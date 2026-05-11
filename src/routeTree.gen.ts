@@ -9,38 +9,335 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as UserRouteImport } from './routes/_user'
+import { Route as PartnerRouteImport } from './routes/_partner'
+import { Route as AdminRouteImport } from './routes/_admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as UserProfileRouteImport } from './routes/_user/profile'
+import { Route as UserInboxRouteImport } from './routes/_user/inbox'
+import { Route as UserHomeRouteImport } from './routes/_user/home'
+import { Route as UserCreateRouteImport } from './routes/_user/create'
+import { Route as PartnerPartnerIndexRouteImport } from './routes/_partner/partner.index'
+import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index'
+import { Route as UserDShare_uuidRouteImport } from './routes/_user/d.$share_uuid'
+import { Route as UserCouponClaim_codeRouteImport } from './routes/_user/coupon.$claim_code'
+import { Route as PartnerPartnerRegisterRouteImport } from './routes/_partner/partner.register'
+import { Route as PartnerPartnerRedeemRouteImport } from './routes/_partner/partner.redeem'
+import { Route as PartnerPartnerCouponsRouteImport } from './routes/_partner/partner.coupons'
+import { Route as PartnerPartnerCampaignsRouteImport } from './routes/_partner/partner.campaigns'
+import { Route as PartnerPartnerBillingRouteImport } from './routes/_partner/partner.billing'
+import { Route as AdminAdminTrendsRouteImport } from './routes/_admin/admin.trends'
+import { Route as AdminAdminSourcesRouteImport } from './routes/_admin/admin.sources'
+import { Route as AdminAdminRulesRouteImport } from './routes/_admin/admin.rules'
+import { Route as AdminAdminExtractRouteImport } from './routes/_admin/admin.extract'
+import { Route as AdminAdminDefamationRouteImport } from './routes/_admin/admin.defamation'
+import { Route as AdminAdminCampaignsRouteImport } from './routes/_admin/admin.campaigns'
 
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UserRoute = UserRouteImport.update({
+  id: '/_user',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PartnerRoute = PartnerRouteImport.update({
+  id: '/_partner',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/_admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UserProfileRoute = UserProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserInboxRoute = UserInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserHomeRoute = UserHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserCreateRoute = UserCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => UserRoute,
+} as any)
+const PartnerPartnerIndexRoute = PartnerPartnerIndexRouteImport.update({
+  id: '/partner/',
+  path: '/partner/',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const AdminAdminIndexRoute = AdminAdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const UserDShare_uuidRoute = UserDShare_uuidRouteImport.update({
+  id: '/d/$share_uuid',
+  path: '/d/$share_uuid',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserCouponClaim_codeRoute = UserCouponClaim_codeRouteImport.update({
+  id: '/coupon/$claim_code',
+  path: '/coupon/$claim_code',
+  getParentRoute: () => UserRoute,
+} as any)
+const PartnerPartnerRegisterRoute = PartnerPartnerRegisterRouteImport.update({
+  id: '/partner/register',
+  path: '/partner/register',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const PartnerPartnerRedeemRoute = PartnerPartnerRedeemRouteImport.update({
+  id: '/partner/redeem',
+  path: '/partner/redeem',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const PartnerPartnerCouponsRoute = PartnerPartnerCouponsRouteImport.update({
+  id: '/partner/coupons',
+  path: '/partner/coupons',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const PartnerPartnerCampaignsRoute = PartnerPartnerCampaignsRouteImport.update({
+  id: '/partner/campaigns',
+  path: '/partner/campaigns',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const PartnerPartnerBillingRoute = PartnerPartnerBillingRouteImport.update({
+  id: '/partner/billing',
+  path: '/partner/billing',
+  getParentRoute: () => PartnerRoute,
+} as any)
+const AdminAdminTrendsRoute = AdminAdminTrendsRouteImport.update({
+  id: '/admin/trends',
+  path: '/admin/trends',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminSourcesRoute = AdminAdminSourcesRouteImport.update({
+  id: '/admin/sources',
+  path: '/admin/sources',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminRulesRoute = AdminAdminRulesRouteImport.update({
+  id: '/admin/rules',
+  path: '/admin/rules',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminExtractRoute = AdminAdminExtractRouteImport.update({
+  id: '/admin/extract',
+  path: '/admin/extract',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminDefamationRoute = AdminAdminDefamationRouteImport.update({
+  id: '/admin/defamation',
+  path: '/admin/defamation',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminCampaignsRoute = AdminAdminCampaignsRouteImport.update({
+  id: '/admin/campaigns',
+  path: '/admin/campaigns',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/create': typeof UserCreateRoute
+  '/home': typeof UserHomeRoute
+  '/inbox': typeof UserInboxRoute
+  '/profile': typeof UserProfileRoute
+  '/admin/campaigns': typeof AdminAdminCampaignsRoute
+  '/admin/defamation': typeof AdminAdminDefamationRoute
+  '/admin/extract': typeof AdminAdminExtractRoute
+  '/admin/rules': typeof AdminAdminRulesRoute
+  '/admin/sources': typeof AdminAdminSourcesRoute
+  '/admin/trends': typeof AdminAdminTrendsRoute
+  '/partner/billing': typeof PartnerPartnerBillingRoute
+  '/partner/campaigns': typeof PartnerPartnerCampaignsRoute
+  '/partner/coupons': typeof PartnerPartnerCouponsRoute
+  '/partner/redeem': typeof PartnerPartnerRedeemRoute
+  '/partner/register': typeof PartnerPartnerRegisterRoute
+  '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/d/$share_uuid': typeof UserDShare_uuidRoute
+  '/admin/': typeof AdminAdminIndexRoute
+  '/partner/': typeof PartnerPartnerIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/create': typeof UserCreateRoute
+  '/home': typeof UserHomeRoute
+  '/inbox': typeof UserInboxRoute
+  '/profile': typeof UserProfileRoute
+  '/admin/campaigns': typeof AdminAdminCampaignsRoute
+  '/admin/defamation': typeof AdminAdminDefamationRoute
+  '/admin/extract': typeof AdminAdminExtractRoute
+  '/admin/rules': typeof AdminAdminRulesRoute
+  '/admin/sources': typeof AdminAdminSourcesRoute
+  '/admin/trends': typeof AdminAdminTrendsRoute
+  '/partner/billing': typeof PartnerPartnerBillingRoute
+  '/partner/campaigns': typeof PartnerPartnerCampaignsRoute
+  '/partner/coupons': typeof PartnerPartnerCouponsRoute
+  '/partner/redeem': typeof PartnerPartnerRedeemRoute
+  '/partner/register': typeof PartnerPartnerRegisterRoute
+  '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/d/$share_uuid': typeof UserDShare_uuidRoute
+  '/admin': typeof AdminAdminIndexRoute
+  '/partner': typeof PartnerPartnerIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_admin': typeof AdminRouteWithChildren
+  '/_partner': typeof PartnerRouteWithChildren
+  '/_user': typeof UserRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_user/create': typeof UserCreateRoute
+  '/_user/home': typeof UserHomeRoute
+  '/_user/inbox': typeof UserInboxRoute
+  '/_user/profile': typeof UserProfileRoute
+  '/_admin/admin/campaigns': typeof AdminAdminCampaignsRoute
+  '/_admin/admin/defamation': typeof AdminAdminDefamationRoute
+  '/_admin/admin/extract': typeof AdminAdminExtractRoute
+  '/_admin/admin/rules': typeof AdminAdminRulesRoute
+  '/_admin/admin/sources': typeof AdminAdminSourcesRoute
+  '/_admin/admin/trends': typeof AdminAdminTrendsRoute
+  '/_partner/partner/billing': typeof PartnerPartnerBillingRoute
+  '/_partner/partner/campaigns': typeof PartnerPartnerCampaignsRoute
+  '/_partner/partner/coupons': typeof PartnerPartnerCouponsRoute
+  '/_partner/partner/redeem': typeof PartnerPartnerRedeemRoute
+  '/_partner/partner/register': typeof PartnerPartnerRegisterRoute
+  '/_user/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/_user/d/$share_uuid': typeof UserDShare_uuidRoute
+  '/_admin/admin/': typeof AdminAdminIndexRoute
+  '/_partner/partner/': typeof PartnerPartnerIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/create'
+    | '/home'
+    | '/inbox'
+    | '/profile'
+    | '/admin/campaigns'
+    | '/admin/defamation'
+    | '/admin/extract'
+    | '/admin/rules'
+    | '/admin/sources'
+    | '/admin/trends'
+    | '/partner/billing'
+    | '/partner/campaigns'
+    | '/partner/coupons'
+    | '/partner/redeem'
+    | '/partner/register'
+    | '/coupon/$claim_code'
+    | '/d/$share_uuid'
+    | '/admin/'
+    | '/partner/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/login'
+    | '/create'
+    | '/home'
+    | '/inbox'
+    | '/profile'
+    | '/admin/campaigns'
+    | '/admin/defamation'
+    | '/admin/extract'
+    | '/admin/rules'
+    | '/admin/sources'
+    | '/admin/trends'
+    | '/partner/billing'
+    | '/partner/campaigns'
+    | '/partner/coupons'
+    | '/partner/redeem'
+    | '/partner/register'
+    | '/coupon/$claim_code'
+    | '/d/$share_uuid'
+    | '/admin'
+    | '/partner'
+  id:
+    | '__root__'
+    | '/'
+    | '/_admin'
+    | '/_partner'
+    | '/_user'
+    | '/login'
+    | '/_user/create'
+    | '/_user/home'
+    | '/_user/inbox'
+    | '/_user/profile'
+    | '/_admin/admin/campaigns'
+    | '/_admin/admin/defamation'
+    | '/_admin/admin/extract'
+    | '/_admin/admin/rules'
+    | '/_admin/admin/sources'
+    | '/_admin/admin/trends'
+    | '/_partner/partner/billing'
+    | '/_partner/partner/campaigns'
+    | '/_partner/partner/coupons'
+    | '/_partner/partner/redeem'
+    | '/_partner/partner/register'
+    | '/_user/coupon/$claim_code'
+    | '/_user/d/$share_uuid'
+    | '/_admin/admin/'
+    | '/_partner/partner/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
+  PartnerRoute: typeof PartnerRouteWithChildren
+  UserRoute: typeof UserRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_user': {
+      id: '/_user'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof UserRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_partner': {
+      id: '/_partner'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof PartnerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_admin': {
+      id: '/_admin'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,12 +345,222 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_user/profile': {
+      id: '/_user/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof UserProfileRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/inbox': {
+      id: '/_user/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof UserInboxRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/home': {
+      id: '/_user/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof UserHomeRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/create': {
+      id: '/_user/create'
+      path: '/create'
+      fullPath: '/create'
+      preLoaderRoute: typeof UserCreateRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_partner/partner/': {
+      id: '/_partner/partner/'
+      path: '/partner'
+      fullPath: '/partner/'
+      preLoaderRoute: typeof PartnerPartnerIndexRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/_admin/admin/': {
+      id: '/_admin/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminAdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_user/d/$share_uuid': {
+      id: '/_user/d/$share_uuid'
+      path: '/d/$share_uuid'
+      fullPath: '/d/$share_uuid'
+      preLoaderRoute: typeof UserDShare_uuidRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/coupon/$claim_code': {
+      id: '/_user/coupon/$claim_code'
+      path: '/coupon/$claim_code'
+      fullPath: '/coupon/$claim_code'
+      preLoaderRoute: typeof UserCouponClaim_codeRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_partner/partner/register': {
+      id: '/_partner/partner/register'
+      path: '/partner/register'
+      fullPath: '/partner/register'
+      preLoaderRoute: typeof PartnerPartnerRegisterRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/_partner/partner/redeem': {
+      id: '/_partner/partner/redeem'
+      path: '/partner/redeem'
+      fullPath: '/partner/redeem'
+      preLoaderRoute: typeof PartnerPartnerRedeemRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/_partner/partner/coupons': {
+      id: '/_partner/partner/coupons'
+      path: '/partner/coupons'
+      fullPath: '/partner/coupons'
+      preLoaderRoute: typeof PartnerPartnerCouponsRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/_partner/partner/campaigns': {
+      id: '/_partner/partner/campaigns'
+      path: '/partner/campaigns'
+      fullPath: '/partner/campaigns'
+      preLoaderRoute: typeof PartnerPartnerCampaignsRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/_partner/partner/billing': {
+      id: '/_partner/partner/billing'
+      path: '/partner/billing'
+      fullPath: '/partner/billing'
+      preLoaderRoute: typeof PartnerPartnerBillingRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/_admin/admin/trends': {
+      id: '/_admin/admin/trends'
+      path: '/admin/trends'
+      fullPath: '/admin/trends'
+      preLoaderRoute: typeof AdminAdminTrendsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/admin/sources': {
+      id: '/_admin/admin/sources'
+      path: '/admin/sources'
+      fullPath: '/admin/sources'
+      preLoaderRoute: typeof AdminAdminSourcesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/admin/rules': {
+      id: '/_admin/admin/rules'
+      path: '/admin/rules'
+      fullPath: '/admin/rules'
+      preLoaderRoute: typeof AdminAdminRulesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/admin/extract': {
+      id: '/_admin/admin/extract'
+      path: '/admin/extract'
+      fullPath: '/admin/extract'
+      preLoaderRoute: typeof AdminAdminExtractRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/admin/defamation': {
+      id: '/_admin/admin/defamation'
+      path: '/admin/defamation'
+      fullPath: '/admin/defamation'
+      preLoaderRoute: typeof AdminAdminDefamationRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/admin/campaigns': {
+      id: '/_admin/admin/campaigns'
+      path: '/admin/campaigns'
+      fullPath: '/admin/campaigns'
+      preLoaderRoute: typeof AdminAdminCampaignsRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
+interface AdminRouteChildren {
+  AdminAdminCampaignsRoute: typeof AdminAdminCampaignsRoute
+  AdminAdminDefamationRoute: typeof AdminAdminDefamationRoute
+  AdminAdminExtractRoute: typeof AdminAdminExtractRoute
+  AdminAdminRulesRoute: typeof AdminAdminRulesRoute
+  AdminAdminSourcesRoute: typeof AdminAdminSourcesRoute
+  AdminAdminTrendsRoute: typeof AdminAdminTrendsRoute
+  AdminAdminIndexRoute: typeof AdminAdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAdminCampaignsRoute: AdminAdminCampaignsRoute,
+  AdminAdminDefamationRoute: AdminAdminDefamationRoute,
+  AdminAdminExtractRoute: AdminAdminExtractRoute,
+  AdminAdminRulesRoute: AdminAdminRulesRoute,
+  AdminAdminSourcesRoute: AdminAdminSourcesRoute,
+  AdminAdminTrendsRoute: AdminAdminTrendsRoute,
+  AdminAdminIndexRoute: AdminAdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface PartnerRouteChildren {
+  PartnerPartnerBillingRoute: typeof PartnerPartnerBillingRoute
+  PartnerPartnerCampaignsRoute: typeof PartnerPartnerCampaignsRoute
+  PartnerPartnerCouponsRoute: typeof PartnerPartnerCouponsRoute
+  PartnerPartnerRedeemRoute: typeof PartnerPartnerRedeemRoute
+  PartnerPartnerRegisterRoute: typeof PartnerPartnerRegisterRoute
+  PartnerPartnerIndexRoute: typeof PartnerPartnerIndexRoute
+}
+
+const PartnerRouteChildren: PartnerRouteChildren = {
+  PartnerPartnerBillingRoute: PartnerPartnerBillingRoute,
+  PartnerPartnerCampaignsRoute: PartnerPartnerCampaignsRoute,
+  PartnerPartnerCouponsRoute: PartnerPartnerCouponsRoute,
+  PartnerPartnerRedeemRoute: PartnerPartnerRedeemRoute,
+  PartnerPartnerRegisterRoute: PartnerPartnerRegisterRoute,
+  PartnerPartnerIndexRoute: PartnerPartnerIndexRoute,
+}
+
+const PartnerRouteWithChildren =
+  PartnerRoute._addFileChildren(PartnerRouteChildren)
+
+interface UserRouteChildren {
+  UserCreateRoute: typeof UserCreateRoute
+  UserHomeRoute: typeof UserHomeRoute
+  UserInboxRoute: typeof UserInboxRoute
+  UserProfileRoute: typeof UserProfileRoute
+  UserCouponClaim_codeRoute: typeof UserCouponClaim_codeRoute
+  UserDShare_uuidRoute: typeof UserDShare_uuidRoute
+}
+
+const UserRouteChildren: UserRouteChildren = {
+  UserCreateRoute: UserCreateRoute,
+  UserHomeRoute: UserHomeRoute,
+  UserInboxRoute: UserInboxRoute,
+  UserProfileRoute: UserProfileRoute,
+  UserCouponClaim_codeRoute: UserCouponClaim_codeRoute,
+  UserDShare_uuidRoute: UserDShare_uuidRoute,
+}
+
+const UserRouteWithChildren = UserRoute._addFileChildren(UserRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
+  PartnerRoute: PartnerRouteWithChildren,
+  UserRoute: UserRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
