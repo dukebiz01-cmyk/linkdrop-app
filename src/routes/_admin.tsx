@@ -1,14 +1,30 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 
+/**
+ * 관리자(staff/admin) 보호 레이아웃.
+ * - 비로그인: /login
+ * - 로그인했지만 staff/admin 둘 다 false: / 로 redirect
+ */
 export const Route = createFileRoute("/_admin")({
   beforeLoad: async ({ location }) => {
     if (!isSupabaseConfigured) return;
-    const { data } = await getSupabase().auth.getSession();
-    if (!data.session) {
-      throw redirect({ to: "/login", search: { redirect: location.href } as never });
+    const supabase = getSupabase();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const session = sessionData.session;
+    if (!session) {
+      throw redirect({
+        to: "/login",
+        search: { redirect: location.href } as never,
+      });
     }
-    // TODO: user_roles에서 'staff' 또는 'admin' 역할 검증
+    const [{ data: isStaff }, { data: isAdmin }] = await Promise.all([
+      supabase.rpc("has_role", { _user_id: session.user.id, _role: "staff" }),
+      supabase.rpc("has_role", { _user_id: session.user.id, _role: "admin" }),
+    ]);
+    if (!isStaff && !isAdmin) {
+      throw redirect({ to: "/" });
+    }
   },
   component: AdminLayout,
 });
