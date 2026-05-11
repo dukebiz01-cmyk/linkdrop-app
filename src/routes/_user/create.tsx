@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -48,7 +49,7 @@ const INTENT_FALLBACK: IntentType[] = [
 
 const INTENT_META: Record<
   string,
-  { icon: ComponentType<{ className?: string }>; stripVar: string }
+  { icon: LucideIcon; stripVar: string }
 > = {
   info: { icon: BookOpen, stripVar: "var(--color-intent-info-strip)" },
   discussion: { icon: MessageCircle, stripVar: "var(--color-intent-discussion-strip)" },
