@@ -9,15 +9,47 @@ import {
   Megaphone,
   MessageCircle,
   Phone,
+  Plus,
   Settings,
   ShoppingBag,
   Theater,
   Ticket,
 } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { ActionButton } from "@/components/ActionButton";
-import { ErrorMessage, friendlyErrors } from "@/components/ErrorMessage";
+import { ErrorMessage } from "@/components/ErrorMessage";
+import { AdDisclosure } from "@/components/AdDisclosure";
+import { SourceAttribution } from "@/components/SourceAttribution";
+import { SortableBlock } from "@/components/create/BlockEditor";
+import {
+  PartnerPickerModal,
+  type PartnerOption,
+} from "@/components/create/PartnerPickerModal";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { fetchOEmbed, parseVideoUrl, type OEmbedResult } from "@/lib/oembed";
+import {
+  BLOCK_KINDS,
+  FALLBACK_ALLOWED_BY_INTENT,
+  FALLBACK_REQUIRED_BY_INTENT,
+  KIND_LABEL,
+  REQUIRES_DISCLOSURE,
+  emptyData,
+  newId,
+  type BlockDraft,
+  type BlockKind,
+} from "@/lib/create-flow/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_user/create")({
@@ -33,6 +65,9 @@ interface IntentType {
   name_ko: string;
   requires_partner: boolean;
   is_active: boolean;
+  default_required_blocks?: BlockKind[] | null;
+  allowed_blocks?: BlockKind[] | null;
+  requires_disclosure?: boolean | null;
 }
 
 const INTENT_FALLBACK: IntentType[] = [
@@ -67,7 +102,9 @@ function CreatePage() {
   const [step, setStep] = useState<StepNum>(1);
   const [contentSourceId, setContentSourceId] = useState<string | null>(null);
   const [oembed, setOembed] = useState<OEmbedResult | null>(null);
-  const [selectedIntentId, setSelectedIntentId] = useState<string | null>(null);
+  const [selectedIntent, setSelectedIntent] = useState<IntentType | null>(null);
+  const [partner, setPartner] = useState<PartnerOption | null>(null);
+  const [partnerPickerOpen, setPartnerPickerOpen] = useState(false);
 
   function back() {
     if (step === 1) {
@@ -75,6 +112,15 @@ function CreatePage() {
       return;
     }
     setStep((s) => (s - 1) as StepNum);
+  }
+
+  function handleIntentPicked(intent: IntentType) {
+    setSelectedIntent(intent);
+    if (intent.requires_partner) {
+      setPartnerPickerOpen(true);
+    } else {
+      setStep(3);
+    }
   }
 
   return (
@@ -102,14 +148,27 @@ function CreatePage() {
       )}
       {step === 2 && (
         <Step2
-          selectedIntentId={selectedIntentId}
-          onSelect={(id) => {
-            setSelectedIntentId(id);
-            setStep(3);
-          }}
+          selectedIntentId={selectedIntent?.id ?? null}
+          onSelect={handleIntentPicked}
         />
       )}
-      {step === 3 && <StepPlaceholder />}
+      {step === 3 && selectedIntent && (
+        <Step3
+          oembed={oembed}
+          contentSourceId={contentSourceId}
+          intent={selectedIntent}
+          partner={partner}
+        />
+      )}
+      <PartnerPickerModal
+        open={partnerPickerOpen}
+        onClose={() => setPartnerPickerOpen(false)}
+        onSelect={(p) => {
+          setPartner(p);
+          setPartnerPickerOpen(false);
+          setStep(3);
+        }}
+      />
     </div>
   );
 }
