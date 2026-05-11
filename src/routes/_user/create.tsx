@@ -9,15 +9,47 @@ import {
   Megaphone,
   MessageCircle,
   Phone,
+  Plus,
   Settings,
   ShoppingBag,
   Theater,
   Ticket,
 } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { ActionButton } from "@/components/ActionButton";
-import { ErrorMessage, friendlyErrors } from "@/components/ErrorMessage";
+import { ErrorMessage } from "@/components/ErrorMessage";
+import { AdDisclosure } from "@/components/AdDisclosure";
+import { SourceAttribution } from "@/components/SourceAttribution";
+import { SortableBlock } from "@/components/create/BlockEditor";
+import {
+  PartnerPickerModal,
+  type PartnerOption,
+} from "@/components/create/PartnerPickerModal";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { fetchOEmbed, parseVideoUrl, type OEmbedResult } from "@/lib/oembed";
+import {
+  BLOCK_KINDS,
+  FALLBACK_ALLOWED_BY_INTENT,
+  FALLBACK_REQUIRED_BY_INTENT,
+  KIND_LABEL,
+  REQUIRES_DISCLOSURE,
+  emptyData,
+  newId,
+  type BlockDraft,
+  type BlockKind,
+} from "@/lib/create-flow/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_user/create")({
@@ -33,6 +65,9 @@ interface IntentType {
   name_ko: string;
   requires_partner: boolean;
   is_active: boolean;
+  default_required_blocks?: BlockKind[] | null;
+  allowed_blocks?: BlockKind[] | null;
+  requires_disclosure?: boolean | null;
 }
 
 const INTENT_FALLBACK: IntentType[] = [
@@ -67,7 +102,9 @@ function CreatePage() {
   const [step, setStep] = useState<StepNum>(1);
   const [contentSourceId, setContentSourceId] = useState<string | null>(null);
   const [oembed, setOembed] = useState<OEmbedResult | null>(null);
-  const [selectedIntentId, setSelectedIntentId] = useState<string | null>(null);
+  const [selectedIntent, setSelectedIntent] = useState<IntentType | null>(null);
+  const [partner, setPartner] = useState<PartnerOption | null>(null);
+  const [partnerPickerOpen, setPartnerPickerOpen] = useState(false);
 
   function back() {
     if (step === 1) {
@@ -75,6 +112,15 @@ function CreatePage() {
       return;
     }
     setStep((s) => (s - 1) as StepNum);
+  }
+
+  function handleIntentPicked(intent: IntentType) {
+    setSelectedIntent(intent);
+    if (intent.requires_partner) {
+      setPartnerPickerOpen(true);
+    } else {
+      setStep(3);
+    }
   }
 
   return (
@@ -102,14 +148,27 @@ function CreatePage() {
       )}
       {step === 2 && (
         <Step2
-          selectedIntentId={selectedIntentId}
-          onSelect={(id) => {
-            setSelectedIntentId(id);
-            setStep(3);
-          }}
+          selectedIntentId={selectedIntent?.id ?? null}
+          onSelect={handleIntentPicked}
         />
       )}
-      {step === 3 && <StepPlaceholder />}
+      {step === 3 && selectedIntent && (
+        <Step3
+          oembed={oembed}
+          contentSourceId={contentSourceId}
+          intent={selectedIntent}
+          partner={partner}
+        />
+      )}
+      <PartnerPickerModal
+        open={partnerPickerOpen}
+        onClose={() => setPartnerPickerOpen(false)}
+        onSelect={(p) => {
+          setPartner(p);
+          setPartnerPickerOpen(false);
+          setStep(3);
+        }}
+      />
     </div>
   );
 }
@@ -349,7 +408,7 @@ function Step2({
   onSelect,
 }: {
   selectedIntentId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (intent: IntentType) => void;
 }) {
   const { data: intents } = useQuery({
     queryKey: ["intent_types"],
@@ -359,7 +418,9 @@ function Step2({
       try {
         const { data, error } = await getSupabase()
           .from("intent_types")
-          .select("id, key, name_ko, requires_partner, is_active")
+          .select(
+            "id, key, name_ko, requires_partner, is_active, default_required_blocks, allowed_blocks, requires_disclosure",
+          )
           .eq("is_active", true)
           .order("key");
         if (error || !data || data.length === 0) return INTENT_FALLBACK;
@@ -390,7 +451,7 @@ function Step2({
             <button
               key={intent.id}
               type="button"
-              onClick={() => onSelect(intent.id)}
+              onClick={() => onSelect(intent)}
               style={{ ["--strip-color" as string]: meta.stripVar }}
               className={cn(
                 "group relative h-[112px] overflow-hidden rounded-2xl border border-border p-4",
@@ -427,17 +488,233 @@ function Step2({
   );
 }
 
-/* ---------- Step 3 placeholder ---------- */
-function StepPlaceholder() {
+/* ---------- Step 3: Block editor ---------- */
+function Step3({
+  oembed,
+  contentSourceId,
+  intent,
+  partner,
+}: {
+  oembed: OEmbedResult | null;
+  contentSourceId: string | null;
+  intent: IntentType;
+  partner: PartnerOption | null;
+}) {
+  const requiresDisclosure =
+    intent.requires_disclosure ?? REQUIRES_DISCLOSURE[intent.key] ?? false;
+  const required: BlockKind[] =
+    intent.default_required_blocks ??
+    FALLBACK_REQUIRED_BY_INTENT[intent.key] ??
+    ["video", "text"];
+  const allowed: BlockKind[] =
+    intent.allowed_blocks ??
+    FALLBACK_ALLOWED_BY_INTENT[intent.key] ??
+    BLOCK_KINDS.slice();
+
+  const [blocks, setBlocks] = useState<BlockDraft[]>(() =>
+    required.map((kind) => ({
+      id: newId(),
+      kind,
+      isLocked: true,
+      data: emptyData(kind),
+    })),
+  );
+  const [infoDropId, setInfoDropId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // info_drops INSERT (best-effort) on mount
+  useEffect(() => {
+    if (infoDropId || !isSupabaseConfigured) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const sb = getSupabase();
+        const { data: sess } = await sb.auth.getSession();
+        const uid = sess.session?.user.id;
+        if (!uid) return;
+        const { data, error } = await sb
+          .from("info_drops")
+          .insert({
+            owner_id: uid,
+            intent_id: intent.id,
+            content_source_id: contentSourceId,
+            partner_id: partner?.id ?? null,
+            has_ad_disclosure: requiresDisclosure,
+            status: "draft",
+          })
+          .select("id")
+          .single();
+        if (!cancelled && !error && data) {
+          setInfoDropId(data.id as string);
+        }
+      } catch {
+        // 스키마 미적용 — 로컬 진행
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [contentSourceId, intent.id, partner?.id, requiresDisclosure, infoDropId]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    setBlocks((prev) => {
+      const oldIndex = prev.findIndex((b) => b.id === active.id);
+      const newIndex = prev.findIndex((b) => b.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return prev;
+      // 잠긴 블록 자리 이동 금지
+      if (prev[oldIndex].isLocked) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  }
+
+  function addBlock(kind: BlockKind) {
+    setBlocks((prev) => [
+      ...prev,
+      { id: newId(), kind, isLocked: false, data: emptyData(kind) },
+    ]);
+    setPickerOpen(false);
+  }
+
+  function updateBlock(id: string, data: Record<string, unknown>) {
+    setBlocks((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, data } : b)),
+    );
+  }
+
+  function deleteBlock(id: string) {
+    setBlocks((prev) => prev.filter((b) => b.id !== id || b.isLocked));
+  }
+
+  async function handlePublish() {
+    setSaveError(null);
+    if (!isSupabaseConfigured || !infoDropId) {
+      setSaveError("저장은 백엔드 연결 후에 작동해요. (로컬 미리보기)");
+      return;
+    }
+    try {
+      const sb = getSupabase();
+      // upsert blocks
+      const rows = blocks.map((b, i) => ({
+        info_drop_id: infoDropId,
+        kind: b.kind,
+        position: i,
+        is_locked: b.isLocked,
+        data: b.data,
+      }));
+      const { error } = await sb.from("component_blocks").insert(rows);
+      if (error) throw error;
+      await sb
+        .from("info_drops")
+        .update({ status: "published" })
+        .eq("id", infoDropId);
+    } catch {
+      setSaveError("저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    }
+  }
+
+  const addable = allowed.filter(
+    (k) => k !== "video" && k !== "text" && k !== "similar",
+  );
+
   return (
-    <main className="flex-1 px-6 pt-2">
-      <StepBadge n={3} />
-      <h1 className="mt-3 text-2xl font-extrabold tracking-tighter text-text-strong">
-        Step 3 준비 중
-      </h1>
-      <p className="mt-2 text-sm font-medium text-text-muted">
-        Module 1B에서 블록 에디터를 이어 만듭니다.
-      </p>
-    </main>
+    <>
+      <main className="flex-1 px-6 pb-32 pt-2">
+        <StepBadge n={3} />
+        <h1 className="mt-3 text-2xl font-extrabold tracking-tighter text-text-strong">
+          카드를 다듬어 주세요
+        </h1>
+        <p className="mt-2 text-sm font-medium text-text-muted">
+          {intent.name_ko}
+          {partner ? ` · ${partner.name}` : ""}
+        </p>
+
+        {requiresDisclosure && <AdDisclosure className="mt-6" />}
+
+        <div className="mt-6 overflow-hidden rounded-2xl border border-border">
+          {oembed && (
+            <SourceAttribution
+              provider={oembed.provider}
+              authorName={oembed.authorName}
+              sourceMode={
+                partner ? "partner_official" : "user_submitted"
+              }
+              position="top"
+              className="border-b border-border"
+            />
+          )}
+
+          <div className="space-y-3 p-4">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={blocks.map((b) => b.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {blocks.map((b) => (
+                  <SortableBlock
+                    key={b.id}
+                    block={b}
+                    oembed={oembed}
+                    onChange={(d) => updateBlock(b.id, d)}
+                    onDelete={() => deleteBlock(b.id)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+
+            <button
+              type="button"
+              onClick={() => setPickerOpen((v) => !v)}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-semibold text-text-muted transition-colors hover:border-text-muted hover:text-text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            >
+              <Plus className="size-4" strokeWidth={2} />
+              블록 추가
+            </button>
+
+            {pickerOpen && (
+              <div className="grid grid-cols-2 gap-2 rounded-lg border border-border p-3">
+                {addable.map((kind) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    onClick={() => addBlock(kind)}
+                    className="inline-flex h-11 items-center justify-start rounded-lg border border-border px-3 text-sm font-semibold text-text-strong transition-colors hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+                  >
+                    {KIND_LABEL[kind]}
+                  </button>
+                ))}
+                {addable.length === 0 && (
+                  <p className="col-span-2 text-xs font-medium text-text-muted">
+                    추가 가능한 블록이 없어요
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <ErrorMessage message={saveError} className="mt-6" />
+      </main>
+
+      <div className="sticky bottom-0 border-t border-border bg-bg px-6 py-4">
+        <ActionButton
+          type="button"
+          onClick={handlePublish}
+          className="w-full"
+        >
+          공유 링크 만들기
+        </ActionButton>
+      </div>
+    </>
   );
 }
