@@ -70,6 +70,17 @@
   --color-intent-danger: var(--intent-danger);
   --color-intent-danger-bg: var(--intent-danger-bg);
 
+  /* Intent — 9 LinkDrop intents (4px strip ONLY) */
+  --color-intent-info-strip: var(--intent-info-strip);
+  --color-intent-discussion-strip: var(--intent-discussion-strip);
+  --color-intent-coupon-strip: var(--intent-coupon-strip);
+  --color-intent-reservation-strip: var(--intent-reservation-strip);
+  --color-intent-commerce-strip: var(--intent-commerce-strip);
+  --color-intent-ticket-strip: var(--intent-ticket-strip);
+  --color-intent-lead-strip: var(--intent-lead-strip);
+  --color-intent-campaign-strip: var(--intent-campaign-strip);
+  --color-intent-custom-strip: var(--intent-custom-strip);
+
   /* shadcn compatibility aliases — map to system tokens so primitives keep working */
   --color-background: var(--bg);
   --color-foreground: var(--text-strong);
@@ -123,6 +134,17 @@
   --intent-warning-bg: #fffbeb;
   --intent-danger: #b91c1c;
   --intent-danger-bg: #fef2f2;
+
+  /* 9 LinkDrop intent strip colors (4px left strip only) */
+  --intent-info-strip: #2563eb;        /* 정보 공유 */
+  --intent-discussion-strip: #7c3aed;  /* 친구와 의논 */
+  --intent-coupon-strip: #db2777;      /* 쿠폰 */
+  --intent-reservation-strip: #0891b2; /* 예약 유도 */
+  --intent-commerce-strip: #ea580c;    /* 구매 유도 */
+  --intent-ticket-strip: #c026d3;      /* 티켓 판매 */
+  --intent-lead-strip: #16a34a;        /* 상담 신청 */
+  --intent-campaign-strip: #ca8a04;    /* 공식 안내 */
+  --intent-custom-strip: #525252;      /* 직접 설정 */
 }
 
 @layer base {
