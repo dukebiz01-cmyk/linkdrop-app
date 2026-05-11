@@ -27,9 +27,11 @@ import { Route as PartnerPartnerRedeemRouteImport } from './routes/_partner/part
 import { Route as PartnerPartnerCouponsRouteImport } from './routes/_partner/partner.coupons'
 import { Route as PartnerPartnerCampaignsRouteImport } from './routes/_partner/partner.campaigns'
 import { Route as PartnerPartnerBillingRouteImport } from './routes/_partner/partner.billing'
+import { Route as AdminAdminTrendsRouteImport } from './routes/_admin/admin.trends'
 import { Route as AdminAdminSourcesRouteImport } from './routes/_admin/admin.sources'
 import { Route as AdminAdminRulesRouteImport } from './routes/_admin/admin.rules'
 import { Route as AdminAdminExtractRouteImport } from './routes/_admin/admin.extract'
+import { Route as AdminAdminDefamationRouteImport } from './routes/_admin/admin.defamation'
 import { Route as AdminAdminCampaignsRouteImport } from './routes/_admin/admin.campaigns'
 
 const LoginRoute = LoginRouteImport.update({
@@ -119,6 +121,11 @@ const PartnerPartnerBillingRoute = PartnerPartnerBillingRouteImport.update({
   path: '/partner/billing',
   getParentRoute: () => PartnerRoute,
 } as any)
+const AdminAdminTrendsRoute = AdminAdminTrendsRouteImport.update({
+  id: '/admin/trends',
+  path: '/admin/trends',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminAdminSourcesRoute = AdminAdminSourcesRouteImport.update({
   id: '/admin/sources',
   path: '/admin/sources',
@@ -132,6 +139,11 @@ const AdminAdminRulesRoute = AdminAdminRulesRouteImport.update({
 const AdminAdminExtractRoute = AdminAdminExtractRouteImport.update({
   id: '/admin/extract',
   path: '/admin/extract',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminDefamationRoute = AdminAdminDefamationRouteImport.update({
+  id: '/admin/defamation',
+  path: '/admin/defamation',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminAdminCampaignsRoute = AdminAdminCampaignsRouteImport.update({
@@ -148,9 +160,11 @@ export interface FileRoutesByFullPath {
   '/inbox': typeof UserInboxRoute
   '/profile': typeof UserProfileRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
+  '/admin/defamation': typeof AdminAdminDefamationRoute
   '/admin/extract': typeof AdminAdminExtractRoute
   '/admin/rules': typeof AdminAdminRulesRoute
   '/admin/sources': typeof AdminAdminSourcesRoute
+  '/admin/trends': typeof AdminAdminTrendsRoute
   '/partner/billing': typeof PartnerPartnerBillingRoute
   '/partner/campaigns': typeof PartnerPartnerCampaignsRoute
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
@@ -169,9 +183,11 @@ export interface FileRoutesByTo {
   '/inbox': typeof UserInboxRoute
   '/profile': typeof UserProfileRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
+  '/admin/defamation': typeof AdminAdminDefamationRoute
   '/admin/extract': typeof AdminAdminExtractRoute
   '/admin/rules': typeof AdminAdminRulesRoute
   '/admin/sources': typeof AdminAdminSourcesRoute
+  '/admin/trends': typeof AdminAdminTrendsRoute
   '/partner/billing': typeof PartnerPartnerBillingRoute
   '/partner/campaigns': typeof PartnerPartnerCampaignsRoute
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
@@ -194,9 +210,11 @@ export interface FileRoutesById {
   '/_user/inbox': typeof UserInboxRoute
   '/_user/profile': typeof UserProfileRoute
   '/_admin/admin/campaigns': typeof AdminAdminCampaignsRoute
+  '/_admin/admin/defamation': typeof AdminAdminDefamationRoute
   '/_admin/admin/extract': typeof AdminAdminExtractRoute
   '/_admin/admin/rules': typeof AdminAdminRulesRoute
   '/_admin/admin/sources': typeof AdminAdminSourcesRoute
+  '/_admin/admin/trends': typeof AdminAdminTrendsRoute
   '/_partner/partner/billing': typeof PartnerPartnerBillingRoute
   '/_partner/partner/campaigns': typeof PartnerPartnerCampaignsRoute
   '/_partner/partner/coupons': typeof PartnerPartnerCouponsRoute
@@ -217,9 +235,11 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/profile'
     | '/admin/campaigns'
+    | '/admin/defamation'
     | '/admin/extract'
     | '/admin/rules'
     | '/admin/sources'
+    | '/admin/trends'
     | '/partner/billing'
     | '/partner/campaigns'
     | '/partner/coupons'
@@ -238,9 +258,11 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/profile'
     | '/admin/campaigns'
+    | '/admin/defamation'
     | '/admin/extract'
     | '/admin/rules'
     | '/admin/sources'
+    | '/admin/trends'
     | '/partner/billing'
     | '/partner/campaigns'
     | '/partner/coupons'
@@ -262,9 +284,11 @@ export interface FileRouteTypes {
     | '/_user/inbox'
     | '/_user/profile'
     | '/_admin/admin/campaigns'
+    | '/_admin/admin/defamation'
     | '/_admin/admin/extract'
     | '/_admin/admin/rules'
     | '/_admin/admin/sources'
+    | '/_admin/admin/trends'
     | '/_partner/partner/billing'
     | '/_partner/partner/campaigns'
     | '/_partner/partner/coupons'
@@ -412,6 +436,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PartnerPartnerBillingRouteImport
       parentRoute: typeof PartnerRoute
     }
+    '/_admin/admin/trends': {
+      id: '/_admin/admin/trends'
+      path: '/admin/trends'
+      fullPath: '/admin/trends'
+      preLoaderRoute: typeof AdminAdminTrendsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/_admin/admin/sources': {
       id: '/_admin/admin/sources'
       path: '/admin/sources'
@@ -433,6 +464,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAdminExtractRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/_admin/admin/defamation': {
+      id: '/_admin/admin/defamation'
+      path: '/admin/defamation'
+      fullPath: '/admin/defamation'
+      preLoaderRoute: typeof AdminAdminDefamationRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/_admin/admin/campaigns': {
       id: '/_admin/admin/campaigns'
       path: '/admin/campaigns'
@@ -445,17 +483,21 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteChildren {
   AdminAdminCampaignsRoute: typeof AdminAdminCampaignsRoute
+  AdminAdminDefamationRoute: typeof AdminAdminDefamationRoute
   AdminAdminExtractRoute: typeof AdminAdminExtractRoute
   AdminAdminRulesRoute: typeof AdminAdminRulesRoute
   AdminAdminSourcesRoute: typeof AdminAdminSourcesRoute
+  AdminAdminTrendsRoute: typeof AdminAdminTrendsRoute
   AdminAdminIndexRoute: typeof AdminAdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminAdminCampaignsRoute: AdminAdminCampaignsRoute,
+  AdminAdminDefamationRoute: AdminAdminDefamationRoute,
   AdminAdminExtractRoute: AdminAdminExtractRoute,
   AdminAdminRulesRoute: AdminAdminRulesRoute,
   AdminAdminSourcesRoute: AdminAdminSourcesRoute,
+  AdminAdminTrendsRoute: AdminAdminTrendsRoute,
   AdminAdminIndexRoute: AdminAdminIndexRoute,
 }
 
