@@ -15,7 +15,8 @@ export const ActionButton = forwardRef<
       className={cn(
         "inline-flex min-h-[44px] min-w-[44px] items-center justify-center",
         "rounded-lg bg-action px-6 py-3 text-sm font-semibold text-action-foreground",
-        "transition-colors hover:bg-text-strong/90",
+        "transition-colors duration-150 ease-out hover:bg-text-strong/90",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
         "disabled:bg-text-disabled disabled:cursor-not-allowed",
         className,
       )}
