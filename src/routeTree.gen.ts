@@ -10,11 +10,22 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as UserRouteImport } from './routes/_user'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as UserProfileRouteImport } from './routes/_user/profile'
+import { Route as UserInboxRouteImport } from './routes/_user/inbox'
+import { Route as UserHomeRouteImport } from './routes/_user/home'
+import { Route as UserCreateRouteImport } from './routes/_user/create'
+import { Route as UserDShare_uuidRouteImport } from './routes/_user/d.$share_uuid'
+import { Route as UserCouponClaim_codeRouteImport } from './routes/_user/coupon.$claim_code'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UserRoute = UserRouteImport.update({
+  id: '/_user',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -22,30 +33,106 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UserProfileRoute = UserProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserInboxRoute = UserInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserHomeRoute = UserHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserCreateRoute = UserCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserDShare_uuidRoute = UserDShare_uuidRouteImport.update({
+  id: '/d/$share_uuid',
+  path: '/d/$share_uuid',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserCouponClaim_codeRoute = UserCouponClaim_codeRouteImport.update({
+  id: '/coupon/$claim_code',
+  path: '/coupon/$claim_code',
+  getParentRoute: () => UserRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/create': typeof UserCreateRoute
+  '/home': typeof UserHomeRoute
+  '/inbox': typeof UserInboxRoute
+  '/profile': typeof UserProfileRoute
+  '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/d/$share_uuid': typeof UserDShare_uuidRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/create': typeof UserCreateRoute
+  '/home': typeof UserHomeRoute
+  '/inbox': typeof UserInboxRoute
+  '/profile': typeof UserProfileRoute
+  '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/d/$share_uuid': typeof UserDShare_uuidRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_user': typeof UserRouteWithChildren
   '/login': typeof LoginRoute
+  '/_user/create': typeof UserCreateRoute
+  '/_user/home': typeof UserHomeRoute
+  '/_user/inbox': typeof UserInboxRoute
+  '/_user/profile': typeof UserProfileRoute
+  '/_user/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/_user/d/$share_uuid': typeof UserDShare_uuidRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/create'
+    | '/home'
+    | '/inbox'
+    | '/profile'
+    | '/coupon/$claim_code'
+    | '/d/$share_uuid'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login'
-  id: '__root__' | '/' | '/login'
+  to:
+    | '/'
+    | '/login'
+    | '/create'
+    | '/home'
+    | '/inbox'
+    | '/profile'
+    | '/coupon/$claim_code'
+    | '/d/$share_uuid'
+  id:
+    | '__root__'
+    | '/'
+    | '/_user'
+    | '/login'
+    | '/_user/create'
+    | '/_user/home'
+    | '/_user/inbox'
+    | '/_user/profile'
+    | '/_user/coupon/$claim_code'
+    | '/_user/d/$share_uuid'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  UserRoute: typeof UserRouteWithChildren
   LoginRoute: typeof LoginRoute
 }
 
@@ -58,6 +145,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_user': {
+      id: '/_user'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof UserRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -65,13 +159,86 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_user/profile': {
+      id: '/_user/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof UserProfileRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/inbox': {
+      id: '/_user/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof UserInboxRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/home': {
+      id: '/_user/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof UserHomeRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/create': {
+      id: '/_user/create'
+      path: '/create'
+      fullPath: '/create'
+      preLoaderRoute: typeof UserCreateRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/d/$share_uuid': {
+      id: '/_user/d/$share_uuid'
+      path: '/d/$share_uuid'
+      fullPath: '/d/$share_uuid'
+      preLoaderRoute: typeof UserDShare_uuidRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/coupon/$claim_code': {
+      id: '/_user/coupon/$claim_code'
+      path: '/coupon/$claim_code'
+      fullPath: '/coupon/$claim_code'
+      preLoaderRoute: typeof UserCouponClaim_codeRouteImport
+      parentRoute: typeof UserRoute
+    }
   }
 }
 
+interface UserRouteChildren {
+  UserCreateRoute: typeof UserCreateRoute
+  UserHomeRoute: typeof UserHomeRoute
+  UserInboxRoute: typeof UserInboxRoute
+  UserProfileRoute: typeof UserProfileRoute
+  UserCouponClaim_codeRoute: typeof UserCouponClaim_codeRoute
+  UserDShare_uuidRoute: typeof UserDShare_uuidRoute
+}
+
+const UserRouteChildren: UserRouteChildren = {
+  UserCreateRoute: UserCreateRoute,
+  UserHomeRoute: UserHomeRoute,
+  UserInboxRoute: UserInboxRoute,
+  UserProfileRoute: UserProfileRoute,
+  UserCouponClaim_codeRoute: UserCouponClaim_codeRoute,
+  UserDShare_uuidRoute: UserDShare_uuidRoute,
+}
+
+const UserRouteWithChildren = UserRoute._addFileChildren(UserRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  UserRoute: UserRouteWithChildren,
   LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
