@@ -20,6 +20,9 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# MCP server config (contains personal access tokens)
+.mcp.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
