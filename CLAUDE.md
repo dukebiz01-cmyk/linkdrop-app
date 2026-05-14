@@ -87,8 +87,20 @@ shadcn config is in `components.json` (style: `new-york`, base: `slate`). User-f
 
 `eslint.config.js` bans imports from `server-only` (Next.js package). For server-only modules either use `.server.ts` suffix (Vite strips them from the client bundle) or `@tanstack/react-start/server-only`.
 
-## Notes
+## Database / migrations
+
+- `supabase/config.toml` holds the project ref. `supabase/migrations/` contains numbered SQL migrations. The current head is `v2.2_step2.sql` — the v3 Drop Audience Engine expansion: `drop_intents` catalog (19 codes with allowed reward types + fraud sensitivity), `drop_sender_reputation` (trust score), `drop_event_fraud_signals`, `drop_forks` (remix), `reward_ledger.idempotency_key`, and three RPCs (`ld_create_share_edge_v3` for atomic share+context, `ld_rebuild_sender_reputation_v3`, refreshed `distribute_rewards_safe` with per-intent allowed-form enforcement). `update_lifecycle_stage` gained `fork_create → remix_curator` and `advocacy + trust ≥ 80 → trusted_advocate` branches.
+- Schema is large and evolves outside the app code. To inspect or change it, prefer the Supabase MCP server (see `.mcp.json` — gitignored — which configures `@supabase/mcp-server-supabase`). MCP tools cover `list_tables`, `execute_sql`, `apply_migration`, `get_advisors`, etc. Run `get_advisors` periodically; it flags missing RLS and similar.
+
+## Working with Supabase on Windows (this dev machine)
+
+Three traps that have bitten before — work around them, don't rediscover them:
+
+- **`npx` is broken on this profile.** The username `THE E&M` contains a space and `&`; `npx`'s cache path resolves through `cmd.exe` and the path gets shredded (`THE E&` is parsed as a command separator). `.mcp.json` therefore invokes `node` against the globally installed entrypoint (`%APPDATA%\npm\node_modules\@supabase\mcp-server-supabase\dist\transports\stdio.js`) rather than `npx ... @supabase/mcp-server-supabase`. If you add another MCP server, do the same.
+- **PowerShell pipes drop non-ASCII.** `... | & node ...` encodes the pipe with `$OutputEncoding` (ASCII by default on Windows PowerShell 5.1), so Korean text in SQL gets silently replaced with `?` before reaching the server. Symptom: migrations "succeed" but `드롭` becomes `??`. Fix: launch node via `System.Diagnostics.Process` and write raw UTF-8 bytes to `StandardInput.BaseStream` (`PowerShell 5.1` lacks `StandardInputEncoding`, so byte-level writes are the only reliable path). Verify with `encode(convert_to(col, 'UTF8'), 'hex')` and a `position('?' in col) > 0` sentinel after any migration that includes Korean strings.
+- **`apply_migration` in `--read-only` mode** is blocked. The committed `.mcp.json` keeps `--read-only` for safety; for one-off writes, invoke the MCP server stdio directly without the flag instead of editing the config and restarting.
+
+## Other notes
 
 - `.lovable/plan.md` describes an aspirational migration off TanStack Start to a plain Vite SPA. That migration **did not happen** — the current code is still on TanStack Start. Treat the file as historical context, not as a spec to follow.
-- `supabase/config.toml` only contains the Supabase project id; there are no local migrations checked in.
 - Recent commits suggest the team works in short batches with terse messages ("Changes"); larger commits use Korean summaries.
