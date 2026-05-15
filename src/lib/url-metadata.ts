@@ -4,12 +4,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { friendlyErrors } from "@/components/ErrorMessage";
 
-export type UrlMetadataProvider =
-  | "youtube"
-  | "instagram"
-  | "tiktok"
-  | "naver_clip"
-  | "manual";
+export type UrlMetadataProvider = "youtube" | "instagram" | "tiktok" | "naver_clip" | "manual";
 
 export type UrlMetadataExtractionMethod = "oembed" | "og_tags" | "manual";
 
@@ -84,14 +79,13 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata> {
 
   if (error) {
     // supabase-js wraps non-2xx as FunctionsHttpError with a Response on .context
-    const status =
-      (error as { context?: { status?: number } }).context?.status ?? 0;
+    const status = (error as { context?: { status?: number } }).context?.status ?? 0;
     // try to read the error body
     let code = "unknown";
     try {
-      const body = await (
-        error as { context?: { response?: Response } }
-      ).context?.response?.clone().json();
+      const body = await (error as { context?: { response?: Response } }).context?.response
+        ?.clone()
+        .json();
       if (body && typeof body.error === "string") code = body.error;
     } catch {
       // ignore parse failures

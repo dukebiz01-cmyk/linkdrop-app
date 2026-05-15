@@ -25,9 +25,7 @@ const payload = {
 const payloadPath = resolve(here, "tmp/payload-deploy-extract.json");
 writeFileSync(payloadPath, JSON.stringify(payload, null, 2), "utf8");
 
-const result = spawnSync(
-  "node",
-  [resolve(here, "mcp-supabase-write.mjs"), payloadPath],
-  { stdio: "inherit" },
-);
+const result = spawnSync("node", [resolve(here, "mcp-supabase-write.mjs"), payloadPath], {
+  stdio: "inherit",
+});
 process.exit(result.status ?? 0);

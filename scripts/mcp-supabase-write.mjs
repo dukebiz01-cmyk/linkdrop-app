@@ -16,8 +16,7 @@ const STDIO_PATH =
   process.env.SUPABASE_MCP_STDIO ??
   "C:\\Users\\THE E&M\\AppData\\Roaming\\npm\\node_modules\\@supabase\\mcp-server-supabase\\dist\\transports\\stdio.js";
 
-const PROJECT_REF =
-  process.env.SUPABASE_PROJECT_REF ?? "xukxtzjfqfwalqpmfidb";
+const PROJECT_REF = process.env.SUPABASE_PROJECT_REF ?? "xukxtzjfqfwalqpmfidb";
 const ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
 if (!ACCESS_TOKEN) {
   console.error(
@@ -38,14 +37,10 @@ if (!payload.tool || !payload.args) {
   process.exit(2);
 }
 
-const child = spawn(
-  "node",
-  [STDIO_PATH, `--project-ref=${PROJECT_REF}`],
-  {
-    env: { ...process.env, SUPABASE_ACCESS_TOKEN: ACCESS_TOKEN },
-    stdio: ["pipe", "pipe", "inherit"],
-  },
-);
+const child = spawn("node", [STDIO_PATH, `--project-ref=${PROJECT_REF}`], {
+  env: { ...process.env, SUPABASE_ACCESS_TOKEN: ACCESS_TOKEN },
+  stdio: ["pipe", "pipe", "inherit"],
+});
 
 let buf = "";
 const responses = new Map();
