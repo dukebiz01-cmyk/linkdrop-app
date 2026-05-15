@@ -1,0 +1,49 @@
+# Normalize all text files to LF on commit; checkout as LF on every OS.
+# Overrides individual users' core.autocrlf settings (e.g. Windows true).
+* text=auto eol=lf
+
+# Explicit text + LF for source / config we care about
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.mjs       text eol=lf
+*.cjs       text eol=lf
+*.json      text eol=lf
+*.jsonc     text eol=lf
+*.md        text eol=lf
+*.css       text eol=lf
+*.html      text eol=lf
+*.svg       text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.sql       text eol=lf
+*.sh        text eol=lf
+*.env*      text eol=lf
+.gitignore  text eol=lf
+.gitattributes text eol=lf
+
+# Lockfiles: keep as text but never auto-merge to avoid churn
+bun.lock        text eol=lf -diff merge=ours
+package-lock.json text eol=lf -diff merge=ours
+yarn.lock       text eol=lf -diff merge=ours
+pnpm-lock.yaml  text eol=lf -diff merge=ours
+
+# Binaries — leave bytes untouched
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.webp      binary
+*.avif      binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.otf       binary
+*.eot       binary
+*.pdf       binary
+*.zip       binary
+*.gz        binary
+*.tgz       binary
