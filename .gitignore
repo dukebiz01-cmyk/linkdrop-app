@@ -23,6 +23,9 @@ dist-ssr
 # MCP server config (contains personal access tokens)
 .mcp.json
 
+# Throwaway payload files for scripts/mcp-supabase-write.mjs
+scripts/tmp/
+
 # Local Claude Code session state
 .claude/
 
