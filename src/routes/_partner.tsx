@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
+import { getAuthClient } from "@/lib/auth-context";
 
 /**
  * 파트너(approved owner) 보호 레이아웃.
@@ -8,8 +8,8 @@ import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
  */
 export const Route = createFileRoute("/_partner")({
   beforeLoad: async ({ location }) => {
-    if (!isSupabaseConfigured) return;
-    const supabase = getSupabase();
+    const supabase = await getAuthClient();
+    if (!supabase) return;
     const { data: sessionData } = await supabase.auth.getSession();
     const session = sessionData.session;
     if (!session) {
