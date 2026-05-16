@@ -14,13 +14,14 @@ import { Route as UserRouteImport } from './routes/_user'
 import { Route as PartnerRouteImport } from './routes/_partner'
 import { Route as AdminRouteImport } from './routes/_admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DTestRouteImport } from './routes/d.test'
+import { Route as DShareUuidRouteImport } from './routes/d.$shareUuid'
 import { Route as UserProfileRouteImport } from './routes/_user/profile'
 import { Route as UserInboxRouteImport } from './routes/_user/inbox'
 import { Route as UserHomeRouteImport } from './routes/_user/home'
 import { Route as UserCreateRouteImport } from './routes/_user/create'
 import { Route as PartnerPartnerIndexRouteImport } from './routes/_partner/partner.index'
 import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index'
-import { Route as UserDShare_uuidRouteImport } from './routes/_user/d.$share_uuid'
 import { Route as UserCouponClaim_codeRouteImport } from './routes/_user/coupon.$claim_code'
 import { Route as PartnerPartnerRegisterRouteImport } from './routes/_partner/partner.register'
 import { Route as PartnerPartnerRedeemRouteImport } from './routes/_partner/partner.redeem'
@@ -56,6 +57,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DTestRoute = DTestRouteImport.update({
+  id: '/d/test',
+  path: '/d/test',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DShareUuidRoute = DShareUuidRouteImport.update({
+  id: '/d/$shareUuid',
+  path: '/d/$shareUuid',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UserProfileRoute = UserProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -85,11 +96,6 @@ const AdminAdminIndexRoute = AdminAdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
   getParentRoute: () => AdminRoute,
-} as any)
-const UserDShare_uuidRoute = UserDShare_uuidRouteImport.update({
-  id: '/d/$share_uuid',
-  path: '/d/$share_uuid',
-  getParentRoute: () => UserRoute,
 } as any)
 const UserCouponClaim_codeRoute = UserCouponClaim_codeRouteImport.update({
   id: '/coupon/$claim_code',
@@ -159,6 +165,8 @@ export interface FileRoutesByFullPath {
   '/home': typeof UserHomeRoute
   '/inbox': typeof UserInboxRoute
   '/profile': typeof UserProfileRoute
+  '/d/$shareUuid': typeof DShareUuidRoute
+  '/d/test': typeof DTestRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
   '/admin/defamation': typeof AdminAdminDefamationRoute
   '/admin/extract': typeof AdminAdminExtractRoute
@@ -171,7 +179,6 @@ export interface FileRoutesByFullPath {
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
-  '/d/$share_uuid': typeof UserDShare_uuidRoute
   '/admin/': typeof AdminAdminIndexRoute
   '/partner/': typeof PartnerPartnerIndexRoute
 }
@@ -182,6 +189,8 @@ export interface FileRoutesByTo {
   '/home': typeof UserHomeRoute
   '/inbox': typeof UserInboxRoute
   '/profile': typeof UserProfileRoute
+  '/d/$shareUuid': typeof DShareUuidRoute
+  '/d/test': typeof DTestRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
   '/admin/defamation': typeof AdminAdminDefamationRoute
   '/admin/extract': typeof AdminAdminExtractRoute
@@ -194,7 +203,6 @@ export interface FileRoutesByTo {
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
-  '/d/$share_uuid': typeof UserDShare_uuidRoute
   '/admin': typeof AdminAdminIndexRoute
   '/partner': typeof PartnerPartnerIndexRoute
 }
@@ -209,6 +217,8 @@ export interface FileRoutesById {
   '/_user/home': typeof UserHomeRoute
   '/_user/inbox': typeof UserInboxRoute
   '/_user/profile': typeof UserProfileRoute
+  '/d/$shareUuid': typeof DShareUuidRoute
+  '/d/test': typeof DTestRoute
   '/_admin/admin/campaigns': typeof AdminAdminCampaignsRoute
   '/_admin/admin/defamation': typeof AdminAdminDefamationRoute
   '/_admin/admin/extract': typeof AdminAdminExtractRoute
@@ -221,7 +231,6 @@ export interface FileRoutesById {
   '/_partner/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/_partner/partner/register': typeof PartnerPartnerRegisterRoute
   '/_user/coupon/$claim_code': typeof UserCouponClaim_codeRoute
-  '/_user/d/$share_uuid': typeof UserDShare_uuidRoute
   '/_admin/admin/': typeof AdminAdminIndexRoute
   '/_partner/partner/': typeof PartnerPartnerIndexRoute
 }
@@ -234,6 +243,8 @@ export interface FileRouteTypes {
     | '/home'
     | '/inbox'
     | '/profile'
+    | '/d/$shareUuid'
+    | '/d/test'
     | '/admin/campaigns'
     | '/admin/defamation'
     | '/admin/extract'
@@ -246,7 +257,6 @@ export interface FileRouteTypes {
     | '/partner/redeem'
     | '/partner/register'
     | '/coupon/$claim_code'
-    | '/d/$share_uuid'
     | '/admin/'
     | '/partner/'
   fileRoutesByTo: FileRoutesByTo
@@ -257,6 +267,8 @@ export interface FileRouteTypes {
     | '/home'
     | '/inbox'
     | '/profile'
+    | '/d/$shareUuid'
+    | '/d/test'
     | '/admin/campaigns'
     | '/admin/defamation'
     | '/admin/extract'
@@ -269,7 +281,6 @@ export interface FileRouteTypes {
     | '/partner/redeem'
     | '/partner/register'
     | '/coupon/$claim_code'
-    | '/d/$share_uuid'
     | '/admin'
     | '/partner'
   id:
@@ -283,6 +294,8 @@ export interface FileRouteTypes {
     | '/_user/home'
     | '/_user/inbox'
     | '/_user/profile'
+    | '/d/$shareUuid'
+    | '/d/test'
     | '/_admin/admin/campaigns'
     | '/_admin/admin/defamation'
     | '/_admin/admin/extract'
@@ -295,7 +308,6 @@ export interface FileRouteTypes {
     | '/_partner/partner/redeem'
     | '/_partner/partner/register'
     | '/_user/coupon/$claim_code'
-    | '/_user/d/$share_uuid'
     | '/_admin/admin/'
     | '/_partner/partner/'
   fileRoutesById: FileRoutesById
@@ -306,6 +318,8 @@ export interface RootRouteChildren {
   PartnerRoute: typeof PartnerRouteWithChildren
   UserRoute: typeof UserRouteWithChildren
   LoginRoute: typeof LoginRoute
+  DShareUuidRoute: typeof DShareUuidRoute
+  DTestRoute: typeof DTestRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -343,6 +357,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/d/test': {
+      id: '/d/test'
+      path: '/d/test'
+      fullPath: '/d/test'
+      preLoaderRoute: typeof DTestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/d/$shareUuid': {
+      id: '/d/$shareUuid'
+      path: '/d/$shareUuid'
+      fullPath: '/d/$shareUuid'
+      preLoaderRoute: typeof DShareUuidRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_user/profile': {
@@ -386,13 +414,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminAdminIndexRouteImport
       parentRoute: typeof AdminRoute
-    }
-    '/_user/d/$share_uuid': {
-      id: '/_user/d/$share_uuid'
-      path: '/d/$share_uuid'
-      fullPath: '/d/$share_uuid'
-      preLoaderRoute: typeof UserDShare_uuidRouteImport
-      parentRoute: typeof UserRoute
     }
     '/_user/coupon/$claim_code': {
       id: '/_user/coupon/$claim_code'
@@ -530,7 +551,6 @@ interface UserRouteChildren {
   UserInboxRoute: typeof UserInboxRoute
   UserProfileRoute: typeof UserProfileRoute
   UserCouponClaim_codeRoute: typeof UserCouponClaim_codeRoute
-  UserDShare_uuidRoute: typeof UserDShare_uuidRoute
 }
 
 const UserRouteChildren: UserRouteChildren = {
@@ -539,7 +559,6 @@ const UserRouteChildren: UserRouteChildren = {
   UserInboxRoute: UserInboxRoute,
   UserProfileRoute: UserProfileRoute,
   UserCouponClaim_codeRoute: UserCouponClaim_codeRoute,
-  UserDShare_uuidRoute: UserDShare_uuidRoute,
 }
 
 const UserRouteWithChildren = UserRoute._addFileChildren(UserRouteChildren)
@@ -550,6 +569,8 @@ const rootRouteChildren: RootRouteChildren = {
   PartnerRoute: PartnerRouteWithChildren,
   UserRoute: UserRouteWithChildren,
   LoginRoute: LoginRoute,
+  DShareUuidRoute: DShareUuidRoute,
+  DTestRoute: DTestRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
