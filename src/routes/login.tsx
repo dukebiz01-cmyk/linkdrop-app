@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { ActionButton } from "@/components/ActionButton";
 import { ErrorMessage, friendlyErrors } from "@/components/ErrorMessage";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -17,9 +17,13 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function handleLogin() {
+    if (loading) return;
     setError(null);
+    if (!email || !password) {
+      setError("이메일과 비밀번호를 입력해 주세요.");
+      return;
+    }
     if (!isSupabaseConfigured) {
       setError("Supabase 연결 정보가 아직 없어요. .env.local을 확인해 주세요.");
       return;
@@ -32,7 +36,8 @@ function LoginPage() {
       });
       if (error) throw error;
       window.location.href = "/home";
-    } catch {
+    } catch (e) {
+      console.error("[login] signInWithPassword failed:", e);
       setError(friendlyErrors.unauthorized);
     } finally {
       setLoading(false);
@@ -45,13 +50,14 @@ function LoginPage() {
       <p className="mt-2 text-sm font-medium text-text-muted">
         이메일과 비밀번호로 로그인해 주세요.
       </p>
-      <form onSubmit={onSubmit} className="mt-8 space-y-4">
+      <div className="mt-8 space-y-4">
         <label className="block">
           <span className="text-sm font-semibold text-text-strong">이메일</span>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }}
             required
             className="mt-2 block w-full min-h-[44px] rounded-lg border border-border bg-bg px-4 py-3 text-base font-medium text-text-strong placeholder:text-text-subtle"
             placeholder="you@example.com"
@@ -63,15 +69,21 @@ function LoginPage() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }}
             required
             className="mt-2 block w-full min-h-[44px] rounded-lg border border-border bg-bg px-4 py-3 text-base font-medium text-text-strong placeholder:text-text-subtle"
           />
         </label>
         <ErrorMessage message={error} />
-        <ActionButton type="submit" disabled={loading} className="w-full">
+        <ActionButton
+          type="button"
+          disabled={loading}
+          className="w-full"
+          onClick={() => handleLogin()}
+        >
           {loading ? "확인 중…" : "로그인"}
         </ActionButton>
-      </form>
+      </div>
     </main>
   );
 }

@@ -344,11 +344,14 @@ Deno.serve(async (req) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceKey) {
+  // V2 SUPABASE_SECRET_KEY preferred; fall back to legacy SERVICE_ROLE_KEY
+  // (Supabase auto-injects the legacy var even after V2 transition).
+  const secretKey =
+    Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !secretKey) {
     return jsonResponse({ error: "server_not_configured" }, 500);
   }
-  const supa = createClient(supabaseUrl, serviceKey, {
+  const supa = createClient(supabaseUrl, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
