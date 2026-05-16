@@ -33,6 +33,15 @@ scripts/tmp/
 linkdrop-v0-integration/
 linkdrop-v0-integration.zip
 
+# Secret material — never commit (added 2026-05-16)
+docs/*key*.txt
+docs/*secret*.txt
+docs/*credentials*
+*.key
+*.pem
+.env.*.local
+secrets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
