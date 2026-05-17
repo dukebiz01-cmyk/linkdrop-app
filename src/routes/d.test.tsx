@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { InfoDropPage } from "@/components/info-drop-page";
 
 export const Route = createFileRoute("/d/test")({
-  head: () => ({ meta: [{ title: "LinkDrop Drop · 미리보기" }] }),
+  head: () => ({ meta: [{ title: "LinkDrop Drop 미리보기" }] }),
   component: DropTestPage,
 });
 
@@ -13,9 +13,9 @@ function DropTestPage() {
       videoDurationSec={154}
       videoSourceLabel="YouTube"
       maker={{ name: "Duke", droppedAgo: "2시간 전" }}
-      makerMessage="여기 진짜 분위기 좋더라. 너 좋아할 것 같아서 보내"
-      title="서울숲 근처 숨은 브런치 카페 발견"
-      description="서울숲역 3번 출구에서 도보 5분, 창가 자리에서 숲 뷰가 보이는 조용한 카페입니다. 시그니처 라떼가 맛있어요."
+      makerMessage="여기 진짜 분위기 좋더라. 너 좋아할 것 같아서 보내."
+      title="서울 근처 핫한 브런치 카페 발견"
+      description="서울역 3번 출구에서 도보 5분. 창가 자리에서 노을 보이는 조용한 카페입니다. 시그니처 쿠키랑 라떼가 맛있어요."
       intent="coupon"
       local={{
         name: "포레스트 커피",
@@ -32,7 +32,7 @@ function DropTestPage() {
         priceRange: "평균 8,000원",
       }}
       creator={{
-        channelName: "카페투어 브이로그",
+        channelName: "카페어 브이로그",
         channelUrl: "https://youtube.com/@cafetour",
       }}
       onPrimaryAction={() => console.log("[d/test] primary action: coupon")}
