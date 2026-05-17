@@ -44,18 +44,20 @@ Three protected layouts gate everything beyond the landing/login pages — each 
 
 All three short-circuit when `isSupabaseConfigured` is false so the app still renders during local setup. The file-route conventions are `_segment.tsx` (layout) + `_segment/*.tsx` (children), and children use flat dotted names like `partner.billing.tsx`.
 
-### Supabase clients — two systems, only one is wired up
+### Supabase clients — cookie-shared session, two-environment dispatch
 
-The repo has **two parallel Supabase setups** (a leftover from Lovable Cloud activation followed by a switch to a self-hosted project — see commits `affb623` "Cloud 활성화" and `d4eff94` "Raw supabase 클라이언트 적용"):
+The browser/server split uses **`@supabase/ssr`** (not raw `@supabase/supabase-js`) so SSR route guards and the browser see the same session via `document.cookie`. The earlier localStorage-based client caused `_user`/`_partner`/`_admin` `beforeLoad` guards to miss the session on full-page navigations right after login and bounce users back to `/login`.
 
-- `src/lib/supabase.ts` — **the one actually used by the app**. Raw `@supabase/supabase-js` client, lazy singleton, reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY`. Always import as `import { getSupabase, isSupabaseConfigured } from "@/lib/supabase"` and call `getSupabase()` (don't grab the client at module top — env may not be set). Targets the team's own Supabase project (`master-schema-v2.sql`, with `intent_types`, `has_role`, `is_active_partner_owner`).
+- `src/lib/supabase.ts` — browser client (`createBrowserClient`), lazy singleton, reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY`. Import as `import { getSupabase, isSupabaseConfigured } from "@/lib/supabase"` and call `getSupabase()` (don't grab the client at module top — env may not be set).
+- `src/lib/supabase-server.server.ts` — server client (`createServerClient`), bridges TanStack Start's `getCookies` / `setCookie` from `@tanstack/react-start/server` into Supabase's cookie adapter. The `.server.ts` suffix makes Vite strip it from the client bundle.
+- `src/lib/auth-context.ts` — `getAuthClient()` uses `createIsomorphicFn` from `@tanstack/react-start` to return the right client per environment. The start-compiler-plugin (`handleCreateIsomorphicFn.ts`) erases the opposite branch at build time, so the dynamic `import("./supabase-server.server")` never reaches the client bundle. **Use this in route `beforeLoad`** — do not import `supabase-server.server.ts` directly from anywhere that runs on the client (it triggers `@tanstack/react-start/server` import-protection). The earlier `typeof window` guard pattern was insufficient; `createIsomorphicFn` is the only correct dispatch.
 
-- `src/integrations/supabase/*` — Lovable Cloud scaffolding, V2-updated 2026-05-16. Currently **not imported by any app code** but kept for future use (header comments document the intent). If you wire one up:
-  - `client.ts` — proxy-wrapped browser client (duplicate of `@/lib/supabase`, kept only so `bunx supabase gen types` regeneration target stays stable).
-  - `client.server.ts` — `supabaseAdmin` with `SUPABASE_SECRET_KEY`, bypasses RLS, server-only.
-  - `auth-middleware.ts` — `requireSupabaseAuth` for TanStack Start server functions; extracts the Bearer token from the incoming request, validates via `auth.getClaims` with `SUPABASE_PUBLISHABLE_KEY`, and forwards it so RLS applies.
+There is also a second parallel scaffolding under `src/integrations/supabase/*` (leftover from Lovable Cloud activation, see commits `affb623` "Cloud 활성화" and `d4eff94` "Raw supabase 클라이언트 적용"). Currently **not imported by any app code** but V2-updated 2026-05-16 and kept for future use:
+- `client.ts` — proxy-wrapped browser client (duplicate of `@/lib/supabase`, kept only so `bunx supabase gen types` regeneration target stays stable).
+- `client.server.ts` — `supabaseAdmin` with `SUPABASE_SECRET_KEY`, bypasses RLS, server-only.
+- `auth-middleware.ts` — `requireSupabaseAuth` for TanStack Start server functions; extracts the Bearer token, validates via `auth.getClaims` with `SUPABASE_PUBLISHABLE_KEY`, and forwards it so RLS applies.
 
-When picking a client: client-side route loaders / components → `@/lib/supabase`. New server functions that need user-scoped RLS → `requireSupabaseAuth`. Server-side admin tasks → `supabaseAdmin`. Never expose `supabaseAdmin` to client code.
+When picking a client: route loaders / `beforeLoad` → `getAuthClient()`. Client components → `getSupabase()`. New server functions that need user-scoped RLS → `requireSupabaseAuth`. Server-side admin tasks → `supabaseAdmin`. Never expose `supabaseAdmin` to client code.
 
 ### Create flow (`/create`)
 
@@ -89,8 +91,9 @@ shadcn config is in `components.json` (style: `new-york`, base: `slate`). User-f
 
 ## Database / migrations
 
-- `supabase/config.toml` holds the project ref. `supabase/migrations/` contains numbered SQL migrations. The current head is `v2.2_step2.sql` — the v3 Drop Audience Engine expansion: `drop_intents` catalog (19 codes with allowed reward types + fraud sensitivity), `drop_sender_reputation` (trust score), `drop_event_fraud_signals`, `drop_forks` (remix), `reward_ledger.idempotency_key`, and three RPCs (`ld_create_share_edge_v3` for atomic share+context, `ld_rebuild_sender_reputation_v3`, refreshed `distribute_rewards_safe` with per-intent allowed-form enforcement). `update_lifecycle_stage` gained `fork_create → remix_curator` and `advocacy + trust ≥ 80 → trusted_advocate` branches.
-- Schema is large and evolves outside the app code. To inspect or change it, prefer the Supabase MCP server (see `.mcp.json` — gitignored — which configures `@supabase/mcp-server-supabase`). MCP tools cover `list_tables`, `execute_sql`, `apply_migration`, `get_advisors`, etc. Run `get_advisors` periodically; it flags missing RLS and similar.
+- `supabase/config.toml` holds the project ref (`xukxtzjfqfwalqpmfidb`). `supabase/migrations/` contains numbered SQL migrations; current head is `v2.4_phase1_hardening.sql`. The Drop Audience Engine schema (introduced at `v2.2_step2.sql`) is the core model: `drop_intents` catalog (19 codes — the canonical intent list lives in `drop_intents.code`, not `intent_types.key`), `drop_sender_reputation`, `drop_event_fraud_signals`, `drop_forks`, `reward_ledger.idempotency_key`, and the RPCs `ld_create_share_edge_v3` / `ld_rebuild_sender_reputation_v3` / `distribute_rewards_safe`. The `v2.3_step*` series added the coupon-security tightening, `url_metadata_cache`, the YouTube category → intent map + seeds, the `suggest_intent_for_url` RPC, and `timelink` (timestamped video link) support. `v2.4_phase1_hardening.sql` is the most recent hardening pass.
+- Schema is large and evolves outside the app code. To inspect it, use the Supabase MCP server (`.mcp.json` is gitignored, configures `@supabase/mcp-server-supabase`). MCP tools cover `list_tables`, `execute_sql`, `apply_migration`, `get_advisors`, etc. Run `get_advisors` periodically; it flags missing RLS and similar.
+- **To write migrations**, use `node scripts/apply-migration.mjs <migration_name> <path_to_sql>`. The committed `.mcp.json` keeps `--read-only` on for safety, so `apply_migration` is blocked by default. The script invokes the MCP stdio entrypoint directly without `--read-only`, reading the token/project-ref from `.mcp.json` so secrets aren't duplicated. Edit `.mcp.json` to drop `--read-only` only if you need many writes in a row, then restore it.
 
 ## Working with Supabase on Windows (this dev machine)
 
@@ -102,5 +105,6 @@ Three traps that have bitten before — work around them, don't rediscover them:
 
 ## Other notes
 
+- **Deployment target is Cloudflare Workers only.** A Vercel project existed briefly and was deleted 2026-05-17 — the `@cloudflare/vite-plugin` output format is unservable by Vercel. Don't reintroduce Vercel config or assume Vercel-specific runtime APIs.
 - `.lovable/plan.md` describes an aspirational migration off TanStack Start to a plain Vite SPA. That migration **did not happen** — the current code is still on TanStack Start. Treat the file as historical context, not as a spec to follow.
 - Recent commits suggest the team works in short batches with terse messages ("Changes"); larger commits use Korean summaries.
