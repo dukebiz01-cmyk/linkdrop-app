@@ -3,7 +3,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Play, MapPin, ExternalLink, Share2 } from "lucide-react";
+import {
+  Play,
+  MapPin,
+  ExternalLink,
+  Share2,
+} from "lucide-react";
 
 // ============================================================
 // Types
@@ -56,7 +61,9 @@ function formatRelativeTime(date: Date | string): string {
   return then.toLocaleDateString("ko-KR");
 }
 
-function getIntentLabel(intent: InfoDropCardProps["intent"]): string {
+function getIntentLabel(
+  intent: InfoDropCardProps["intent"]
+): string {
   const labels: Record<InfoDropCardProps["intent"], string> = {
     coupon: "쿠폰 드롭",
     reservation: "예약 드롭",
@@ -103,7 +110,11 @@ export function InfoDropCard({
     <Card className="w-full max-w-[480px] overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
       {/* 1. Video Section */}
       <div className="relative aspect-video w-full bg-neutral-100">
-        <img src={videoThumbnailUrl} alt={title} className="h-full w-full object-cover" />
+        <img
+          src={videoThumbnailUrl}
+          alt={title}
+          className="h-full w-full object-cover"
+        />
         {/* Play Button Overlay */}
         <button
           className="absolute inset-0 flex items-center justify-center"
@@ -136,14 +147,22 @@ export function InfoDropCard({
               {maker.name.charAt(0)}
             </AvatarFallback>
           </Avatar>
-          <span className="flex-1 text-sm font-medium text-black">{maker.name}님이 보낸 드롭</span>
-          <span className="text-xs text-neutral-400">{formatRelativeTime(sentAt)}</span>
+          <span className="flex-1 text-sm font-medium text-black">
+            {maker.name}님이 보낸 드롭
+          </span>
+          <span className="text-xs text-neutral-400">
+            {formatRelativeTime(sentAt)}
+          </span>
         </div>
 
         {/* 3. Title + Description */}
         <div className="flex flex-col gap-1">
-          <h2 className="line-clamp-2 text-lg font-semibold tracking-tight text-black">{title}</h2>
-          <p className="line-clamp-3 text-sm leading-relaxed text-neutral-600">{description}</p>
+          <h2 className="line-clamp-2 text-lg font-semibold tracking-tight text-black">
+            {title}
+          </h2>
+          <p className="line-clamp-3 text-sm leading-relaxed text-neutral-600">
+            {description}
+          </p>
         </div>
 
         {/* 4. Intent Badge */}
@@ -159,19 +178,15 @@ export function InfoDropCard({
         {/* 5. Local Info Card */}
         <div className="flex items-center justify-between rounded-md bg-neutral-50 p-3">
           <div className="flex flex-col gap-0.5">
-            <span className="text-base font-medium text-black">{local.name}</span>
+            <span className="text-base font-medium text-black">
+              {local.name}
+            </span>
             <span className="text-sm text-neutral-600">
               {local.category}
               {local.distanceKm !== undefined && ` · ${local.distanceKm}km`}
             </span>
             <span className="text-sm">
-              <span
-                className={
-                  local.statusLabel === "영업중" || local.statusLabel === "예약 가능"
-                    ? "text-[#10B981]"
-                    : "text-neutral-600"
-                }
-              >
+              <span className={local.statusLabel === "영업중" || local.statusLabel === "예약 가능" ? "text-[#10B981]" : "text-neutral-600"}>
                 {local.statusLabel}
               </span>
               {local.hoursLabel && <span className="text-neutral-600"> · {local.hoursLabel}</span>}

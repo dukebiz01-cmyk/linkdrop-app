@@ -137,7 +137,9 @@ export function InfoDropPage({
         >
           <ChevronLeft className="h-6 w-6 text-[#0A0A0A]" />
         </button>
-        <span className="text-sm font-medium tracking-tight text-[#0A0A0A]">LinkDrop</span>
+        <span className="text-sm font-medium tracking-tight text-[#0A0A0A]">
+          LinkDrop
+        </span>
         <button
           className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-gray-100"
           aria-label="더보기"
@@ -155,14 +157,18 @@ export function InfoDropPage({
           </AvatarFallback>
         </Avatar>
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-[#0A0A0A]">{maker.name}</span>
+            <span className="text-sm font-semibold text-[#0A0A0A]">{maker.name}</span>
           <span className="text-xs text-[#A3A3A3]">{maker.droppedAgo} 드롭</span>
         </div>
       </div>
 
       {/* B. Video Hero */}
       <div className="relative aspect-video w-full bg-[#0A0A0A]">
-        <img src={videoThumbnailUrl} alt={title} className="h-full w-full object-cover" />
+        <img
+          src={videoThumbnailUrl}
+          alt={title}
+          className="h-full w-full object-cover"
+        />
         {/* YouTube label - top right */}
         <span className="absolute right-3 top-3 rounded-md bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
           {videoSourceLabel}
@@ -193,7 +199,9 @@ export function InfoDropPage({
           {getIntentLabel(intent)}
         </span>
         {/* Title */}
-        <h1 className="text-2xl font-bold leading-snug tracking-tight text-[#0A0A0A]">{title}</h1>
+        <h1 className="text-2xl font-bold leading-snug tracking-tight text-[#0A0A0A]">
+          {title}
+        </h1>
         {/* Maker message */}
         {makerMessage && (
           <p className="mt-3 border-l-2 border-[#E5E5E5] pl-3 text-sm italic leading-relaxed text-[#525252]">
@@ -201,7 +209,9 @@ export function InfoDropPage({
           </p>
         )}
         {/* Description */}
-        <p className="mt-4 text-base leading-relaxed text-[#525252]">{description}</p>
+        <p className="mt-4 text-base leading-relaxed text-[#525252]">
+          {description}
+        </p>
       </div>
 
       {/* D. Local Info Card */}
@@ -227,7 +237,9 @@ export function InfoDropPage({
                   {local.rating}
                 </span>
                 {local.reviewCount && (
-                  <span className="text-sm text-[#525252]">· 리뷰 {local.reviewCount}개</span>
+                  <span className="text-sm text-[#525252]">
+                    · 리뷰 {local.reviewCount}개
+                  </span>
                 )}
               </div>
             )}
@@ -258,7 +270,9 @@ export function InfoDropPage({
               <span>{local.responseNote}</span>
             </div>
           )}
-          {local.priceRange && <div className="text-[#525252]">{local.priceRange}</div>}
+          {local.priceRange && (
+            <div className="text-[#525252]">{local.priceRange}</div>
+          )}
         </div>
       </div>
 
@@ -271,8 +285,12 @@ export function InfoDropPage({
           </AvatarFallback>
         </Avatar>
         <div className="flex flex-1 flex-col">
-          <span className="text-xs uppercase tracking-wider text-[#A3A3A3]">원본 영상</span>
-          <span className="text-sm font-medium text-[#0A0A0A]">{creator.channelName}</span>
+          <span className="text-xs uppercase tracking-wider text-[#A3A3A3]">
+            원본 영상
+          </span>
+          <span className="text-sm font-medium text-[#0A0A0A]">
+            {creator.channelName}
+          </span>
         </div>
         <a
           href={creator.channelUrl}
@@ -446,8 +464,7 @@ export default function InfoDropPageCoupon() {
       local={{
         name: "포레스트 커피",
         category: "카페 · 브런치",
-        thumbnailUrl:
-          "https://images.unsplash.com/photo-1559925393-8be0ec4767c8?w=200&h=200&fit=crop",
+        thumbnailUrl: "https://images.unsplash.com/photo-1559925393-8be0ec4767c8?w=200&h=200&fit=crop",
         distance: "0.8km",
         address: "서울 성동구",
         statusLabel: "영업중",
@@ -483,8 +500,7 @@ export function InfoDropPageReservation() {
       local={{
         name: "노을재 캠핑장",
         category: "캠핑 · 글램핑",
-        thumbnailUrl:
-          "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=200&h=200&fit=crop",
+        thumbnailUrl: "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=200&h=200&fit=crop",
         distance: "가평",
         address: "경기 가평군",
         statusLabel: "예약 가능",
