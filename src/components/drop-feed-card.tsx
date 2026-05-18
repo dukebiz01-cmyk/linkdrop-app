@@ -171,8 +171,8 @@ export function DropFeedCard({
         )}
       </div>
 
-      {/* Intent chip */}
-      <div className="mx-4 mt-3">
+      {/* Intent chip — display only, swallow click so card body navigate doesn't fire */}
+      <div className="mx-4 mt-3" onClick={(e) => e.stopPropagation()}>
         <span
           className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${getIntentStyle(intent)}`}
         >
