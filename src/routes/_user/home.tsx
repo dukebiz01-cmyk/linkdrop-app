@@ -48,6 +48,11 @@ function HomeRoute() {
       onCreateDrop={() => navigate({ to: "/create" })}
       onTabChange={(tab) => {
         if (tab === "home") return;
+        if (tab === "explore") {
+          setCategory("discover");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
         if (tab === "inbox") navigate({ to: "/inbox" });
         else if (tab === "profile") navigate({ to: "/profile" });
         else console.log("[home] unhandled tab:", tab);

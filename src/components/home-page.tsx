@@ -116,7 +116,7 @@ export function HomePage({
               key={drop.shareUuid}
               {...drop}
               onClick={() => onDropClick(drop.shareUuid)}
-              onCtaClick={() => console.log("[HomePage] CTA clicked:", drop.shareUuid)}
+              onCtaClick={() => onDropClick(drop.shareUuid)}
             />
           ))
         ) : (
