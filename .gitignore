@@ -32,6 +32,7 @@ scripts/tmp/
 # v0.app integration source (extracted from zip, components merged into src/)
 linkdrop-v0-integration/
 linkdrop-v0-integration.zip
+linkdrop-v0-zip-13/
 
 # Secret material — never commit (added 2026-05-16)
 docs/*key*.txt
