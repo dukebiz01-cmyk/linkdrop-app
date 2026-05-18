@@ -1,31 +1,47 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { HomePage, type HomePageProps } from "@/components/home-page";
+import { HomePage, type DropFeedItem, type HomePageProps } from "@/components/home-page";
 import { getAuthClient } from "@/lib/auth-context";
+import { getDiscoverDrops, getSentDrops } from "@/lib/feed-queries";
 
 export const Route = createFileRoute("/_user/home")({
   head: () => ({ meta: [{ title: "홈" }] }),
-  loader: async () => {
+  loader: async (): Promise<{
+    user: { name: string };
+    discoverDrops: DropFeedItem[];
+    sentDrops: DropFeedItem[];
+  }> => {
     const supabase = await getAuthClient();
-    if (!supabase) return { user: { name: "사용자" } };
+    if (!supabase) {
+      return { user: { name: "사용자" }, discoverDrops: [], sentDrops: [] };
+    }
     const { data } = await supabase.auth.getSession();
     const email = data.session?.user.email ?? null;
+    const userId = data.session?.user.id;
     const displayName = email ? email.split("@")[0] : "사용자";
-    return { user: { name: displayName } };
+
+    const [discoverDrops, sentDrops] = await Promise.all([
+      getDiscoverDrops(supabase),
+      userId ? getSentDrops(supabase, userId) : Promise.resolve([] as DropFeedItem[]),
+    ]);
+
+    return { user: { name: displayName }, discoverDrops, sentDrops };
   },
   component: HomeRoute,
 });
 
 function HomeRoute() {
-  const { user } = Route.useLoaderData();
+  const { user, discoverDrops, sentDrops } = Route.useLoaderData();
   const navigate = useNavigate();
-  const [category, setCategory] = useState<HomePageProps["category"]>("received");
+  const [category, setCategory] = useState<HomePageProps["category"]>("discover");
+
+  const drops = category === "discover" ? discoverDrops : category === "sent" ? sentDrops : [];
 
   return (
     <HomePage
       user={user}
       category={category}
-      drops={[]}
+      drops={drops}
       unreadCount={0}
       onCategoryChange={(cat) => setCategory(cat as HomePageProps["category"])}
       onDropClick={(shareUuid) => navigate({ to: "/d/$shareUuid", params: { shareUuid } })}

@@ -23,7 +23,7 @@ export interface DropFeedCardProps {
     | "campaign"
     | "custom";
   title: string;
-  localName: string;
+  localName?: string;
   distance?: string;
   receivedByCount?: number;
   remainingCoupons?: number;
@@ -164,9 +164,11 @@ export function DropFeedCard({
           {videoSourceLabel}
         </span>
         {/* Duration */}
-        <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs tabular-nums text-white backdrop-blur-sm">
-          {formatDuration(videoDurationSec)}
-        </span>
+        {videoDurationSec > 0 && (
+          <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs tabular-nums text-white backdrop-blur-sm">
+            {formatDuration(videoDurationSec)}
+          </span>
+        )}
       </div>
 
       {/* Intent chip */}
@@ -184,16 +186,18 @@ export function DropFeedCard({
       </h3>
 
       {/* Local row */}
-      <div className="mt-3 flex items-center gap-2 px-4">
-        <MapPin className="h-3.5 w-3.5 text-[#A3A3A3]" />
-        <span className="text-sm text-[#525252]">{localName}</span>
-        {distance && (
-          <>
-            <span className="text-[#A3A3A3]">·</span>
-            <span className="text-sm text-[#A3A3A3]">{distance}</span>
-          </>
-        )}
-      </div>
+      {localName && (
+        <div className="mt-3 flex items-center gap-2 px-4">
+          <MapPin className="h-3.5 w-3.5 text-[#A3A3A3]" />
+          <span className="text-sm text-[#525252]">{localName}</span>
+          {distance && (
+            <>
+              <span className="text-[#A3A3A3]">·</span>
+              <span className="text-sm text-[#A3A3A3]">{distance}</span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Mini creator attribution */}
       {creator && (

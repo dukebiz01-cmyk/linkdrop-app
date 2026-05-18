@@ -1,17 +1,17 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Search, Bell, Home, Compass, Plus, Inbox, User } from "lucide-react";
-import { DropFeedCard, DropFeedCardSkeleton } from "./drop-feed-card";
+import { DropFeedCard, DropFeedCardSkeleton, type DropFeedCardProps } from "./drop-feed-card";
 
 // Types
-interface DropFeedItem {
+export interface DropFeedItem {
   shareUuid: string;
   maker: { name: string; avatarUrl?: string; droppedAgo: string };
   videoThumbnailUrl: string;
   videoSourceLabel: "YouTube" | "Instagram";
   videoDurationSec: number;
-  intent: "coupon" | "reservation" | "commerce" | "info" | "ticket" | "lead";
+  intent: DropFeedCardProps["intent"];
   title: string;
-  localName: string;
+  localName?: string;
   distance?: string;
   receivedByCount?: number;
   remainingCoupons?: number;
@@ -20,7 +20,7 @@ interface DropFeedItem {
 
 export interface HomePageProps {
   user: { name: string; avatarUrl?: string };
-  category: "received" | "recommended" | "sent" | "saved" | "nearby";
+  category: "discover" | "sent" | "saved";
   drops: DropFeedItem[];
   unreadCount?: number;
   onCategoryChange: (cat: string) => void;
@@ -32,12 +32,21 @@ export interface HomePageProps {
 type Category = HomePageProps["category"];
 
 const CATEGORIES: { key: Category; label: string }[] = [
-  { key: "received", label: "받은 드롭" },
-  { key: "recommended", label: "추천" },
+  { key: "discover", label: "탐색" },
   { key: "sent", label: "내가 보낸" },
   { key: "saved", label: "저장됨" },
-  { key: "nearby", label: "주변" },
 ];
+
+function emptyCopyFor(category: Category): string {
+  switch (category) {
+    case "discover":
+      return "아직 공개된 드롭이 없어요";
+    case "sent":
+      return "아직 보낸 드롭이 없어요. 첫 드롭을 만들어 보세요";
+    case "saved":
+      return "저장 기능은 곧 만나요";
+  }
+}
 
 // Main Component
 export function HomePage({
@@ -114,9 +123,7 @@ export function HomePage({
           /* D. Empty State */
           <div className="mt-24 flex flex-col items-center justify-center">
             <Inbox className="h-12 w-12 text-[#A3A3A3]" />
-            <p className="mt-4 text-sm text-[#525252]">
-              친구가 좋은 곳을 발견하면 여기로 드롭이 와요
-            </p>
+            <p className="mt-4 text-sm text-[#525252]">{emptyCopyFor(category)}</p>
           </div>
         )}
       </main>
@@ -315,7 +322,7 @@ export function HomePageDemo() {
   return (
     <HomePage
       user={{ name: "나", avatarUrl: "https://picsum.photos/seed/me/100" }}
-      category="received"
+      category="discover"
       drops={DEMO_DROPS}
       unreadCount={3}
       onCategoryChange={(cat) => console.log("[Demo] Category:", cat)}
@@ -330,7 +337,7 @@ export function HomePageEmptyDemo() {
   return (
     <HomePage
       user={{ name: "나", avatarUrl: "https://picsum.photos/seed/me/100" }}
-      category="received"
+      category="discover"
       drops={[]}
       unreadCount={0}
       onCategoryChange={(cat) => console.log("[Demo] Category:", cat)}
