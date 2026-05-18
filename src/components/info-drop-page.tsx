@@ -126,22 +126,20 @@ export function InfoDropPage({
   return (
     <div className="relative min-h-screen bg-white pb-32">
       {/* A. Header */}
-      <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-gray-100 bg-white px-4">
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[#F5F5F5] bg-white px-4">
         <button
           onClick={() => {
             console.log("[InfoDropPage] Back clicked");
             onBack?.();
           }}
-          className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-gray-100"
+          className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-[#F5F5F5]"
           aria-label="뒤로 가기"
         >
           <ChevronLeft className="h-6 w-6 text-[#0A0A0A]" />
         </button>
-        <span className="text-sm font-medium tracking-tight text-[#0A0A0A]">
-          LinkDrop
-        </span>
+        <span className="text-sm font-medium tracking-tight text-[#0A0A0A]">LinkDrop</span>
         <button
-          className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-gray-100"
+          className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-[#F5F5F5]"
           aria-label="더보기"
         >
           <MoreVertical className="h-5 w-5 text-[#525252]" />
@@ -152,23 +150,19 @@ export function InfoDropPage({
       <div className="flex items-center gap-3 px-5 py-4">
         <Avatar className="h-8 w-8">
           <AvatarImage src={maker.avatarUrl} alt={maker.name} />
-          <AvatarFallback className="bg-gray-200 text-xs font-medium text-[#525252]">
+          <AvatarFallback className="bg-[#E5E5E5] text-xs font-medium text-[#525252]">
             {maker.name.charAt(0)}
           </AvatarFallback>
         </Avatar>
         <div className="flex flex-col">
-            <span className="text-sm font-semibold text-[#0A0A0A]">{maker.name}</span>
+          <span className="text-sm font-semibold text-[#0A0A0A]">{maker.name}</span>
           <span className="text-xs text-[#A3A3A3]">{maker.droppedAgo} 드롭</span>
         </div>
       </div>
 
       {/* B. Video Hero */}
       <div className="relative aspect-video w-full bg-[#0A0A0A]">
-        <img
-          src={videoThumbnailUrl}
-          alt={title}
-          className="h-full w-full object-cover"
-        />
+        <img src={videoThumbnailUrl} alt={title} className="h-full w-full object-cover" />
         {/* YouTube label - top right */}
         <span className="absolute right-3 top-3 rounded-md bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
           {videoSourceLabel}
@@ -199,9 +193,7 @@ export function InfoDropPage({
           {getIntentLabel(intent)}
         </span>
         {/* Title */}
-        <h1 className="text-2xl font-bold leading-snug tracking-tight text-[#0A0A0A]">
-          {title}
-        </h1>
+        <h1 className="text-2xl font-bold leading-snug tracking-tight text-[#0A0A0A]">{title}</h1>
         {/* Maker message */}
         {makerMessage && (
           <p className="mt-3 border-l-2 border-[#E5E5E5] pl-3 text-sm italic leading-relaxed text-[#525252]">
@@ -209,16 +201,14 @@ export function InfoDropPage({
           </p>
         )}
         {/* Description */}
-        <p className="mt-4 text-base leading-relaxed text-[#525252]">
-          {description}
-        </p>
+        <p className="mt-4 text-base leading-relaxed text-[#525252]">{description}</p>
       </div>
 
       {/* D. Local Info Card */}
-      <div className="mx-5 mt-6 rounded-xl bg-gray-50 p-5">
+      <div className="mx-5 mt-6 rounded-xl bg-[#FAFAFA] p-5">
         {/* Top row */}
         <div className="flex gap-4">
-          <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-200">
+          <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-[#E5E5E5]">
             <img
               src={local.thumbnailUrl || videoThumbnailUrl}
               alt={local.name}
@@ -237,9 +227,7 @@ export function InfoDropPage({
                   {local.rating}
                 </span>
                 {local.reviewCount && (
-                  <span className="text-sm text-[#525252]">
-                    · 리뷰 {local.reviewCount}개
-                  </span>
+                  <span className="text-sm text-[#525252]">· 리뷰 {local.reviewCount}개</span>
                 )}
               </div>
             )}
@@ -270,27 +258,21 @@ export function InfoDropPage({
               <span>{local.responseNote}</span>
             </div>
           )}
-          {local.priceRange && (
-            <div className="text-[#525252]">{local.priceRange}</div>
-          )}
+          {local.priceRange && <div className="text-[#525252]">{local.priceRange}</div>}
         </div>
       </div>
 
       {/* E. Creator Attribution */}
-      <div className="mx-5 mt-4 flex items-center gap-3 rounded-xl border border-gray-100 p-4">
+      <div className="mx-5 mt-4 flex items-center gap-3 rounded-xl border border-[#F5F5F5] p-4">
         <Avatar className="h-8 w-8">
           <AvatarImage src={creator.avatarUrl} alt={creator.channelName} />
-          <AvatarFallback className="bg-gray-100 text-xs text-[#525252]">
+          <AvatarFallback className="bg-[#F5F5F5] text-xs text-[#525252]">
             {creator.channelName.charAt(0)}
           </AvatarFallback>
         </Avatar>
         <div className="flex flex-1 flex-col">
-          <span className="text-xs uppercase tracking-wider text-[#A3A3A3]">
-            원본 영상
-          </span>
-          <span className="text-sm font-medium text-[#0A0A0A]">
-            {creator.channelName}
-          </span>
+          <span className="text-xs uppercase tracking-wider text-[#A3A3A3]">원본 영상</span>
+          <span className="text-sm font-medium text-[#0A0A0A]">{creator.channelName}</span>
         </div>
         <a
           href={creator.channelUrl}
@@ -372,7 +354,7 @@ export function InfoDropPageSkeleton() {
   return (
     <div className="relative min-h-screen bg-white pb-32">
       {/* Header */}
-      <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-gray-100 bg-white px-4">
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[#F5F5F5] bg-white px-4">
         <Skeleton className="h-10 w-10 rounded-full" />
         <Skeleton className="h-4 w-16" />
         <Skeleton className="h-10 w-10 rounded-full" />
@@ -400,7 +382,7 @@ export function InfoDropPageSkeleton() {
       </div>
 
       {/* Local info card */}
-      <div className="mx-5 mt-6 rounded-xl bg-gray-50 p-5">
+      <div className="mx-5 mt-6 rounded-xl bg-[#FAFAFA] p-5">
         <div className="flex gap-4">
           <Skeleton className="h-16 w-16 rounded-lg" />
           <div className="flex flex-1 flex-col justify-center gap-2">
@@ -419,7 +401,7 @@ export function InfoDropPageSkeleton() {
       </div>
 
       {/* Creator */}
-      <div className="mx-5 mt-4 flex items-center gap-3 rounded-xl border border-gray-100 p-4">
+      <div className="mx-5 mt-4 flex items-center gap-3 rounded-xl border border-[#F5F5F5] p-4">
         <Skeleton className="h-8 w-8 rounded-full" />
         <div className="flex flex-1 flex-col gap-1">
           <Skeleton className="h-3 w-12" />
@@ -464,7 +446,8 @@ export default function InfoDropPageCoupon() {
       local={{
         name: "포레스트 커피",
         category: "카페 · 브런치",
-        thumbnailUrl: "https://images.unsplash.com/photo-1559925393-8be0ec4767c8?w=200&h=200&fit=crop",
+        thumbnailUrl:
+          "https://images.unsplash.com/photo-1559925393-8be0ec4767c8?w=200&h=200&fit=crop",
         distance: "0.8km",
         address: "서울 성동구",
         statusLabel: "영업중",
@@ -500,7 +483,8 @@ export function InfoDropPageReservation() {
       local={{
         name: "노을재 캠핑장",
         category: "캠핑 · 글램핑",
-        thumbnailUrl: "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=200&h=200&fit=crop",
+        thumbnailUrl:
+          "https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=200&h=200&fit=crop",
         distance: "가평",
         address: "경기 가평군",
         statusLabel: "예약 가능",

@@ -3,12 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Play,
-  MapPin,
-  ExternalLink,
-  Share2,
-} from "lucide-react";
+import { Play, MapPin, ExternalLink, Share2 } from "lucide-react";
 
 // ============================================================
 // Types
@@ -61,9 +56,7 @@ function formatRelativeTime(date: Date | string): string {
   return then.toLocaleDateString("ko-KR");
 }
 
-function getIntentLabel(
-  intent: InfoDropCardProps["intent"]
-): string {
+function getIntentLabel(intent: InfoDropCardProps["intent"]): string {
   const labels: Record<InfoDropCardProps["intent"], string> = {
     coupon: "쿠폰 드롭",
     reservation: "예약 드롭",
@@ -107,14 +100,10 @@ export function InfoDropCard({
   onShare,
 }: InfoDropCardProps) {
   return (
-    <Card className="w-full max-w-[480px] overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+    <Card className="w-full max-w-[480px] overflow-hidden rounded-lg border border-[#E5E5E5] bg-white shadow-sm">
       {/* 1. Video Section */}
-      <div className="relative aspect-video w-full bg-neutral-100">
-        <img
-          src={videoThumbnailUrl}
-          alt={title}
-          className="h-full w-full object-cover"
-        />
+      <div className="relative aspect-video w-full bg-[#F5F5F5]">
+        <img src={videoThumbnailUrl} alt={title} className="h-full w-full object-cover" />
         {/* Play Button Overlay */}
         <button
           className="absolute inset-0 flex items-center justify-center"
@@ -143,26 +132,22 @@ export function InfoDropCard({
         <div className="flex h-10 items-center gap-3">
           <Avatar className="h-8 w-8">
             <AvatarImage src={maker.avatarUrl} alt={maker.name} />
-            <AvatarFallback className="bg-neutral-200 text-sm text-neutral-600">
+            <AvatarFallback className="bg-[#E5E5E5] text-sm text-[#525252]">
               {maker.name.charAt(0)}
             </AvatarFallback>
           </Avatar>
-          <span className="flex-1 text-sm font-medium text-black">
+          <span className="flex-1 text-sm font-medium text-[#0A0A0A]">
             {maker.name}님이 보낸 드롭
           </span>
-          <span className="text-xs text-neutral-400">
-            {formatRelativeTime(sentAt)}
-          </span>
+          <span className="text-xs text-[#A3A3A3]">{formatRelativeTime(sentAt)}</span>
         </div>
 
         {/* 3. Title + Description */}
         <div className="flex flex-col gap-1">
-          <h2 className="line-clamp-2 text-lg font-semibold tracking-tight text-black">
+          <h2 className="line-clamp-2 text-lg font-semibold tracking-tight text-[#0A0A0A]">
             {title}
           </h2>
-          <p className="line-clamp-3 text-sm leading-relaxed text-neutral-600">
-            {description}
-          </p>
+          <p className="line-clamp-3 text-sm leading-relaxed text-[#525252]">{description}</p>
         </div>
 
         {/* 4. Intent Badge */}
@@ -176,24 +161,28 @@ export function InfoDropCard({
         </div>
 
         {/* 5. Local Info Card */}
-        <div className="flex items-center justify-between rounded-md bg-neutral-50 p-3">
+        <div className="flex items-center justify-between rounded-md bg-[#FAFAFA] p-3">
           <div className="flex flex-col gap-0.5">
-            <span className="text-base font-medium text-black">
-              {local.name}
-            </span>
-            <span className="text-sm text-neutral-600">
+            <span className="text-base font-medium text-[#0A0A0A]">{local.name}</span>
+            <span className="text-sm text-[#525252]">
               {local.category}
               {local.distanceKm !== undefined && ` · ${local.distanceKm}km`}
             </span>
             <span className="text-sm">
-              <span className={local.statusLabel === "영업중" || local.statusLabel === "예약 가능" ? "text-[#10B981]" : "text-neutral-600"}>
+              <span
+                className={
+                  local.statusLabel === "영업중" || local.statusLabel === "예약 가능"
+                    ? "text-[#10B981]"
+                    : "text-[#525252]"
+                }
+              >
                 {local.statusLabel}
               </span>
-              {local.hoursLabel && <span className="text-neutral-600"> · {local.hoursLabel}</span>}
+              {local.hoursLabel && <span className="text-[#525252]"> · {local.hoursLabel}</span>}
             </span>
           </div>
           <button
-            className="flex h-10 w-10 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100"
+            className="flex h-10 w-10 items-center justify-center rounded-md text-[#525252] hover:bg-[#F5F5F5]"
             onClick={() => console.log("[InfoDropCard] Map clicked")}
             aria-label="지도 보기"
           >
@@ -217,7 +206,7 @@ export function InfoDropCard({
           <Button
             variant="ghost"
             size="sm"
-            className="text-sm text-neutral-600 hover:text-black"
+            className="text-sm text-[#525252] hover:text-[#0A0A0A]"
             onClick={() => {
               console.log("[InfoDropCard] Watch original clicked");
               onWatchOriginal?.();
@@ -229,7 +218,7 @@ export function InfoDropCard({
           <Button
             variant="ghost"
             size="sm"
-            className="text-sm text-neutral-600 hover:text-black"
+            className="text-sm text-[#525252] hover:text-[#0A0A0A]"
             onClick={() => {
               console.log("[InfoDropCard] Share clicked");
               onShare?.();
@@ -241,17 +230,17 @@ export function InfoDropCard({
         </div>
 
         {/* 8. Footer: Trust + Disclosure */}
-        <div className="flex flex-col gap-1 border-t border-neutral-200 pt-3">
+        <div className="flex flex-col gap-1 border-t border-[#E5E5E5] pt-3">
           <a
             href={creator.channelUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-[#2563EB]"
+            className="inline-flex items-center gap-1 text-xs text-[#A3A3A3] hover:text-[#2563EB]"
           >
             원본 크리에이터: {creator.channelName}
             <ExternalLink className="h-3 w-3" />
           </a>
-          <span className="text-xs text-neutral-400 hover:text-[#2563EB] cursor-pointer">
+          <span className="text-xs text-[#A3A3A3] hover:text-[#2563EB] cursor-pointer">
             광고/제휴 안내 적용 (FTC 권고 사항)
           </span>
         </div>
@@ -295,7 +284,7 @@ export function InfoDropCardReservation() {
 
 export function InfoDropCardSkeleton() {
   return (
-    <Card className="w-full max-w-[480px] overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+    <Card className="w-full max-w-[480px] overflow-hidden rounded-lg border border-[#E5E5E5] bg-white shadow-sm">
       {/* Video Skeleton */}
       <Skeleton className="aspect-video w-full" />
 
@@ -319,7 +308,7 @@ export function InfoDropCardSkeleton() {
         <Skeleton className="h-5 w-20 rounded-md" />
 
         {/* Local Info Skeleton */}
-        <div className="flex items-center justify-between rounded-md bg-neutral-50 p-3">
+        <div className="flex items-center justify-between rounded-md bg-[#FAFAFA] p-3">
           <div className="flex flex-col gap-1.5">
             <Skeleton className="h-5 w-28" />
             <Skeleton className="h-4 w-24" />
@@ -338,7 +327,7 @@ export function InfoDropCardSkeleton() {
         </div>
 
         {/* Footer Skeleton */}
-        <div className="flex flex-col gap-1 border-t border-neutral-200 pt-3">
+        <div className="flex flex-col gap-1 border-t border-[#E5E5E5] pt-3">
           <Skeleton className="h-3 w-40" />
           <Skeleton className="h-3 w-48" />
         </div>

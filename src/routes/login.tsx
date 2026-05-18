@@ -1,25 +1,30 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
-import { ActionButton } from "@/components/ActionButton";
-import { ErrorMessage, friendlyErrors } from "@/components/ErrorMessage";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { LoginPage } from "@/components/login-page";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 
+type AuthMode = "signin" | "signup" | "forgot";
+
 export const Route = createFileRoute("/login")({
-  head: () => ({
-    meta: [{ title: "로그인" }],
-  }),
-  component: LoginPage,
+  head: () => ({ meta: [{ title: "로그인" }] }),
+  component: LoginRoute,
 });
 
-function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+function LoginRoute() {
+  const navigate = useNavigate();
+  const [mode, setMode] = useState<AuthMode>("signin");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [failedAttempts, setFailedAttempts] = useState(0);
 
-  async function handleLogin(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (loading) return;
+  function handleModeChange(newMode: AuthMode) {
+    setMode(newMode);
+    setError(null);
+    setLoading(false);
+    setFailedAttempts(0);
+  }
+
+  async function handleSignIn(email: string, password: string, _rememberMe: boolean) {
     setError(null);
     if (!email || !password) {
       setError("이메일과 비밀번호를 입력해 주세요.");
@@ -31,55 +36,53 @@ function LoginPage() {
     }
     setLoading(true);
     try {
-      const { error } = await getSupabase().auth.signInWithPassword({
+      const { error: authError } = await getSupabase().auth.signInWithPassword({
         email,
         password,
       });
-      if (error) throw error;
-      window.location.href = "/home";
-    } catch (e) {
-      console.error("[login] signInWithPassword failed:", e);
-      setError(friendlyErrors.unauthorized);
+      if (authError) throw authError;
+      setFailedAttempts(0);
+      navigate({ to: "/home" });
+    } catch (err) {
+      console.error("[login] signInWithPassword failed:", err);
+      const newCount = failedAttempts + 1;
+      setFailedAttempts(newCount);
+      if (newCount >= 3) {
+        setError(
+          "로그인이 필요해요. 다시 로그인해 주세요. 비밀번호가 기억나지 않으시면 비밀번호 찾기를 이용해 주세요.",
+        );
+      } else {
+        setError("이메일 또는 비밀번호를 확인해 주세요.");
+      }
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleSignUp(_email: string, _password: string, _name: string) {
+    setError("회원가입은 곧 지원될 예정입니다.");
+  }
+
+  async function handleForgotPassword(_email: string) {
+    setError("비밀번호 재설정 이메일이 곧 지원될 예정입니다.");
+  }
+
+  async function handleOAuthSignIn(provider: "kakao" | "google") {
+    const label = provider === "kakao" ? "카카오" : "Google";
+    setError(`${label} 로그인은 곧 지원될 예정입니다.`);
+  }
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center bg-bg px-6 py-12">
-      <h1 className="text-2xl font-extrabold text-text-strong">로그인</h1>
-      <p className="mt-2 text-sm font-medium text-text-muted">
-        이메일과 비밀번호로 로그인해 주세요.
-      </p>
-      <form onSubmit={handleLogin} className="mt-8 space-y-4">
-        <label className="block">
-          <span className="text-sm font-semibold text-text-strong">이메일</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-            className="mt-2 block w-full min-h-[44px] rounded-lg border border-border bg-bg px-4 py-3 text-base font-medium text-text-strong placeholder:text-text-subtle"
-            placeholder="you@example.com"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-semibold text-text-strong">비밀번호</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            className="mt-2 block w-full min-h-[44px] rounded-lg border border-border bg-bg px-4 py-3 text-base font-medium text-text-strong placeholder:text-text-subtle"
-          />
-        </label>
-        <ErrorMessage message={error} />
-        <ActionButton type="submit" disabled={loading} className="w-full">
-          {loading ? "확인 중…" : "로그인"}
-        </ActionButton>
-      </form>
-    </main>
+    <LoginPage
+      mode={mode}
+      onModeChange={handleModeChange}
+      loading={loading}
+      error={error}
+      failedAttempts={failedAttempts}
+      onSignIn={handleSignIn}
+      onSignUp={handleSignUp}
+      onForgotPassword={handleForgotPassword}
+      onOAuthSignIn={handleOAuthSignIn}
+    />
   );
 }
