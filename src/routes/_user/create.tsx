@@ -230,7 +230,8 @@ function Step1({
         let id: string | null = null;
         if (isSupabaseConfigured) {
           try {
-            const { data, error: dbErr } = await getSupabase()
+            const sb = getSupabase();
+            const { data: upserted, error: upsertErr } = await sb
               .from("content_sources")
               .upsert(
                 {
@@ -244,11 +245,23 @@ function Step1({
                   source_mode: "user_submitted",
                   rights_status: "unclaimed",
                 },
-                { onConflict: "provider,source_id" },
+                { onConflict: "provider,source_id", ignoreDuplicates: true },
               )
               .select("id")
-              .single();
-            if (!dbErr && data) id = data.id as string;
+              .maybeSingle();
+            if (upserted) {
+              id = upserted.id as string;
+            } else if (!upsertErr) {
+              // Conflict case (ignoreDuplicates) — row already exists, fetch its id.
+              // Avoids sources_self_modify RLS block when registered_by_user_id is NULL.
+              const { data: existing } = await sb
+                .from("content_sources")
+                .select("id")
+                .eq("provider", result.provider)
+                .eq("source_id", result.sourceId)
+                .maybeSingle();
+              if (existing) id = existing.id as string;
+            }
           } catch {
             // 테이블이 아직 없거나 권한 문제 — 로컬 진행 허용
           }
@@ -518,6 +531,7 @@ function Step3({
   const [publishedShareUuid, setPublishedShareUuid] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [makerMessage, setMakerMessage] = useState("");
 
   // info_drops INSERT (best-effort) on mount
   useEffect(() => {
@@ -618,9 +632,14 @@ function Step3({
       const uid = sess.session?.user.id;
       if (!uid) throw new Error("not signed in");
 
+      const trimmedMessage = makerMessage.trim();
       const { data: shareRow, error: shareErr } = await sb
         .from("share_events")
-        .insert({ info_drop_id: infoDropId, sender_user_id: uid })
+        .insert({
+          info_drop_id: infoDropId,
+          sender_user_id: uid,
+          curator_message: trimmedMessage.length > 0 ? trimmedMessage : null,
+        })
         .select("share_uuid")
         .single();
       if (shareErr || !shareRow) throw shareErr ?? new Error("share insert failed");
@@ -782,6 +801,21 @@ function Step3({
             )}
           </div>
         </div>
+
+        <label className="mt-6 block">
+          <span className="text-sm font-semibold text-text-strong">친구에게 한마디 (선택)</span>
+          <textarea
+            value={makerMessage}
+            onChange={(e) => setMakerMessage(e.target.value.slice(0, 100))}
+            maxLength={100}
+            rows={2}
+            className="mt-2 block w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-sm font-medium text-text-strong placeholder:text-text-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            placeholder="왜 이 영상을 보내고 싶었어요?"
+          />
+          <span className="mt-1 block text-right text-xs font-medium text-text-subtle">
+            {makerMessage.length}/100
+          </span>
+        </label>
 
         <ErrorMessage message={saveError} className="mt-6" />
       </main>
