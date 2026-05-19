@@ -23,21 +23,15 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ActionButton } from "@/components/ActionButton";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { AdDisclosure } from "@/components/AdDisclosure";
 import { SourceAttribution } from "@/components/SourceAttribution";
 import { SortableBlock } from "@/components/create/BlockEditor";
-import {
-  PartnerPickerModal,
-  type PartnerOption,
-} from "@/components/create/PartnerPickerModal";
+import { PartnerPickerModal, type PartnerOption } from "@/components/create/PartnerPickerModal";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
+import { shareToKakao } from "@/lib/kakao";
 import { fetchOEmbed, parseVideoUrl, type OEmbedResult } from "@/lib/oembed";
 import {
   BLOCK_KINDS,
@@ -72,20 +66,41 @@ interface IntentType {
 
 const INTENT_FALLBACK: IntentType[] = [
   { id: "info", key: "info", name_ko: "정보 공유", requires_partner: false, is_active: true },
-  { id: "discussion", key: "discussion", name_ko: "친구와 의논", requires_partner: false, is_active: true },
+  {
+    id: "discussion",
+    key: "discussion",
+    name_ko: "친구와 의논",
+    requires_partner: false,
+    is_active: true,
+  },
   { id: "coupon", key: "coupon", name_ko: "쿠폰", requires_partner: true, is_active: true },
-  { id: "reservation", key: "reservation", name_ko: "예약 유도", requires_partner: true, is_active: true },
-  { id: "commerce", key: "commerce", name_ko: "구매 유도", requires_partner: true, is_active: true },
+  {
+    id: "reservation",
+    key: "reservation",
+    name_ko: "예약 유도",
+    requires_partner: true,
+    is_active: true,
+  },
+  {
+    id: "commerce",
+    key: "commerce",
+    name_ko: "구매 유도",
+    requires_partner: true,
+    is_active: true,
+  },
   { id: "ticket", key: "ticket", name_ko: "티켓 판매", requires_partner: true, is_active: true },
   { id: "lead", key: "lead", name_ko: "상담 신청", requires_partner: true, is_active: true },
-  { id: "campaign", key: "campaign", name_ko: "공식 안내", requires_partner: false, is_active: true },
+  {
+    id: "campaign",
+    key: "campaign",
+    name_ko: "공식 안내",
+    requires_partner: false,
+    is_active: true,
+  },
   { id: "custom", key: "custom", name_ko: "직접 설정", requires_partner: false, is_active: true },
 ];
 
-const INTENT_META: Record<
-  string,
-  { icon: LucideIcon; stripVar: string }
-> = {
+const INTENT_META: Record<string, { icon: LucideIcon; stripVar: string }> = {
   info: { icon: BookOpen, stripVar: "var(--color-intent-info-strip)" },
   discussion: { icon: MessageCircle, stripVar: "var(--color-intent-discussion-strip)" },
   coupon: { icon: Ticket, stripVar: "var(--color-intent-coupon-strip)" },
@@ -147,10 +162,7 @@ function CreatePage() {
         />
       )}
       {step === 2 && (
-        <Step2
-          selectedIntentId={selectedIntent?.id ?? null}
-          onSelect={handleIntentPicked}
-        />
+        <Step2 selectedIntentId={selectedIntent?.id ?? null} onSelect={handleIntentPicked} />
       )}
       {step === 3 && selectedIntent && (
         <Step3
@@ -175,11 +187,7 @@ function CreatePage() {
 
 /* ---------- Step indicator ---------- */
 function StepBadge({ n }: { n: number }) {
-  return (
-    <p className="text-xs font-semibold tracking-tight text-text-subtle">
-      Step {n} / 5
-    </p>
-  );
+  return <p className="text-xs font-semibold tracking-tight text-text-subtle">Step {n} / 5</p>;
 }
 
 /* ---------- Step 1: URL ---------- */
@@ -258,9 +266,7 @@ function Step1({
     };
   }, [parsed, manual, onResolved]);
 
-  const canProceed = manual
-    ? manualTitle.trim().length > 0
-    : Boolean(oembed);
+  const canProceed = manual ? manualTitle.trim().length > 0 : Boolean(oembed);
 
   function handleManualNext() {
     if (!manualTitle.trim()) return;
@@ -299,14 +305,10 @@ function Step1({
               placeholder="youtu.be/..."
               className="mt-6 block h-14 w-full rounded-lg border border-border bg-bg px-4 text-base font-medium text-text-strong placeholder:text-text-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
             />
-            <p className="mt-2 text-xs font-medium text-text-muted">
-              지원: YouTube · Instagram
-            </p>
+            <p className="mt-2 text-xs font-medium text-text-muted">지원: YouTube · Instagram</p>
 
             {loading && (
-              <p className="mt-6 text-sm font-medium text-text-muted">
-                영상 정보를 가져오는 중…
-              </p>
+              <p className="mt-6 text-sm font-medium text-text-muted">영상 정보를 가져오는 중…</p>
             )}
 
             {igNotice && (
@@ -321,11 +323,7 @@ function Step1({
               <div className="mt-8 overflow-hidden rounded-2xl border border-border">
                 {oembed.thumbnailUrl && (
                   <div className="aspect-video w-full overflow-hidden rounded-lg bg-surface">
-                    <img
-                      src={oembed.thumbnailUrl}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
+                    <img src={oembed.thumbnailUrl} alt="" className="h-full w-full object-cover" />
                   </div>
                 )}
                 <div className="p-4">
@@ -356,9 +354,7 @@ function Step1({
         {manual && (
           <div className="mt-6 space-y-4">
             <label className="block">
-              <span className="text-sm font-semibold text-text-strong">
-                영상 제목
-              </span>
+              <span className="text-sm font-semibold text-text-strong">영상 제목</span>
               <input
                 value={manualTitle}
                 onChange={(e) => setManualTitle(e.target.value)}
@@ -367,9 +363,7 @@ function Step1({
               />
             </label>
             <label className="block">
-              <span className="text-sm font-semibold text-text-strong">
-                썸네일 URL (선택)
-              </span>
+              <span className="text-sm font-semibold text-text-strong">썸네일 URL (선택)</span>
               <input
                 value={manualThumb}
                 onChange={(e) => setManualThumb(e.target.value)}
@@ -500,17 +494,13 @@ function Step3({
   intent: IntentType;
   partner: PartnerOption | null;
 }) {
-  const requiresDisclosure =
-    intent.requires_disclosure ?? REQUIRES_DISCLOSURE[intent.key] ?? false;
-  const required: BlockKind[] =
-    intent.default_required_blocks ??
-    FALLBACK_REQUIRED_BY_INTENT[intent.key] ??
-    ["video", "text"];
+  const requiresDisclosure = intent.requires_disclosure ?? REQUIRES_DISCLOSURE[intent.key] ?? false;
+  const required: BlockKind[] = intent.default_required_blocks ??
+    FALLBACK_REQUIRED_BY_INTENT[intent.key] ?? ["video", "text"];
   const allowed: BlockKind[] =
-    intent.allowed_blocks ??
-    FALLBACK_ALLOWED_BY_INTENT[intent.key] ??
-    BLOCK_KINDS.slice();
+    intent.allowed_blocks ?? FALLBACK_ALLOWED_BY_INTENT[intent.key] ?? BLOCK_KINDS.slice();
 
+  const navigate = useNavigate();
   const [blocks, setBlocks] = useState<BlockDraft[]>(() =>
     required.map((kind) => ({
       id: newId(),
@@ -522,6 +512,10 @@ function Step3({
   const [infoDropId, setInfoDropId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishedShareUuid, setPublishedShareUuid] = useState<string | null>(null);
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   // info_drops INSERT (best-effort) on mount
   useEffect(() => {
@@ -557,9 +551,7 @@ function Step3({
     };
   }, [contentSourceId, intent.id, partner?.id, requiresDisclosure, infoDropId]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e;
@@ -575,17 +567,12 @@ function Step3({
   }
 
   function addBlock(kind: BlockKind) {
-    setBlocks((prev) => [
-      ...prev,
-      { id: newId(), kind, isLocked: false, data: emptyData(kind) },
-    ]);
+    setBlocks((prev) => [...prev, { id: newId(), kind, isLocked: false, data: emptyData(kind) }]);
     setPickerOpen(false);
   }
 
   function updateBlock(id: string, data: Record<string, unknown>) {
-    setBlocks((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, data } : b)),
-    );
+    setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, data } : b)));
   }
 
   function deleteBlock(id: string) {
@@ -598,9 +585,9 @@ function Step3({
       setSaveError("저장은 백엔드 연결 후에 작동해요. (로컬 미리보기)");
       return;
     }
+    setPublishing(true);
     try {
       const sb = getSupabase();
-      // upsert blocks
       const rows = blocks.map((b, i) => ({
         info_drop_id: infoDropId,
         kind: b.kind,
@@ -608,20 +595,105 @@ function Step3({
         is_locked: b.isLocked,
         data: b.data,
       }));
-      const { error } = await sb.from("component_blocks").insert(rows);
-      if (error) throw error;
-      await sb
+      const { error: blockErr } = await sb.from("component_blocks").insert(rows);
+      if (blockErr) throw blockErr;
+
+      const { error: updErr } = await sb
         .from("info_drops")
         .update({ status: "published" })
         .eq("id", infoDropId);
+      if (updErr) throw updErr;
+
+      const { data: sess } = await sb.auth.getSession();
+      const uid = sess.session?.user.id;
+      if (!uid) throw new Error("not signed in");
+
+      const { data: shareRow, error: shareErr } = await sb
+        .from("share_events")
+        .insert({ info_drop_id: infoDropId, sender_user_id: uid })
+        .select("share_uuid")
+        .single();
+      if (shareErr || !shareRow) throw shareErr ?? new Error("share insert failed");
+
+      setPublishedShareUuid(shareRow.share_uuid as string);
     } catch {
       setSaveError("저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setPublishing(false);
     }
   }
 
-  const addable = allowed.filter(
-    (k) => k !== "video" && k !== "text" && k !== "similar",
-  );
+  const shareUrl = publishedShareUuid ? `https://app.drop.how/d/${publishedShareUuid}` : null;
+
+  async function handleKakaoShare() {
+    if (!shareUrl) return;
+    setShareError(null);
+    setShareFeedback(null);
+    const result = await shareToKakao({
+      title: oembed?.title ?? "LinkDrop",
+      description: partner ? `${intent.name_ko} · ${partner.name}` : intent.name_ko,
+      imageUrl: oembed?.thumbnailUrl ?? "",
+      linkUrl: shareUrl,
+      buttons: [{ title: "보러 가기", link: shareUrl }],
+    });
+    if (result.fallback === "clipboard") {
+      setShareFeedback("카카오 SDK 호출에 실패해서 링크를 복사했어요.");
+    } else if (!result.ok) {
+      setShareError("카카오 공유에 실패했어요. 링크를 직접 복사해 주세요.");
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!shareUrl) return;
+    setShareError(null);
+    setShareFeedback(null);
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareFeedback("링크를 복사했어요.");
+    } catch {
+      setShareError("링크 복사에 실패했어요.");
+    }
+  }
+
+  const addable = allowed.filter((k) => k !== "video" && k !== "text" && k !== "similar");
+
+  if (publishedShareUuid && shareUrl) {
+    return (
+      <main className="flex-1 px-6 pb-12 pt-2">
+        <StepBadge n={4} />
+        <h1 className="mt-3 text-2xl font-extrabold tracking-tighter text-text-strong">
+          드롭이 만들어졌어요! 🎉
+        </h1>
+        <p className="mt-3 text-sm font-medium text-text-muted">친구에게 공유해 보세요.</p>
+
+        <div className="mt-8 space-y-3">
+          <ActionButton type="button" onClick={handleKakaoShare} className="w-full">
+            카카오톡으로 보내기
+          </ActionButton>
+          <button
+            type="button"
+            onClick={handleCopyLink}
+            className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-border bg-bg text-sm font-semibold text-text-strong transition-colors hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+          >
+            링크 복사하기
+          </button>
+        </div>
+
+        {shareFeedback && (
+          <p className="mt-4 text-sm font-medium text-text-strong">{shareFeedback}</p>
+        )}
+        <ErrorMessage message={shareError} className="mt-4" />
+
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/home" })}
+          className="mt-10 inline-flex h-11 w-full items-center justify-center text-sm font-medium text-text-muted transition-colors hover:text-text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+        >
+          홈으로 가기
+        </button>
+      </main>
+    );
+  }
 
   return (
     <>
@@ -642,9 +714,7 @@ function Step3({
             <SourceAttribution
               provider={oembed.provider}
               authorName={oembed.authorName}
-              sourceMode={
-                partner ? "partner_official" : "user_submitted"
-              }
+              sourceMode={partner ? "partner_official" : "user_submitted"}
               position="top"
               className="border-b border-border"
             />
@@ -710,9 +780,10 @@ function Step3({
         <ActionButton
           type="button"
           onClick={handlePublish}
+          disabled={publishing}
           className="w-full"
         >
-          공유 링크 만들기
+          {publishing ? "저장 중..." : "공유 링크 만들기"}
         </ActionButton>
       </div>
     </>
