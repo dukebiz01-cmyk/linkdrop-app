@@ -56,7 +56,7 @@ type StepNum = 1 | 2 | 3;
 interface IntentType {
   id: string;
   key: string;
-  name_ko: string;
+  name: string;
   requires_partner: boolean;
   is_active: boolean;
   default_required_blocks?: BlockKind[] | null;
@@ -65,39 +65,39 @@ interface IntentType {
 }
 
 const INTENT_FALLBACK: IntentType[] = [
-  { id: "info", key: "info", name_ko: "정보 공유", requires_partner: false, is_active: true },
+  { id: "info", key: "info", name: "정보 공유", requires_partner: false, is_active: true },
   {
     id: "discussion",
     key: "discussion",
-    name_ko: "친구와 의논",
+    name: "친구와 의논",
     requires_partner: false,
     is_active: true,
   },
-  { id: "coupon", key: "coupon", name_ko: "쿠폰", requires_partner: true, is_active: true },
+  { id: "coupon", key: "coupon", name: "쿠폰", requires_partner: true, is_active: true },
   {
     id: "reservation",
     key: "reservation",
-    name_ko: "예약 유도",
+    name: "예약 유도",
     requires_partner: true,
     is_active: true,
   },
   {
     id: "commerce",
     key: "commerce",
-    name_ko: "구매 유도",
+    name: "구매 유도",
     requires_partner: true,
     is_active: true,
   },
-  { id: "ticket", key: "ticket", name_ko: "티켓 판매", requires_partner: true, is_active: true },
-  { id: "lead", key: "lead", name_ko: "상담 신청", requires_partner: true, is_active: true },
+  { id: "ticket", key: "ticket", name: "티켓 판매", requires_partner: true, is_active: true },
+  { id: "lead", key: "lead", name: "상담 신청", requires_partner: true, is_active: true },
   {
     id: "campaign",
     key: "campaign",
-    name_ko: "공식 안내",
+    name: "공식 안내",
     requires_partner: false,
     is_active: true,
   },
-  { id: "custom", key: "custom", name_ko: "직접 설정", requires_partner: false, is_active: true },
+  { id: "custom", key: "custom", name: "직접 설정", requires_partner: false, is_active: true },
 ];
 
 const INTENT_META: Record<string, { icon: LucideIcon; stripVar: string }> = {
@@ -413,7 +413,7 @@ function Step2({
         const { data, error } = await getSupabase()
           .from("intent_types")
           .select(
-            "id, key, name_ko, requires_partner, is_active, default_required_blocks, allowed_blocks, requires_disclosure",
+            "id, key, name, requires_partner, is_active, default_required_blocks, allowed_blocks, requires_disclosure",
           )
           .eq("is_active", true)
           .order("key");
@@ -468,7 +468,7 @@ function Step2({
               />
               <Icon className="size-6 text-text-muted" strokeWidth={2} />
               <span className="text-sm font-bold tracking-tight text-text-strong">
-                {intent.name_ko}
+                {intent.name}
               </span>
             </button>
           );
@@ -641,7 +641,7 @@ function Step3({
     setShareFeedback(null);
     const result = await shareToKakao({
       title: oembed?.title ?? "LinkDrop",
-      description: partner ? `${intent.name_ko} · ${partner.name}` : intent.name_ko,
+      description: partner ? `${intent.name} · ${partner.name}` : intent.name,
       imageUrl: oembed?.thumbnailUrl ?? "",
       linkUrl: shareUrl,
       buttons: [{ title: "보러 가기", link: shareUrl }],
@@ -713,7 +713,7 @@ function Step3({
           카드를 다듬어 주세요
         </h1>
         <p className="mt-2 text-sm font-medium text-text-muted">
-          {intent.name_ko}
+          {intent.name}
           {partner ? ` · ${partner.name}` : ""}
         </p>
 
