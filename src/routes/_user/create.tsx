@@ -512,6 +512,7 @@ function Step3({
   const [infoDropId, setInfoDropId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishedShareUuid, setPublishedShareUuid] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
@@ -530,20 +531,25 @@ function Step3({
         const { data, error } = await sb
           .from("info_drops")
           .insert({
-            owner_id: uid,
+            owner_user_id: uid,
             intent_id: intent.id,
-            content_source_id: contentSourceId,
-            partner_id: partner?.id ?? null,
+            source_id: contentSourceId,
             has_ad_disclosure: requiresDisclosure,
             status: "draft",
           })
           .select("id")
           .single();
-        if (!cancelled && !error && data) {
-          setInfoDropId(data.id as string);
+        if (cancelled) return;
+        if (error) {
+          console.error("[create] info_drops insert failed:", error);
+          setSchemaError("초안 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+          return;
         }
-      } catch {
-        // 스키마 미적용 — 로컬 진행
+        if (data) setInfoDropId(data.id as string);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[create] info_drops insert threw:", err);
+        setSchemaError("초안 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
       }
     })();
     return () => {
@@ -581,8 +587,12 @@ function Step3({
 
   async function handlePublish() {
     setSaveError(null);
-    if (!isSupabaseConfigured || !infoDropId) {
+    if (!isSupabaseConfigured) {
       setSaveError("저장은 백엔드 연결 후에 작동해요. (로컬 미리보기)");
+      return;
+    }
+    if (!infoDropId) {
+      setSaveError(schemaError ?? "저장은 백엔드 연결 후에 작동해요. (로컬 미리보기)");
       return;
     }
     setPublishing(true);
@@ -590,10 +600,10 @@ function Step3({
       const sb = getSupabase();
       const rows = blocks.map((b, i) => ({
         info_drop_id: infoDropId,
-        kind: b.kind,
+        block_kind: b.kind,
         position: i,
         is_locked: b.isLocked,
-        data: b.data,
+        block_data: b.data,
       }));
       const { error: blockErr } = await sb.from("component_blocks").insert(rows);
       if (blockErr) throw blockErr;
