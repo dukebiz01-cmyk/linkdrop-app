@@ -235,6 +235,7 @@ function Step1({
               .upsert(
                 {
                   provider: result.provider,
+                  source_url: result.canonicalUrl,
                   canonical_url: result.canonicalUrl,
                   source_id: result.sourceId,
                   title: result.title,
