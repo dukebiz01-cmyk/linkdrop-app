@@ -69,11 +69,17 @@ type InfoDropRow = {
   content_sources: ContentSource | null;
 };
 
+type SenderProfile = {
+  display_name: string | null;
+  avatar_url: string | null;
+};
+
 type ShareRow = {
   share_uuid: string;
   curator_message: string | null;
   created_at: string | null;
   info_drops: InfoDropRow | null;
+  sender: SenderProfile | null;
 };
 
 type LoaderData = { share: ShareRow | null; shareUuid: string };
@@ -87,7 +93,8 @@ const SHARE_SELECT = `
     content_sources!info_drops_source_id_fkey (
       title, thumbnail_url, source_url, author_name, provider, duration_sec
     )
-  )
+  ),
+  sender:public_profiles!share_events_sender_user_id_fkey ( display_name, avatar_url )
 `;
 
 export const Route = createFileRoute("/d/$shareUuid")({
@@ -106,12 +113,14 @@ export const Route = createFileRoute("/d/$shareUuid")({
     const share = loaderData?.share;
     const cs = share?.info_drops?.content_sources;
     const it = share?.info_drops?.intent_types;
+    const makerName = share?.sender?.display_name ?? null;
     const ogUrl = `${PROD_BASE}/d/${loaderData?.shareUuid ?? ""}`;
 
     const title = cs?.title ? `${cs.title} | LinkDrop` : BRAND_TITLE;
     const intentLabel = it?.name ?? (it?.key ? INTENT_FALLBACK_LABEL[it.key] : null);
-    const description =
+    const baseDescription =
       share?.curator_message ?? (intentLabel ? `${intentLabel} 드롭` : BRAND_DESCRIPTION);
+    const description = makerName ? `${makerName}님이 보낸 드롭 — ${baseDescription}` : baseDescription;
 
     const meta: Array<Record<string, string>> = [
       { title },
@@ -153,7 +162,7 @@ function DropPage() {
       videoDurationSec={cs?.duration_sec ?? 0}
       videoSourceLabel={providerToLabel(cs?.provider)}
       maker={{
-        name: "익명",
+        name: share?.sender?.display_name ?? "익명",
         droppedAgo: formatDroppedAgo(share?.created_at),
       }}
       makerMessage={share?.curator_message ?? undefined}
