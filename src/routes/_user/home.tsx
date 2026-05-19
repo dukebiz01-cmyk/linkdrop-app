@@ -34,6 +34,7 @@ function HomeRoute() {
   const { user, discoverDrops, sentDrops } = Route.useLoaderData();
   const navigate = useNavigate();
   const [category, setCategory] = useState<HomePageProps["category"]>("discover");
+  const [activeTab, setActiveTab] = useState<HomePageProps["activeTab"]>("home");
 
   const drops = category === "discover" ? discoverDrops : category === "sent" ? sentDrops : [];
 
@@ -41,21 +42,32 @@ function HomeRoute() {
     <HomePage
       user={user}
       category={category}
+      activeTab={activeTab}
       drops={drops}
       unreadCount={0}
       onCategoryChange={(cat) => setCategory(cat as HomePageProps["category"])}
       onDropClick={(shareUuid) => navigate({ to: "/d/$shareUuid", params: { shareUuid } })}
       onCreateDrop={() => navigate({ to: "/create" })}
       onTabChange={(tab) => {
-        if (tab === "home") return;
+        if (tab === "home") {
+          setActiveTab("home");
+          return;
+        }
         if (tab === "explore") {
+          setActiveTab("explore");
           setCategory("discover");
           window.scrollTo({ top: 0, behavior: "smooth" });
           return;
         }
-        if (tab === "inbox") navigate({ to: "/inbox" });
-        else if (tab === "profile") navigate({ to: "/profile" });
-        else console.log("[home] unhandled tab:", tab);
+        if (tab === "inbox") {
+          setActiveTab("inbox");
+          navigate({ to: "/inbox" });
+        } else if (tab === "profile") {
+          setActiveTab("profile");
+          navigate({ to: "/profile" });
+        } else {
+          console.log("[home] unhandled tab:", tab);
+        }
       }}
     />
   );

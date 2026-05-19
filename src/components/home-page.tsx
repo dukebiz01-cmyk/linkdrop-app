@@ -21,6 +21,7 @@ export interface DropFeedItem {
 export interface HomePageProps {
   user: { name: string; avatarUrl?: string };
   category: "discover" | "sent" | "saved";
+  activeTab: "home" | "explore" | "inbox" | "profile";
   drops: DropFeedItem[];
   unreadCount?: number;
   onCategoryChange: (cat: string) => void;
@@ -52,6 +53,7 @@ function emptyCopyFor(category: Category): string {
 export function HomePage({
   user,
   category,
+  activeTab,
   drops,
   unreadCount = 0,
   onCategoryChange,
@@ -146,13 +148,13 @@ export function HomePage({
         <TabButton
           icon={<Home className="h-5 w-5" />}
           label="홈"
-          isActive={true}
+          isActive={activeTab === "home"}
           onClick={() => onTabChange("home")}
         />
         <TabButton
           icon={<Compass className="h-5 w-5" />}
           label="탐색"
-          isActive={false}
+          isActive={activeTab === "explore"}
           onClick={() => onTabChange("explore")}
         />
         <TabButton
@@ -164,14 +166,14 @@ export function HomePage({
         <TabButton
           icon={<Inbox className="h-5 w-5" />}
           label="받은함"
-          isActive={false}
+          isActive={activeTab === "inbox"}
           hasNotification={unreadCount > 0}
           onClick={() => onTabChange("inbox")}
         />
         <TabButton
           icon={<User className="h-5 w-5" />}
           label="나"
-          isActive={false}
+          isActive={activeTab === "profile"}
           onClick={() => onTabChange("profile")}
         />
       </nav>
@@ -323,6 +325,7 @@ export function HomePageDemo() {
     <HomePage
       user={{ name: "나", avatarUrl: "https://picsum.photos/seed/me/100" }}
       category="discover"
+      activeTab="home"
       drops={DEMO_DROPS}
       unreadCount={3}
       onCategoryChange={(cat) => console.log("[Demo] Category:", cat)}
@@ -338,6 +341,7 @@ export function HomePageEmptyDemo() {
     <HomePage
       user={{ name: "나", avatarUrl: "https://picsum.photos/seed/me/100" }}
       category="discover"
+      activeTab="home"
       drops={[]}
       unreadCount={0}
       onCategoryChange={(cat) => console.log("[Demo] Category:", cat)}
