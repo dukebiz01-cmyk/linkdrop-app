@@ -534,7 +534,6 @@ function Step3({
             owner_user_id: uid,
             intent_id: intent.id,
             source_id: contentSourceId,
-            has_ad_disclosure: requiresDisclosure,
             status: "draft",
           })
           .select("id")
