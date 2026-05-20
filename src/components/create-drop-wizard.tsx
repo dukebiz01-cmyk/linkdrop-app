@@ -1,54 +1,39 @@
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useEffect, useMemo, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 import {
-  X,
+  AlertCircle,
+  ArrowLeft,
+  BookOpen,
+  Calendar,
+  Check,
+  Clipboard,
+  Gift,
   Link as LinkIcon,
   Loader2,
-  AlertCircle,
-  Info,
-  MessageCircle,
-  Gift,
-  Calendar,
-  ShoppingBag,
-  Ticket,
-  Send,
-  Megaphone,
-  Settings,
-  Search,
   MapPin,
-  Check,
-  Play,
-  Clock,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Share2,
-  ExternalLink,
-  Smile,
-  ArrowRight,
-  Clipboard,
+  Phone,
+  Search,
+  ShoppingBag,
   Sparkles,
+  X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ActionButton } from "@/components/ActionButton";
+import { ErrorMessage } from "@/components/ErrorMessage";
+import { WizardSharePreview } from "@/components/wizard-share-preview";
+import { shareToKakao } from "@/lib/kakao";
+import { MOCK_LOCAL_PARTNERS, MOCK_VIDEO_INFO } from "@/lib/mock-data";
+import type { DropPurpose } from "@/lib/types";
+import {
+  WIZARD_PRIMARY_BUTTON_CLASS,
+  WIZARD_SECONDARY_BUTTON_CLASS,
+} from "@/components/create-wizard-button-styles";
+import { cn } from "@/lib/utils";
 
 // =============================================================================
 // Types
 // =============================================================================
-
-export type Intent =
-  | "info"
-  | "discussion"
-  | "meme"
-  | "coupon"
-  | "reservation"
-  | "commerce"
-  | "ticket"
-  | "lead"
-  | "campaign"
-  | "custom";
-
-export type IntentCategory = "share" | "benefit" | "purchase" | "participate" | "free";
 
 export interface VideoInfo {
   url: string;
@@ -63,18 +48,15 @@ export interface LocalPartner {
   id: string;
   name: string;
   category: string;
-  distance: string;
+  address: string;
   avatarUrl: string;
 }
 
-export interface DropCardData {
+export interface AiPreviewData {
   title: string;
-  description: string;
-  makerMessage: string;
-  timeLink: { start: string; end: string } | null;
-  couponCode?: string;
-  couponExpiry?: string;
-  couponDiscount?: string;
+  summary: string;
+  keyPoints: string[];
+  suggestedShareText: string;
 }
 
 export interface CreateDropWizardProps {
@@ -82,189 +64,117 @@ export interface CreateDropWizardProps {
   onClose?: () => void;
   onComplete?: (data: {
     video: VideoInfo;
-    intent: Intent;
+    purpose: DropPurpose;
     local?: LocalPartner;
-    card: DropCardData;
+    ai: AiPreviewData;
+    makerMessage: string;
   }) => void;
 }
 
-// =============================================================================
-// Intent Config
-// =============================================================================
+type StepNum = 1 | 2 | 3 | 4 | 5;
 
-interface IntentConfig {
-  id: Intent;
+// WHY: UX 레이어는 5 목적만 노출. DB intent_types 9행은 Phase 1 UI에서 숨김 (v3 결정 락).
+const WIZARD_PURPOSES: {
+  purpose: DropPurpose;
   label: string;
   description: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   requiresPartner: boolean;
-  category: IntentCategory;
-  friendAction: string;
-  exampleMessage: string;
-}
-
-const INTENTS: IntentConfig[] = [
-  // Share category
+  stripClass: string;
+  aiRecommended?: boolean;
+}[] = [
   {
-    id: "info",
+    purpose: "정보",
     label: "정보",
-    description: "유용한 정보 공유",
-    icon: Info,
+    description: "영상 핵심 정리",
+    icon: BookOpen,
     requiresPartner: false,
-    category: "share",
-    friendAction: "정보 확인 → 가볼까 생각",
-    exampleMessage: "이 카페 좋아 보여, 가봐",
+    stripClass: "bg-intent-info-strip",
+    aiRecommended: true,
   },
   {
-    id: "discussion",
-    label: "대화",
-    description: "의견 나누기",
-    icon: MessageCircle,
-    requiresPartner: false,
-    category: "share",
-    friendAction: "의견 남기기 → 대화",
-    exampleMessage: "이거 어떻게 생각해?",
-  },
-  {
-    id: "meme",
-    label: "밈",
-    description: "재미있는 거 공유",
-    icon: Smile,
-    requiresPartner: false,
-    category: "share",
-    friendAction: "웃음 → 친구에게 또 보내기",
-    exampleMessage: "ㅋㅋㅋ 이거 봤어?",
-  },
-  // Benefit category
-  {
-    id: "coupon",
+    purpose: "쿠폰",
     label: "쿠폰",
-    description: "할인 쿠폰 전달",
+    description: "혜택으로 손님 모으기",
     icon: Gift,
     requiresPartner: true,
-    category: "benefit",
-    friendAction: "쿠폰 받음 → 매장 사용",
-    exampleMessage: "이 카페 쿠폰 받아가",
+    stripClass: "bg-intent-coupon-strip",
   },
   {
-    id: "reservation",
+    purpose: "예약",
     label: "예약",
-    description: "예약 연결",
+    description: "날짜 선택과 예약 연결",
     icon: Calendar,
     requiresPartner: true,
-    category: "benefit",
-    friendAction: "예약 → 매장 방문",
-    exampleMessage: "여기 예약해봐",
+    stripClass: "bg-intent-reservation-strip",
   },
-  // Purchase category
   {
-    id: "commerce",
-    label: "상품",
-    description: "상품 구매 연결",
+    purpose: "구매",
+    label: "구매",
+    description: "AI 상품 찾기·가격비교",
     icon: ShoppingBag,
     requiresPartner: true,
-    category: "purchase",
-    friendAction: "구매 → 배송",
-    exampleMessage: "이거 진짜 좋아",
+    stripClass: "bg-intent-commerce-strip",
   },
   {
-    id: "ticket",
-    label: "티켓",
-    description: "티켓 예매",
-    icon: Ticket,
-    requiresPartner: true,
-    category: "purchase",
-    friendAction: "예매 → 입장",
-    exampleMessage: "같이 가자",
-  },
-  // Participate category
-  {
-    id: "lead",
-    label: "신청",
-    description: "신청 폼 연결",
-    icon: Send,
+    purpose: "상담",
+    label: "상담",
+    description: "문의·상담 받기",
+    icon: Phone,
     requiresPartner: false,
-    category: "participate",
-    friendAction: "관심 등록 → 안내",
-    exampleMessage: "이거 신청해봐",
-  },
-  {
-    id: "campaign",
-    label: "캠페인",
-    description: "캠페인 참여",
-    icon: Megaphone,
-    requiresPartner: false,
-    category: "participate",
-    friendAction: "캠페인 참여 → 응원",
-    exampleMessage: "좋은 캠페인이야",
-  },
-  // Free category
-  {
-    id: "custom",
-    label: "커스텀",
-    description: "직접 설정",
-    icon: Settings,
-    requiresPartner: false,
-    category: "free",
-    friendAction: "Maker가 정의한 액션",
-    exampleMessage: "내가 직접 설정할게",
+    stripClass: "bg-intent-lead-strip",
   },
 ];
 
-const CATEGORY_CONFIG: Record<IntentCategory, { label: string; subtitle: string; color: string }> =
-  {
-    share: { label: "공유", subtitle: "정보·의견을 나누기", color: "#525252" },
-    benefit: { label: "혜택", subtitle: "쿠폰·예약을 연결하기", color: "#2563EB" },
-    purchase: { label: "구매", subtitle: "상품·티켓을 연결하기", color: "#0A0A0A" },
-    participate: { label: "참여", subtitle: "신청·캠페인에 참여시키기", color: "#10B981" },
-    free: { label: "자유", subtitle: "목적을 직접 정하기", color: "#A3A3A3" },
-  };
+const MOCK_LOCALS: LocalPartner[] = MOCK_LOCAL_PARTNERS.map((p) => ({
+  id: p.id,
+  name: p.name,
+  category: p.category,
+  address: p.address,
+  avatarUrl: p.avatarUrl,
+}));
 
-// =============================================================================
-// Mock Data
-// =============================================================================
-
-const MOCK_LOCALS: LocalPartner[] = [
-  {
-    id: "1",
-    name: "카페 온도",
-    category: "카페 · 브런치",
-    distance: "도보 5분",
-    avatarUrl: "https://picsum.photos/seed/cafe1/64/64",
+// WHY: Phase 1은 Edge/ RPC 연동 전 mock AI — Step 4 UI 검증용.
+const MOCK_AI_BY_PURPOSE: Record<DropPurpose, Omit<AiPreviewData, "suggestedShareText">> = {
+  정보: {
+    title: "성수동 숨은 카페 — 분위기·메뉴 한눈에",
+    summary: "영상 속 카페 위치, 대표 메뉴, 방문 팁을 짧게 정리했어요.",
+    keyPoints: ["도보 5분 거리", "브런치 메뉴 인기", "평일 오전 한산"],
   },
-  {
-    id: "2",
-    name: "스시 오마카세 히든",
-    category: "일식 · 오마카세",
-    distance: "도보 12분",
-    avatarUrl: "https://picsum.photos/seed/sushi1/64/64",
+  쿠폰: {
+    title: "10% 할인 쿠폰 — 이번 주말까지",
+    summary: "영상에 나온 매장에서 바로 쓸 수 있는 혜택이에요.",
+    keyPoints: ["1인 1회 사용", "예약 후 방문 권장", "현장 제시"],
   },
-  {
-    id: "3",
-    name: "솔캠핑 파크",
-    category: "캠핑 · 글램핑",
-    distance: "차량 25분",
-    avatarUrl: "https://picsum.photos/seed/camp1/64/64",
+  예약: {
+    title: "주말 빈자리 예약 — 쿠폰과 함께",
+    summary: "원하는 날짜를 고르고 외부 예약 링크로 연결해요.",
+    keyPoints: ["1박/2박 선택", "반려견 동반 가능", "네이버 예약 연결"],
   },
-];
+  구매: {
+    title: "영상 속 상품 — 국내 최저가 비교",
+    summary: "AI가 찾은 구매처와 예상 가격을 비교해 드려요.",
+    keyPoints: ["국내·해외 셀러 비교", "배송비 포함 안내", "구매 전 가격 재확인"],
+  },
+  상담: {
+    title: "1:1 상담 신청 — 빠른 연락",
+    summary: "바로 예약하지 않는 분을 위한 문의 폼이에요.",
+    keyPoints: ["전화·카톡 응답", "원하는 날짜 메모", "개인정보 최소 수집"],
+  },
+};
 
-// =============================================================================
-// Step Components
-// =============================================================================
-
-function StepIndicator({ current, total }: { current: number; total: number }) {
-  const progress = (current / total) * 100;
-  return (
-    <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#F5F5F5]">
-      <div
-        className="h-full bg-[#2563EB] transition-all duration-300 ease-out"
-        style={{ width: `${progress}%` }}
-      />
-    </div>
-  );
+function platformLabel(platform: VideoInfo["platform"]): string {
+  return platform === "youtube" ? "YouTube" : "Instagram";
 }
 
-// Step 1: URL Input
+function StepBadge({ n }: { n: StepNum }) {
+  return <p className="text-xs font-semibold tracking-ko text-text-subtle">Step {n} / 5</p>;
+}
+
+// =============================================================================
+// Step 1 — 영상 링크
+// =============================================================================
+
 function Step1UrlInput({
   value,
   onChange,
@@ -280,672 +190,347 @@ function Step1UrlInput({
     try {
       const text = await navigator.clipboard.readText();
       onChange(text);
-    } catch (err) {
-      console.log("[Step1] Clipboard paste failed:", err);
+    } catch {
+      // 클립보드 권한 거부 시 무시
     }
   };
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex-1 px-5 pt-6">
-        <h1 className="text-2xl font-bold tracking-tight text-[#0A0A0A]">
-          영상 링크를 붙여넣어 주세요
+      <main className="flex-1 px-6 pb-32 pt-2">
+        <StepBadge n={1} />
+        <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">
+          보낼 영상 링크를 넣어주세요
         </h1>
-        <p className="mt-2 text-sm text-[#525252]">YouTube 또는 Instagram 링크를 받을 수 있어요</p>
+        <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
+          유튜브나 인스타에서 [공유] → [링크 복사] 후
+          <br />
+          아래에 붙여넣으면 AI가 Drop을 만들어줘요.
+        </p>
 
-        {/* URL Input */}
         <div className="mt-6 flex gap-2">
           <div className="relative flex-1">
-            <LinkIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#A3A3A3]" />
+            <LinkIcon
+              className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-text-subtle"
+              strokeWidth={2}
+            />
             <Input
               type="url"
               value={value}
               onChange={(e) => onChange(e.target.value)}
               placeholder="https://youtu.be/..."
-              className="h-14 rounded-lg border-[#E5E5E5] pl-12 pr-10 font-mono text-sm placeholder:font-sans placeholder:text-[#A3A3A3] focus:border-[#2563EB] focus:ring-[#2563EB]"
+              className="h-14 rounded-lg border-border pl-12 pr-10 font-mono text-sm placeholder:font-sans placeholder:text-text-subtle"
             />
             {value && (
               <button
+                type="button"
                 onClick={() => onChange("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A3A3A3] hover:text-[#525252]"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-subtle hover:text-text-muted"
+                aria-label="지우기"
               >
-                <X className="h-4 w-4" />
+                <X className="size-4" strokeWidth={2} />
               </button>
             )}
           </div>
           <button
+            type="button"
             onClick={handlePaste}
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-[#E5E5E5] text-[#525252] transition-colors hover:bg-[#F5F5F5]"
+            className="inline-flex size-14 shrink-0 items-center justify-center rounded-lg border border-border text-text-muted transition-colors hover:border-text-muted hover:bg-surface"
             aria-label="붙여넣기"
           >
-            <Clipboard className="h-5 w-5" />
+            <Clipboard className="size-5" strokeWidth={2} />
           </button>
         </div>
 
-        {/* Hint Card (idle state) */}
         {status === "idle" && !value && (
-          <div className="mt-4 rounded-lg border border-[#F5F5F5] bg-[#FAFAFA] p-4">
-            <p className="text-sm text-[#525252]">
-              친구에게 보여주고 싶은 영상의 링크를 복사해서 붙여넣어 주세요. YouTube와 Instagram
-              Reels를 지원해요.
-            </p>
-          </div>
-        )}
-
-        {/* Status */}
-        <div className="mt-4">
-          {status === "loading" && (
-            <div className="flex items-center gap-3 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-              <Loader2 className="h-5 w-5 animate-spin text-[#2563EB]" />
-              <span className="text-sm text-[#525252]">영상을 분석하고 있어요...</span>
-            </div>
-          )}
-
-          {status === "error" && (
-            <div className="flex items-center gap-3 rounded-lg border border-[#FECACA] bg-[#FEF2F2] p-4">
-              <AlertCircle className="h-5 w-5 text-[#EF4444]" />
-              <span className="text-sm text-[#EF4444]">URL을 다시 확인해 주세요</span>
-            </div>
-          )}
-
-          {status === "success" && videoInfo && (
-            <div className="flex gap-3 rounded-lg border border-[#E5E5E5] bg-white p-3">
-              <div className="relative h-16 w-24 flex-shrink-0 overflow-hidden rounded-lg bg-[#F5F5F5]">
-                <img src={videoInfo.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-                <div className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
-                  {videoInfo.duration}
-                </div>
-              </div>
-              <div className="flex flex-1 flex-col justify-center gap-1">
-                <p className="line-clamp-2 text-sm font-medium leading-snug text-[#0A0A0A]">
-                  {videoInfo.title}
-                </p>
-                <p className="text-xs text-[#525252]">{videoInfo.channelName}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Step 2: Intent Selection (3-Layer Discovery)
-function Step2IntentSelect({
-  selected,
-  onSelect,
-  friendName,
-  videoCategory,
-  recommendedIntents,
-  videoInfo,
-}: {
-  selected: Intent | null;
-  onSelect: (i: Intent) => void;
-  friendName?: string;
-  videoCategory?: string;
-  recommendedIntents?: Intent[];
-  videoInfo?: VideoInfo | null;
-}) {
-  const [showAllCategories, setShowAllCategories] = useState(
-    !recommendedIntents || recommendedIntents.length === 0,
-  );
-  const selectedIntent = INTENTS.find((i) => i.id === selected);
-
-  // Get recommended intent configs
-  const recommendedConfigs = recommendedIntents
-    ? INTENTS.filter((i) => recommendedIntents.includes(i.id)).slice(0, 2)
-    : [];
-
-  // Group intents by category
-  const intentsByCategory = INTENTS.reduce(
-    (acc, intent) => {
-      if (!acc[intent.category]) acc[intent.category] = [];
-      acc[intent.category].push(intent);
-      return acc;
-    },
-    {} as Record<IntentCategory, IntentConfig[]>,
-  );
-
-  const categoryOrder: IntentCategory[] = ["share", "benefit", "purchase", "participate", "free"];
-
-  return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto px-5 pt-6 pb-4">
-        {/* Header */}
-        <h1 className="text-2xl font-bold tracking-tight text-[#0A0A0A]">이런 정보를 발견했어요</h1>
-        <p className="mt-1 text-sm text-[#525252]">어떤 목적으로 보내시겠어요?</p>
-
-        {/* Extracted Info Cards */}
-        {videoInfo && (
-          <div className="mt-6 grid grid-cols-2 gap-3">
-            {/* Location Card */}
-            <div className="group rounded-lg border border-[#E5E5E5] p-4 transition-colors hover:border-[#D4D4D4]">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EFF6FF]">
-                <MapPin className="h-4 w-4 text-[#2563EB]" />
-              </div>
-              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-[#A3A3A3]">
-                장소
-              </p>
-              <p className="mt-1 text-base font-medium text-[#0A0A0A]">성수동 카페</p>
-            </div>
-            {/* Category Card */}
-            <div className="group rounded-lg border border-[#E5E5E5] p-4 transition-colors hover:border-[#D4D4D4]">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EFF6FF]">
-                <ShoppingBag className="h-4 w-4 text-[#2563EB]" />
-              </div>
-              <p className="mt-3 text-xs font-medium uppercase tracking-wide text-[#A3A3A3]">
-                카테고리
-              </p>
-              <p className="mt-1 text-base font-medium text-[#0A0A0A]">카페 · 브런치</p>
-            </div>
-          </div>
-        )}
-
-        {/* Layer 1: Recommended Cards (if available) */}
-        {recommendedConfigs.length > 0 && !showAllCategories && (
-          <div className="mt-6 space-y-4">
-            {recommendedConfigs.map((intent, index) => {
-              const Icon = intent.icon;
-              const isSelected = selected === intent.id;
-              return (
-                <button
-                  key={intent.id}
-                  onClick={() => onSelect(intent.id)}
-                  className={`relative w-full cursor-pointer rounded-xl border-2 p-6 text-left transition-all duration-150 ease-out active:scale-[0.99] ${
-                    isSelected
-                      ? "border-[#2563EB] bg-[#EFF6FF] shadow-md"
-                      : "border-[#E5E5E5] bg-white hover:border-[#2563EB] hover:bg-[#EFF6FF] hover:shadow-md"
-                  }`}
-                >
-                  {/* AI 추천 badge */}
-                  {index === 0 && (
-                    <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-[#EFF6FF] px-2 py-0.5 text-xs font-medium text-[#2563EB]">
-                      <Sparkles className="h-3 w-3" />
-                      AI 추천
-                    </span>
-                  )}
-
-                  {/* Icon + Label */}
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${
-                        isSelected ? "bg-[#2563EB]" : "bg-[#EFF6FF]"
-                      }`}
-                    >
-                      <Icon className={`h-6 w-6 ${isSelected ? "text-white" : "text-[#2563EB]"}`} />
-                    </div>
-                    <div className="flex-1 pt-1">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-lg font-semibold ${isSelected ? "text-[#2563EB]" : "text-[#0A0A0A]"}`}
-                        >
-                          {intent.label}로 보내기
-                        </span>
-                        {intent.requiresPartner && (
-                          <span className="rounded bg-[#F5F5F5] px-1.5 py-0.5 text-[10px] font-medium text-[#525252]">
-                            매장 연결
-                          </span>
-                        )}
-                      </div>
-                      {/* Example message */}
-                      <p className="mt-1.5 text-sm italic text-[#525252]">
-                        &quot;{intent.exampleMessage}&quot;
-                      </p>
-                      {/* Friend action flow */}
-                      <div className="mt-2 flex items-center gap-1.5 text-xs text-[#A3A3A3]">
-                        <span>친구가</span>
-                        <ArrowRight className="h-3 w-3" />
-                        <span>{intent.friendAction}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bottom-right arrow */}
-                  <ArrowRight
-                    className={`absolute bottom-4 right-4 h-5 w-5 ${isSelected ? "text-[#2563EB]" : "text-[#A3A3A3]"}`}
-                  />
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Toggle: Show all categories */}
-        {recommendedConfigs.length > 0 && (
-          <button
-            onClick={() => setShowAllCategories(!showAllCategories)}
-            className="mt-6 flex w-full items-center justify-center gap-1.5 py-3 text-sm text-[#525252] transition-colors hover:text-[#0A0A0A]"
-          >
-            <span>{showAllCategories ? "추천만 보기" : "다른 목적으로 보내기"}</span>
-            {showAllCategories ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
-          </button>
-        )}
-
-        {/* Layer 2: All Intents Grid (expanded) */}
-        {showAllCategories && (
-          <div className="mt-6">
-            <p className="mb-3 text-sm font-medium text-[#0A0A0A]">정확한 목적을 골라주세요</p>
-            <div className="grid grid-cols-2 gap-3">
-              {INTENTS.map((intent) => {
-                const Icon = intent.icon;
-                const isSelected = selected === intent.id;
-                return (
-                  <button
-                    key={intent.id}
-                    onClick={() => onSelect(intent.id)}
-                    className={`relative flex aspect-square flex-col items-start justify-between rounded-lg border p-4 text-left transition-all duration-150 ease-out ${
-                      isSelected
-                        ? "border-[#2563EB] bg-[#EFF6FF]"
-                        : "border-[#E5E5E5] bg-white hover:border-[#2563EB] hover:bg-[#EFF6FF]"
-                    }`}
-                  >
-                    {/* Checkmark when selected */}
-                    {isSelected && (
-                      <div className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#2563EB]">
-                        <Check className="h-3 w-3 text-white" />
-                      </div>
-                    )}
-
-                    {/* Icon */}
-                    <div
-                      className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                        isSelected ? "bg-[#2563EB]" : "bg-[#EFF6FF]"
-                      }`}
-                    >
-                      <Icon className={`h-5 w-5 ${isSelected ? "text-white" : "text-[#2563EB]"}`} />
-                    </div>
-
-                    {/* Label + Description */}
-                    <div>
-                      <p
-                        className={`text-lg font-bold ${isSelected ? "text-[#2563EB]" : "text-[#0A0A0A]"}`}
-                      >
-                        {intent.label}
-                      </p>
-                      <p className="mt-1 text-xs text-[#525252]">{intent.description}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Layer 3: Compact Grid (always visible at bottom) */}
-        <div className="mt-6">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-[#A3A3A3]">
-            모든 목적 보기
+          <p className="mt-4 rounded-lg border border-border bg-surface p-4 text-sm font-medium tracking-ko text-text-muted">
+            영상 링크를 안내, 쿠폰, 예약, 구매, 상담으로 연결해보세요.
           </p>
-          <div className="grid grid-cols-3 gap-2">
-            {INTENTS.map((intent) => {
-              const Icon = intent.icon;
-              const isSelected = selected === intent.id;
-              return (
-                <button
-                  key={intent.id}
-                  onClick={() => onSelect(intent.id)}
-                  className={`flex aspect-square flex-col items-center justify-center gap-1.5 rounded-lg border p-3 transition-all duration-150 ease-out ${
-                    isSelected
-                      ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                      : "border-[#E5E5E5] bg-white text-[#525252] hover:border-[#2563EB] hover:bg-[#EFF6FF] hover:text-[#2563EB]"
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span className="text-xs font-medium">{intent.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Preview card (when intent selected) */}
-        {selectedIntent && videoInfo && (
-          <div className="mt-6 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-[#A3A3A3]">
-              친구가 받을 카드
-            </p>
-            <div className="mt-3 flex gap-3">
-              {/* Mini thumbnail */}
-              <div className="relative h-14 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-[#E5E5E5]">
-                <img src={videoInfo.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-              </div>
-              <div className="flex flex-1 flex-col gap-1">
-                {/* Intent badge */}
-                <span className="inline-flex w-fit rounded-md bg-[#EFF6FF] px-2 py-0.5 text-xs font-medium text-[#2563EB]">
-                  {selectedIntent.label}
-                </span>
-                {/* Title */}
-                <p className="line-clamp-1 text-sm font-medium text-[#0A0A0A]">{videoInfo.title}</p>
-                {/* CTA preview */}
-                <span className="text-xs text-[#525252]">
-                  {selectedIntent.id === "coupon" && "받기"}
-                  {selectedIntent.id === "reservation" && "예약"}
-                  {selectedIntent.id === "commerce" && "구매"}
-                  {selectedIntent.id === "ticket" && "예매"}
-                  {selectedIntent.id === "lead" && "신청"}
-                  {(selectedIntent.id === "info" ||
-                    selectedIntent.id === "discussion" ||
-                    selectedIntent.id === "meme" ||
-                    selectedIntent.id === "campaign" ||
-                    selectedIntent.id === "custom") &&
-                    "보기"}
-                </span>
-              </div>
-            </div>
-          </div>
         )}
-      </div>
-    </div>
-  );
-}
 
-// Step 3: Local Partner Selection
-function Step3LocalSelect({
-  searchQuery,
-  onSearchChange,
-  locals,
-  selected,
-  onSelect,
-  onNext,
-}: {
-  searchQuery: string;
-  onSearchChange: (v: string) => void;
-  locals: LocalPartner[];
-  selected: LocalPartner | null;
-  onSelect: (l: LocalPartner | null) => void;
-  onNext: () => void;
-}) {
-  const filtered = locals.filter((l) => l.name.toLowerCase().includes(searchQuery.toLowerCase()));
-
-  return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto px-5 pt-6">
-        <h1 className="text-2xl font-bold tracking-tight text-[#0A0A0A]">
-          어떤 매장과 연결할까요?
-        </h1>
-        <p className="mt-2 text-sm text-[#525252]">쿠폰/예약 드롭은 매장 등록이 필요해요</p>
-
-        {/* Search */}
-        <div className="relative mt-6">
-          <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#A3A3A3]" />
-          <Input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="매장 이름 검색"
-            className="h-12 rounded-xl border-[#E5E5E5] pl-12 text-sm placeholder:text-[#A3A3A3] focus:border-[#2563EB] focus:ring-[#2563EB]"
-          />
-        </div>
-
-        {/* Selected */}
-        {selected && (
-          <div className="mt-4 flex items-center gap-3 rounded-xl border border-[#2563EB] bg-[#EFF6FF] p-3">
-            <img src={selected.avatarUrl} alt="" className="h-12 w-12 rounded-lg object-cover" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-[#0A0A0A]">{selected.name}</p>
-              <p className="text-xs text-[#525252]">{selected.category}</p>
-            </div>
-            <button onClick={() => onSelect(null)} className="text-xs font-medium text-[#2563EB]">
-              변경
-            </button>
+        {status === "loading" && (
+          <div className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-surface p-4">
+            <Loader2 className="size-5 animate-spin text-accent" strokeWidth={2} />
+            <span className="text-sm font-medium text-text-muted">영상을 분석하고 있어요…</span>
           </div>
         )}
 
-        {/* Results */}
-        {!selected && (
-          <div className="mt-4 space-y-2">
-            {filtered.map((local) => (
-              <div
-                key={local.id}
-                className="flex items-center gap-3 rounded-xl border border-[#E5E5E5] bg-white p-3"
-              >
-                <img src={local.avatarUrl} alt="" className="h-12 w-12 rounded-lg object-cover" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-[#0A0A0A]">{local.name}</p>
-                  <div className="flex items-center gap-1 text-xs text-[#525252]">
-                    <span>{local.category}</span>
-                    <span>·</span>
-                    <MapPin className="h-3 w-3" />
-                    <span>{local.distance}</span>
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onSelect(local)}
-                  className="h-8 rounded-lg border-[#2563EB] text-xs font-medium text-[#2563EB] hover:bg-[#EFF6FF]"
-                >
-                  선택
-                </Button>
-              </div>
-            ))}
+        {status === "error" && (
+          <div className="mt-4 flex items-center gap-3 rounded-lg border border-intent-danger/30 bg-intent-danger-bg p-4">
+            <AlertCircle className="size-5 text-intent-danger" strokeWidth={2} />
+            <span className="text-sm font-medium text-intent-danger">URL을 다시 확인해 주세요</span>
           </div>
         )}
 
-        {/* New Partner Link (disabled for now) */}
-        <button disabled className="mt-4 flex items-center gap-1 text-sm text-[#A3A3A3]">
-          <span>새 매장 등록하기</span>
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Bottom Action */}
-      <div className="p-5">
-        <Button
-          onClick={onNext}
-          disabled={!selected}
-          className="h-12 w-full rounded-xl bg-[#2563EB] text-base font-semibold text-white hover:bg-[#1D4ED8] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
-        >
-          다음
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// Step 4: Card Preview (카드 미리보기)
-function Step4Preview({
-  videoInfo,
-  intent,
-  local,
-  onEdit,
-}: {
-  videoInfo: VideoInfo;
-  intent: Intent;
-  local: LocalInfo | null;
-  onEdit?: () => void;
-}) {
-  const intentConfig = INTENTS.find((i) => i.id === intent);
-
-  return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto px-5 pt-6">
-        <h1 className="text-2xl font-bold tracking-tight text-[#0A0A0A]">
-          어떻게 보일지 확인해 주세요
-        </h1>
-        <p className="mt-1 text-sm text-[#525252]">친구가 받을 카드예요</p>
-
-        {/* Card Preview */}
-        <div className="mt-6 overflow-hidden rounded-xl border border-[#E5E5E5] bg-white">
-          {/* Video */}
-          <div className="relative aspect-video w-full bg-[#F5F5F5]">
-            <img src={videoInfo.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/95">
-                <Play className="h-6 w-6 fill-[#0A0A0A] text-[#0A0A0A]" />
-              </div>
+        {status === "success" && videoInfo && (
+          <div className="mt-4 flex gap-3 overflow-hidden rounded-2xl border border-border bg-bg p-3">
+            <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-surface">
+              <img src={videoInfo.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+              <span className="absolute bottom-1 right-1 rounded-lg bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
+                {videoInfo.duration}
+              </span>
             </div>
-            <span className="absolute right-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white">
-              {videoInfo.source}
-            </span>
-            <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs tabular-nums text-white">
-              {videoInfo.duration}
-            </span>
-          </div>
-
-          {/* Content */}
-          <div className="p-4">
-            {/* Intent badge */}
-            <span className="inline-block rounded-full bg-[#EFF6FF] px-2.5 py-0.5 text-xs font-medium text-[#2563EB]">
-              {intentConfig?.label}
-            </span>
-
-            {/* Title */}
-            <h2 className="mt-2 text-lg font-semibold leading-snug text-[#0A0A0A]">
-              {videoInfo.title}
-            </h2>
-
-            {/* Local info */}
-            {local && (
-              <div className="mt-3 flex items-center gap-2 text-sm text-[#525252]">
-                <MapPin className="h-4 w-4 text-[#A3A3A3]" />
-                <span>{local.name}</span>
-              </div>
-            )}
-
-            {/* Creator */}
-            <div className="mt-3 border-t border-[#F5F5F5] pt-3">
-              <p className="text-xs text-[#A3A3A3]">원본: {videoInfo.channelName}</p>
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+              <p className="line-clamp-2 text-sm font-bold tracking-ko text-text-strong">
+                {videoInfo.title}
+              </p>
+              <p className="text-xs font-medium text-text-muted">{videoInfo.channelName}</p>
             </div>
           </div>
-        </div>
-
-        {/* Edit button */}
-        {onEdit && (
-          <button
-            onClick={onEdit}
-            className="mt-4 w-full text-center text-sm text-[#525252] hover:text-[#0A0A0A]"
-          >
-            수정하기
-          </button>
         )}
-      </div>
-    </div>
-  );
-}
-
-// Step 5: Personal Message (친구에게 한마디)
-function Step5Message({
-  value,
-  onChange,
-  maxLength = 100,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  maxLength?: number;
-}) {
-  return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex-1 px-5 pt-6">
-        <h1 className="text-2xl font-bold tracking-tight text-[#0A0A0A]">
-          친구에게 메시지를 남겨주세요
-        </h1>
-        <p className="mt-1 text-sm text-[#525252]">카드와 함께 보낼 메시지를 적어주세요</p>
-
-        {/* Textarea */}
-        <div className="mt-6">
-          <textarea
-            value={value}
-            onChange={(e) => {
-              if (e.target.value.length <= maxLength) {
-                onChange(e.target.value);
-              }
-            }}
-            placeholder="예: 여기 진짜 좋더라. 너 좋아할 것 같아!"
-            rows={5}
-            className="w-full resize-none rounded-lg border border-[#E5E5E5] p-4 text-sm leading-relaxed placeholder:text-[#A3A3A3] focus:border-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
-          />
-          <p className="mt-2 text-right text-xs text-[#A3A3A3]">
-            {value.length}/{maxLength}
-          </p>
-        </div>
-
-        {/* Skip option */}
-        <p className="mt-4 text-center text-xs text-[#A3A3A3]">
-          건너뛰기를 누르면 메시지 없이 보낼 수 있어요
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// Step 6: Share (카카오톡으로 보내기)
-function Step6Share({
-  onKakaoShare,
-  onCopyLink,
-  onComplete,
-}: {
-  onKakaoShare: () => void;
-  onCopyLink: () => void;
-  onComplete: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopyLink = () => {
-    onCopyLink();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex flex-1 flex-col items-center justify-center px-5">
-        {/* Success Icon */}
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#10B981]/10">
-          <Check className="h-10 w-10 text-[#10B981]" />
-        </div>
-
-        <h1 className="mt-6 text-2xl font-bold tracking-tight text-[#0A0A0A]">준비 완료!</h1>
-        <p className="mt-2 text-center text-sm text-[#525252]">이제 친구에게 공유해보세요</p>
-
-        {/* Link Copy Option */}
-        <div className="mt-8 w-full">
-          <Button
-            onClick={handleCopyLink}
-            variant="outline"
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-lg border-[#E5E5E5] text-sm font-medium text-[#0A0A0A] hover:bg-[#F5F5F5]"
-          >
-            {copied ? (
-              <>
-                <Check className="h-4 w-4 text-[#10B981]" />
-                복사됨!
-              </>
-            ) : (
-              <>
-                <Share2 className="h-4 w-4" />
-                링크 복사하기
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-
-      {/* Footer with Kakao button */}
-      <footer className="sticky bottom-0 z-20 space-y-2 border-t border-[#F5F5F5] bg-white px-4 py-3">
-        <Button
-          onClick={onKakaoShare}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#2563EB] text-sm font-medium text-white hover:bg-[#1D4ED8]"
-        >
-          <MessageCircle className="h-5 w-5" />
-          카카오톡으로 보내기
-        </Button>
-        <button
-          onClick={onComplete}
-          className="h-10 w-full text-sm font-medium text-[#525252] hover:text-[#0A0A0A]"
-        >
-          홈으로 돌아가기
-        </button>
-      </footer>
+      </main>
     </div>
   );
 }
 
 // =============================================================================
-// Main Component
+// Step 2 — 5 목적 선택 (밈 Phase 2 미노출)
+// =============================================================================
+
+function Step2PurposeSelect({
+  selected,
+  onSelect,
+}: {
+  selected: DropPurpose | null;
+  onSelect: (p: DropPurpose) => void;
+}) {
+  return (
+    <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
+      <StepBadge n={2} />
+      <h1 className="mt-3 text-2xl font-extrabold leading-snug tracking-ko text-text-strong">
+        이 Drop의 목적을 선택하세요
+      </h1>
+
+      <div className="mt-8 grid grid-cols-2 gap-3">
+        {WIZARD_PURPOSES.map((item) => {
+          const Icon = item.icon;
+          const isSelected = selected === item.purpose;
+          return (
+            <button
+              key={item.purpose}
+              type="button"
+              onClick={() => onSelect(item.purpose)}
+              className={cn(
+                "group relative flex min-h-[112px] flex-col items-start justify-between gap-2 overflow-hidden rounded-2xl border border-border p-4 text-left transition-all duration-150 ease-out",
+                "hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
+                isSelected && "border-[#2563EB] bg-[#EFF6FF]/40 ring-1 ring-[#2563EB]/25",
+              )}
+            >
+              {item.aiRecommended && (
+                <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-ko text-accent">
+                  <Sparkles className="size-3" strokeWidth={2} />
+                  AI 추천
+                </span>
+              )}
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute inset-y-0 left-0 w-1 transition-opacity duration-150",
+                  item.stripClass,
+                  isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                )}
+              />
+              <Icon className="size-6 text-text-muted" strokeWidth={2} />
+              <div>
+                <span className="text-sm font-bold tracking-ko text-text-strong">
+                  {item.label}
+                </span>
+                <p className="mt-1 text-xs font-medium leading-snug tracking-ko text-text-muted">
+                  {item.description}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="mt-6 text-xs font-medium leading-relaxed tracking-ko text-text-muted">
+        선택한 목적에 따라 AI가 요약, 버튼, 공유 문구를 다르게 추천합니다.
+      </p>
+    </main>
+  );
+}
+
+// =============================================================================
+// Step 3 — 옵션 / 메시지
+// =============================================================================
+
+function Step3Options({
+  purpose,
+  makerMessage,
+  onMessageChange,
+  partnerSearch,
+  onPartnerSearchChange,
+  selectedPartner,
+  onSelectPartner,
+}: {
+  purpose: DropPurpose;
+  makerMessage: string;
+  onMessageChange: (v: string) => void;
+  partnerSearch: string;
+  onPartnerSearchChange: (v: string) => void;
+  selectedPartner: LocalPartner | null;
+  onSelectPartner: (p: LocalPartner | null) => void;
+}) {
+  const config = WIZARD_PURPOSES.find((p) => p.purpose === purpose)!;
+  const filtered = MOCK_LOCALS.filter((l) =>
+    l.name.toLowerCase().includes(partnerSearch.toLowerCase()),
+  );
+
+  return (
+    <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
+      <StepBadge n={3} />
+      <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">
+        옵션을 정해 주세요
+      </h1>
+      <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">
+        {config.label} 드롭 · 친구에게 함께 갈 한마디 (선택)
+      </p>
+
+      {config.requiresPartner && (
+        <div className="mt-6">
+          <p className="text-sm font-semibold tracking-ko text-text-strong">연결할 매장</p>
+          <div className="relative mt-2">
+            <Search
+              className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-text-subtle"
+              strokeWidth={2}
+            />
+            <Input
+              type="search"
+              value={partnerSearch}
+              onChange={(e) => onPartnerSearchChange(e.target.value)}
+              placeholder="매장 이름 검색"
+              className="h-12 rounded-lg border-border pl-12"
+            />
+          </div>
+
+          {selectedPartner ? (
+            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-accent bg-surface p-3">
+              <img
+                src={selectedPartner.avatarUrl}
+                alt=""
+                className="size-12 rounded-lg object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-text-strong">{selectedPartner.name}</p>
+                <p className="text-xs font-medium text-text-muted">{selectedPartner.category}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onSelectPartner(null)}
+                className="text-xs font-semibold text-accent"
+              >
+                변경
+              </button>
+            </div>
+          ) : (
+            <ul className="mt-4 space-y-2">
+              {filtered.map((local) => (
+                <li key={local.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectPartner(local)}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-border bg-bg p-3 text-left transition-colors hover:border-text-muted"
+                  >
+                    <img src={local.avatarUrl} alt="" className="size-12 rounded-lg object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-text-strong">{local.name}</p>
+                      <p className="flex items-center gap-1 text-xs font-medium text-text-muted">
+                        <MapPin className="size-3" strokeWidth={2} />
+                        {local.category}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <label className="mt-6 block">
+        <span className="text-sm font-semibold tracking-ko text-text-strong">
+          친구에게 한마디 (선택)
+        </span>
+        <textarea
+          value={makerMessage}
+          onChange={(e) => onMessageChange(e.target.value.slice(0, 100))}
+          maxLength={100}
+          rows={3}
+          placeholder="예: 여기 진짜 좋더라. 너 좋아할 것 같아!"
+          className="mt-2 block w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko text-text-strong placeholder:text-text-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+        />
+        <span className="mt-1 block text-right text-xs font-medium text-text-subtle">
+          {makerMessage.length}/100
+        </span>
+      </label>
+    </main>
+  );
+}
+
+// =============================================================================
+// Step 4 — AI 결과 미리보기 (mock)
+// =============================================================================
+
+function Step4AiPreview({
+  purpose,
+  ai,
+  videoInfo,
+  partnerName,
+}: {
+  purpose: DropPurpose;
+  ai: AiPreviewData;
+  videoInfo: VideoInfo;
+  partnerName?: string;
+}) {
+  return (
+    <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
+      <StepBadge n={4} />
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-extrabold tracking-ko text-text-strong">AI가 이렇게 만들었어요</h1>
+        <span className="inline-flex items-center gap-1 rounded-lg bg-surface px-2 py-0.5 text-xs font-semibold text-accent">
+          <Sparkles className="size-3" strokeWidth={2} />
+          AI
+        </span>
+      </div>
+      <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">
+        {purpose}
+        {partnerName ? ` · ${partnerName}` : ""} — 공유 전에 내용을 확인해 주세요
+      </p>
+
+      <div className="mt-6 space-y-4 rounded-2xl border border-border bg-bg p-4">
+        <div className="flex gap-3">
+          <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-surface">
+            <img src={videoInfo.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-bold tracking-ko text-text-strong">{ai.title}</p>
+            <p className="mt-1 text-sm font-medium text-text-muted">{ai.summary}</p>
+          </div>
+        </div>
+
+        <ul className="space-y-2 border-t border-border pt-4">
+          {ai.keyPoints.map((point) => (
+            <li key={point} className="flex items-start gap-2 text-sm font-medium text-text-strong">
+              <Check className="mt-0.5 size-4 shrink-0 text-accent" strokeWidth={2} />
+              {point}
+            </li>
+          ))}
+        </ul>
+
+        <div className="rounded-lg bg-surface p-3">
+          <p className="text-xs font-semibold uppercase tracking-ko text-text-subtle">공유 문구 제안</p>
+          <p className="mt-1 text-sm font-medium italic tracking-ko text-text-muted">
+            &quot;{ai.suggestedShareText}&quot;
+          </p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// =============================================================================
+// Main wizard
 // =============================================================================
 
 export function CreateDropWizard({
@@ -953,247 +538,260 @@ export function CreateDropWizard({
   onClose,
   onComplete,
 }: CreateDropWizardProps) {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<StepNum>(1);
   const [url, setUrl] = useState("");
   const [urlStatus, setUrlStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
-  const [selectedIntent, setSelectedIntent] = useState<Intent | null>(null);
-  const [localSearchQuery, setLocalSearchQuery] = useState("");
-  const [selectedLocal, setSelectedLocal] = useState<LocalPartner | null>(null);
-  const [cardData, setCardData] = useState<DropCardData>({
-    title: "",
-    description: "",
-    makerMessage: "",
-    timeLink: null,
-  });
+  const [purpose, setPurpose] = useState<DropPurpose | null>(null);
+  const [partnerSearch, setPartnerSearch] = useState("");
+  const [selectedPartner, setSelectedPartner] = useState<LocalPartner | null>(null);
+  const [makerMessage, setMakerMessage] = useState("");
+  const [aiPreview, setAiPreview] = useState<AiPreviewData | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
-  // Calculate total steps based on intent
-  const intentConfig = INTENTS.find((i) => i.id === selectedIntent);
-  const requiresPartner = intentConfig?.requiresPartner ?? false;
-  const totalSteps = requiresPartner ? 6 : 5;
+  const purposeConfig = purpose ? WIZARD_PURPOSES.find((p) => p.purpose === purpose) : null;
+  const requiresPartner = purposeConfig?.requiresPartner ?? false;
 
-  // Simulate URL parsing
+  const mockShareUrl = useMemo(() => {
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
+    const slug = purpose
+      ? { 정보: "info", 쿠폰: "coupon", 예약: "reservation", 구매: "purchase", 상담: "lead" }[purpose]
+      : "info";
+    return `${origin}/d/preview-${slug}-${Date.now().toString(36)}`;
+  }, [purpose]);
+
+  // WHY: Phase 1 URL 파싱은 mock — oEmbed/Edge 연동 전 UX 검증용.
   useEffect(() => {
     if (!url) {
       setUrlStatus("idle");
       setVideoInfo(null);
       return;
     }
-
-    const isValidUrl = url.includes("youtu") || url.includes("instagram");
-    if (!isValidUrl) {
+    const isValid = url.includes("youtu") || url.includes("instagram");
+    if (!isValid) {
       setUrlStatus("error");
+      setVideoInfo(null);
       return;
     }
-
     setUrlStatus("loading");
     const timer = setTimeout(() => {
+      const mock = MOCK_VIDEO_INFO.cafeTour;
       setUrlStatus("success");
       setVideoInfo({
         url,
-        thumbnailUrl: "https://picsum.photos/seed/video1/640/360",
-        title: "서울 성수동 힙한 카페 투어 | 요즘 핫한 브런치 맛집 5곳",
-        channelName: "먹방여행 크리에이터",
-        duration: "12:34",
-        platform: "youtube",
+        thumbnailUrl: mock.thumbnailUrl,
+        title: mock.title,
+        channelName: mock.channelName,
+        duration: mock.duration,
+        platform: url.includes("instagram") ? "instagram" : "youtube",
       });
-      setCardData((prev) => ({
-        ...prev,
-        title: "서울 성수동 힙한 카페 투어 | 요즘 핫한 브런치 맛집 5곳",
-      }));
-    }, 1500);
-
+    }, 1200);
     return () => clearTimeout(timer);
   }, [url]);
 
-  const handleBack = () => {
+  function buildAiPreview(p: DropPurpose, message: string): AiPreviewData {
+    const base = MOCK_AI_BY_PURPOSE[p];
+    const suffix = message.trim() ? ` — "${message.trim()}"` : "";
+    return {
+      ...base,
+      suggestedShareText: base.title + suffix,
+    };
+  }
+
+  function handleBack() {
     if (step === 1) {
       onClose?.();
-    } else if (step === 4 && !requiresPartner) {
-      setStep(2);
-    } else {
-      setStep(step - 1);
+      return;
     }
-  };
+    setStep((s) => (s - 1) as StepNum);
+  }
 
-  const handleNext = () => {
-    if (step === 2 && !requiresPartner) {
+  function handleNext() {
+    if (step === 2 && purpose) {
+      setAiPreview(null);
+      setStep(3);
+      return;
+    }
+    if (step === 3 && purpose) {
+      setAiPreview(buildAiPreview(purpose, makerMessage));
       setStep(4);
-    } else if (step === totalSteps) {
-      // Complete
-    } else {
-      setStep(step + 1);
+      return;
     }
-  };
+    if (step === 4) {
+      // TODO: Step 5 완료 후 createDropV2({ intentId, sourceId, blocks, curatorMessage }) RPC로 교체
+      setStep(5);
+      return;
+    }
+    setStep((s) => Math.min(5, s + 1) as StepNum);
+  }
 
-  const handleKakaoShare = () => {
-    console.log("[CreateDropWizard] KakaoTalk share");
-  };
+  function canProceed(): boolean {
+    if (step === 1) return urlStatus === "success";
+    if (step === 2) return purpose !== null;
+    if (step === 3) return !requiresPartner || selectedPartner !== null;
+    return true;
+  }
 
-  const handleCopyLink = () => {
-    console.log("[CreateDropWizard] Copy link");
-  };
-
-  const handleComplete = () => {
-    onComplete?.({
-      video: videoInfo!,
-      intent: selectedIntent!,
-      local: selectedLocal || undefined,
-      card: cardData,
+  async function handleKakaoShare() {
+    if (!videoInfo || !aiPreview || !purpose) return;
+    setShareError(null);
+    setShareFeedback(null);
+    const result = await shareToKakao({
+      title: aiPreview.title,
+      description: [purpose, selectedPartner?.name, makerMessage.trim()].filter(Boolean).join(" · "),
+      imageUrl: videoInfo.thumbnailUrl,
+      linkUrl: mockShareUrl,
+      buttons: [{ title: "보러 가기", link: mockShareUrl }],
     });
-    onClose?.();
-  };
+    if (result.fallback === "clipboard") {
+      setShareFeedback("카카오 SDK 호출에 실패해서 링크를 복사했어요.");
+    } else if (!result.ok) {
+      setShareError("카카오 공유에 실패했어요. 링크를 직접 복사해 주세요.");
+    }
+  }
 
-  // Skeleton
+  async function handleCopyLink() {
+    setShareError(null);
+    setShareFeedback(null);
+    try {
+      await navigator.clipboard.writeText(mockShareUrl);
+      setShareFeedback("링크를 복사했어요.");
+    } catch {
+      setShareError("링크 복사에 실패했어요.");
+    }
+  }
+
+  function handleGoHome() {
+    if (videoInfo && purpose && aiPreview) {
+      onComplete?.({
+        video: videoInfo,
+        purpose,
+        local: selectedPartner ?? undefined,
+        ai: aiPreview,
+        makerMessage,
+      });
+    }
+    onClose?.();
+  }
+
   if (variant === "skeleton") {
     return (
-      <div className="flex h-full min-h-screen flex-col bg-white">
-        {/* Header */}
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[#F5F5F5] bg-white px-4">
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <Skeleton className="h-4 w-24 rounded" />
-          <Skeleton className="h-4 w-16 rounded" />
+      <div className="flex min-h-screen flex-col bg-bg">
+        <header className="flex h-14 items-center justify-between border-b border-border px-4">
+          <Skeleton className="size-10 rounded-lg" />
+          <Skeleton className="h-4 w-24 rounded-lg" />
+          <Skeleton className="h-4 w-12 rounded-lg" />
         </header>
-
-        <div className="flex-1 px-5 pt-6">
-          <Skeleton className="h-8 w-48 rounded" />
-          <Skeleton className="mt-2 h-4 w-64 rounded" />
-          <Skeleton className="mt-6 h-14 w-full rounded-xl" />
-          <Skeleton className="mt-6 h-24 w-full rounded-xl" />
-        </div>
-
-        <div className="p-5">
-          <Skeleton className="h-12 w-full rounded-xl" />
+        <div className="flex-1 px-6 pt-6">
+          <Skeleton className="h-8 w-48 rounded-lg" />
+          <Skeleton className="mt-6 h-14 w-full rounded-lg" />
         </div>
       </div>
     );
   }
 
-  // Map step to actual step number for display
-  const displayStep = step <= 2 ? step : requiresPartner ? step : step - 1;
-  const displayTotalSteps = requiresPartner ? 6 : 5;
-
   return (
-    <div className="flex h-full min-h-screen flex-col bg-white">
-      {/* Header */}
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[#F5F5F5] bg-white px-4">
+    <div className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col bg-white">
+      <header className="flex h-14 shrink-0 items-center border-b border-[#E5E7EB] px-2">
         <button
-          onClick={() => {
-            console.log("[CreateDropWizard] Cancel clicked");
-            onClose?.();
-          }}
-          className="flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-[#F5F5F5]"
-          aria-label="닫기"
+          type="button"
+          onClick={handleBack}
+          className="inline-flex h-11 min-w-11 items-center gap-1 rounded-lg px-3 text-sm font-medium tracking-ko text-[#525252] transition-colors hover:text-[#111111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2"
         >
-          <X className="h-5 w-5 text-[#0A0A0A]" />
+          <ArrowLeft className="size-4" strokeWidth={2} />
+          {step === 1 ? "닫기" : "이전"}
         </button>
-
-        <span className="text-base font-medium text-[#0A0A0A]">드롭 만들기</span>
-
-        <span className="text-sm text-[#525252]">
-          {displayStep}/{displayTotalSteps}
+        <span className="flex-1 text-center text-sm font-bold tracking-ko text-[#111111]">
+          드롭 만들기
         </span>
-
-        <StepIndicator current={displayStep} total={displayTotalSteps} />
+        <span className="w-16 text-right text-xs font-semibold tracking-ko text-[#525252]">
+          Step {step}/5
+        </span>
       </header>
+      <div className="h-1 w-full bg-[#E2E8F0]" aria-hidden>
+        <div
+          className="h-full bg-[#2563EB] transition-all duration-300 ease-out"
+          style={{ width: `${(step / 5) * 100}%` }}
+        />
+      </div>
 
-      {/* Step Content */}
       {step === 1 && (
         <Step1UrlInput value={url} onChange={setUrl} status={urlStatus} videoInfo={videoInfo} />
       )}
-
-      {step === 2 && (
-        <Step2IntentSelect
-          selected={selectedIntent}
-          onSelect={setSelectedIntent}
+      {step === 2 && <Step2PurposeSelect selected={purpose} onSelect={setPurpose} />}
+      {step === 3 && purpose && (
+        <Step3Options
+          purpose={purpose}
+          makerMessage={makerMessage}
+          onMessageChange={setMakerMessage}
+          partnerSearch={partnerSearch}
+          onPartnerSearchChange={setPartnerSearch}
+          selectedPartner={selectedPartner}
+          onSelectPartner={setSelectedPartner}
+        />
+      )}
+      {step === 4 && purpose && videoInfo && aiPreview && (
+        <Step4AiPreview
+          purpose={purpose}
+          ai={aiPreview}
           videoInfo={videoInfo}
-          recommendedIntents={["info", "coupon"]}
+          partnerName={selectedPartner?.name}
         />
       )}
-
-      {step === 3 && requiresPartner && (
-        <Step3LocalSelect
-          searchQuery={localSearchQuery}
-          onSearchChange={setLocalSearchQuery}
-          locals={MOCK_LOCALS}
-          selected={selectedLocal}
-          onSelect={setSelectedLocal}
-          onNext={handleNext}
-        />
-      )}
-
-      {step === 4 && videoInfo && selectedIntent && (
-        <Step4Preview
-          videoInfo={videoInfo}
-          intent={selectedIntent}
-          local={selectedLocal}
-          onEdit={() => setStep(2)}
-        />
-      )}
-
-      {step === 5 && (
-        <Step5Message
-          value={cardData.makerMessage}
-          onChange={(v) => setCardData((prev) => ({ ...prev, makerMessage: v }))}
-          maxLength={100}
-        />
-      )}
-
-      {step === 6 && (
-        <Step6Share
+      {step === 5 && purpose && videoInfo && aiPreview && (
+        <WizardSharePreview
+          data={{
+            video: {
+              thumbnailUrl: videoInfo.thumbnailUrl,
+              title: videoInfo.title,
+              channelName: videoInfo.channelName,
+              duration: videoInfo.duration,
+              platformLabel: platformLabel(videoInfo.platform),
+            },
+            purpose,
+            aiTitle: aiPreview.title,
+            makerMessage: makerMessage.trim() || undefined,
+            partnerName: selectedPartner?.name,
+          }}
+          shareUrl={mockShareUrl}
           onKakaoShare={handleKakaoShare}
           onCopyLink={handleCopyLink}
-          onComplete={handleComplete}
+          onGoHome={handleGoHome}
+          shareError={shareError}
+          shareFeedback={shareFeedback}
         />
       )}
 
-      {/* Footer - Navigation buttons (except Step 6) */}
-      {step !== 6 && (
-        <footer className="sticky bottom-0 z-20 flex h-16 items-center justify-between border-t border-[#F5F5F5] bg-white px-4">
-          <button
-            onClick={handleBack}
-            disabled={step === 1}
-            className="h-10 rounded-lg px-4 text-sm font-medium text-[#525252] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            이전
-          </button>
-          {step === 5 ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleNext}
-                className="h-10 rounded-lg px-4 text-sm font-medium text-[#525252] transition-colors hover:bg-[#F5F5F5]"
-              >
-                건너뛰기
-              </button>
-              <button
-                onClick={handleNext}
-                disabled={!cardData.makerMessage}
-                className="h-10 rounded-lg bg-[#2563EB] px-6 text-sm font-medium text-white transition-colors hover:bg-[#1D4ED8] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
-              >
-                다음
-              </button>
-            </div>
-          ) : (
+      {step < 5 && (
+        <div className="sticky bottom-0 border-t border-[#E5E7EB] bg-white px-6 py-4">
+          {step === 3 && (
             <button
-              onClick={handleNext}
-              disabled={
-                (step === 1 && urlStatus !== "success") ||
-                (step === 2 && !selectedIntent) ||
-                (step === 3 && requiresPartner && !selectedLocal)
-              }
-              className="h-10 rounded-lg bg-[#2563EB] px-6 text-sm font-medium text-white transition-colors hover:bg-[#1D4ED8] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
+              type="button"
+              onClick={() => {
+                if (purpose) {
+                  setAiPreview(buildAiPreview(purpose, makerMessage));
+                  setStep(4);
+                }
+              }}
+              className={WIZARD_SECONDARY_BUTTON_CLASS}
             >
-              다음
+              메시지 없이 계속
             </button>
           )}
-        </footer>
+          <ActionButton
+            type="button"
+            disabled={!canProceed()}
+            onClick={handleNext}
+            className={WIZARD_PRIMARY_BUTTON_CLASS}
+          >
+            {step === 4 ? "공유 미리보기" : "다음"}
+          </ActionButton>
+        </div>
       )}
     </div>
   );
 }
-
-// =============================================================================
-// Exports
-// =============================================================================
 
 export default CreateDropWizard;

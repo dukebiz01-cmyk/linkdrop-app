@@ -1,0 +1,187 @@
+import { useState } from "react";
+import { Check, Copy, MessageCircle } from "lucide-react";
+import { ActionButton } from "@/components/ActionButton";
+import {
+  WIZARD_PRIMARY_BUTTON_CLASS,
+  WIZARD_SECONDARY_BUTTON_CLASS,
+} from "@/components/create-wizard-button-styles";
+import { ErrorMessage } from "@/components/ErrorMessage";
+import type { DropPurpose } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+/** Step 5 — 카카오톡 공유 미리보기에 필요한 드롭 요약 데이터. */
+export interface WizardSharePreviewData {
+  video: {
+    thumbnailUrl: string;
+    title: string;
+    channelName: string;
+    duration: string;
+    platformLabel: string;
+  };
+  purpose: DropPurpose;
+  aiTitle: string;
+  makerMessage?: string;
+  partnerName?: string;
+}
+
+export interface WizardSharePreviewProps {
+  data: WizardSharePreviewData;
+  shareUrl: string;
+  onKakaoShare: () => Promise<void>;
+  onCopyLink: () => Promise<void>;
+  onGoHome: () => void;
+  shareError?: string | null;
+  shareFeedback?: string | null;
+  className?: string;
+}
+
+const PURPOSE_CHIP: Record<DropPurpose, string> = {
+  정보: "bg-intent-info-bg text-intent-info",
+  쿠폰: "bg-intent-warning-bg text-intent-warning",
+  예약: "bg-intent-success-bg text-intent-success",
+  구매: "bg-surface text-text-strong",
+  상담: "bg-intent-danger-bg text-intent-danger",
+};
+
+/**
+ * 카카오톡 대화창에 보이는 말풍선 형태의 공유 미리보기 + 공유 CTA.
+ * WHY: Step 5에서 “보내기 전에 친구 화면”을 보여주면 이탈률이 줄어든다 (v3 UX 원칙).
+ */
+export function WizardSharePreview({
+  data,
+  shareUrl,
+  onKakaoShare,
+  onCopyLink,
+  onGoHome,
+  shareError,
+  shareFeedback,
+  className,
+}: WizardSharePreviewProps) {
+  const [kakaoLoading, setKakaoLoading] = useState(false);
+  const [copyLoading, setCopyLoading] = useState(false);
+
+  const description = [
+    data.purpose,
+    data.partnerName,
+    data.makerMessage?.trim(),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  async function handleKakao() {
+    setKakaoLoading(true);
+    try {
+      await onKakaoShare();
+    } finally {
+      setKakaoLoading(false);
+    }
+  }
+
+  async function handleCopy() {
+    setCopyLoading(true);
+    try {
+      await onCopyLink();
+    } finally {
+      setCopyLoading(false);
+    }
+  }
+
+  return (
+    <div className={cn("flex flex-1 flex-col", className)}>
+      <div className="flex-1 overflow-y-auto px-6 pb-8 pt-2">
+        <h1 className="mt-2 text-2xl font-extrabold tracking-ko text-text-strong">
+          공유 전에 Drop을 확인하세요
+        </h1>
+        <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
+          받는 사람에게 보일 영상, 설명, 버튼을 확인한 뒤
+          <br />
+          카카오톡이나 링크로 공유하세요.
+        </p>
+
+        {/* Kakao-style feed card mock */}
+        <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-surface shadow-soft">
+          <div className="border-b border-border bg-bg px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FEE500]">
+                <MessageCircle className="h-4 w-4 text-[#3C1E1E]" strokeWidth={2} />
+              </span>
+              <span className="text-sm font-semibold tracking-ko text-text-strong">카카오톡</span>
+            </div>
+          </div>
+
+          <div className="p-4">
+            <div className="overflow-hidden rounded-lg border border-border bg-bg">
+              {data.video.thumbnailUrl && (
+                <div className="relative aspect-video w-full bg-surface">
+                  <img
+                    src={data.video.thumbnailUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                  <span className="absolute bottom-2 right-2 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-medium tabular-nums text-white">
+                    {data.video.duration}
+                  </span>
+                </div>
+              )}
+              <div className="space-y-2 p-4">
+                <span
+                  className={cn(
+                    "inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold tracking-ko",
+                    PURPOSE_CHIP[data.purpose],
+                  )}
+                >
+                  {data.purpose}
+                </span>
+                <p className="text-base font-bold tracking-ko text-text-strong">{data.aiTitle}</p>
+                {description && (
+                  <p className="line-clamp-2 text-sm font-medium tracking-ko text-text-muted">
+                    {description}
+                  </p>
+                )}
+                <p className="text-xs font-medium text-text-subtle">{data.video.channelName}</p>
+              </div>
+            </div>
+
+            <p className="mt-3 truncate font-mono text-xs text-text-subtle">{shareUrl}</p>
+          </div>
+        </div>
+
+        {shareFeedback && (
+          <p className="mt-4 flex items-center gap-2 text-sm font-medium text-text-strong">
+            <Check className="size-4 text-intent-success" strokeWidth={2} />
+            {shareFeedback}
+          </p>
+        )}
+        <ErrorMessage message={shareError} className="mt-4" />
+      </div>
+
+      <div className="sticky bottom-0 space-y-3 border-t border-border bg-bg px-6 py-4">
+        <ActionButton
+          type="button"
+          onClick={handleKakao}
+          disabled={kakaoLoading}
+          className={cn(WIZARD_PRIMARY_BUTTON_CLASS, "gap-2")}
+        >
+          <MessageCircle className="size-5" strokeWidth={2} />
+          {kakaoLoading ? "공유 준비 중…" : "카카오톡으로 공유하기"}
+        </ActionButton>
+        <button
+          type="button"
+          onClick={handleCopy}
+          disabled={copyLoading}
+          className={cn(WIZARD_SECONDARY_BUTTON_CLASS, "gap-2 disabled:opacity-50")}
+        >
+          <Copy className="size-4" strokeWidth={2} />
+          {copyLoading ? "복사 중…" : "링크 복사하기"}
+        </button>
+        <button
+          type="button"
+          onClick={onGoHome}
+          className="inline-flex min-h-[44px] w-full items-center justify-center text-sm font-medium tracking-ko text-text-muted transition-colors hover:text-text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+        >
+          홈으로 가기
+        </button>
+      </div>
+    </div>
+  );
+}
