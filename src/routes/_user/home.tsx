@@ -46,7 +46,7 @@ function HomeRoute() {
       drops={drops}
       unreadCount={0}
       onCategoryChange={(cat) => setCategory(cat as HomePageProps["category"])}
-      onDropClick={(shareUuid) => navigate({ to: "/d/$shareUuid", params: { shareUuid } })}
+      onDropClick={(shareCode) => navigate({ to: "/d/$shareCode", params: { shareCode } })}
       onCreateDrop={() => navigate({ to: "/create" })}
       onTabChange={(tab) => {
         if (tab === "home") {
