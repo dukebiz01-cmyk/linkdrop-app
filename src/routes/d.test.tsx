@@ -1,48 +1,77 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { InfoDropPage } from "@/components/info-drop-page";
+import {
+  renderMockInfoDropPage,
+  normalizeVariant,
+  type DropVariant,
+} from "@/lib/public-drop-page";
+import { MOCK_DROP_VIEW_BY_VARIANT, MOCK_VIDEO_INFO } from "@/lib/mock-data";
+
+const BRAND_TITLE = "LinkDrop — 친구가 보내준 드롭";
+
+type DropSearch = {
+  variant?: DropVariant;
+};
+
+function safeVariant(searchVariant: unknown): DropVariant {
+  try {
+    return normalizeVariant(searchVariant);
+  } catch {
+    return "info";
+  }
+}
 
 export const Route = createFileRoute("/d/test")({
-  head: () => ({ meta: [{ title: "LinkDrop Drop 미리보기" }] }),
+  ssr: false,
+  validateSearch: (search: Record<string, unknown>): DropSearch => ({
+    variant: normalizeVariant(search.variant),
+  }),
+  loader: ({ location }): { variant: DropVariant; mock: true } => {
+    try {
+      const search = location.search as DropSearch;
+      return { variant: safeVariant(search?.variant), mock: true };
+    } catch (err) {
+      console.error("[d/test loader]", err);
+      return { variant: "info", mock: true };
+    }
+  },
+  head: ({ loaderData }) => {
+    try {
+      const variant = loaderData?.variant ?? "info";
+      const mock = MOCK_DROP_VIEW_BY_VARIANT[variant] ?? MOCK_DROP_VIEW_BY_VARIANT.info;
+      return {
+        meta: [
+          { title: mock.title ?? BRAND_TITLE },
+          { property: "og:title", content: mock.title ?? BRAND_TITLE },
+          { property: "og:image", content: MOCK_VIDEO_INFO.cafeTour.thumbnailUrl },
+        ],
+      };
+    } catch {
+      return { meta: [{ title: BRAND_TITLE }] };
+    }
+  },
+  errorComponent: DropTestErrorFallback,
   component: DropTestPage,
 });
 
+function DropTestErrorFallback({ error }: { error: Error }) {
+  console.error("[d/test route error]", error);
+  let variant: DropVariant = "info";
+  try {
+    variant = normalizeVariant(Route.useSearch({ select: (s) => s.variant }));
+  } catch {
+    /* info fallback */
+  }
+  return renderMockInfoDropPage("test", variant);
+}
+
 function DropTestPage() {
-  return (
-    <InfoDropPage
-      videoThumbnailUrl="https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&h=450&fit=crop"
-      videoDurationSec={154}
-      videoSourceLabel="YouTube"
-      maker={{ name: "Duke", droppedAgo: "2시간 전" }}
-      makerMessage="여기 진짜 분위기 좋더라. 너 좋아할 것 같아서 보내."
-      title="서울 근처 핫한 브런치 카페 발견"
-      description="서울역 3번 출구에서 도보 5분. 창가 자리에서 노을 보이는 조용한 카페입니다. 시그니처 쿠키랑 라떼가 맛있어요."
-      intent="coupon"
-      local={{
-        name: "포레스트 커피",
-        category: "카페 · 브런치",
-        thumbnailUrl:
-          "https://images.unsplash.com/photo-1559925393-8be0ec4767c8?w=200&h=200&fit=crop",
-        distance: "0.8km",
-        address: "서울 성동구",
-        statusLabel: "영업중",
-        hoursLabel: "22:00까지",
-        rating: 4.8,
-        reviewCount: 127,
-        responseNote: "카톡 응답 빠름",
-        priceRange: "평균 8,000원",
-      }}
-      creator={{
-        channelName: "카페어 브이로그",
-        channelUrl: "https://youtube.com/@cafetour",
-      }}
-      onPrimaryAction={() => console.log("[d/test] primary action: coupon")}
-      onWatchOriginal={() =>
-        window.open("https://youtu.be/dQw4w9WgXcQ", "_blank", "noopener,noreferrer")
-      }
-      onShare={() => console.log("[d/test] share")}
-      onBack={() => window.history.back()}
-      onSave={() => console.log("[d/test] save (Phase 2 wiring)")}
-      onForward={() => console.log("[d/test] forward to friend")}
-    />
-  );
+  let variant: DropVariant = "info";
+  try {
+    const fromLoader = Route.useLoaderData()?.variant;
+    const fromSearch = Route.useSearch({ select: (s) => s.variant });
+    variant = safeVariant(fromLoader ?? fromSearch);
+  } catch (err) {
+    console.error("[d/test page]", err);
+  }
+  return renderMockInfoDropPage("test", variant);
 }

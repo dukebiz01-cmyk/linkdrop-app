@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { InfoDropPage } from "@/components/info-drop-page";
 import { getAuthClient } from "@/lib/auth-context";
+import {
+  isPublicDropMockPath,
+  renderMockInfoDropPage,
+  normalizeVariant,
+  resolvePublicDropVariant,
+  type DropVariant,
+} from "@/lib/public-drop-page";
+import { MOCK_DROP_VIEW_BY_VARIANT, MOCK_VIDEO_INFO } from "@/lib/mock-data";
 
 const PROD_BASE = "https://app.drop.how";
 const BRAND_TITLE = "LinkDrop — 친구가 보내준 드롭";
@@ -82,7 +90,23 @@ type ShareRow = {
   sender: SenderProfile | null;
 };
 
-type LoaderData = { share: ShareRow | null; shareUuid: string };
+type DropSearch = {
+  variant?: DropVariant;
+};
+
+type MockLoaderData = {
+  mode: "mock";
+  shareUuid: string;
+  variant: DropVariant;
+};
+
+type DbLoaderData = {
+  mode: "db";
+  share: ShareRow | null;
+  shareUuid: string;
+};
+
+type LoaderData = MockLoaderData | DbLoaderData;
 
 const SHARE_SELECT = `
   share_uuid,
@@ -97,56 +121,118 @@ const SHARE_SELECT = `
   sender:public_profiles!share_events_sender_user_id_fkey ( display_name, avatar_url )
 `;
 
+function mockLoaderData(shareUuid: string, searchVariant: unknown): MockLoaderData {
+  const code = shareUuid || "test";
+  return {
+    mode: "mock",
+    shareUuid: code,
+    variant: resolvePublicDropVariant(code, normalizeVariant(searchVariant)),
+  };
+}
+
 export const Route = createFileRoute("/d/$shareUuid")({
-  loader: async ({ params }): Promise<LoaderData> => {
-    const supabase = await getAuthClient();
-    if (!supabase) return { share: null, shareUuid: params.shareUuid };
-    const { data, error } = await supabase
-      .from("share_events")
-      .select(SHARE_SELECT)
-      .eq("share_uuid", params.shareUuid)
-      .maybeSingle();
-    if (error || !data) return { share: null, shareUuid: params.shareUuid };
-    return { share: data as unknown as ShareRow, shareUuid: params.shareUuid };
-  },
-  head: ({ loaderData }) => {
-    const share = loaderData?.share;
-    const cs = share?.info_drops?.content_sources;
-    const it = share?.info_drops?.intent_types;
-    const makerName = share?.sender?.display_name ?? null;
-    const ogUrl = `${PROD_BASE}/d/${loaderData?.shareUuid ?? ""}`;
+  validateSearch: (search: Record<string, unknown>): DropSearch => ({
+    variant: normalizeVariant(search.variant),
+  }),
+  loader: async ({ params, location }): Promise<LoaderData> => {
+    const shareUuid = params.shareUuid ?? "";
+    const searchVariant = (location.search as DropSearch)?.variant;
 
-    const title = cs?.title ? `${cs.title} | LinkDrop` : BRAND_TITLE;
-    const intentLabel = it?.name ?? (it?.key ? INTENT_FALLBACK_LABEL[it.key] : null);
-    const baseDescription =
-      share?.curator_message ?? (intentLabel ? `${intentLabel} 드롭` : BRAND_DESCRIPTION);
-    const description = makerName ? `${makerName}님이 보낸 드롭 — ${baseDescription}` : baseDescription;
-
-    const meta: Array<Record<string, string>> = [
-      { title },
-      { name: "description", content: description },
-      { property: "og:title", content: title },
-      { property: "og:description", content: description },
-      { property: "og:url", content: ogUrl },
-      { property: "og:type", content: "website" },
-      { property: "og:site_name", content: "LinkDrop" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: title },
-      { name: "twitter:description", content: description },
-    ];
-
-    if (cs?.thumbnail_url) {
-      meta.push({ property: "og:image", content: cs.thumbnail_url });
-      meta.push({ name: "twitter:image", content: cs.thumbnail_url });
+    if (isPublicDropMockPath(shareUuid)) {
+      return mockLoaderData(shareUuid, searchVariant);
     }
 
-    return { meta };
+    try {
+      const supabase = await getAuthClient();
+      if (!supabase) return { mode: "db", share: null, shareUuid };
+      const { data, error } = await supabase
+        .from("share_events")
+        .select(SHARE_SELECT)
+        .eq("share_uuid", shareUuid)
+        .maybeSingle();
+      if (error || !data) return { mode: "db", share: null, shareUuid };
+      return { mode: "db", share: data as unknown as ShareRow, shareUuid };
+    } catch (err) {
+      console.error("[d/$shareUuid loader]", err);
+      return { mode: "db", share: null, shareUuid };
+    }
   },
+  head: ({ loaderData, params }) => {
+    try {
+      if (loaderData?.mode === "mock") {
+        const variant = loaderData.variant ?? "info";
+        const mock = MOCK_DROP_VIEW_BY_VARIANT[variant] ?? MOCK_DROP_VIEW_BY_VARIANT.info;
+        const ogUrl = `${PROD_BASE}/d/${params.shareUuid}`;
+        return {
+          meta: [
+            { title: mock.title ?? BRAND_TITLE },
+            { property: "og:title", content: mock.title ?? BRAND_TITLE },
+            { property: "og:url", content: ogUrl },
+            { property: "og:image", content: MOCK_VIDEO_INFO.cafeTour.thumbnailUrl },
+          ],
+        };
+      }
+
+      const share = loaderData?.mode === "db" ? loaderData.share : null;
+      const cs = share?.info_drops?.content_sources;
+      const it = share?.info_drops?.intent_types;
+      const makerName = share?.sender?.display_name ?? null;
+      const ogUrl = `${PROD_BASE}/d/${loaderData?.shareUuid ?? ""}`;
+
+      const title = cs?.title ? `${cs.title} | LinkDrop` : BRAND_TITLE;
+      const intentLabel = it?.name ?? (it?.key ? INTENT_FALLBACK_LABEL[it.key] : null);
+      const baseDescription =
+        share?.curator_message ?? (intentLabel ? `${intentLabel} 드롭` : BRAND_DESCRIPTION);
+      const description = makerName ? `${makerName}님이 보낸 드롭 — ${baseDescription}` : baseDescription;
+
+      const meta: Array<Record<string, string>> = [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:url", content: ogUrl },
+        { property: "og:type", content: "website" },
+        { property: "og:site_name", content: "LinkDrop" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+      ];
+
+      if (cs?.thumbnail_url) {
+        meta.push({ property: "og:image", content: cs.thumbnail_url });
+        meta.push({ name: "twitter:image", content: cs.thumbnail_url });
+      }
+
+      return { meta };
+    } catch {
+      return { meta: [{ title: BRAND_TITLE }] };
+    }
+  },
+  errorComponent: ShareUuidRouteErrorFallback,
   component: DropPage,
 });
 
+function ShareUuidRouteErrorFallback({ error }: { error: Error }) {
+  console.error("[d/$shareUuid route error]", error);
+  let shareUuid = "test";
+  let variant: DropVariant = "info";
+  try {
+    shareUuid = Route.useParams().shareUuid ?? "test";
+    variant = normalizeVariant(Route.useSearch({ select: (s) => s.variant }));
+  } catch {
+    /* defaults */
+  }
+  return renderMockInfoDropPage(shareUuid, variant);
+}
+
 function DropPage() {
-  const { share, shareUuid } = Route.useLoaderData();
+  const loaderData = Route.useLoaderData();
+
+  if (loaderData.mode === "mock") {
+    return renderMockInfoDropPage(loaderData.shareUuid, loaderData.variant);
+  }
+
+  const { share, shareUuid } = loaderData;
   const cs = share?.info_drops?.content_sources;
   const it = share?.info_drops?.intent_types;
 
