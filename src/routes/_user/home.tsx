@@ -1,5 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { HomePageV3, type HomePageV3NavTab } from "@/components/home-page-v3";
+import {
+  HomePageV3,
+  type HomePageV3NavTab,
+  type HomeStartCreateParams,
+} from "@/components/home-page-v3";
 
 export const Route = createFileRoute("/_user/home")({
   head: () => ({ meta: [{ title: "홈" }] }),
@@ -28,12 +32,24 @@ function HomeRoute() {
     }
   };
 
+  const handleStartCreate = (params: HomeStartCreateParams) => {
+    navigate({
+      to: "/create",
+      search: {
+        url: params.url,
+        purpose: params.purpose,
+        intent_suggested: params.intent_suggested,
+        confidence: params.confidence,
+        source_id: params.source_id,
+        platform: params.platform,
+      } as never,
+    });
+  };
+
   return (
     <HomePageV3
-      isAuthenticated
       activeNavTab="home"
-      onCreateDrop={() => navigate({ to: "/create" })}
-      onPurposeClick={() => navigate({ to: "/create" })}
+      onStartCreate={handleStartCreate}
       onNavTab={handleNavTab}
     />
   );

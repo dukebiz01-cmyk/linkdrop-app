@@ -21,7 +21,17 @@ import {
   User,
   X,
 } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import {
+  suggestPurpose,
+  type HomePurpose,
+  type SuggestionConfidence,
+} from "@/lib/purpose-suggestion";
+import {
+  fetchVideoMetadata,
+  parseVideoUrl,
+  type VideoMetadata,
+  type VideoMetadataFetchedBy,
+} from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
 
 // ============================================================
@@ -30,7 +40,19 @@ import { cn } from "@/lib/utils";
 
 export type HomePageV3NavTab = "home" | "create" | "my-drops" | "inbox" | "profile";
 
-type HomeDropIntent = "info" | "coupon" | "reservation" | "commerce" | "lead";
+export type { HomePurpose };
+export type HomeSuggestionConfidence = SuggestionConfidence;
+
+export interface HomeStartCreateParams {
+  url: string;
+  purpose: HomePurpose;
+  intent_suggested?: HomePurpose;
+  confidence?: HomeSuggestionConfidence;
+  source_id?: string;
+  platform?: string;
+}
+
+type HomeDropIntent = HomePurpose;
 
 interface HomeMyDrop {
   id: string;
@@ -41,10 +63,12 @@ interface HomeMyDrop {
 }
 
 export interface HomePageV3Props {
-  isAuthenticated?: boolean;
   activeNavTab?: HomePageV3NavTab;
+  /** @deprecated onStartCreate 사용 */
   onCreateDrop?: () => void;
+  /** @deprecated 목적은 Home 내부 선택 */
   onPurposeClick?: (label: string) => void;
+  onStartCreate?: (params: HomeStartCreateParams) => void;
   onNavTab?: (tab: HomePageV3NavTab) => void;
 }
 
@@ -79,7 +103,7 @@ const INTENTS: {
   {
     id: "info",
     label: "정보",
-    description: "내용을 쉽게 정리해요",
+    description: "영상 핵심 정리",
     icon: Info,
     bgColor: "bg-[#DBEAFE]",
     iconColor: "text-[#2563EB]",
@@ -87,7 +111,7 @@ const INTENTS: {
   {
     id: "coupon",
     label: "쿠폰",
-    description: "혜택으로 손님을 불러요",
+    description: "혜택으로 손님 모으기",
     icon: Ticket,
     bgColor: "bg-[#FEF3C7]",
     iconColor: "text-[#D97706]",
@@ -95,15 +119,15 @@ const INTENTS: {
   {
     id: "reservation",
     label: "예약",
-    description: "날짜를 고르고 예약해요",
+    description: "날짜 선택과 예약 연결",
     icon: Calendar,
     bgColor: "bg-[#D1FAE5]",
     iconColor: "text-[#10B981]",
   },
   {
-    id: "commerce",
+    id: "purchase",
     label: "구매",
-    description: "상품을 찾고 가격을 비교해요",
+    description: "AI 상품 찾기·가격비교",
     icon: ShoppingCart,
     bgColor: "bg-[#FCE7F3]",
     iconColor: "text-[#DB2777]",
@@ -111,36 +135,55 @@ const INTENTS: {
   {
     id: "lead",
     label: "상담",
-    description: "궁금한 점을 문의받아요",
+    description: "문의·상담 받기",
     icon: MessageCircle,
     bgColor: "bg-[#E0E7FF]",
     iconColor: "text-[#6366F1]",
   },
 ];
 
-interface VideoPreview {
-  title: string;
-  channelName: string;
-  thumbnailUrl: string;
-  duration?: string;
+function metadataUsesFallback(fetchedBy: VideoMetadataFetchedBy): boolean {
+  return (
+    fetchedBy === "youtube_fallback" ||
+    fetchedBy === "instagram_fallback" ||
+    fetchedBy === "manual_fallback"
+  );
 }
 
-function VideoPreviewCard({ preview }: { preview: VideoPreview }) {
+function platformBadgeLabel(platform: VideoMetadata["platform"]): string {
+  if (platform === "youtube") return "YouTube";
+  if (platform === "instagram") return "Instagram";
+  return "영상";
+}
+
+function VideoPreviewCard({ meta }: { meta: VideoMetadata }) {
+  const [thumbBroken, setThumbBroken] = useState(false);
+
   return (
     <div className="mt-3 flex items-center gap-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
       <div className="relative h-[45px] w-[80px] shrink-0 overflow-hidden rounded-lg bg-[#E2E8F0]">
-        <img src={preview.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-        {preview.duration && (
-          <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[10px] font-medium text-white">
-            {preview.duration}
-          </span>
+        {meta.thumbnailUrl && !thumbBroken ? (
+          <img
+            src={meta.thumbnailUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={() => setThumbBroken(true)}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[#94A3B8]">
+            <LinkIcon className="size-5" strokeWidth={2} />
+          </div>
         )}
+        <span className="absolute left-0.5 top-0.5 rounded bg-black/75 px-1 py-0.5 text-[9px] font-semibold text-white">
+          {platformBadgeLabel(meta.platform)}
+        </span>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-[#0F172A]">{preview.title}</p>
-        <p className="truncate text-xs text-[#64748B]">{preview.channelName}</p>
+        <p className="truncate text-sm font-medium text-[#0F172A]">{meta.title}</p>
+        {meta.authorName ? (
+          <p className="truncate text-xs text-[#64748B]">{meta.authorName}</p>
+        ) : null}
       </div>
-      <Check className="size-5 shrink-0 text-[#10B981]" strokeWidth={2} />
     </div>
   );
 }
@@ -158,53 +201,119 @@ function PreviewSkeleton() {
 }
 
 export function HomePageV3({
-  isAuthenticated = false,
   activeNavTab = "home",
   onCreateDrop,
   onPurposeClick,
+  onStartCreate,
   onNavTab,
 }: HomePageV3Props) {
   const myDrops = DEFAULT_MY_DROPS;
   const [videoUrl, setVideoUrl] = useState("");
-  const [videoPreview, setVideoPreview] = useState<VideoPreview | null>(null);
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | null>(null);
+  const [selectedPurpose, setSelectedPurpose] = useState<HomePurpose | null>(null);
+  const [suggestedPurpose, setSuggestedPurpose] = useState<HomePurpose | null>(null);
+  const [suggestionConfidence, setSuggestionConfidence] =
+    useState<HomeSuggestionConfidence | null>(null);
+  const [suggestionReason, setSuggestionReason] = useState<string | null>(null);
+  const [isFetchingMetadata, setIsFetchingMetadata] = useState(false);
+  const [isSuggestingPurpose, setIsSuggestingPurpose] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
 
-  const createTarget = isAuthenticated ? "/create" : "/login";
-  const isButtonEnabled = Boolean(videoPreview) && !isLoadingPreview;
+  const hasValidUrl = Boolean(videoMetadata) && !urlError;
+  const isButtonEnabled = hasValidUrl && selectedPurpose !== null;
+
+  const ctaLabel = (() => {
+    if (!hasValidUrl && !selectedPurpose) return "영상 링크와 목적을 선택해 주세요";
+    if (hasValidUrl && !selectedPurpose) return "목적을 선택해 주세요";
+    if (!hasValidUrl && selectedPurpose) return "영상 링크를 넣어 주세요";
+    return "Drop 만들기 →";
+  })();
 
   useEffect(() => {
-    if (!videoUrl.trim()) {
-      setVideoPreview(null);
-      setIsLoadingPreview(false);
+    const trimmed = videoUrl.trim();
+    if (!trimmed) {
+      setVideoMetadata(null);
+      setUrlError(null);
+      setIsFetchingMetadata(false);
+      setSuggestedPurpose(null);
+      setSuggestionConfidence(null);
+      setSuggestionReason(null);
+      setIsSuggestingPurpose(false);
       return;
     }
 
-    const isValidUrl =
-      videoUrl.includes("youtube.com") ||
-      videoUrl.includes("youtu.be") ||
-      videoUrl.includes("instagram.com");
-
-    if (!isValidUrl) {
-      setVideoPreview(null);
-      setIsLoadingPreview(false);
+    const parsed = parseVideoUrl(trimmed);
+    if (!parsed) {
+      setVideoMetadata(null);
+      setUrlError("유튜브 또는 인스타그램 링크인지 확인해 주세요");
+      setIsFetchingMetadata(false);
+      setSuggestedPurpose(null);
+      setSuggestionConfidence(null);
+      setSuggestionReason(null);
+      setIsSuggestingPurpose(false);
       return;
     }
 
-    setIsLoadingPreview(true);
-    const timer = setTimeout(() => {
-      setVideoPreview({
-        title: "서울숲 근처 브런치 카페 맛집 투어",
-        channelName: "카페투어 브이로그",
-        thumbnailUrl:
-          "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=160&h=90&fit=crop",
-        duration: "2:34",
-      });
-      setIsLoadingPreview(false);
+    setUrlError(null);
+    setIsFetchingMetadata(true);
+    let cancelled = false;
+
+    const debounce = setTimeout(() => {
+      void fetchVideoMetadata(trimmed)
+        .then((meta) => {
+          if (cancelled) return;
+          setVideoMetadata(meta);
+          setIsFetchingMetadata(false);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setVideoMetadata(null);
+          setUrlError("영상 정보를 자동으로 가져오지 못했어요. 링크는 그대로 사용할 수 있어요.");
+          setIsFetchingMetadata(false);
+        });
     }, 500);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(debounce);
+    };
   }, [videoUrl]);
+
+  useEffect(() => {
+    if (!videoMetadata || urlError) {
+      setSuggestedPurpose(null);
+      setSuggestionConfidence(null);
+      setSuggestionReason(null);
+      setIsSuggestingPurpose(false);
+      return;
+    }
+
+    setIsSuggestingPurpose(true);
+    let cancelled = false;
+
+    const timer = setTimeout(() => {
+      void suggestPurpose({
+        metadata: videoMetadata,
+        url: videoUrl,
+        sourceId: videoMetadata.videoId,
+        platform:
+          videoMetadata.platform !== "unknown" ? videoMetadata.platform : undefined,
+      }).then((suggestion) => {
+        if (cancelled) return;
+        setSuggestedPurpose(suggestion.purpose);
+        setSuggestionConfidence(suggestion.confidence);
+        setSuggestionReason(suggestion.reason);
+        // TODO(analytics): ai_suggested_purpose, ai_confidence, suggested_equals_selected, source_id, url_platform
+        setIsSuggestingPurpose(false);
+      });
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [videoMetadata, videoUrl, urlError]);
 
   const handlePaste = useCallback(async () => {
     try {
@@ -216,24 +325,51 @@ export function HomePageV3({
   }, []);
 
   const handleCreateDrop = useCallback(() => {
-    if (!isButtonEnabled) return;
-    onCreateDrop?.();
-  }, [isButtonEnabled, onCreateDrop]);
+    if (!isButtonEnabled || !selectedPurpose || !videoMetadata) return;
 
-  const handlePurpose = useCallback(
-    (intentId: HomeDropIntent, label: string) => {
+    const params: HomeStartCreateParams = {
+      url: videoUrl.trim(),
+      purpose: selectedPurpose,
+      intent_suggested: suggestedPurpose ?? undefined,
+      confidence: suggestionConfidence ?? undefined,
+      source_id: videoMetadata.videoId,
+      platform: videoMetadata.platform !== "unknown" ? videoMetadata.platform : undefined,
+    };
+
+    // TODO(analytics): user_selected_purpose, suggested_equals_selected, source_id, url_platform
+    // TODO(/create): url, purpose, source_id search param을 읽어 Step 1/2 prefill.
+    // url + purpose가 모두 있으면 나중에 Step 3부터 시작 가능. 누락 시 Step 1 또는 Step 2 fallback.
+
+    if (onStartCreate) {
+      onStartCreate(params);
+      return;
+    }
+    onCreateDrop?.();
+  }, [
+    isButtonEnabled,
+    selectedPurpose,
+    videoMetadata,
+    videoUrl,
+    suggestedPurpose,
+    suggestionConfidence,
+    onStartCreate,
+    onCreateDrop,
+  ]);
+
+  const handlePurposeSelect = useCallback(
+    (purpose: HomePurpose) => {
+      setSelectedPurpose(purpose);
       if (onPurposeClick) {
+        const label = INTENTS.find((i) => i.id === purpose)?.label ?? purpose;
         onPurposeClick(label);
-        return;
       }
-      console.log("[HomePageV3] Purpose selected:", intentId);
     },
     [onPurposeClick],
   );
 
   return (
     <div
-      className="relative mx-auto min-h-screen max-w-md pb-16"
+      className="relative mx-auto min-h-screen max-w-md pb-24"
       style={{
         background: "radial-gradient(circle at top right, #EFF6FF 0%, transparent 60%), #FFFFFF",
       }}
@@ -319,6 +455,9 @@ export function HomePageV3({
 
         {/* 영상 링크 입력 + preview */}
         <section className="mt-4">
+          <p className="mb-2 text-[13px] font-medium leading-relaxed text-[#64748B]">
+            영상 링크를 넣고, 어떤 Drop으로 만들지 선택하세요.
+          </p>
           <div
             className={cn(
               "relative flex h-14 items-center gap-3 rounded-xl border bg-white px-4 transition-colors duration-150",
@@ -344,43 +483,22 @@ export function HomePageV3({
               붙여넣기
             </button>
           </div>
-          {isLoadingPreview && <PreviewSkeleton />}
-          {videoPreview && !isLoadingPreview && <VideoPreviewCard preview={videoPreview} />}
-        </section>
-
-        {/* Drop 만들기 */}
-        <section className="mt-5">
-          {onCreateDrop ? (
-            <button
-              type="button"
-              onClick={handleCreateDrop}
-              disabled={!isButtonEnabled}
-              className={cn(
-                "relative flex h-14 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl text-[16px] font-bold transition-all duration-150",
-                isButtonEnabled
-                  ? "bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-white shadow-[0_4px_20px_rgba(37,99,235,0.35)] hover:shadow-[0_6px_24px_rgba(37,99,235,0.45)]"
-                  : "cursor-not-allowed bg-[#E2E8F0] text-[#94A3B8]",
+          {isFetchingMetadata && (
+            <p className="mt-3 text-sm font-medium text-[#64748B]">영상 정보를 가져오는 중...</p>
+          )}
+          {isFetchingMetadata && <PreviewSkeleton />}
+          {urlError && !isFetchingMetadata && (
+            <p className="mt-3 text-sm font-medium text-[#DC2626]">{urlError}</p>
+          )}
+          {videoMetadata && !isFetchingMetadata && !urlError && (
+            <>
+              {metadataUsesFallback(videoMetadata.fetchedBy) && (
+                <p className="mt-3 text-sm font-medium leading-relaxed text-[#64748B]">
+                  영상 정보를 자동으로 가져오지 못했어요. 링크는 그대로 사용할 수 있어요.
+                </p>
               )}
-            >
-              Drop 만들기
-              <ArrowRight className="size-5" strokeWidth={2} />
-            </button>
-          ) : isButtonEnabled ? (
-            <Link to={createTarget} className="block">
-              <span className="relative flex h-14 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-[16px] font-bold text-white shadow-[0_4px_20px_rgba(37,99,235,0.35)]">
-                Drop 만들기
-                <ArrowRight className="size-5" strokeWidth={2} />
-              </span>
-            </Link>
-          ) : (
-            <button
-              type="button"
-              disabled
-              className="relative flex h-14 w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl bg-[#E2E8F0] text-[16px] font-bold text-[#94A3B8]"
-            >
-              Drop 만들기
-              <ArrowRight className="size-5" strokeWidth={2} />
-            </button>
+              <VideoPreviewCard meta={videoMetadata} />
+            </>
           )}
         </section>
 
@@ -448,59 +566,102 @@ export function HomePageV3({
         )}
 
         {/* 목적 카드 */}
-        <section className="mt-8 pb-6">
-          <h3 className="text-lg font-bold tracking-ko text-[#0F172A]">무엇을 만들까요?</h3>
-          <p className="mt-1 text-[13px] font-medium text-[#64748B]">원하는 목적을 선택하세요.</p>
+        <section className="mt-8">
+          <h3 className="text-lg font-bold tracking-ko text-[#0F172A]">무엇으로 만들까요?</h3>
+          <p className="mt-1 text-[13px] font-medium leading-relaxed text-[#64748B]">
+            선택한 목적에 따라 AI가 요약, 버튼, 공유 문구를 다르게 추천합니다.
+          </p>
+          {isSuggestingPurpose && (
+            <p className="mt-3 text-sm font-medium text-[#64748B]">
+              AI가 적합한 목적을 찾고 있어요...
+            </p>
+          )}
+          {suggestedPurpose && suggestionReason && !isSuggestingPurpose && (
+            <p className="mt-3 text-xs leading-relaxed text-[#64748B]">{suggestionReason}</p>
+          )}
+          <p className="mt-2 text-xs font-medium text-[#94A3B8]">
+            AI 추천은 참고용이에요. 원하는 목적을 직접 선택할 수 있습니다.
+          </p>
           <ul className="mt-4 space-y-2.5">
             {INTENTS.map((intent) => {
               const Icon = intent.icon;
-              const cardClass =
-                "group flex w-full items-center gap-3.5 rounded-xl border border-[#E2E8F0] bg-white p-3.5 text-left transition-colors duration-150 hover:border-[#2563EB] hover:shadow-[0_1px_4px_rgba(15,23,42,0.06)]";
-              const inner = (
-                <>
-                  <span
-                    className={cn(
-                      "flex size-10 shrink-0 items-center justify-center rounded-xl",
-                      intent.bgColor,
-                    )}
-                  >
-                    <Icon className={cn("size-5", intent.iconColor)} strokeWidth={2} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-semibold text-[#0F172A]">
-                      {intent.label}
-                    </span>
-                    <span className="mt-0.5 block text-[12px] text-[#64748B]">
-                      {intent.description}
-                    </span>
-                  </span>
-                  <ArrowRight className="size-4 shrink-0 text-[#CBD5E1] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[#2563EB]" />
-                </>
-              );
-
-              if (onPurposeClick) {
-                return (
-                  <li key={intent.id}>
-                    <button
-                      type="button"
-                      className={cardClass}
-                      onClick={() => handlePurpose(intent.id, intent.label)}
-                    >
-                      {inner}
-                    </button>
-                  </li>
-                );
-              }
+              const isSelected = selectedPurpose === intent.id;
+              const isSuggested = suggestedPurpose === intent.id;
+              const showAiBadge =
+                isSuggested &&
+                suggestionConfidence &&
+                (suggestionConfidence === "high" || suggestionConfidence === "medium");
 
               return (
                 <li key={intent.id}>
-                  <Link to={createTarget} className={cardClass}>
-                    {inner}
-                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handlePurposeSelect(intent.id)}
+                    className={cn(
+                      "group relative flex w-full items-center gap-3.5 rounded-xl border p-3.5 text-left transition-colors duration-150",
+                      isSelected
+                        ? "border-[#2563EB] bg-[#EFF6FF] shadow-[0_1px_4px_rgba(37,99,235,0.12)]"
+                        : "border-[#E2E8F0] bg-white hover:border-[#2563EB] hover:shadow-[0_1px_4px_rgba(15,23,42,0.06)]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex size-10 shrink-0 items-center justify-center rounded-xl",
+                        intent.bgColor,
+                      )}
+                    >
+                      <Icon className={cn("size-5", intent.iconColor)} strokeWidth={2} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-[15px] font-semibold text-[#0F172A]">
+                          {intent.label}
+                        </span>
+                        {showAiBadge && (
+                          <span
+                            className={cn(
+                              "rounded-lg px-1.5 py-0.5 text-[10px] font-semibold tracking-ko",
+                              suggestionConfidence === "high"
+                                ? "bg-[#2563EB] text-white"
+                                : "border border-[#2563EB] bg-white text-[#2563EB]",
+                            )}
+                          >
+                            AI 추천
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 block text-[12px] text-[#64748B]">
+                        {intent.description}
+                      </span>
+                    </span>
+                    {isSelected ? (
+                      <Check className="size-5 shrink-0 text-[#2563EB]" strokeWidth={2} />
+                    ) : (
+                      <ChevronRight className="size-4 shrink-0 text-[#CBD5E1]" strokeWidth={2} />
+                    )}
+                  </button>
                 </li>
               );
             })}
           </ul>
+        </section>
+
+        {/* Drop 만들기 */}
+        <section className="mt-6 pb-8">
+          <button
+            type="button"
+            onClick={handleCreateDrop}
+            disabled={!isButtonEnabled}
+            className={cn(
+              "flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-base font-bold tracking-ko transition-colors duration-150",
+              isButtonEnabled
+                ? "bg-[#2563EB] text-white hover:bg-[#1D4ED8]"
+                : "cursor-not-allowed bg-[#E2E8F0] text-[#A3A3A3]",
+            )}
+          >
+            {ctaLabel}
+            {isButtonEnabled ? <ArrowRight className="size-5" strokeWidth={2} /> : null}
+          </button>
         </section>
 
         {/* 내 Drop — 컴포넌트 내부 mock */}
@@ -543,7 +704,7 @@ export function HomePageV3({
                             "mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium",
                             drop.intent === "coupon" && "bg-[#FEF3C7] text-[#D97706]",
                             drop.intent === "reservation" && "bg-[#D1FAE5] text-[#10B981]",
-                            drop.intent === "commerce" && "bg-[#FCE7F3] text-[#DB2777]",
+                            drop.intent === "purchase" && "bg-[#FCE7F3] text-[#DB2777]",
                             drop.intent === "lead" && "bg-[#E0E7FF] text-[#6366F1]",
                             drop.intent === "info" && "bg-[#DBEAFE] text-[#2563EB]",
                           )}
