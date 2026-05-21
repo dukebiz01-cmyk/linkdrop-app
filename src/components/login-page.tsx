@@ -11,6 +11,18 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
+
+// v3 Home 톤 — UI only (인증 로직 무관)
+const LOGIN_INPUT_ICON =
+  "pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-[#94A3B8]";
+const LOGIN_INPUT_CLASS =
+  "h-14 w-full rounded-2xl border border-[#E2E8F0] bg-white pl-11 text-[15px] text-[#0F172A] placeholder:text-[#94A3B8] transition-colors duration-150 hover:border-[#CBD5E1] focus:border-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 disabled:opacity-50";
+const LOGIN_PRIMARY_BUTTON_CLASS =
+  "flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#2563EB] text-base font-bold tracking-ko text-white transition-colors duration-150 hover:bg-[#1D4ED8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+const LOGIN_SECONDARY_BUTTON_CLASS =
+  "flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-[#E2E8F0] bg-white text-sm font-semibold tracking-ko text-[#0F172A] transition-colors duration-150 hover:border-[#CBD5E1] hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-50";
+const LOGIN_CARD_CLASS = "rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.04)]";
 
 // ─────────────────────────────────────────────────────────────
 // Signature Animation Component — Brand Identity Moment
@@ -40,11 +52,13 @@ function ThesisAnimation() {
   }, []);
 
   if (prefersReducedMotion || hasPlayed) {
-    return <p className="mb-12 mt-2 text-sm font-medium text-[#0A0A0A]">{text}</p>;
+    return (
+      <p className="mt-3 text-sm font-medium tracking-ko text-[#64748B]">{text}</p>
+    );
   }
 
   return (
-    <div className="relative mb-12 mt-2 flex h-7 items-center justify-center">
+    <div className="relative mt-3 flex h-7 items-center justify-center">
       {/* Phase 1: Gray dot grows to line (0-0.3s) */}
       <motion.div
         className="absolute rounded-full bg-[#A3A3A3]"
@@ -204,7 +218,7 @@ export function LoginPage({
 
   // Title/description based on mode
   const titles = {
-    signin: { title: "로그인", description: "이메일로 로그인해 주세요" },
+    signin: { title: "로그인", description: "Drop을 만들고 관리하려면 로그인해 주세요." },
     signup: { title: "회원가입", description: "정보 드롭을 받고, 보낼 수 있어요" },
     forgot: { title: "비밀번호 재설정", description: "가입하신 이메일로 재설정 링크를 보내드려요" },
   };
@@ -222,32 +236,47 @@ export function LoginPage({
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-6">
+    <div
+      className="flex min-h-screen flex-col"
+      style={{
+        background:
+          "radial-gradient(circle at top right, #EFF6FF 0%, transparent 55%), #FFFFFF",
+      }}
+    >
+      <div className="mx-auto flex w-full max-w-[480px] flex-1 flex-col px-5">
         {/* A. Logo + Thesis */}
-        <div className="pt-12 text-center">
-          <h1 className="mb-4 text-3xl font-bold tracking-tight text-[#0A0A0A]">LinkDrop</h1>
+        <div className="pt-10 text-center">
+          <h1
+            className="inline-flex items-center gap-1.5 text-xl font-bold tracking-ko text-[#0A0A0A]"
+            style={{ letterSpacing: "-0.02em" }}
+          >
+            LinkDrop
+            <span className="inline-block size-1.5 rounded-full bg-[#2563EB]" aria-hidden />
+          </h1>
           <ThesisAnimation />
         </div>
 
-        {/* B. Title Section */}
-        <div className="mb-8">
-          {mode === "forgot" && (
-            <button
-              type="button"
-              onClick={() => handleModeChange("signin")}
-              className="mb-4 flex items-center gap-1 text-sm text-[#525252] hover:text-[#0A0A0A]"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              로그인으로 돌아가기
-            </button>
-          )}
-          <h2 className="mb-2 text-2xl font-bold text-[#0A0A0A]">{titles[mode].title}</h2>
-          <p className="text-sm leading-relaxed text-[#525252]">{titles[mode].description}</p>
-        </div>
+        {/* B–E. Login card */}
+        <div className={LOGIN_CARD_CLASS}>
+          <div className="mb-6">
+            {mode === "forgot" && (
+              <button
+                type="button"
+                onClick={() => handleModeChange("signin")}
+                className="mb-4 flex min-h-[44px] items-center gap-1 text-sm font-medium text-[#64748B] transition-colors hover:text-[#0F172A]"
+              >
+                <ArrowLeft className="size-4" strokeWidth={2} />
+                로그인으로 돌아가기
+              </button>
+            )}
+            <h2 className="text-2xl font-bold tracking-ko text-[#0F172A]">{titles[mode].title}</h2>
+            <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-[#64748B]">
+              {titles[mode].description}
+            </p>
+          </div>
 
-        {/* C. Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* C. Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
           {/* Name (signup only) */}
           {mode === "signup" && (
             <div>
@@ -255,14 +284,14 @@ export function LoginPage({
                 이름
               </label>
               <div className="relative">
-                <User className="absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#A3A3A3]" />
+                <User className={LOGIN_INPUT_ICON} strokeWidth={2} />
                 <input
                   id="name"
                   type="text"
                   placeholder="홍길동"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="h-12 w-full rounded-lg border border-[#E5E5E5] bg-white pl-11 pr-4 text-base text-[#0A0A0A] placeholder:text-[#A3A3A3] transition-all duration-150 hover:border-[#D4D4D4] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-2"
+                  className={cn(LOGIN_INPUT_CLASS, "pr-4")}
                   autoComplete="name"
                   disabled={loading}
                 />
@@ -276,14 +305,14 @@ export function LoginPage({
               이메일
             </label>
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#A3A3A3]" />
+              <Mail className={LOGIN_INPUT_ICON} strokeWidth={2} />
               <input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-12 w-full rounded-lg border border-[#E5E5E5] bg-white pl-11 pr-4 text-base text-[#0A0A0A] placeholder:text-[#A3A3A3] transition-all duration-150 hover:border-[#D4D4D4] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-2"
+                className={cn(LOGIN_INPUT_CLASS, "pr-4")}
                 autoComplete="email"
                 disabled={loading}
               />
@@ -297,27 +326,28 @@ export function LoginPage({
                 비밀번호
               </label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#A3A3A3]" />
+                <Lock className={LOGIN_INPUT_ICON} strokeWidth={2} />
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-12 w-full rounded-lg border border-[#E5E5E5] bg-white pl-11 pr-12 text-base text-[#0A0A0A] placeholder:text-[#A3A3A3] transition-all duration-150 hover:border-[#D4D4D4] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-2"
+                  className={cn(LOGIN_INPUT_CLASS, "pr-12")}
                   autoComplete={mode === "signin" ? "current-password" : "new-password"}
                   disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-[#A3A3A3] hover:bg-[#F5F5F5] hover:text-[#525252]"
+                  className="absolute right-3 top-1/2 flex min-h-[44px] min-w-[44px] -translate-y-1/2 items-center justify-center rounded-lg text-[#94A3B8] transition-colors hover:bg-[#F1F5F9] hover:text-[#64748B]"
                   tabIndex={-1}
+                  aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-[18px] w-[18px]" />
+                    <EyeOff className="size-[18px]" strokeWidth={2} />
                   ) : (
-                    <Eye className="h-[18px] w-[18px]" />
+                    <Eye className="size-[18px]" strokeWidth={2} />
                   )}
                 </button>
               </div>
@@ -335,27 +365,28 @@ export function LoginPage({
                 비밀번호 확인
               </label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#A3A3A3]" />
+                <Lock className={LOGIN_INPUT_ICON} strokeWidth={2} />
                 <input
                   id="passwordConfirm"
                   type={showPasswordConfirm ? "text" : "password"}
                   placeholder="••••••••"
                   value={passwordConfirm}
                   onChange={(e) => setPasswordConfirm(e.target.value)}
-                  className="h-12 w-full rounded-lg border border-[#E5E5E5] bg-white pl-11 pr-12 text-base text-[#0A0A0A] placeholder:text-[#A3A3A3] transition-all duration-150 hover:border-[#D4D4D4] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-2"
+                  className={cn(LOGIN_INPUT_CLASS, "pr-12")}
                   autoComplete="new-password"
                   disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
-                  className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-[#A3A3A3] hover:bg-[#F5F5F5] hover:text-[#525252]"
+                  className="absolute right-3 top-1/2 flex min-h-[44px] min-w-[44px] -translate-y-1/2 items-center justify-center rounded-lg text-[#94A3B8] transition-colors hover:bg-[#F1F5F9] hover:text-[#64748B]"
                   tabIndex={-1}
+                  aria-label={showPasswordConfirm ? "비밀번호 숨기기" : "비밀번호 보기"}
                 >
                   {showPasswordConfirm ? (
-                    <EyeOff className="h-[18px] w-[18px]" />
+                    <EyeOff className="size-[18px]" strokeWidth={2} />
                   ) : (
-                    <Eye className="h-[18px] w-[18px]" />
+                    <Eye className="size-[18px]" strokeWidth={2} />
                   )}
                 </button>
               </div>
@@ -372,13 +403,13 @@ export function LoginPage({
 
           {/* Remember Me + Forgot (signin only) */}
           {mode === "signin" && (
-            <div className="flex items-center justify-between pt-2">
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-[#525252]">
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm font-medium text-[#64748B]">
                 <input
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded-sm border-[#E5E5E5] text-[#2563EB] focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-1"
+                  className="size-4 rounded border-[#E2E8F0] text-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/30"
                   disabled={loading}
                 />
                 로그인 상태 유지
@@ -386,11 +417,12 @@ export function LoginPage({
               <button
                 type="button"
                 onClick={() => handleModeChange("forgot")}
-                className={
+                className={cn(
+                  "shrink-0 text-sm font-medium leading-none underline-offset-2 transition-colors hover:underline",
                   failedAttempts >= 3
-                    ? "text-sm font-semibold text-[#2563EB] underline underline-offset-2 transition-colors hover:text-[#1D4ED8]"
-                    : "text-sm text-[#525252] underline-offset-2 transition-colors hover:text-[#0A0A0A] hover:underline"
-                }
+                    ? "font-semibold text-[#2563EB] hover:text-[#1D4ED8]"
+                    : "text-[#64748B] hover:text-[#0F172A]",
+                )}
               >
                 비밀번호를 잊으셨나요?
               </button>
@@ -398,15 +430,11 @@ export function LoginPage({
           )}
 
           {/* Primary Button */}
-          <div className="pt-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#2563EB] text-base font-medium text-white shadow-[0_4px_14px_0_rgba(37,99,235,0.25)] transition-all duration-150 ease-out hover:bg-[#1D4ED8] hover:shadow-[0_6px_20px_0_rgba(37,99,235,0.35)] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:ring-offset-2 active:bg-[#1E40AF] disabled:cursor-not-allowed disabled:opacity-50"
-            >
+          <div className="pt-2">
+            <button type="submit" disabled={loading} className={LOGIN_PRIMARY_BUTTON_CLASS}>
               {loading ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" strokeWidth={2} />
                   {loadingLabels[mode]}
                 </>
               ) : (
@@ -421,10 +449,12 @@ export function LoginPage({
           <>
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-[#F5F5F5]" />
+                <div className="w-full border-t border-[#E2E8F0]" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-white px-3 text-xs tracking-wide text-[#A3A3A3]">또는</span>
+                <span className="bg-white px-3 text-xs font-medium tracking-ko text-[#94A3B8]">
+                  또는
+                </span>
               </div>
             </div>
 
@@ -433,21 +463,21 @@ export function LoginPage({
                 type="button"
                 onClick={() => onOAuthSignIn("kakao")}
                 disabled={loading}
-                className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-[#E5E5E5] bg-white text-sm font-medium text-[#0A0A0A] transition-all duration-150 hover:border-[#D4D4D4] hover:bg-[#FAFAFA] active:bg-[#F5F5F5] disabled:opacity-50"
+                className={LOGIN_SECONDARY_BUTTON_CLASS}
               >
-                <MessageCircle className="h-5 w-5 text-[#525252]" />
-                카카오로 계속하기
+                <MessageCircle className="size-5 shrink-0 text-[#64748B]" strokeWidth={2} />
+                <span>카카오로 계속하기</span>
               </button>
               <button
                 type="button"
                 onClick={() => onOAuthSignIn("google")}
                 disabled={loading}
-                className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-[#E5E5E5] bg-white text-sm font-medium text-[#0A0A0A] transition-all duration-150 hover:border-[#D4D4D4] hover:bg-[#FAFAFA] active:bg-[#F5F5F5] disabled:opacity-50"
+                className={LOGIN_SECONDARY_BUTTON_CLASS}
               >
-                <span className="flex h-5 w-5 items-center justify-center font-bold text-[#525252]">
+                <span className="flex size-5 shrink-0 items-center justify-center text-sm font-bold text-[#64748B]">
                   G
                 </span>
-                Google로 계속하기
+                <span>Google로 계속하기</span>
               </button>
             </div>
           </>
@@ -455,7 +485,7 @@ export function LoginPage({
 
         {/* E. Mode Switch (signin/signup only) */}
         {mode !== "forgot" && (
-          <div className="mt-8 text-center text-sm text-[#525252]">
+          <div className="mt-6 text-center text-sm font-medium text-[#64748B]">
             {mode === "signin" ? (
               <>
                 회원이 아니신가요?{" "}
@@ -481,13 +511,14 @@ export function LoginPage({
             )}
           </div>
         )}
+        </div>
 
         {/* Spacer */}
-        <div className="flex-1" />
+        <div className="min-h-8 flex-1" />
 
         {/* F. Footer */}
-        <footer className="pb-8 pt-6 text-center">
-          <p className="text-xs leading-relaxed text-[#A3A3A3]">
+        <footer className="pb-8 pt-4 text-center">
+          <p className="text-xs font-medium leading-relaxed tracking-ko text-[#94A3B8]">
             {mode === "signin" ? "로그인" : "가입"} 시 LinkDrop의{" "}
             <a href="#" className="text-[#525252] underline hover:text-[#0A0A0A]">
               이용약관
@@ -510,51 +541,45 @@ export function LoginPage({
 
 export function LoginPageSkeleton() {
   return (
-    <div className="flex min-h-screen flex-col bg-white">
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-6">
-        {/* Logo */}
-        <div className="flex flex-col items-center pt-12">
-          <div className="h-9 w-32 animate-pulse rounded bg-[#E5E5E5]" />
-          <div className="mb-12 mt-4 h-5 w-56 animate-pulse rounded bg-[#E5E5E5]" />
+    <div
+      className="flex min-h-screen flex-col"
+      style={{
+        background:
+          "radial-gradient(circle at top right, #EFF6FF 0%, transparent 55%), #FFFFFF",
+      }}
+    >
+      <div className="mx-auto flex w-full max-w-[480px] flex-1 flex-col px-5">
+        <div className="flex flex-col items-center pt-10">
+          <div className="h-6 w-28 animate-pulse rounded-lg bg-[#E2E8F0]" />
+          <div className="mt-3 h-4 w-56 animate-pulse rounded-lg bg-[#E2E8F0]" />
         </div>
 
-        {/* Title */}
-        <div className="mb-8">
-          <div className="mb-2 h-8 w-24 animate-pulse rounded bg-[#E5E5E5]" />
-          <div className="h-5 w-40 animate-pulse rounded bg-[#E5E5E5]" />
-        </div>
-
-        {/* Form */}
-        <div className="space-y-4">
-          <div>
-            <div className="mb-1.5 h-4 w-12 animate-pulse rounded bg-[#E5E5E5]" />
-            <div className="h-12 w-full animate-pulse rounded-lg bg-[#E5E5E5]" />
+        <div className={`mt-6 ${LOGIN_CARD_CLASS}`}>
+          <div className="mb-6 space-y-2">
+            <div className="h-8 w-24 animate-pulse rounded-lg bg-[#E2E8F0]" />
+            <div className="h-4 w-64 max-w-full animate-pulse rounded-lg bg-[#E2E8F0]" />
           </div>
-          <div>
-            <div className="mb-1.5 h-4 w-16 animate-pulse rounded bg-[#E5E5E5]" />
-            <div className="h-12 w-full animate-pulse rounded-lg bg-[#E5E5E5]" />
-          </div>
-          <div className="flex items-center justify-between pt-2">
-            <div className="h-4 w-28 animate-pulse rounded bg-[#E5E5E5]" />
-            <div className="h-4 w-20 animate-pulse rounded bg-[#E5E5E5]" />
-          </div>
-          <div className="pt-4">
-            <div className="h-12 w-full animate-pulse rounded-lg bg-[#E5E5E5]" />
-          </div>
-        </div>
 
-        {/* Divider */}
-        <div className="my-6 h-px w-full animate-pulse bg-[#E5E5E5]" />
+          <div className="space-y-4">
+            <div className="h-14 w-full animate-pulse rounded-2xl bg-[#E2E8F0]" />
+            <div className="h-14 w-full animate-pulse rounded-2xl bg-[#E2E8F0]" />
+            <div className="flex items-center justify-between pt-1">
+              <div className="h-4 w-28 animate-pulse rounded bg-[#E2E8F0]" />
+              <div className="h-4 w-32 animate-pulse rounded bg-[#E2E8F0]" />
+            </div>
+            <div className="h-14 w-full animate-pulse rounded-2xl bg-[#E2E8F0]" />
+          </div>
 
-        {/* OAuth buttons */}
-        <div className="space-y-3">
-          <div className="h-12 w-full animate-pulse rounded-lg bg-[#E5E5E5]" />
-          <div className="h-12 w-full animate-pulse rounded-lg bg-[#E5E5E5]" />
-        </div>
+          <div className="my-6 h-px w-full bg-[#E2E8F0]" />
 
-        {/* Mode switch */}
-        <div className="mt-8 flex justify-center">
-          <div className="h-4 w-40 animate-pulse rounded bg-[#E5E5E5]" />
+          <div className="space-y-3">
+            <div className="h-14 w-full animate-pulse rounded-2xl bg-[#E2E8F0]" />
+            <div className="h-14 w-full animate-pulse rounded-2xl bg-[#E2E8F0]" />
+          </div>
+
+          <div className="mt-6 flex justify-center">
+            <div className="h-4 w-40 animate-pulse rounded bg-[#E2E8F0]" />
+          </div>
         </div>
       </div>
     </div>
