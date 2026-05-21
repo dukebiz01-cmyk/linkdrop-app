@@ -63,7 +63,7 @@ function getIntentLabel(intent: InfoDropCardProps["intent"]): string {
     commerce: "구매 드롭",
     info: "정보 드롭",
     ticket: "티켓 드롭",
-    lead: "관심 드롭",
+    lead: "상담 드롭",
   };
   return labels[intent];
 }
@@ -75,9 +75,15 @@ function getCtaLabel(intent: InfoDropCardProps["intent"]): string {
     commerce: "구매하러 가기",
     info: "자세히 보기",
     ticket: "티켓 구하기",
-    lead: "관심 등록",
+    lead: "상담 신청",
   };
   return labels[intent];
+}
+
+function intentToTestVariant(intent: InfoDropCardProps["intent"]): string {
+  if (intent === "commerce") return "purchase";
+  if (intent === "ticket") return "info";
+  return intent;
 }
 
 // ============================================================
@@ -100,7 +106,11 @@ export function InfoDropCard({
   onShare,
 }: InfoDropCardProps) {
   return (
-    <Card className="w-full max-w-[480px] overflow-hidden rounded-lg border border-[#E5E5E5] bg-white shadow-sm">
+    <Card
+      data-testid="info-drop-card"
+      data-variant={intentToTestVariant(intent)}
+      className="w-full max-w-[480px] overflow-hidden rounded-lg border border-[#E5E5E5] bg-white shadow-sm"
+    >
       {/* 1. Video Section */}
       <div className="relative aspect-video w-full bg-[#F5F5F5]">
         <img src={videoThumbnailUrl} alt={title} className="h-full w-full object-cover" />

@@ -16,12 +16,20 @@ import { Route as AdminRouteImport } from './routes/_admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DTestRouteImport } from './routes/d.test'
 import { Route as DShareUuidRouteImport } from './routes/d.$shareUuid'
+import { Route as ApiPriceCompareRouteImport } from './routes/api/price-compare'
+import { Route as ApiOembedRouteImport } from './routes/api/oembed'
+import { Route as ApiEventsRouteImport } from './routes/api/events'
+import { Route as ApiConsultationsRouteImport } from './routes/api/consultations'
 import { Route as UserProfileRouteImport } from './routes/_user/profile'
 import { Route as UserInboxRouteImport } from './routes/_user/inbox'
 import { Route as UserHomeRouteImport } from './routes/_user/home'
+import { Route as UserCreateWizardRouteImport } from './routes/_user/create-wizard'
 import { Route as UserCreateRouteImport } from './routes/_user/create'
+import { Route as ApiDropsIndexRouteImport } from './routes/api/drops/index'
 import { Route as PartnerPartnerIndexRouteImport } from './routes/_partner/partner.index'
 import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index'
+import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
+import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
 import { Route as UserCouponClaim_codeRouteImport } from './routes/_user/coupon.$claim_code'
 import { Route as PartnerPartnerRegisterRouteImport } from './routes/_partner/partner.register'
 import { Route as PartnerPartnerRedeemRouteImport } from './routes/_partner/partner.redeem'
@@ -67,6 +75,26 @@ const DShareUuidRoute = DShareUuidRouteImport.update({
   path: '/d/$shareUuid',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPriceCompareRoute = ApiPriceCompareRouteImport.update({
+  id: '/api/price-compare',
+  path: '/api/price-compare',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOembedRoute = ApiOembedRouteImport.update({
+  id: '/api/oembed',
+  path: '/api/oembed',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEventsRoute = ApiEventsRouteImport.update({
+  id: '/api/events',
+  path: '/api/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiConsultationsRoute = ApiConsultationsRouteImport.update({
+  id: '/api/consultations',
+  path: '/api/consultations',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UserProfileRoute = UserProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -82,10 +110,20 @@ const UserHomeRoute = UserHomeRouteImport.update({
   path: '/home',
   getParentRoute: () => UserRoute,
 } as any)
+const UserCreateWizardRoute = UserCreateWizardRouteImport.update({
+  id: '/create-wizard',
+  path: '/create-wizard',
+  getParentRoute: () => UserRoute,
+} as any)
 const UserCreateRoute = UserCreateRouteImport.update({
   id: '/create',
   path: '/create',
   getParentRoute: () => UserRoute,
+} as any)
+const ApiDropsIndexRoute = ApiDropsIndexRouteImport.update({
+  id: '/api/drops/',
+  path: '/api/drops/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const PartnerPartnerIndexRoute = PartnerPartnerIndexRouteImport.update({
   id: '/partner/',
@@ -96,6 +134,16 @@ const AdminAdminIndexRoute = AdminAdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
   getParentRoute: () => AdminRoute,
+} as any)
+const ApiDropsShareCodeRoute = ApiDropsShareCodeRouteImport.update({
+  id: '/api/drops/$shareCode',
+  path: '/api/drops/$shareCode',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCouponsClaimRoute = ApiCouponsClaimRouteImport.update({
+  id: '/api/coupons/claim',
+  path: '/api/coupons/claim',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const UserCouponClaim_codeRoute = UserCouponClaim_codeRouteImport.update({
   id: '/coupon/$claim_code',
@@ -162,9 +210,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/create': typeof UserCreateRoute
+  '/create-wizard': typeof UserCreateWizardRoute
   '/home': typeof UserHomeRoute
   '/inbox': typeof UserInboxRoute
   '/profile': typeof UserProfileRoute
+  '/api/consultations': typeof ApiConsultationsRoute
+  '/api/events': typeof ApiEventsRoute
+  '/api/oembed': typeof ApiOembedRoute
+  '/api/price-compare': typeof ApiPriceCompareRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
@@ -179,16 +232,24 @@ export interface FileRoutesByFullPath {
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/api/coupons/claim': typeof ApiCouponsClaimRoute
+  '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/admin/': typeof AdminAdminIndexRoute
   '/partner/': typeof PartnerPartnerIndexRoute
+  '/api/drops/': typeof ApiDropsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/create': typeof UserCreateRoute
+  '/create-wizard': typeof UserCreateWizardRoute
   '/home': typeof UserHomeRoute
   '/inbox': typeof UserInboxRoute
   '/profile': typeof UserProfileRoute
+  '/api/consultations': typeof ApiConsultationsRoute
+  '/api/events': typeof ApiEventsRoute
+  '/api/oembed': typeof ApiOembedRoute
+  '/api/price-compare': typeof ApiPriceCompareRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
@@ -203,8 +264,11 @@ export interface FileRoutesByTo {
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/api/coupons/claim': typeof ApiCouponsClaimRoute
+  '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/admin': typeof AdminAdminIndexRoute
   '/partner': typeof PartnerPartnerIndexRoute
+  '/api/drops': typeof ApiDropsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -214,9 +278,14 @@ export interface FileRoutesById {
   '/_user': typeof UserRouteWithChildren
   '/login': typeof LoginRoute
   '/_user/create': typeof UserCreateRoute
+  '/_user/create-wizard': typeof UserCreateWizardRoute
   '/_user/home': typeof UserHomeRoute
   '/_user/inbox': typeof UserInboxRoute
   '/_user/profile': typeof UserProfileRoute
+  '/api/consultations': typeof ApiConsultationsRoute
+  '/api/events': typeof ApiEventsRoute
+  '/api/oembed': typeof ApiOembedRoute
+  '/api/price-compare': typeof ApiPriceCompareRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
   '/_admin/admin/campaigns': typeof AdminAdminCampaignsRoute
@@ -231,8 +300,11 @@ export interface FileRoutesById {
   '/_partner/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/_partner/partner/register': typeof PartnerPartnerRegisterRoute
   '/_user/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/api/coupons/claim': typeof ApiCouponsClaimRoute
+  '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/_admin/admin/': typeof AdminAdminIndexRoute
   '/_partner/partner/': typeof PartnerPartnerIndexRoute
+  '/api/drops/': typeof ApiDropsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -240,9 +312,14 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/create'
+    | '/create-wizard'
     | '/home'
     | '/inbox'
     | '/profile'
+    | '/api/consultations'
+    | '/api/events'
+    | '/api/oembed'
+    | '/api/price-compare'
     | '/d/$shareUuid'
     | '/d/test'
     | '/admin/campaigns'
@@ -257,16 +334,24 @@ export interface FileRouteTypes {
     | '/partner/redeem'
     | '/partner/register'
     | '/coupon/$claim_code'
+    | '/api/coupons/claim'
+    | '/api/drops/$shareCode'
     | '/admin/'
     | '/partner/'
+    | '/api/drops/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/create'
+    | '/create-wizard'
     | '/home'
     | '/inbox'
     | '/profile'
+    | '/api/consultations'
+    | '/api/events'
+    | '/api/oembed'
+    | '/api/price-compare'
     | '/d/$shareUuid'
     | '/d/test'
     | '/admin/campaigns'
@@ -281,8 +366,11 @@ export interface FileRouteTypes {
     | '/partner/redeem'
     | '/partner/register'
     | '/coupon/$claim_code'
+    | '/api/coupons/claim'
+    | '/api/drops/$shareCode'
     | '/admin'
     | '/partner'
+    | '/api/drops'
   id:
     | '__root__'
     | '/'
@@ -291,9 +379,14 @@ export interface FileRouteTypes {
     | '/_user'
     | '/login'
     | '/_user/create'
+    | '/_user/create-wizard'
     | '/_user/home'
     | '/_user/inbox'
     | '/_user/profile'
+    | '/api/consultations'
+    | '/api/events'
+    | '/api/oembed'
+    | '/api/price-compare'
     | '/d/$shareUuid'
     | '/d/test'
     | '/_admin/admin/campaigns'
@@ -308,8 +401,11 @@ export interface FileRouteTypes {
     | '/_partner/partner/redeem'
     | '/_partner/partner/register'
     | '/_user/coupon/$claim_code'
+    | '/api/coupons/claim'
+    | '/api/drops/$shareCode'
     | '/_admin/admin/'
     | '/_partner/partner/'
+    | '/api/drops/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -318,8 +414,15 @@ export interface RootRouteChildren {
   PartnerRoute: typeof PartnerRouteWithChildren
   UserRoute: typeof UserRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiConsultationsRoute: typeof ApiConsultationsRoute
+  ApiEventsRoute: typeof ApiEventsRoute
+  ApiOembedRoute: typeof ApiOembedRoute
+  ApiPriceCompareRoute: typeof ApiPriceCompareRoute
   DShareUuidRoute: typeof DShareUuidRoute
   DTestRoute: typeof DTestRoute
+  ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
+  ApiDropsShareCodeRoute: typeof ApiDropsShareCodeRoute
+  ApiDropsIndexRoute: typeof ApiDropsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -373,6 +476,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DShareUuidRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/price-compare': {
+      id: '/api/price-compare'
+      path: '/api/price-compare'
+      fullPath: '/api/price-compare'
+      preLoaderRoute: typeof ApiPriceCompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/oembed': {
+      id: '/api/oembed'
+      path: '/api/oembed'
+      fullPath: '/api/oembed'
+      preLoaderRoute: typeof ApiOembedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/events': {
+      id: '/api/events'
+      path: '/api/events'
+      fullPath: '/api/events'
+      preLoaderRoute: typeof ApiEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/consultations': {
+      id: '/api/consultations'
+      path: '/api/consultations'
+      fullPath: '/api/consultations'
+      preLoaderRoute: typeof ApiConsultationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_user/profile': {
       id: '/_user/profile'
       path: '/profile'
@@ -394,12 +525,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UserHomeRouteImport
       parentRoute: typeof UserRoute
     }
+    '/_user/create-wizard': {
+      id: '/_user/create-wizard'
+      path: '/create-wizard'
+      fullPath: '/create-wizard'
+      preLoaderRoute: typeof UserCreateWizardRouteImport
+      parentRoute: typeof UserRoute
+    }
     '/_user/create': {
       id: '/_user/create'
       path: '/create'
       fullPath: '/create'
       preLoaderRoute: typeof UserCreateRouteImport
       parentRoute: typeof UserRoute
+    }
+    '/api/drops/': {
+      id: '/api/drops/'
+      path: '/api/drops'
+      fullPath: '/api/drops/'
+      preLoaderRoute: typeof ApiDropsIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_partner/partner/': {
       id: '/_partner/partner/'
@@ -414,6 +559,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminAdminIndexRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/api/drops/$shareCode': {
+      id: '/api/drops/$shareCode'
+      path: '/api/drops/$shareCode'
+      fullPath: '/api/drops/$shareCode'
+      preLoaderRoute: typeof ApiDropsShareCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/coupons/claim': {
+      id: '/api/coupons/claim'
+      path: '/api/coupons/claim'
+      fullPath: '/api/coupons/claim'
+      preLoaderRoute: typeof ApiCouponsClaimRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_user/coupon/$claim_code': {
       id: '/_user/coupon/$claim_code'
@@ -547,6 +706,7 @@ const PartnerRouteWithChildren =
 
 interface UserRouteChildren {
   UserCreateRoute: typeof UserCreateRoute
+  UserCreateWizardRoute: typeof UserCreateWizardRoute
   UserHomeRoute: typeof UserHomeRoute
   UserInboxRoute: typeof UserInboxRoute
   UserProfileRoute: typeof UserProfileRoute
@@ -555,6 +715,7 @@ interface UserRouteChildren {
 
 const UserRouteChildren: UserRouteChildren = {
   UserCreateRoute: UserCreateRoute,
+  UserCreateWizardRoute: UserCreateWizardRoute,
   UserHomeRoute: UserHomeRoute,
   UserInboxRoute: UserInboxRoute,
   UserProfileRoute: UserProfileRoute,
@@ -569,8 +730,15 @@ const rootRouteChildren: RootRouteChildren = {
   PartnerRoute: PartnerRouteWithChildren,
   UserRoute: UserRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiConsultationsRoute: ApiConsultationsRoute,
+  ApiEventsRoute: ApiEventsRoute,
+  ApiOembedRoute: ApiOembedRoute,
+  ApiPriceCompareRoute: ApiPriceCompareRoute,
   DShareUuidRoute: DShareUuidRoute,
   DTestRoute: DTestRoute,
+  ApiCouponsClaimRoute: ApiCouponsClaimRoute,
+  ApiDropsShareCodeRoute: ApiDropsShareCodeRoute,
+  ApiDropsIndexRoute: ApiDropsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,26 +1,36 @@
+import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Play, Copy, MessageCircle, Check, Sparkles } from "lucide-react";
 import {
-  Play,
-  MapPin,
-  ExternalLink,
-  Share2,
-  ChevronLeft,
-  MoreVertical,
-  Star,
-  Clock,
-  MessageCircle,
-  Gift,
-  Calendar,
-  ShoppingBag,
-  Bookmark,
-  Send,
-  Ticket,
-} from "lucide-react";
+  AiPriceComparisonCard,
+  type PriceOfferRow,
+} from "@/components/ai-price-comparison-card";
+import { ActionButton } from "@/components/ActionButton";
+import { ErrorMessage } from "@/components/ErrorMessage";
+import {
+  WIZARD_PRIMARY_BUTTON_CLASS,
+  WIZARD_SECONDARY_BUTTON_CLASS,
+} from "@/components/create-wizard-button-styles";
+import { PUBLIC_DROP_CTAS } from "@/components/public-drop-ctas";
+import type { DropPurpose } from "@/lib/types";
+import {
+  MOCK_RESERVATION_CAMPGROUND_INFO,
+  MOCK_RESERVATION_SECTION_GUIDE,
+  type DropViewVariant,
+  type ReservationCampgroundInfo,
+} from "@/lib/mock-data";
+import type {
+  ReservationSecondaryAction,
+  ReservationSelection,
+} from "@/components/reservation-calendar-page";
+import { cn } from "@/lib/utils";
 
 // ============================================================
 // Types
 // ============================================================
+
+export type { DropViewVariant };
 
 export interface InfoDropPageProps {
   videoThumbnailUrl: string;
@@ -31,6 +41,11 @@ export interface InfoDropPageProps {
   title: string;
   description: string;
   intent: "coupon" | "reservation" | "commerce" | "info" | "ticket" | "lead";
+  /** v3 5목적 UI 분기 — purchase=구매(가격비교), lead=상담 폼 */
+  variant?: DropViewVariant;
+  productName?: string;
+  brandGuess?: string;
+  priceOffers?: PriceOfferRow[];
   local: {
     name: string;
     category: string;
@@ -45,13 +60,91 @@ export interface InfoDropPageProps {
     priceRange?: string;
   };
   creator: { channelName: string; channelUrl: string; avatarUrl?: string };
+  /** AI 한 줄 요약 (없으면 description 사용) */
+  aiSummary?: string;
+  keyPoints?: string[];
+  shareUrl?: string;
   onPrimaryAction?: () => void;
   onWatchOriginal?: () => void;
   onShare?: () => void;
+  onCopyLink?: () => void | Promise<void>;
+  onKakaoShare?: () => void | Promise<void>;
   onBack?: () => void;
   onSave?: () => void;
   onForward?: () => void;
 }
+
+const PURPOSE_CHIP_CLASS: Record<DropPurpose, string> = {
+  정보: "bg-intent-info-bg text-intent-info",
+  쿠폰: "bg-intent-warning-bg text-intent-warning",
+  예약: "bg-intent-success-bg text-intent-success",
+  구매: "bg-surface text-text-strong",
+  상담: "bg-intent-danger-bg text-intent-danger",
+};
+
+/** variant별 공개 Drop 헤드라인 — mock title과 별도로 목적 UI 검증용. */
+/** variant·CTA HTTP/Playwright 검증용 — UI/카피 변경 없음 */
+const CTA_TEST_IDS: Record<DropViewVariant, Partial<Record<string, string>>> = {
+  info: {},
+  coupon: {
+    coupon: "cta-coupon-save",
+    "reserve-coupon": "cta-coupon-reserve",
+  },
+  reservation: {},
+  purchase: {
+    "price-compare": "cta-price-compare",
+    seller: "cta-seller-link",
+    share: "cta-purchase-share",
+  },
+  lead: {
+    phone: "cta-lead-phone",
+    sms: "cta-lead-sms",
+    share: "cta-lead-share",
+  },
+};
+
+function getCtaTestId(variant: DropViewVariant, ctaId: string): string | undefined {
+  return CTA_TEST_IDS[variant]?.[ctaId];
+}
+
+/** v0 보조 공유 액션 — 예약 variant 하단 (Primary·Secondary보다 약함) */
+const SHARE_ACTION_BUTTON_CLASS = cn(
+  "inline-flex h-12 min-h-[48px] w-full min-w-0 items-center justify-center gap-1.5 rounded-xl",
+  "border border-[#E5E7EB] bg-white px-2 text-sm font-semibold tracking-ko text-[#374151]",
+  "transition-colors duration-150 hover:border-[#D4D4D4] hover:bg-[#FAFAFA]",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2",
+);
+
+const VARIANT_PAGE_COPY: Record<
+  DropViewVariant,
+  { label: DropPurpose; sectionTitle: string; ctaHeading: string }
+> = {
+  info: {
+    label: "정보",
+    sectionTitle: "영상 핵심 정리",
+    ctaHeading: "바로 실행하기",
+  },
+  coupon: {
+    label: "쿠폰",
+    sectionTitle: "혜택으로 손님 모으기",
+    ctaHeading: "쿠폰 받기",
+  },
+  reservation: {
+    label: "예약",
+    sectionTitle: "날짜 선택과 예약 연결",
+    ctaHeading: "예약 확인",
+  },
+  purchase: {
+    label: "구매",
+    sectionTitle: "AI 상품 찾기·가격비교",
+    ctaHeading: "가격 비교",
+  },
+  lead: {
+    label: "상담",
+    sectionTitle: "문의·상담 받기",
+    ctaHeading: "추가 문의",
+  },
+};
 
 // ============================================================
 // Helpers
@@ -63,44 +156,182 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-function getIntentLabel(intent: InfoDropPageProps["intent"]): string {
-  const labels: Record<InfoDropPageProps["intent"], string> = {
-    coupon: "쿠폰",
-    reservation: "예약",
-    commerce: "구매",
-    info: "정보",
-    ticket: "티켓",
-    lead: "관심등록",
+function variantToIntent(variant: DropViewVariant): InfoDropPageProps["intent"] {
+  const map: Record<DropViewVariant, InfoDropPageProps["intent"]> = {
+    info: "info",
+    coupon: "coupon",
+    reservation: "reservation",
+    purchase: "commerce",
+    lead: "lead",
   };
-  return labels[intent];
+  return map[variant];
 }
 
-function getCtaLabel(intent: InfoDropPageProps["intent"]): string {
-  const labels: Record<InfoDropPageProps["intent"], string> = {
-    coupon: "쿠폰 받기",
-    reservation: "예약하기",
-    commerce: "구매하기",
-    info: "자세히 보기",
-    ticket: "티켓 보기",
-    lead: "관심 등록",
-  };
-  return labels[intent];
+function intentToVariant(intent: InfoDropPageProps["intent"]): DropViewVariant {
+  if (intent === "commerce") return "purchase";
+  if (intent === "lead") return "lead";
+  if (intent === "coupon") return "coupon";
+  if (intent === "reservation") return "reservation";
+  return "info";
 }
 
-function getCtaIcon(intent: InfoDropPageProps["intent"]) {
-  const icons: Record<InfoDropPageProps["intent"], React.ReactNode> = {
-    coupon: <Gift className="h-5 w-5" />,
-    reservation: <Calendar className="h-5 w-5" />,
-    commerce: <ShoppingBag className="h-5 w-5" />,
-    info: <ExternalLink className="h-5 w-5" />,
-    ticket: <Ticket className="h-5 w-5" />,
-    lead: <Send className="h-5 w-5" />,
-  };
-  return icons[intent];
+const DEFAULT_MAKER: InfoDropPageProps["maker"] = {
+  name: "익명",
+  droppedAgo: "방금 전",
+};
+
+const DEFAULT_LOCAL: InfoDropPageProps["local"] = {
+  name: "매장",
+  category: "공유된 정보",
+  distance: "",
+  address: "",
+  statusLabel: "영업중",
+};
+
+const DEFAULT_CREATOR: InfoDropPageProps["creator"] = {
+  channelName: "채널",
+  channelUrl: "#",
+};
+
+type ReservationCalendarProps = import("@/components/reservation-calendar-page").ReservationCalendarPageProps;
+
+/** react-day-picker — SSR 번들 로드 방지, 클라이언트에서만 동적 import */
+function ReservationCalendarClient(props: {
+  partnerName: string;
+  campgroundInfo?: ReservationCampgroundInfo;
+  onCheckAvailability?: (selection: ReservationSelection) => void;
+  onSecondaryAction?: (action: ReservationSecondaryAction) => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const [Calendar, setCalendar] = useState<((p: ReservationCalendarProps) => React.JSX.Element) | null>(
+    null,
+  );
+
+  useEffect(() => {
+    setMounted(true);
+    import("@/components/reservation-calendar-page")
+      .then((m) => setCalendar(() => m.ReservationCalendarPage))
+      .catch((err) => console.error("[ReservationCalendarClient]", err));
+  }, []);
+
+  if (!mounted || !Calendar) {
+    return (
+      <section
+        data-testid="variant-reservation"
+        className="rounded-2xl border border-border bg-surface p-4"
+      >
+        <p className="text-sm font-medium text-text-subtle">예약 일정을 불러오는 중이에요.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section data-testid="variant-reservation" className="w-full max-w-full">
+      <Calendar
+        partnerName={props.partnerName}
+        className="mx-0 mt-0 w-full max-w-full"
+        onCheckAvailability={props.onCheckAvailability}
+        onSecondaryAction={props.onSecondaryAction}
+      />
+    </section>
+  );
+}
+
+// WHY: 무로그인 lead 수집 — submitConsultationLead RPC는 Step 5 이후 연동.
+function ConsultationLeadForm({ partnerName }: { partnerName: string }) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [message, setMessage] = useState("");
+  const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitError(null);
+    if (!name.trim() || !phone.trim() || !privacyAgreed) {
+      setSubmitError("이름, 연락처, 개인정보 동의를 확인해 주세요.");
+      return;
+    }
+    // TODO: Step 5 완료 후 submitConsultationLead({ dropId, name, phone, ... }) RPC로 교체
+    console.log("[ConsultationLeadForm] mock submit", { partnerName, name, phone, message });
+    setSubmitted(true);
+  }
+
+  if (submitted) {
+    return (
+      <section
+        data-testid="variant-lead"
+        className="rounded-2xl border border-border bg-intent-success-bg p-4"
+      >
+        <p className="text-sm font-semibold tracking-ko text-intent-success">
+          상담 신청이 접수됐어요. 빠르게 연락드릴게요.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <form
+      data-testid="variant-lead"
+      onSubmit={handleSubmit}
+      className="space-y-4 rounded-2xl border border-border bg-surface p-4"
+    >
+      <h2 className="text-lg font-bold tracking-ko text-text-strong">상담 신청</h2>
+      <p className="text-sm font-medium text-text-muted">{partnerName}</p>
+
+      <label className="block">
+        <span className="text-sm font-semibold text-text-strong">이름</span>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="mt-2 block h-12 w-full rounded-lg border border-border bg-bg px-4 text-sm font-medium"
+          placeholder="홍길동"
+        />
+      </label>
+      <label className="block">
+        <span className="text-sm font-semibold text-text-strong">연락처</span>
+        <input
+          type="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          className="mt-2 block h-12 w-full rounded-lg border border-border bg-bg px-4 text-sm font-medium"
+          placeholder="010-0000-0000"
+        />
+      </label>
+      <label className="block">
+        <span className="text-sm font-semibold text-text-strong">문의 내용</span>
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={3}
+          className="mt-2 block w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-sm font-medium"
+          placeholder="궁금한 점을 적어 주세요"
+        />
+      </label>
+      <label className="flex items-start gap-2 text-sm font-medium text-text-muted">
+        <input
+          type="checkbox"
+          checked={privacyAgreed}
+          onChange={(e) => setPrivacyAgreed(e.target.checked)}
+          className="mt-1 size-4 rounded border-border"
+        />
+        <span>개인정보 수집·이용에 동의합니다 (필수)</span>
+      </label>
+      <ErrorMessage message={submitError} />
+      <ActionButton
+        type="submit"
+        data-testid="cta-lead-submit"
+        className={cn("w-full", WIZARD_PRIMARY_BUTTON_CLASS)}
+      >
+        상담 신청하기
+      </ActionButton>
+    </form>
+  );
 }
 
 // ============================================================
-// Main Page Component
+// Main Page Component — v3 무로그인 받은 사람 화면
 // ============================================================
 
 export function InfoDropPage({
@@ -112,236 +343,356 @@ export function InfoDropPage({
   title,
   description,
   intent,
+  variant,
+  productName,
+  brandGuess,
+  priceOffers,
   local,
   creator,
+  aiSummary,
+  keyPoints,
+  shareUrl,
   onPrimaryAction,
   onWatchOriginal,
   onShare,
-  onBack,
-  onSave,
-  onForward,
+  onCopyLink,
+  onKakaoShare,
 }: InfoDropPageProps) {
-  const isOpen = local.statusLabel === "영업중" || local.statusLabel === "예약 가능";
+  const safeIntent = intent ?? "info";
+  const resolvedVariant: DropViewVariant =
+    variant && VARIANT_PAGE_COPY[variant] ? variant : intentToVariant(safeIntent);
+  const pageCopy = VARIANT_PAGE_COPY[resolvedVariant] ?? VARIANT_PAGE_COPY.info;
+  const purposeLabel = pageCopy.label;
+  const safeMaker = {
+    ...DEFAULT_MAKER,
+    ...maker,
+    name: maker?.name?.trim() || DEFAULT_MAKER.name,
+  };
+  const safeLocal = { ...DEFAULT_LOCAL, ...local, name: local?.name?.trim() || DEFAULT_LOCAL.name };
+  const safeCreator = {
+    ...DEFAULT_CREATOR,
+    ...creator,
+    channelName: creator?.channelName?.trim() || DEFAULT_CREATOR.channelName,
+    channelUrl: creator?.channelUrl?.trim() || DEFAULT_CREATOR.channelUrl,
+  };
+  const safeTitle = title?.trim() || pageCopy.sectionTitle;
+  const safeDescription = description?.trim() || "";
+  const summaryLine = aiSummary?.trim() || safeDescription || pageCopy.sectionTitle;
+  const points = keyPoints ?? [];
+  const ctas = PUBLIC_DROP_CTAS[resolvedVariant] ?? PUBLIC_DROP_CTAS.info;
+  const isReservation = resolvedVariant === "reservation";
+  const reservationGuide = MOCK_RESERVATION_SECTION_GUIDE;
+  const videoHeadline = isReservation ? safeTitle : pageCopy.sectionTitle;
+  const safeThumb = videoThumbnailUrl?.trim() || "";
+  const safeDuration = Number.isFinite(videoDurationSec) ? videoDurationSec : 0;
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+
+  async function handleCopy() {
+    setShareError(null);
+    setCopyFeedback(null);
+    if (onCopyLink) {
+      await onCopyLink();
+      setCopyFeedback("링크를 복사했어요.");
+      return;
+    }
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopyFeedback("링크를 복사했어요.");
+    } catch {
+      setShareError("링크 복사에 실패했어요.");
+    }
+  }
+
+  async function handleKakao() {
+    setShareError(null);
+    if (onKakaoShare) {
+      await onKakaoShare();
+      return;
+    }
+    onShare?.();
+  }
+
+  function handleCtaClick(ctaId: string) {
+    console.log("[InfoDropPage] CTA", ctaId, resolvedVariant);
+    if (ctaId === "copy-link") {
+      void handleCopy();
+      return;
+    }
+    if (ctaId === "share") {
+      void handleKakao();
+      return;
+    }
+    if (ctaId === "phone") {
+      window.open("tel:01000000000", "_self");
+      return;
+    }
+    if (ctaId === "sms") {
+      window.open("sms:01000000000", "_self");
+      return;
+    }
+    if (ctaId === "directions") {
+      const q = encodeURIComponent(safeLocal.address || safeLocal.name);
+      window.open(`https://map.naver.com/v5/search/${q}`, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (ctaId === "price-compare") {
+      document
+        .querySelector('[data-testid="variant-purchase"]')
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (ctaId === "seller" && resolvedVariant === "purchase") {
+      onPrimaryAction?.();
+      return;
+    }
+    if (ctaId === "coupon" || ctaId === "reserve-coupon") {
+      onPrimaryAction?.();
+      return;
+    }
+    onPrimaryAction?.();
+  }
 
   return (
-    <div className="relative min-h-screen bg-white pb-32">
-      {/* A. Header */}
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[#F5F5F5] bg-white px-4">
-        <button
-          onClick={() => {
-            console.log("[InfoDropPage] Back clicked");
-            onBack?.();
-          }}
-          className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-[#F5F5F5]"
-          aria-label="뒤로 가기"
-        >
-          <ChevronLeft className="h-6 w-6 text-[#0A0A0A]" />
-        </button>
-        <span className="text-sm font-medium tracking-tight text-[#0A0A0A]">LinkDrop</span>
-        <button
-          className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-[#F5F5F5]"
-          aria-label="더보기"
-        >
-          <MoreVertical className="h-5 w-5 text-[#525252]" />
-        </button>
+    <div
+      className={cn(
+        "relative mx-auto min-h-screen w-full max-w-[480px] bg-white",
+        isReservation ? "pb-56" : "pb-48",
+      )}
+      data-testid="public-drop-page"
+      data-variant={resolvedVariant}
+    >
+      {/* 1. 상단 — 보낸 사람 */}
+      <header className="px-6 pb-4 pt-8">
+        <div className="flex items-center gap-3">
+          <Avatar className="size-10">
+            <AvatarImage src={safeMaker.avatarUrl} alt={safeMaker.name} />
+            <AvatarFallback className="bg-surface text-sm font-semibold text-text-muted">
+              {safeMaker.name.charAt(0) || "?"}
+          </AvatarFallback>
+        </Avatar>
+          <div>
+            <p className="text-sm font-bold tracking-ko text-text-strong">
+              {safeMaker.name}
+              <span className="font-medium text-text-muted">님이 보냈어요</span>
+            </p>
+            <p className="text-xs font-medium tracking-ko text-text-subtle">
+              LinkDrop으로 공유된 영상
+            </p>
+          </div>
+        </div>
       </header>
 
-      {/* Maker Info Row */}
-      <div className="flex items-center gap-3 px-5 py-4">
-        <Avatar className="h-8 w-8">
-          <AvatarImage src={maker.avatarUrl} alt={maker.name} />
-          <AvatarFallback className="bg-[#E5E5E5] text-xs font-medium text-[#525252]">
-            {maker.name.charAt(0)}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold text-[#0A0A0A]">{maker.name}</span>
-          <span className="text-xs text-[#A3A3A3]">{maker.droppedAgo} 드롭</span>
-        </div>
-      </div>
+      <div className="space-y-6 px-6" data-testid={`variant-${resolvedVariant}`}>
+        {isReservation && (
+          <section className="space-y-2" data-testid="reservation-header">
+            <span
+              className={cn(
+                "inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold tracking-ko",
+                PURPOSE_CHIP_CLASS[purposeLabel],
+              )}
+            >
+              {pageCopy.label}
+            </span>
+            <h2 className="text-xl font-extrabold leading-snug tracking-ko text-text-strong">
+              {pageCopy.sectionTitle}
+            </h2>
+            <p className="text-sm font-medium leading-relaxed tracking-ko text-text-muted">
+              {reservationGuide}
+            </p>
+            <p className="text-xs font-medium text-text-subtle">{safeLocal.name}</p>
+          </section>
+        )}
 
-      {/* B. Video Hero */}
-      <div className="relative aspect-video w-full bg-[#0A0A0A]">
-        <img src={videoThumbnailUrl} alt={title} className="h-full w-full object-cover" />
-        {/* YouTube label - top right */}
-        <span className="absolute right-3 top-3 rounded-md bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
+        {/* 2. 영상 카드 */}
+        <section className="overflow-hidden rounded-2xl border border-border bg-bg">
+          <div className="relative aspect-video w-full bg-surface">
+            <img src={safeThumb} alt={safeTitle} className="h-full w-full object-cover" />
+            <span className="absolute right-3 top-3 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-semibold text-white">
           {videoSourceLabel}
         </span>
-        {/* Duration - bottom left */}
-        <span className="absolute bottom-3 left-3 rounded-md bg-black/60 px-2.5 py-1 text-xs font-medium tabular-nums text-white">
-          {formatDuration(videoDurationSec)}
+            {safeDuration > 0 && (
+              <span className="absolute bottom-3 left-3 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-medium tabular-nums text-white">
+                {formatDuration(safeDuration)}
         </span>
-        {/* Play button - center */}
+            )}
         <button
+              type="button"
           className="absolute inset-0 flex items-center justify-center"
-          onClick={() => {
-            console.log("[InfoDropPage] Play video clicked");
-            onWatchOriginal?.();
-          }}
+              onClick={() => onWatchOriginal?.()}
           aria-label="영상 재생"
         >
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/95 shadow-xl">
-            <Play className="ml-0.5 h-6 w-6 fill-[#0A0A0A] text-[#0A0A0A]" />
+              <span className="flex size-16 items-center justify-center rounded-full bg-bg/95 shadow-soft">
+                <Play className="ml-0.5 size-6 fill-text-strong text-text-strong" strokeWidth={2} />
+              </span>
+            </button>
           </div>
-        </button>
+          <div className="space-y-2 p-4">
+            {!isReservation && (
+              <span
+                className={cn(
+                  "inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold tracking-ko",
+                  PURPOSE_CHIP_CLASS[purposeLabel],
+                )}
+              >
+                {purposeLabel}
+              </span>
+            )}
+            <h1 className="text-xl font-extrabold leading-snug tracking-ko text-text-strong">
+              {videoHeadline}
+            </h1>
+            {!isReservation && (
+              <p className="text-sm font-medium tracking-ko text-text-muted">{safeTitle}</p>
+            )}
+            <p className="text-xs font-medium text-text-subtle">{safeCreator.channelName}</p>
       </div>
+        </section>
 
-      {/* C. Title Block */}
-      <div className="px-5 py-6">
-        {/* Intent badge */}
-        <span className="mb-3 inline-block rounded-md bg-[#EFF6FF] px-2.5 py-1 text-xs font-medium text-[#2563EB]">
-          {getIntentLabel(intent)}
-        </span>
-        {/* Title */}
-        <h1 className="text-2xl font-bold leading-snug tracking-tight text-[#0A0A0A]">{title}</h1>
-        {/* Maker message */}
         {makerMessage && (
-          <p className="mt-3 border-l-2 border-[#E5E5E5] pl-3 text-sm italic leading-relaxed text-[#525252]">
-            {makerMessage}
+          <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium italic leading-relaxed tracking-ko text-text-muted">
+            &quot;{makerMessage}&quot;
           </p>
         )}
-        {/* Description */}
-        <p className="mt-4 text-base leading-relaxed text-[#525252]">{description}</p>
-      </div>
 
-      {/* D. Local Info Card */}
-      <div className="mx-5 mt-6 rounded-xl bg-[#FAFAFA] p-5">
-        {/* Top row */}
-        <div className="flex gap-4">
-          <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-[#E5E5E5]">
-            <img
-              src={local.thumbnailUrl || videoThumbnailUrl}
-              alt={local.name}
-              className="h-full w-full object-cover"
-            />
-          </div>
-          <div className="flex flex-1 flex-col justify-center">
-            <h3 className="text-lg font-semibold text-[#0A0A0A]">{local.name}</h3>
-            <span className="text-sm text-[#525252]">
-              {local.category} · {local.distance}
-            </span>
-            {local.rating && (
-              <div className="mt-1 flex items-center gap-1">
-                <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
-                <span className="text-sm font-medium tabular-nums text-[#0A0A0A]">
-                  {local.rating}
-                </span>
-                {local.reviewCount && (
-                  <span className="text-sm text-[#525252]">· 리뷰 {local.reviewCount}개</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="my-4 border-t border-[#E5E5E5]" />
-
-        {/* 2x2 Grid */}
-        <div className="grid grid-cols-2 gap-y-2 text-sm">
-          <div className="flex items-center gap-2 text-[#525252]">
-            <MapPin className="h-3.5 w-3.5" />
-            <span>{local.address}</span>
-          </div>
-          <div className="flex items-center gap-2 text-[#525252]">
-            <Clock className="h-3.5 w-3.5" />
-            <span>
-              <span className={isOpen ? "text-[#10B981]" : "text-[#525252]"}>
-                {local.statusLabel}
-              </span>
-              {local.hoursLabel && ` · ${local.hoursLabel}`}
-            </span>
-          </div>
-          {local.responseNote && (
-            <div className="flex items-center gap-2 text-[#525252]">
-              <MessageCircle className="h-3.5 w-3.5" />
-              <span>{local.responseNote}</span>
+        {/* 3. AI 요약 — 예약 variant는 캘린더 흐름에 집중 */}
+        {!isReservation && (
+          <section className="rounded-2xl border border-border bg-surface p-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="size-4 text-accent" strokeWidth={2} />
+              <h2 className="text-sm font-bold tracking-ko text-text-strong">AI 요약</h2>
             </div>
-          )}
-          {local.priceRange && <div className="text-[#525252]">{local.priceRange}</div>}
-        </div>
-      </div>
+            <p className="mt-3 text-base font-semibold leading-relaxed tracking-ko text-text-strong">
+              {summaryLine}
+            </p>
+            {points.length > 0 && (
+              <ul className="mt-4 space-y-2 border-t border-border pt-4">
+                {points.map((point) => (
+                  <li
+                    key={point}
+                    className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-strong"
+                  >
+                    <Check className="mt-0.5 size-4 shrink-0 text-accent" strokeWidth={2} />
+                    {point}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
-      {/* E. Creator Attribution */}
-      <div className="mx-5 mt-4 flex items-center gap-3 rounded-xl border border-[#F5F5F5] p-4">
-        <Avatar className="h-8 w-8">
-          <AvatarImage src={creator.avatarUrl} alt={creator.channelName} />
-          <AvatarFallback className="bg-[#F5F5F5] text-xs text-[#525252]">
-            {creator.channelName.charAt(0)}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex flex-1 flex-col">
-          <span className="text-xs uppercase tracking-wider text-[#A3A3A3]">원본 영상</span>
-          <span className="text-sm font-medium text-[#0A0A0A]">{creator.channelName}</span>
-        </div>
-        <a
-          href={creator.channelUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-xs font-medium text-[#0A0A0A] hover:underline"
-        >
-          YouTube에서 보기
-          <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-      </div>
-
-      {/* F. Disclosure */}
-      <p className="mx-5 mt-6 text-xs text-[#A3A3A3]">
-        본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
-      </p>
-
-      {/* G. Floating Action Bar */}
-      <div className="fixed bottom-5 left-0 right-0 px-5">
-        <div className="mx-auto flex max-w-md items-center gap-3">
-          {/* Tertiary actions - minimal */}
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => {
-                console.log("[InfoDropPage] Save clicked");
-                onSave?.();
-              }}
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#525252] hover:opacity-90"
-              aria-label="저장"
-            >
-              <Bookmark className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => {
-                console.log("[InfoDropPage] Share clicked");
-                onShare?.();
-              }}
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-[#E5E5E5] bg-white text-[#525252] hover:opacity-90"
-              aria-label="외부 공유"
-            >
-              <Share2 className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* CTA - Secondary */}
-          <button
-            onClick={() => {
-              console.log("[InfoDropPage] Primary action:", intent);
+        {isReservation && (
+          <ReservationCalendarClient
+            partnerName={safeLocal.name}
+            campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
+            onCheckAvailability={(selection) => {
+              console.log("[InfoDropPage] reservation check", selection);
               onPrimaryAction?.();
             }}
-            className="flex h-11 items-center justify-center gap-2 rounded-md bg-[#EFF6FF] px-5 text-[#2563EB] hover:opacity-90"
-          >
-            {getCtaIcon(intent)}
-            <span className="text-sm font-semibold">{getCtaLabel(intent)}</span>
-          </button>
+            onSecondaryAction={(action) => handleCtaClick(action)}
+          />
+        )}
 
-          {/* Forward - PRIMARY viral action */}
-          <button
-            onClick={() => {
-              console.log("[InfoDropPage] Forward clicked");
-              onForward?.();
-            }}
-            className="flex h-11 flex-1 items-center justify-center gap-2 rounded-md bg-[#2563EB] text-white hover:opacity-90"
-          >
-            <Send className="h-[18px] w-[18px]" />
-            <span className="text-sm font-semibold">친구에게 전달</span>
-          </button>
+        {resolvedVariant === "purchase" && (
+          <section data-testid="variant-purchase">
+            <AiPriceComparisonCard
+              productName={productName ?? safeTitle}
+              brandGuess={brandGuess}
+              offers={priceOffers ?? []}
+              className="mx-0 mt-0"
+              onOfferClick={(id) => {
+                console.log("[InfoDropPage] offer", id);
+                handleCtaClick("seller");
+              }}
+            />
+          </section>
+        )}
+
+        {resolvedVariant === "lead" && <ConsultationLeadForm partnerName={safeLocal.name} />}
+
+        {/* 4. 목적별 CTA — info는 하단 푸터(링크·카톡)만 */}
+        {ctas.length > 0 && (
+          <section>
+            <h2 className="text-sm font-bold tracking-ko text-text-strong">{pageCopy.ctaHeading}</h2>
+            <div className="mt-3 flex flex-col gap-2">
+              {ctas.map((cta) => {
+                const ctaTestId = getCtaTestId(resolvedVariant, cta.id);
+                return cta.primary ? (
+                  <ActionButton
+                    key={`${resolvedVariant}-${cta.id}`}
+                    type="button"
+                    data-testid={ctaTestId}
+                    onClick={() => handleCtaClick(cta.id)}
+                    className={WIZARD_PRIMARY_BUTTON_CLASS}
+                  >
+                    {cta.label}
+                  </ActionButton>
+                ) : (
+                  <button
+                    key={`${resolvedVariant}-${cta.id}`}
+                    type="button"
+                    data-testid={ctaTestId}
+                    onClick={() => handleCtaClick(cta.id)}
+                    className={WIZARD_SECONDARY_BUTTON_CLASS}
+                  >
+                    {cta.label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
         </div>
-      </div>
+
+      {/* 5. 하단 고정 — 링크·카톡·고지 */}
+      <footer className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#E5E7EB] bg-white">
+        <div className="mx-auto w-full max-w-[480px] space-y-3 px-6 py-4">
+          {copyFeedback && (
+            <p className="flex items-center gap-2 text-sm font-medium text-text-strong">
+              <Check className="size-4 text-intent-success" strokeWidth={2} />
+              {copyFeedback}
+            </p>
+          )}
+          <ErrorMessage message={shareError} />
+          {isReservation ? (
+            <div className="space-y-2 pt-1">
+              <p className="text-center text-xs font-semibold tracking-ko text-text-subtle">공유하기</p>
+              <div className="grid min-w-0 grid-cols-2 gap-2">
+                <button type="button" onClick={handleCopy} className={SHARE_ACTION_BUTTON_CLASS}>
+                  <Copy className="size-4 shrink-0" strokeWidth={2} />
+                  <span className="truncate">링크 복사하기</span>
+                </button>
+                <button type="button" onClick={handleKakao} className={SHARE_ACTION_BUTTON_CLASS}>
+                  <MessageCircle className="size-4 shrink-0" strokeWidth={2} />
+                  <span className="truncate">카카오톡 공유</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className={cn(WIZARD_SECONDARY_BUTTON_CLASS, "gap-2")}
+              >
+                <Copy className="size-4 shrink-0" strokeWidth={2} />
+                링크 복사하기
+              </button>
+              <ActionButton
+                type="button"
+                onClick={handleKakao}
+                className={cn(WIZARD_PRIMARY_BUTTON_CLASS, "gap-2")}
+              >
+                <MessageCircle className="size-5 shrink-0" strokeWidth={2} />
+                카카오톡 공유
+              </ActionButton>
+            </>
+          )}
+          <p className="text-center text-xs font-medium leading-relaxed tracking-ko text-text-subtle">
+            본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
