@@ -50,7 +50,7 @@ function IndexHomePage() {
     if (params.confidence) q.set("confidence", params.confidence);
     if (params.source_id) q.set("source_id", params.source_id);
     if (params.platform) q.set("platform", params.platform);
-    return `/create?${q.toString()}`;
+    return `/create-wizard?${q.toString()}`;
   };
 
   return (

@@ -43,6 +43,15 @@ const PURPOSE_CHIP: Record<DropPurpose, string> = {
   상담: "bg-intent-danger-bg text-intent-danger",
 };
 
+/** Step 5 미리보기 카드의 목적별 행동(CTA) 라벨 — 공유 직전 최종 행동 확인용. */
+const PURPOSE_CTA: Record<DropPurpose, string> = {
+  정보: "자세히 보기",
+  쿠폰: "쿠폰 받기",
+  예약: "예약하기",
+  구매: "상품 보기",
+  상담: "상담 신청",
+};
+
 /**
  * 카카오톡 대화창에 보이는 말풍선 형태의 공유 미리보기 + 공유 CTA.
  * WHY: Step 5에서 “보내기 전에 친구 화면”을 보여주면 이탈률이 줄어든다 (v3 UX 원칙).
@@ -139,6 +148,12 @@ export function WizardSharePreview({
                   </p>
                 )}
                 <p className="text-xs font-medium text-text-subtle">{data.video.channelName}</p>
+                {/* 받는 사람 화면의 목적별 행동(CTA) preview — 작은 라벨, 실제 버튼 아님 */}
+                <div>
+                  <span className="inline-flex items-center rounded-lg border border-border bg-surface px-2 py-1 text-xs font-semibold tracking-ko text-text-strong">
+                    {PURPOSE_CTA[data.purpose]}
+                  </span>
+                </div>
               </div>
             </div>
 
