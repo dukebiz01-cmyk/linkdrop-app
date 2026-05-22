@@ -12,9 +12,8 @@ import {
   MessageCircle,
   Link as LinkIcon,
   Loader2,
-  MapPin,
   Phone,
-  Search,
+  Plus,
   ShoppingBag,
   Sparkles,
   X,
@@ -28,7 +27,6 @@ import {
   type WizardSharePreviewData,
 } from "@/components/wizard-share-preview";
 import { shareToKakao } from "@/lib/kakao";
-import { MOCK_LOCAL_PARTNERS } from "@/lib/mock-data";
 import {
   fetchVideoMetadata,
   parseVideoUrl,
@@ -162,8 +160,8 @@ const PURPOSE_FLOW_CONFIG: Record<DropPurpose, PurposeFlowConfig> = {
   예약: {
     badge: "예약",
     title: "주말 빈자리 예약",
-    description: "원하는 날짜를 고르고 예약으로 이어지도록 구성했어요.",
-    points: ["예약 버튼 구성", "날짜 선택 안내", "예약 링크 연결"],
+    description: "비어 있는 날짜와 예약 버튼을 함께 보여주도록 구성했어요.",
+    points: ["예약 버튼 구성", "예약 가능한 날짜 표시", "예약 링크 연결"],
     cta: "예약하기",
     chipClass: "bg-intent-success-bg text-intent-success",
     detailCards: [
@@ -284,17 +282,39 @@ function findPurposeConfig(p: DropPurpose) {
   return WIZARD_PURPOSES.find((item) => item.purpose === p);
 }
 
-const MOCK_LOCALS: LocalPartner[] = MOCK_LOCAL_PARTNERS.map((p) => ({
-  id: p.id,
-  name: p.name,
-  category: p.category,
-  address: p.address,
-  avatarUrl: p.avatarUrl,
-}));
-
 type Step3DetailId = string;
 
 type SummaryTone = "짧게" | "자세히" | "후기처럼";
+
+// 예약 목적 — 메이커가 안내하는 예약 가능 날짜의 상태.
+export type ReservationDateStatus =
+  | "available"
+  | "few_left"
+  | "almost_full"
+  | "closed"
+  | "inquiry";
+
+// 예약 목적 — 메이커가 정하는 예약 가능 날짜 입력 모드.
+export type ReservationDateMode = "single" | "range" | "multiple";
+
+// 예약 가능 날짜 1건 — 하루/기간/여러 날짜를 같은 배열(reservationDates)에 담는다.
+// WHY: 예약 가능 기간을 시스템이 단정하지 않는다. 메이커가 모드를 골라 직접 입력한다.
+export type ReservationDateItem = {
+  id: string;
+  mode: ReservationDateMode;
+  /** single=[d] · range=[start,end] · multiple=[d,...] */
+  dates: string[];
+  startDate?: string;
+  endDate?: string;
+  nights?: number;
+  status: ReservationDateStatus;
+  remainingCount?: number;
+  memo?: string;
+  /** 그날의 행사/이벤트 — 메이커 자유 입력. 고정 chip·eventTypes 없음. */
+  eventTitle?: string;
+  eventDescription?: string;
+  highlighted?: boolean;
+};
 
 export type Step3FieldState = {
   summaryTone: SummaryTone;
@@ -307,6 +327,16 @@ export type Step3FieldState = {
   guestCount: string;
   petAllowed: boolean;
   bookingLink: string;
+  /** 예약 목적 — 예약 버튼 연결 방식 (naver/external/phone/sms/kakao/later) */
+  reservationDest: string;
+  /** 예약 목적 — 장소 정보 (searchPlaces 후보 선택 또는 직접 입력) */
+  placeName: string;
+  placeAddress: string;
+  placePhone: string;
+  placeMapUrl: string;
+  placeSource: string;
+  /** 예약 목적 — 메이커가 안내하는 예약 가능 날짜 (하루/기간/여러 날짜) */
+  reservationDates: ReservationDateItem[];
   productKeyword: string;
   priceCompareEnabled: boolean;
   productCount: string;
@@ -315,6 +345,22 @@ export type Step3FieldState = {
   consultItem: string;
   ctaCopy: string;
   privacyNotice: string;
+};
+
+// 예약 Step 3 입력값 → 받는 사람 화면/공유 데이터로 흐를 요약.
+export type ReservationSummary = {
+  placeName: string;
+  placeAddress: string;
+  placePhone: string;
+  placeMapUrl: string;
+  destKind: string;
+  destLabel: string;
+  destValue: string;
+  /** '나중에 입력'이 아니고 연결값이 있을 때만 예약하기 버튼 노출 */
+  hasReserveButton: boolean;
+  hasPhoneButton: boolean;
+  hasMapButton: boolean;
+  dates: ReservationDateItem[];
 };
 
 function createEmptyStep3Fields(): Step3FieldState {
@@ -329,6 +375,13 @@ function createEmptyStep3Fields(): Step3FieldState {
     guestCount: "2명",
     petAllowed: false,
     bookingLink: "",
+    reservationDest: "",
+    placeName: "",
+    placeAddress: "",
+    placePhone: "",
+    placeMapUrl: "",
+    placeSource: "",
+    reservationDates: [],
     productKeyword: "",
     priceCompareEnabled: true,
     productCount: "3개",
@@ -425,10 +478,6 @@ function aiPreviewFromPurpose(p: DropPurpose): AiPreviewData {
 // TODO: createDropV2 RPC 연결
 // TODO: ai_suggested_purpose vs user_selected_purpose 분석 이벤트 저장
 
-function purposeNeedsOptionalPartner(p: DropPurpose): boolean {
-  return p === "쿠폰" || p === "예약" || p === "상담";
-}
-
 function createFastAiDraft(p: DropPurpose): EditableAiDraft {
   const flow = PURPOSE_FLOW_CONFIG[p];
   const ai = aiPreviewFromPurpose(p);
@@ -499,14 +548,15 @@ function AiResultPreviewCard({
             </li>
           ))}
         </ul>
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-hidden
-          className="flex min-h-[44px] w-full items-center justify-center rounded-lg bg-action text-sm font-semibold tracking-ko text-white"
-        >
-          {ctaLabel}
-        </button>
+        {/* 받는 사람 화면의 행동(CTA) preview — 실제 액션 버튼이 아니라 작은 라벨. */}
+        <div className="border-t border-border pt-4">
+          <p className="text-[11px] font-semibold uppercase tracking-ko text-text-subtle">
+            받는 사람 화면 버튼
+          </p>
+          <span className="mt-2 inline-flex items-center rounded-lg border border-border bg-surface px-2 py-1 text-xs font-semibold tracking-ko text-text-strong">
+            {ctaLabel}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -595,7 +645,7 @@ function buildWizardShareData(
   purpose: DropPurpose,
   aiTitle: string,
   makerMessage?: string,
-  partnerName?: string,
+  reservation?: ReservationSummary,
 ): WizardSharePreviewData {
   return {
     video: {
@@ -608,7 +658,19 @@ function buildWizardShareData(
     purpose,
     aiTitle,
     makerMessage,
-    partnerName,
+    reservation: reservation
+      ? {
+          placeName: reservation.placeName,
+          destLabel: reservation.destLabel,
+          hasReserveButton: reservation.hasReserveButton,
+          // 날짜별 status·remainingCount·event·memo 를 항목 단위로 그대로 전달.
+          dates: reservation.dates.map((item) => ({
+            main: reservationItemFullLabel(item),
+            event: item.eventTitle,
+            memo: item.memo,
+          })),
+        }
+      : undefined,
   };
 }
 
@@ -1020,76 +1082,829 @@ function DetailCategoryGrid({
   );
 }
 
-function PartnerOptionalPicker({
-  partnerSearch,
-  onPartnerSearchChange,
-  selectedPartner,
-  onSelectPartner,
+// 예약 목적 — 장소 검색 후보. searchPlaces 결과 단위.
+export type PlaceCandidate = {
+  name: string;
+  address: string;
+  phone: string;
+  mapUrl: string;
+  source: string;
+};
+
+// 장소 검색 API raw 결과 → PlaceCandidate 정규화.
+// TODO: Naver Local Search 응답 스키마에 맞춰 필드 매핑 확정.
+export function normalizePlaceResult(raw: {
+  title?: string;
+  address?: string;
+  roadAddress?: string;
+  telephone?: string;
+  link?: string;
+}): PlaceCandidate {
+  return {
+    name: (raw.title ?? "").replace(/<[^>]+>/g, "").trim(),
+    address: (raw.roadAddress || raw.address || "").trim(),
+    phone: (raw.telephone ?? "").trim(),
+    mapUrl: raw.link ?? "",
+    source: "네이버 지역검색",
+  };
+}
+
+// 장소명으로 장소 후보를 검색한다.
+// TODO: /api/place-search (Naver Local Search) 연동. 현재는 API 미연결이라
+//       빈 결과를 반환한다 — 더미 리스트로 대체하지 않으며, 호출부는 빈 결과 시
+//       직접 입력 fallback 을 노출한다.
+export async function searchPlaces(query: string): Promise<PlaceCandidate[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  // TODO: const res = await fetch(`/api/place-search?q=${encodeURIComponent(trimmed)}`);
+  //       const json = (await res.json()) as { items?: unknown[] };
+  //       return (json.items ?? []).map((it) => normalizePlaceResult(it as never));
+  return [];
+}
+
+// 예약 목적 — 받는 사람이 누를 "예약하기" 버튼의 연결 목적지 선택지.
+const RESERVATION_DESTS: {
+  id: string;
+  label: string;
+  inputLabel: string | null;
+  placeholder: string;
+  inputType: string;
+}[] = [
+  {
+    id: "naver",
+    label: "네이버 예약 링크",
+    inputLabel: "네이버 예약 링크 주소",
+    placeholder: "https://booking.naver.com/...",
+    inputType: "url",
+  },
+  {
+    id: "external",
+    label: "외부 예약 링크",
+    inputLabel: "예약 링크 주소",
+    placeholder: "https://...",
+    inputType: "url",
+  },
+  {
+    id: "phone",
+    label: "전화 연결",
+    inputLabel: "전화번호",
+    placeholder: "010-0000-0000",
+    inputType: "tel",
+  },
+  {
+    id: "sms",
+    label: "문자 문의",
+    inputLabel: "휴대폰 번호",
+    placeholder: "010-0000-0000",
+    inputType: "tel",
+  },
+  {
+    id: "kakao",
+    label: "카카오톡 문의",
+    inputLabel: "카카오톡 채널·오픈채팅 링크",
+    placeholder: "https://pf.kakao.com/...",
+    inputType: "url",
+  },
+  {
+    id: "later",
+    label: "나중에 입력",
+    inputLabel: null,
+    placeholder: "",
+    inputType: "text",
+  },
+];
+
+// 예약 가능 날짜 상태 → 한글 라벨.
+const RESERVATION_DATE_STATUS_LABEL: Record<ReservationDateStatus, string> = {
+  available: "여유",
+  few_left: "잔여 자리",
+  almost_full: "마감 임박",
+  closed: "마감",
+  inquiry: "문의 필요",
+};
+
+const RESERVATION_DATE_STATUS_OPTIONS: ReservationDateStatus[] = [
+  "available",
+  "few_left",
+  "almost_full",
+  "closed",
+  "inquiry",
+];
+
+// "2026-05-24" → "5월 24일 토". 파싱 실패 시 원본 반환.
+function formatReservationDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const days = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${days[d.getDay()]}`;
+}
+
+// 날짜 항목 고유 id.
+function makeReservationDateId(): string {
+  return `rd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// 메이커 예약 가능 날짜 → 공유 URL 전달용 base64url(JSON) 인코딩.
+// WHY: DB 영속화 없이 reservationDates 를 /d 수신자 화면 달력까지 전달한다.
+//      디코더는 src/lib/public-drop-page.tsx 의 decodeReservationDates.
+export function encodeReservationDates(items: ReservationDateItem[]): string {
+  if (items.length === 0) return "";
+  try {
+    const bytes = new TextEncoder().encode(JSON.stringify(items));
+    let bin = "";
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  } catch {
+    return "";
+  }
+}
+
+// 기간 박 수 — endDate - startDate(일). 잘못된 입력이면 0.
+function reservationRangeNights(start: string, end: string): number {
+  const s = new Date(`${start}T00:00:00`).getTime();
+  const e = new Date(`${end}T00:00:00`).getTime();
+  if (Number.isNaN(s) || Number.isNaN(e) || e <= s) return 0;
+  return Math.round((e - s) / 86_400_000);
+}
+
+// "2026-05-18","2026-05-20" → "5월 18일~20일" (같은 달이면 끝은 일자만).
+function formatReservationRange(start: string, end: string): string {
+  const s = new Date(`${start}T00:00:00`);
+  const e = new Date(`${end}T00:00:00`);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return `${start}~${end}`;
+  const sm = s.getMonth() + 1;
+  const em = e.getMonth() + 1;
+  const endPart = sm === em ? `${e.getDate()}일` : `${em}월 ${e.getDate()}일`;
+  return `${sm}월 ${s.getDate()}일~${endPart}`;
+}
+
+// ["2026-05-18","2026-05-21"] → "5월 18일, 21일" (달이 바뀔 때만 달 표기).
+function formatReservationDateList(dates: string[]): string {
+  let lastMonth = -1;
+  return dates
+    .map((iso) => {
+      const d = new Date(`${iso}T00:00:00`);
+      if (Number.isNaN(d.getTime())) return iso;
+      const m = d.getMonth() + 1;
+      const part = m === lastMonth ? `${d.getDate()}일` : `${m}월 ${d.getDate()}일`;
+      lastMonth = m;
+      return part;
+    })
+    .join(", ");
+}
+
+// 날짜 항목의 날짜 부분 라벨.
+function reservationItemDateLabel(item: ReservationDateItem): string {
+  if (item.mode === "range" && item.startDate && item.endDate) {
+    return formatReservationRange(item.startDate, item.endDate);
+  }
+  if (item.mode === "multiple") return formatReservationDateList(item.dates);
+  return item.dates[0] ? formatReservationDate(item.dates[0]) : "";
+}
+
+// 날짜 항목의 기간 부분 라벨 — "1박 가능" / "N박 가능" / "선택 가능".
+function reservationItemSpanLabel(item: ReservationDateItem): string {
+  if (item.mode === "range") {
+    const n = item.nights ?? 0;
+    return n > 0 ? `${n}박 가능` : "기간 가능";
+  }
+  if (item.mode === "multiple") return "선택 가능";
+  return "1박 가능";
+}
+
+// 날짜 항목의 상태 부분 라벨 — few_left + 잔여수면 "잔여 N자리".
+function reservationItemStatusLabel(item: ReservationDateItem): string {
+  if (item.status === "few_left" && item.remainingCount && item.remainingCount > 0) {
+    return `잔여 ${item.remainingCount}자리`;
+  }
+  return RESERVATION_DATE_STATUS_LABEL[item.status];
+}
+
+// 날짜 항목 한 줄 라벨 — "5월 24일 토 · 1박 가능 · 잔여 2자리".
+function reservationItemFullLabel(item: ReservationDateItem): string {
+  return [
+    reservationItemDateLabel(item),
+    reservationItemSpanLabel(item),
+    reservationItemStatusLabel(item),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+// 예약 Step 3 입력값 → ReservationSummary (Step 4/5·공유 데이터로 전달).
+function buildReservationSummary(fields: Step3FieldState): ReservationSummary {
+  const dest = RESERVATION_DESTS.find((d) => d.id === fields.reservationDest) ?? null;
+  const isLater = !fields.reservationDest || fields.reservationDest === "later";
+  const destValue = fields.bookingLink.trim();
+  return {
+    placeName: fields.placeName.trim(),
+    placeAddress: fields.placeAddress.trim(),
+    placePhone: fields.placePhone.trim(),
+    placeMapUrl: fields.placeMapUrl.trim(),
+    destKind: fields.reservationDest,
+    destLabel: dest?.label ?? "",
+    destValue,
+    // 예약하기 버튼: '나중에 입력'이 아니고 연결값이 있을 때만 노출.
+    hasReserveButton: !isLater && destValue.length > 0,
+    hasPhoneButton: fields.placePhone.trim().length > 0,
+    hasMapButton: fields.placeMapUrl.trim().length > 0,
+    dates: fields.reservationDates,
+  };
+}
+
+// WHY: 메이커는 매장을 "연결"하는 사람이 아니라, 받는 사람이 누를 예약 버튼의
+//      목적지를 정하는 사람이다. 매장 검색 UI 대신 목적지 선택 카드로 구성한다.
+function ReservationDestinationPicker({
+  fields,
+  onFieldsChange,
 }: {
-  partnerSearch: string;
-  onPartnerSearchChange: (v: string) => void;
-  selectedPartner: LocalPartner | null;
-  onSelectPartner: (p: LocalPartner | null) => void;
+  fields: Step3FieldState;
+  onFieldsChange: (patch: Partial<Step3FieldState>) => void;
 }) {
-  const filtered = MOCK_LOCALS.filter((l) =>
-    l.name.toLowerCase().includes(partnerSearch.toLowerCase()),
-  );
+  const selected = RESERVATION_DESTS.find((d) => d.id === fields.reservationDest) ?? null;
 
   return (
-    <div className="mt-4">
-      <p className="text-sm font-semibold tracking-ko text-text-strong">
-        버튼을 어디로 연결할까요? <span className="font-medium text-text-muted">(선택)</span>
-      </p>
-      <div className="relative mt-2">
-        <Search
-          className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-text-subtle"
-          strokeWidth={2}
-        />
-        <Input
-          type="search"
-          value={partnerSearch}
-          onChange={(e) => onPartnerSearchChange(e.target.value)}
-          placeholder="예약 링크·전화·문자로 연결"
-          className="h-12 rounded-lg border-border pl-12"
-        />
+    <div className="space-y-3">
+      <div>
+        <p className="text-base font-bold tracking-ko text-text-strong">
+          예약 버튼을 어디로 연결할까요?
+        </p>
+        <p className="mt-1 text-xs font-medium leading-relaxed tracking-ko text-text-muted">
+          받는 사람이 예약하기를 누르면 이동할 곳을 정하세요.
+        </p>
       </div>
-      {selectedPartner ? (
-        <div className="mt-4 flex items-center gap-3 rounded-2xl border border-accent bg-surface p-3">
-          <img src={selectedPartner.avatarUrl} alt="" className="size-12 rounded-lg object-cover" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-text-strong">{selectedPartner.name}</p>
-            <p className="text-xs font-medium text-text-muted">{selectedPartner.category}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onSelectPartner(null)}
-            className="text-xs font-semibold text-accent"
-          >
-            변경
-          </button>
-        </div>
-      ) : (
-        <ul className="mt-4 space-y-2">
-          {filtered.map((local) => (
-            <li key={local.id}>
+      <ul className="grid grid-cols-2 gap-2">
+        {RESERVATION_DESTS.map((dest) => {
+          const active = fields.reservationDest === dest.id;
+          return (
+            <li key={dest.id}>
               <button
                 type="button"
-                onClick={() => onSelectPartner(local)}
-                className="flex w-full items-center gap-3 rounded-2xl border border-border bg-bg p-3 text-left transition-colors hover:border-text-muted"
+                onClick={() =>
+                  onFieldsChange({
+                    reservationDest: dest.id,
+                    // 전화 연결 — 장소에서 찾은 전화번호를 자동 채움.
+                    bookingLink: dest.id === "phone" ? fields.placePhone : "",
+                  })
+                }
+                className={cn(
+                  "flex min-h-[44px] w-full items-center justify-center rounded-2xl border px-3 py-3 text-center text-sm font-semibold tracking-ko transition-colors",
+                  active
+                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] ring-1 ring-[#2563EB]/25"
+                    : "border-border bg-bg text-text-strong hover:border-text-muted",
+                )}
               >
-                <img src={local.avatarUrl} alt="" className="size-12 rounded-lg object-cover" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-text-strong">{local.name}</p>
-                  <p className="flex items-center gap-1 text-xs font-medium text-text-muted">
-                    <MapPin className="size-3" strokeWidth={2} />
-                    {local.category}
+                {dest.label}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {selected?.inputLabel && (
+        <label className="block">
+          <span className="text-sm font-semibold tracking-ko text-text-strong">
+            {selected.inputLabel}
+          </span>
+          <Input
+            type={selected.inputType}
+            value={fields.bookingLink}
+            onChange={(e) => onFieldsChange({ bookingLink: e.target.value })}
+            placeholder={selected.placeholder}
+            className="mt-2 h-12 rounded-lg"
+          />
+        </label>
+      )}
+      {selected?.id === "later" && (
+        <div className="rounded-2xl border border-border bg-surface p-4">
+          <p className="text-xs font-medium leading-relaxed tracking-ko text-text-muted">
+            예약 버튼 연결이 없어 받은 사람 화면에 예약 버튼이 표시되지 않습니다. 나중에
+            수정에서 연결할 수 있어요.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 예약 목적 Step 3 — 카드 1: 장소 정보 직접 입력.
+// WHY: 메이커는 매장을 "검색·연결"하는 사람이 아니라 예약 장소 정보를 직접
+//      정리하는 사람이다. 매장 검색 UI 대신 compact 입력 4칸으로 구성한다.
+function ReservationPlaceCard({
+  fields,
+  onFieldsChange,
+}: {
+  fields: Step3FieldState;
+  onFieldsChange: (patch: Partial<Step3FieldState>) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-base font-bold tracking-ko text-text-strong">
+          어디를 예약하는 곳인가요?
+        </p>
+        <p className="mt-1 text-xs font-medium leading-relaxed tracking-ko text-text-muted">
+          예약 장소 정보를 직접 입력해 주세요. 받는 사람 화면에 함께 표시됩니다.
+        </p>
+      </div>
+      <label className="block">
+        <span className="text-xs font-semibold tracking-ko text-text-strong">장소명</span>
+        <Input
+          value={fields.placeName}
+          onChange={(e) => onFieldsChange({ placeName: e.target.value })}
+          placeholder="예: 모래재 캠핑장"
+          className="mt-2 h-11 rounded-lg"
+        />
+      </label>
+      <label className="block">
+        <span className="text-xs font-semibold tracking-ko text-text-strong">주소</span>
+        <Input
+          value={fields.placeAddress}
+          onChange={(e) => onFieldsChange({ placeAddress: e.target.value })}
+          placeholder="도로명 주소"
+          className="mt-2 h-11 rounded-lg"
+        />
+      </label>
+      <label className="block">
+        <span className="text-xs font-semibold tracking-ko text-text-strong">전화번호</span>
+        <Input
+          type="tel"
+          value={fields.placePhone}
+          onChange={(e) => onFieldsChange({ placePhone: e.target.value })}
+          placeholder="010-0000-0000"
+          className="mt-2 h-11 rounded-lg"
+        />
+      </label>
+      <label className="block">
+        <span className="text-xs font-semibold tracking-ko text-text-strong">지도 링크 (선택)</span>
+        <Input
+          type="url"
+          value={fields.placeMapUrl}
+          onChange={(e) => onFieldsChange({ placeMapUrl: e.target.value })}
+          placeholder="https://map.naver.com/..."
+          className="mt-2 h-11 rounded-lg"
+        />
+      </label>
+    </div>
+  );
+}
+
+// 예약 가능 날짜 입력 폼 state — reservationDates(목록) state 와 완전히 분리.
+type ReservationDateDraft = {
+  mode: ReservationDateMode;
+  date: string;
+  dates: string[];
+  startDate: string;
+  endDate: string;
+  status: ReservationDateStatus;
+  remainingCount: string;
+  memo: string;
+  eventTitle: string;
+  eventDescription: string;
+};
+
+const EMPTY_RESERVATION_DATE_DRAFT: ReservationDateDraft = {
+  mode: "single",
+  date: "",
+  dates: [],
+  startDate: "",
+  endDate: "",
+  status: "available",
+  remainingCount: "",
+  memo: "",
+  eventTitle: "",
+  eventDescription: "",
+};
+
+const RESERVATION_DATE_MODE_LABEL: Record<ReservationDateMode, string> = {
+  single: "하루",
+  range: "기간",
+  multiple: "여러 날짜",
+};
+
+// draft 가 현재 모드 기준 유효한지 — '확인' 버튼 활성화 조건.
+function isReservationDraftValid(draft: ReservationDateDraft): boolean {
+  if (draft.mode === "single") return Boolean(draft.date);
+  if (draft.mode === "range") {
+    return Boolean(
+      draft.startDate &&
+        draft.endDate &&
+        reservationRangeNights(draft.startDate, draft.endDate) > 0,
+    );
+  }
+  return draft.dates.length > 0;
+}
+
+// draft → ReservationDateItem. 모드별 필수값 미충족이면 null.
+function buildReservationDateItem(draft: ReservationDateDraft): ReservationDateItem | null {
+  if (!isReservationDraftValid(draft)) return null;
+  const parsedCount = parseInt(draft.remainingCount, 10);
+  const remainingCount =
+    draft.remainingCount.trim() && Number.isFinite(parsedCount) && parsedCount > 0
+      ? parsedCount
+      : undefined;
+  const base = {
+    id: makeReservationDateId(),
+    status: draft.status,
+    remainingCount,
+    memo: draft.memo.trim() || undefined,
+    eventTitle: draft.eventTitle.trim() || undefined,
+    eventDescription: draft.eventDescription.trim() || undefined,
+  };
+  if (draft.mode === "single") {
+    return { ...base, mode: "single", dates: [draft.date] };
+  }
+  if (draft.mode === "range") {
+    return {
+      ...base,
+      mode: "range",
+      dates: [draft.startDate, draft.endDate],
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      nights: reservationRangeNights(draft.startDate, draft.endDate),
+    };
+  }
+  return { ...base, mode: "multiple", dates: [...draft.dates] };
+}
+
+// 예약 목적 Step 3 — 섹션 3: 예약 가능 날짜 안내 (하루/기간/여러 날짜 3모드).
+// WHY: 예약 가능 기간을 시스템이 단정하지 않는다. 메이커가 모드를 골라 직접 입력하고,
+//      '확인'을 눌렀을 때만 reservationDates 배열에 append 된다. 목록 변경은 직전
+//      값(prev) 기준 함수형 업데이터로만 하며, 폼 열기/닫기/취소는 목록을 건드리지 않는다.
+function ReservationDateSection({
+  fields,
+  onReservationDatesChange,
+}: {
+  fields: Step3FieldState;
+  onReservationDatesChange: (
+    updater: (prev: ReservationDateItem[]) => ReservationDateItem[],
+  ) => void;
+}) {
+  // 입력 폼 열림 여부 + 입력값 — 둘 다 reservationDates 목록과 독립.
+  const [formOpen, setFormOpen] = useState(false);
+  const [draft, setDraft] = useState<ReservationDateDraft>(EMPTY_RESERVATION_DATE_DRAFT);
+  const [multiInput, setMultiInput] = useState("");
+
+  function patchDraft(patch: Partial<ReservationDateDraft>) {
+    setDraft((d) => ({ ...d, ...patch }));
+  }
+
+  // '날짜 추가' — 입력 폼을 여는 버튼. 목록은 그대로.
+  function openForm() {
+    setDraft(EMPTY_RESERVATION_DATE_DRAFT);
+    setMultiInput("");
+    setFormOpen(true);
+  }
+
+  // '취소' — 입력 폼만 닫는다. reservationDates 목록은 유지.
+  function cancelForm() {
+    setDraft(EMPTY_RESERVATION_DATE_DRAFT);
+    setMultiInput("");
+    setFormOpen(false);
+  }
+
+  // 여러 날짜 모드 — 임시 입력값을 draft.dates 에 추가.
+  function addMultiDate() {
+    if (!multiInput || draft.dates.includes(multiInput)) return;
+    patchDraft({ dates: [...draft.dates, multiInput].sort() });
+    setMultiInput("");
+  }
+
+  function removeMultiDate(value: string) {
+    patchDraft({ dates: draft.dates.filter((d) => d !== value) });
+  }
+
+  // '확인' — draft 를 항목으로 만들어 직전 목록(prev)에 append. 목록 초기화 없음.
+  function confirmDate() {
+    const item = buildReservationDateItem(draft);
+    if (!item) return;
+    onReservationDatesChange((prev) => [
+      ...prev,
+      { ...item, highlighted: prev.length === 0 },
+    ]);
+    cancelForm();
+  }
+
+  // 목록 항목 삭제 / 대표 강조 — 모두 prev 기준 함수형 업데이트.
+  function removeItem(id: string) {
+    onReservationDatesChange((prev) => prev.filter((it) => it.id !== id));
+  }
+
+  function toggleHighlight(id: string) {
+    onReservationDatesChange((prev) =>
+      prev.map((it) => ({
+        ...it,
+        highlighted: it.id === id ? !it.highlighted : it.highlighted,
+      })),
+    );
+  }
+
+  const draftValid = isReservationDraftValid(draft);
+  const rangeNights =
+    draft.mode === "range" && draft.startDate && draft.endDate
+      ? reservationRangeNights(draft.startDate, draft.endDate)
+      : 0;
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-base font-bold tracking-ko text-text-strong">
+          예약 가능한 날짜를 표시해 주세요
+        </p>
+        <p className="mt-1 text-xs font-medium leading-relaxed tracking-ko text-text-muted">
+          비어 있는 날짜나 예약을 받고 싶은 날짜를 선택하세요.
+        </p>
+        <p className="mt-2 rounded-lg bg-surface px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-text-muted">
+          선택한 날짜는 공유 카드에 최대 2개까지 표시됩니다.
+        </p>
+      </div>
+
+      {/* 추가된 날짜 목록 — 폼 열기/닫기와 무관하게 항상 유지된다. */}
+      {fields.reservationDates.length > 0 && (
+        <ul className="space-y-2">
+          {fields.reservationDates.map((item) => (
+            <li
+              key={item.id}
+              className={cn(
+                "flex items-center gap-3 rounded-2xl border p-3",
+                item.highlighted
+                  ? "border-[#2563EB] bg-[#EFF6FF]/40 ring-1 ring-[#2563EB]/25"
+                  : "border-border bg-bg",
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold tracking-ko text-text-strong">
+                  {reservationItemDateLabel(item)}
+                </p>
+                <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
+                  {reservationItemSpanLabel(item)} · {reservationItemStatusLabel(item)}
+                </p>
+                {item.eventTitle && (
+                  <p className="mt-1 text-xs font-semibold tracking-ko text-text-strong">
+                    {item.eventTitle}
                   </p>
-                </div>
+                )}
+                {item.eventDescription && (
+                  <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
+                    {item.eventDescription}
+                  </p>
+                )}
+                {item.memo && (
+                  <p className="mt-1 text-[11px] font-medium tracking-ko text-text-subtle">
+                    {item.memo}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleHighlight(item.id)}
+                className="min-h-[44px] shrink-0 text-xs font-semibold tracking-ko text-[#2563EB]"
+              >
+                {item.highlighted ? "강조 해제" : "대표 강조"}
+              </button>
+              <button
+                type="button"
+                onClick={() => removeItem(item.id)}
+                aria-label="날짜 삭제"
+                className="flex size-11 shrink-0 items-center justify-center text-text-subtle hover:text-text-muted"
+              >
+                <X className="size-4" strokeWidth={2} />
               </button>
             </li>
           ))}
         </ul>
       )}
+
+      {/* 폼 닫힘 — '날짜 추가'는 입력 폼을 여는 버튼(저장 버튼 아님). */}
+      {!formOpen && (
+        <button
+          type="button"
+          onClick={openForm}
+          className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-2xl border border-dashed border-border bg-bg text-sm font-semibold tracking-ko text-text-strong transition-colors hover:border-text-muted"
+        >
+          <Plus className="size-4" strokeWidth={2} />
+          날짜 추가
+        </button>
+      )}
+
+      {/* 폼 열림 — 모드 선택 + 모드별 입력. '확인'을 눌러야 목록에 append. */}
+      {formOpen && (
+        <div className="space-y-3 rounded-2xl border border-border bg-surface p-4">
+          <div className="flex gap-2">
+            {(["single", "range", "multiple"] as ReservationDateMode[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => patchDraft({ mode: m })}
+                className={cn(
+                  "min-h-[44px] flex-1 rounded-lg border px-3 text-xs font-semibold tracking-ko transition-colors",
+                  draft.mode === m
+                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                    : "border-border bg-bg text-text-strong hover:border-text-muted",
+                )}
+              >
+                {RESERVATION_DATE_MODE_LABEL[m]}
+              </button>
+            ))}
+          </div>
+
+          {draft.mode === "single" && (
+            <label className="block">
+              <span className="text-xs font-semibold tracking-ko text-text-strong">날짜</span>
+              <Input
+                type="date"
+                value={draft.date}
+                onChange={(e) => patchDraft({ date: e.target.value })}
+                className="mt-2 h-12 rounded-lg"
+              />
+            </label>
+          )}
+
+          {draft.mode === "range" && (
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-xs font-semibold tracking-ko text-text-strong">
+                  시작일
+                </span>
+                <Input
+                  type="date"
+                  value={draft.startDate}
+                  onChange={(e) => patchDraft({ startDate: e.target.value })}
+                  className="mt-2 h-12 rounded-lg"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold tracking-ko text-text-strong">
+                  종료일
+                </span>
+                <Input
+                  type="date"
+                  value={draft.endDate}
+                  onChange={(e) => patchDraft({ endDate: e.target.value })}
+                  className="mt-2 h-12 rounded-lg"
+                />
+              </label>
+              <p className="text-xs font-medium tracking-ko text-text-muted">
+                {rangeNights > 0
+                  ? `${formatReservationRange(draft.startDate, draft.endDate)} · ${rangeNights}박 가능`
+                  : "시작일과 종료일을 순서대로 선택해 주세요."}
+              </p>
+            </div>
+          )}
+
+          {draft.mode === "multiple" && (
+            <div className="space-y-3">
+              <div>
+                <span className="text-xs font-semibold tracking-ko text-text-strong">
+                  날짜 추가 입력
+                </span>
+                <div className="mt-2 flex gap-2">
+                  <Input
+                    type="date"
+                    value={multiInput}
+                    onChange={(e) => setMultiInput(e.target.value)}
+                    className="h-12 flex-1 rounded-lg"
+                  />
+                  <button
+                    type="button"
+                    onClick={addMultiDate}
+                    disabled={!multiInput}
+                    className="min-h-[44px] shrink-0 rounded-lg border border-border bg-bg px-4 text-xs font-semibold tracking-ko text-text-strong transition-colors hover:border-text-muted disabled:opacity-40"
+                  >
+                    추가
+                  </button>
+                </div>
+              </div>
+              {draft.dates.length > 0 && (
+                <ul className="flex flex-wrap gap-2">
+                  {draft.dates.map((d) => (
+                    <li key={d}>
+                      <span className="inline-flex items-center gap-1 rounded-lg border border-border bg-bg px-2 py-1 text-xs font-semibold tracking-ko text-text-strong">
+                        {formatReservationDate(d)}
+                        <button
+                          type="button"
+                          onClick={() => removeMultiDate(d)}
+                          aria-label="날짜 제거"
+                          className="text-text-subtle hover:text-text-muted"
+                        >
+                          <X className="size-3" strokeWidth={2} />
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          <div>
+            <span className="text-xs font-semibold tracking-ko text-text-strong">상태</span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {RESERVATION_DATE_STATUS_OPTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => patchDraft({ status: s })}
+                  className={cn(
+                    "min-h-[44px] rounded-lg border px-3 text-xs font-semibold tracking-ko transition-colors",
+                    draft.status === s
+                      ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                      : "border-border bg-bg text-text-strong hover:border-text-muted",
+                  )}
+                >
+                  {RESERVATION_DATE_STATUS_LABEL[s]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="text-xs font-semibold tracking-ko text-text-strong">
+              잔여 자리 (선택)
+            </span>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={draft.remainingCount}
+              onChange={(e) => patchDraft({ remainingCount: e.target.value })}
+              placeholder="예: 2"
+              className="mt-2 h-12 rounded-lg"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-xs font-semibold tracking-ko text-text-strong">
+              짧은 메모 (선택)
+            </span>
+            <Input
+              value={draft.memo}
+              onChange={(e) => patchDraft({ memo: e.target.value.slice(0, 20) })}
+              placeholder="예: 반려동물 동반 가능"
+              className="mt-2 h-12 rounded-lg"
+            />
+          </label>
+
+          {/* 그날의 행사/이벤트 — 고정 chip 없이 메이커가 자유롭게 적는다. */}
+          <div className="space-y-3 rounded-lg border border-border bg-bg p-3">
+            <div>
+              <p className="text-xs font-semibold tracking-ko text-text-strong">
+                그날 특별한 게 있나요?
+              </p>
+              <p className="mt-1 text-[11px] font-medium leading-relaxed tracking-ko text-text-muted">
+                행사나 이벤트가 있으면 자유롭게 적어주세요. 받는 사람이 그날 가야 할 이유를
+                더 쉽게 이해할 수 있어요.
+              </p>
+            </div>
+            <label className="block">
+              <span className="text-xs font-semibold tracking-ko text-text-strong">
+                행사/이벤트 내용
+              </span>
+              <Input
+                value={draft.eventDescription}
+                onChange={(e) =>
+                  patchDraft({ eventDescription: e.target.value.slice(0, 60) })
+                }
+                placeholder="예: 저녁 7시 물풍선 놀이, 밤 8시 마술쇼"
+                className="mt-2 h-12 rounded-lg"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold tracking-ko text-text-strong">
+                짧은 강조 문구
+              </span>
+              <Input
+                value={draft.eventTitle}
+                onChange={(e) => patchDraft({ eventTitle: e.target.value.slice(0, 30) })}
+                placeholder="예: 아이와 가기 좋은 날 / 이번 주말 2자리만"
+                className="mt-2 h-12 rounded-lg"
+              />
+            </label>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={cancelForm}
+              className="min-h-[44px] flex-1 rounded-lg border border-border bg-bg text-sm font-semibold tracking-ko text-text-strong transition-colors hover:border-text-muted"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={confirmDate}
+              disabled={!draftValid}
+              className="min-h-[44px] flex-1 rounded-lg bg-action text-sm font-semibold tracking-ko text-white disabled:opacity-40"
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
+
+      <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
+        표시된 날짜는 메이커가 입력한 예약 안내입니다. 최종 예약 가능 여부는 예약처에서
+        확인해 주세요.
+      </p>
     </div>
   );
 }
@@ -1098,18 +1913,10 @@ function Step3PurposeFields({
   purpose,
   fields,
   onFieldsChange,
-  partnerSearch,
-  onPartnerSearchChange,
-  selectedPartner,
-  onSelectPartner,
 }: {
   purpose: DropPurpose;
   fields: Step3FieldState;
   onFieldsChange: (patch: Partial<Step3FieldState>) => void;
-  partnerSearch: string;
-  onPartnerSearchChange: (v: string) => void;
-  selectedPartner: LocalPartner | null;
-  onSelectPartner: (p: LocalPartner | null) => void;
 }) {
   const flow = PURPOSE_FLOW_CONFIG[purpose];
 
@@ -1121,14 +1928,6 @@ function Step3PurposeFields({
           있어요.
         </p>
       </div>
-      {purposeNeedsOptionalPartner(purpose) && (
-        <PartnerOptionalPicker
-          partnerSearch={partnerSearch}
-          onPartnerSearchChange={onPartnerSearchChange}
-          selectedPartner={selectedPartner}
-          onSelectPartner={onSelectPartner}
-        />
-      )}
       <label className="block rounded-2xl border border-border bg-bg p-4">
         <span className="text-sm font-semibold tracking-ko text-text-strong">
           친구에게 한마디 (선택)
@@ -1145,27 +1944,89 @@ function Step3PurposeFields({
   );
 }
 
+// 예약 목적 Step 3 — 장소 / 예약 가능 날짜 / 예약 버튼 연결 3개 카드.
+// WHY: 메이커가 "무엇을 만들어 보내는지" 한눈에 보이도록 세부 유형 선택 게이트
+//      없이 3개 카드를 바로 노출한다. 받는 사람용 예약 Drop 구조를 그대로 반영.
+function Step3ReservationCards({
+  fields,
+  onFieldsChange,
+  onReservationDatesChange,
+}: {
+  fields: Step3FieldState;
+  onFieldsChange: (patch: Partial<Step3FieldState>) => void;
+  onReservationDatesChange: (
+    updater: (prev: ReservationDateItem[]) => ReservationDateItem[],
+  ) => void;
+}) {
+  return (
+    <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
+      <StepBadge n={3} />
+      <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">
+        예약 정보를 확인해 주세요
+      </h1>
+      <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
+        받는 사람이 예약하기 전에 필요한 정보를 정리해 주세요.
+      </p>
+
+      <div className="mt-6 space-y-4">
+        <section className="rounded-2xl border border-border bg-bg p-4">
+          <ReservationPlaceCard fields={fields} onFieldsChange={onFieldsChange} />
+        </section>
+        <section className="rounded-2xl border border-border bg-bg p-4">
+          <ReservationDateSection
+            fields={fields}
+            onReservationDatesChange={onReservationDatesChange}
+          />
+        </section>
+        <section className="rounded-2xl border border-border bg-bg p-4">
+          <ReservationDestinationPicker fields={fields} onFieldsChange={onFieldsChange} />
+        </section>
+
+        <label className="block rounded-2xl border border-border bg-bg p-4">
+          <span className="text-sm font-semibold tracking-ko text-text-strong">
+            친구에게 한마디 (선택)
+          </span>
+          <textarea
+            value={fields.shareMessage}
+            onChange={(e) => onFieldsChange({ shareMessage: e.target.value.slice(0, 100) })}
+            rows={2}
+            placeholder="예: 여기 진짜 좋더라"
+            className="mt-2 block w-full resize-none border-0 bg-transparent p-0 text-sm font-medium tracking-ko text-text-strong placeholder:text-text-subtle focus-visible:outline-none"
+          />
+        </label>
+      </div>
+    </main>
+  );
+}
+
 function Step3Options({
   purpose,
   detailId,
   onDetailSelect,
   fields,
   onFieldsChange,
-  partnerSearch,
-  onPartnerSearchChange,
-  selectedPartner,
-  onSelectPartner,
+  onReservationDatesChange,
 }: {
   purpose: DropPurpose;
   detailId: Step3DetailId | null;
   onDetailSelect: (id: Step3DetailId) => void;
   fields: Step3FieldState;
   onFieldsChange: (patch: Partial<Step3FieldState>) => void;
-  partnerSearch: string;
-  onPartnerSearchChange: (v: string) => void;
-  selectedPartner: LocalPartner | null;
-  onSelectPartner: (p: LocalPartner | null) => void;
+  onReservationDatesChange: (
+    updater: (prev: ReservationDateItem[]) => ReservationDateItem[],
+  ) => void;
 }) {
+  // 예약 목적은 세부 유형 게이트 없이 3개 카드 UI 로 바로 구성한다.
+  if (purpose === "예약") {
+    return (
+      <Step3ReservationCards
+        fields={fields}
+        onFieldsChange={onFieldsChange}
+        onReservationDatesChange={onReservationDatesChange}
+      />
+    );
+  }
+
   const copy = STEP3_COPY[purpose];
   const categories = PURPOSE_FLOW_CONFIG[purpose].detailCards;
 
@@ -1189,10 +2050,6 @@ function Step3Options({
           purpose={purpose}
           fields={fields}
           onFieldsChange={onFieldsChange}
-          partnerSearch={partnerSearch}
-          onPartnerSearchChange={onPartnerSearchChange}
-          selectedPartner={selectedPartner}
-          onSelectPartner={onSelectPartner}
         />
       )}
     </main>
@@ -1207,12 +2064,12 @@ function Step4AiPreview({
   purpose,
   ai,
   videoInfo,
-  partnerName,
+  reservation,
 }: {
   purpose: DropPurpose;
   ai: AiPreviewData;
   videoInfo: VideoInfo;
-  partnerName?: string;
+  reservation?: ReservationSummary;
 }) {
   const flow = PURPOSE_FLOW_CONFIG[purpose];
 
@@ -1220,7 +2077,9 @@ function Step4AiPreview({
     <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
       <StepBadge n={4} />
       <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-extrabold tracking-ko text-text-strong">AI가 이렇게 만들었어요</h1>
+        <h1 className="text-2xl font-extrabold tracking-ko text-text-strong">
+          AI가 받을 사람용 카드로 정리했어요
+        </h1>
         <span className="inline-flex items-center gap-1 rounded-lg bg-surface px-2 py-0.5 text-xs font-semibold text-accent">
           <Sparkles className="size-3" strokeWidth={2} />
           AI
@@ -1228,7 +2087,6 @@ function Step4AiPreview({
       </div>
       <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">
         {flow.description}
-        {partnerName ? ` · ${partnerName}` : ""}
       </p>
 
       <AiResultPreviewCard
@@ -1239,6 +2097,70 @@ function Step4AiPreview({
         keyPoints={ai.keyPoints}
         ctaLabel={flow.cta}
       />
+
+      {purpose === "예약" && reservation && (
+        <div className="mt-4 space-y-2">
+          {(reservation.placeName || reservation.placeAddress) && (
+            <div className="rounded-2xl border border-border bg-surface p-4">
+              {reservation.placeName && (
+                <p className="text-sm font-bold tracking-ko text-text-strong">
+                  {reservation.placeName}
+                </p>
+              )}
+              {reservation.placeAddress && (
+                <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
+                  {reservation.placeAddress}
+                </p>
+              )}
+              {reservation.hasReserveButton && (
+                <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
+                  예약하기 버튼 → {reservation.destLabel}
+                </p>
+              )}
+            </div>
+          )}
+          {reservation.dates.length > 0 && (
+            <div className="space-y-2 rounded-lg border border-intent-success/30 bg-intent-success-bg p-3">
+              <p className="text-xs font-bold tracking-ko text-text-strong">예약 가능 날짜</p>
+              <ul className="space-y-2">
+                {reservation.dates.slice(0, 2).map((item) => (
+                  <li key={item.id}>
+                    <p className="text-xs font-semibold tracking-ko text-text-strong">
+                      {reservationItemFullLabel(item)}
+                    </p>
+                    {item.eventTitle && (
+                      <p className="mt-1 text-xs font-medium tracking-ko text-text-strong">
+                        {item.eventTitle}
+                      </p>
+                    )}
+                    {item.eventDescription && (
+                      <p className="mt-1 text-[11px] font-medium tracking-ko text-text-muted">
+                        {item.eventDescription}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {reservation.dates.length > 2 && (
+                <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+                  외 {reservation.dates.length - 2}개 더 보기
+                </p>
+              )}
+            </div>
+          )}
+          {!reservation.hasReserveButton && (
+            <div className="flex items-start gap-2 rounded-lg border border-intent-danger/30 bg-intent-danger-bg p-4">
+              <AlertCircle
+                className="mt-0.5 size-4 shrink-0 text-intent-danger"
+                strokeWidth={2}
+              />
+              <span className="text-sm font-medium leading-relaxed tracking-ko text-intent-danger">
+                예약 버튼 연결이 없어 받은 사람 화면에 예약하기 버튼이 표시되지 않습니다.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 rounded-lg bg-surface p-3">
         <p className="text-xs font-semibold uppercase tracking-ko text-text-subtle">공유 문구 제안</p>
@@ -1267,7 +2189,7 @@ function Step5PurposeShare({
   shareError,
   shareFeedback,
   makerMessage,
-  partnerName,
+  reservation,
 }: {
   purpose: DropPurpose;
   videoInfo: VideoInfo;
@@ -1279,11 +2201,17 @@ function Step5PurposeShare({
   shareError: string | null;
   shareFeedback: string | null;
   makerMessage?: string;
-  partnerName?: string;
+  reservation?: ReservationSummary;
 }) {
   return (
     <WizardSharePreview
-      data={buildWizardShareData(videoInfo, purpose, ai.title, makerMessage, partnerName)}
+      data={buildWizardShareData(
+        videoInfo,
+        purpose,
+        ai.title,
+        makerMessage,
+        reservation,
+      )}
       shareUrl={shareUrl}
       onKakaoShare={onKakaoShare}
       onCopyLink={onCopyLink}
@@ -1305,10 +2233,6 @@ function FastStep1VideoPurposeConfirm({
   suggestedPurpose,
   suggestionConfidence,
   onPurposeSelect,
-  partnerSearch,
-  onPartnerSearchChange,
-  selectedPartner,
-  onSelectPartner,
 }: {
   purpose: DropPurpose;
   videoInfo: VideoInfo | null;
@@ -1316,10 +2240,6 @@ function FastStep1VideoPurposeConfirm({
   suggestedPurpose?: DropPurpose | null;
   suggestionConfidence?: WizardSuggestionConfidence | null;
   onPurposeSelect: (p: DropPurpose) => void;
-  partnerSearch: string;
-  onPartnerSearchChange: (v: string) => void;
-  selectedPartner: LocalPartner | null;
-  onSelectPartner: (p: LocalPartner | null) => void;
 }) {
   const [showPurposePicker, setShowPurposePicker] = useState(false);
   const [thumbBroken, setThumbBroken] = useState(false);
@@ -1327,9 +2247,6 @@ function FastStep1VideoPurposeConfirm({
   const suggestedConfig = suggestedPurpose ? findPurposeConfig(suggestedPurpose) : null;
   const purposeDiffers =
     suggestedPurpose && suggestedPurpose !== purpose;
-  const filtered = MOCK_LOCALS.filter((l) =>
-    l.name.toLowerCase().includes(partnerSearch.toLowerCase()),
-  );
   const SelectedIcon = selectedConfig.icon;
 
   return (
@@ -1428,55 +2345,6 @@ function FastStep1VideoPurposeConfirm({
         </div>
       )}
 
-      {purposeNeedsOptionalPartner(purpose) && (
-        <div className="mt-6">
-          <p className="text-sm font-semibold tracking-ko text-text-strong">
-            버튼을 어디로 연결할까요? <span className="font-medium text-text-muted">(선택)</span>
-          </p>
-          <div className="relative mt-2">
-            <Search
-              className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-text-subtle"
-              strokeWidth={2}
-            />
-            <Input
-              type="search"
-              value={partnerSearch}
-              onChange={(e) => onPartnerSearchChange(e.target.value)}
-              placeholder="예약 링크·전화·문자로 연결"
-              className="h-12 rounded-lg border-border pl-12"
-            />
-          </div>
-          {selectedPartner ? (
-            <div className="mt-3 flex items-center gap-3 rounded-2xl border border-accent bg-surface p-3">
-              <img src={selectedPartner.avatarUrl} alt="" className="size-12 rounded-lg object-cover" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-text-strong">{selectedPartner.name}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => onSelectPartner(null)}
-                className="text-xs font-semibold text-accent"
-              >
-                변경
-              </button>
-            </div>
-          ) : (
-            <ul className="mt-3 max-h-32 space-y-2 overflow-y-auto">
-              {filtered.slice(0, 3).map((local) => (
-                <li key={local.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelectPartner(local)}
-                    className="flex w-full items-center gap-3 rounded-2xl border border-border p-3 text-left hover:border-text-muted"
-                  >
-                    <span className="text-sm font-semibold text-text-strong">{local.name}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
     </main>
   );
 }
@@ -1607,7 +2475,9 @@ export function CreateDropWizard({
 }: CreateDropWizardProps) {
   // WHY: Home(url+purpose) 경유도 5단계 흐름을 탄다 — Step 3 목적별 세부 카드를
   //      거치도록. fast 3단계는 fastCreateMode prop 을 명시할 때만 활성화.
-  const isFastCreateMode = Boolean(fastCreateModeProp);
+  // WHY: 예약 목적은 장소·예약 가능 날짜·예약 버튼 연결 Step 3 카드가 반드시
+  //      필요하다. fast 3단계에는 이 입력 UI 가 없으므로 예약은 항상 5단계로 탄다.
+  const isFastCreateMode = Boolean(fastCreateModeProp) && initialPurpose !== "예약";
   const [fastStep, setFastStep] = useState<FastStepNum>(1);
   const [editableAi, setEditableAi] = useState<EditableAiDraft | null>(() =>
     isFastCreateMode && initialPurpose ? createFastAiDraft(initialPurpose) : null,
@@ -1635,8 +2505,6 @@ export function CreateDropWizard({
   const isPurposePrefilled = Boolean(initialPurpose);
   const [step3DetailId, setStep3DetailId] = useState<Step3DetailId | null>(null);
   const [step3Fields, setStep3Fields] = useState<Step3FieldState>(createEmptyStep3Fields);
-  const [partnerSearch, setPartnerSearch] = useState("");
-  const [selectedPartner, setSelectedPartner] = useState<LocalPartner | null>(null);
   const [aiPreview, setAiPreview] = useState<AiPreviewData | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
@@ -1644,8 +2512,6 @@ export function CreateDropWizard({
   function resetStep3ForPurpose() {
     setStep3DetailId(null);
     setStep3Fields(createEmptyStep3Fields());
-    setPartnerSearch("");
-    setSelectedPartner(null);
     setAiPreview(null);
   }
 
@@ -1665,8 +2531,14 @@ export function CreateDropWizard({
     const slug = purpose
       ? { 정보: "info", 쿠폰: "coupon", 예약: "reservation", 구매: "purchase", 상담: "lead" }[purpose]
       : "info";
-    return `${origin}/d/preview-${slug}-${Date.now().toString(36)}`;
-  }, [purpose]);
+    const base = `${origin}/d/preview-${slug}-${Date.now().toString(36)}`;
+    // 예약 목적 — 메이커가 입력한 예약 가능 날짜를 공유 URL(?r=)에 실어 /d 까지 전달.
+    if (purpose === "예약" && step3Fields.reservationDates.length > 0) {
+      const encoded = encodeReservationDates(step3Fields.reservationDates);
+      if (encoded) return `${base}?r=${encoded}`;
+    }
+    return base;
+  }, [purpose, step3Fields.reservationDates]);
 
   useEffect(() => {
     const trimmed = url.trim();
@@ -1788,7 +2660,11 @@ export function CreateDropWizard({
     }
     if (step === 1) return parseVideoUrl(url.trim()) !== null && urlStatus === "success";
     if (step === 2) return purpose !== null;
-    if (step === 3) return step3DetailId !== null;
+    if (step === 3) {
+      // 예약은 세부 유형 게이트가 없으므로 장소명 입력으로 진행 여부를 판단한다.
+      if (purpose === "예약") return step3Fields.placeName.trim().length > 0;
+      return step3DetailId !== null;
+    }
     return true;
   }
 
@@ -1803,7 +2679,7 @@ export function CreateDropWizard({
       : step3Fields.shareMessage.trim();
     const result = await shareToKakao({
       title: ai.title,
-      description: [purpose, selectedPartner?.name, makerNote].filter(Boolean).join(" · "),
+      description: [purpose, makerNote].filter(Boolean).join(" · "),
       imageUrl: videoInfo.thumbnailUrl,
       linkUrl: mockShareUrl,
       buttons: [
@@ -1845,7 +2721,6 @@ export function CreateDropWizard({
       onComplete?.({
         video: videoInfo,
         purpose,
-        local: selectedPartner ?? undefined,
         ai,
         makerMessage: message,
       });
@@ -1909,10 +2784,6 @@ export function CreateDropWizard({
             suggestedPurpose={suggestedPurpose}
             suggestionConfidence={suggestionConfidence}
             onPurposeSelect={handlePurposeSelect}
-            partnerSearch={partnerSearch}
-            onPartnerSearchChange={setPartnerSearch}
-            selectedPartner={selectedPartner}
-            onSelectPartner={setSelectedPartner}
           />
         )}
         {fastStep === 2 && (
@@ -1934,7 +2805,6 @@ export function CreateDropWizard({
             shareError={shareError}
             shareFeedback={shareFeedback}
             makerMessage={editableAi.makerMessage.trim() || undefined}
-            partnerName={selectedPartner?.name}
           />
         )}
 
@@ -2004,10 +2874,12 @@ export function CreateDropWizard({
           onDetailSelect={setStep3DetailId}
           fields={step3Fields}
           onFieldsChange={(patch) => setStep3Fields((prev) => ({ ...prev, ...patch }))}
-          partnerSearch={partnerSearch}
-          onPartnerSearchChange={setPartnerSearch}
-          selectedPartner={selectedPartner}
-          onSelectPartner={setSelectedPartner}
+          onReservationDatesChange={(updater) =>
+            setStep3Fields((prev) => ({
+              ...prev,
+              reservationDates: updater(prev.reservationDates),
+            }))
+          }
         />
       )}
       {step === 4 && purpose && videoInfo && aiPreview && (
@@ -2015,7 +2887,7 @@ export function CreateDropWizard({
           purpose={purpose}
           ai={aiPreview}
           videoInfo={videoInfo}
-          partnerName={selectedPartner?.name}
+          reservation={purpose === "예약" ? buildReservationSummary(step3Fields) : undefined}
         />
       )}
       {step === 5 && purpose && videoInfo && aiPreview && (
@@ -2030,7 +2902,7 @@ export function CreateDropWizard({
           shareError={shareError}
           shareFeedback={shareFeedback}
           makerMessage={step3Fields.shareMessage.trim() || undefined}
-          partnerName={selectedPartner?.name}
+          reservation={purpose === "예약" ? buildReservationSummary(step3Fields) : undefined}
         />
       )}
 

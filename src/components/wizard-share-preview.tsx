@@ -22,6 +22,14 @@ export interface WizardSharePreviewData {
   aiTitle: string;
   makerMessage?: string;
   partnerName?: string;
+  /** 예약 목적 — 장소·예약 버튼·예약 가능 날짜 요약 (받는 사람 화면 미리보기용) */
+  reservation?: {
+    placeName: string;
+    destLabel: string;
+    hasReserveButton: boolean;
+    /** main = "5월 24일 토 · 1박 가능 · 잔여 2자리", event = 강조 문구, memo = 짧은 메모(선택) */
+    dates: { main: string; event?: string; memo?: string }[];
+  };
 }
 
 export interface WizardSharePreviewProps {
@@ -148,12 +156,51 @@ export function WizardSharePreview({
                   </p>
                 )}
                 <p className="text-xs font-medium text-text-subtle">{data.video.channelName}</p>
-                {/* 받는 사람 화면의 목적별 행동(CTA) preview — 작은 라벨, 실제 버튼 아님 */}
-                <div>
-                  <span className="inline-flex items-center rounded-lg border border-border bg-surface px-2 py-1 text-xs font-semibold tracking-ko text-text-strong">
-                    {PURPOSE_CTA[data.purpose]}
-                  </span>
-                </div>
+                {data.reservation?.placeName && (
+                  <p className="text-xs font-semibold tracking-ko text-text-strong">
+                    {data.reservation.placeName}
+                  </p>
+                )}
+                {data.reservation && data.reservation.dates.length > 0 && (
+                  <div className="space-y-2 rounded-lg border border-intent-success/30 bg-intent-success-bg p-3">
+                    <p className="text-xs font-bold tracking-ko text-text-strong">
+                      예약 가능 날짜
+                    </p>
+                    <ul className="space-y-2">
+                      {data.reservation.dates.slice(0, 2).map((d, i) => (
+                        <li key={`${d.main}-${i}`}>
+                          <p className="text-xs font-semibold tracking-ko text-text-strong">
+                            {d.main}
+                          </p>
+                          {d.event && (
+                            <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
+                              {d.event}
+                            </p>
+                          )}
+                          {d.memo && (
+                            <p className="mt-1 text-[11px] font-medium tracking-ko text-text-subtle">
+                              {d.memo}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {data.reservation.dates.length > 2 && (
+                      <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+                        외 {data.reservation.dates.length - 2}개 더 보기
+                      </p>
+                    )}
+                  </div>
+                )}
+                {/* 받는 사람 화면의 목적별 행동(CTA) preview — 작은 라벨, 실제 버튼 아님.
+                    예약 목적에서 버튼 연결이 없으면 받는 사람 화면에 버튼이 없으므로 숨긴다. */}
+                {!(data.reservation && !data.reservation.hasReserveButton) && (
+                  <div>
+                    <span className="inline-flex items-center rounded-lg border border-border bg-surface px-2 py-1 text-xs font-semibold tracking-ko text-text-strong">
+                      {PURPOSE_CTA[data.purpose]}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 

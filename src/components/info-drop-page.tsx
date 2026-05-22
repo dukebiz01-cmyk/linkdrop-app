@@ -24,6 +24,7 @@ import type {
   ReservationSecondaryAction,
   ReservationSelection,
 } from "@/components/reservation-calendar-page";
+import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import { cn } from "@/lib/utils";
 
 // ============================================================
@@ -64,6 +65,8 @@ export interface InfoDropPageProps {
   aiSummary?: string;
   keyPoints?: string[];
   shareUrl?: string;
+  /** 예약 목적 — 메이커가 보낸 예약 가능 날짜 (수신자 달력 마킹용). */
+  reservationDates?: ReservationDateItem[];
   onPrimaryAction?: () => void;
   onWatchOriginal?: () => void;
   onShare?: () => void;
@@ -199,6 +202,7 @@ type ReservationCalendarProps = import("@/components/reservation-calendar-page")
 function ReservationCalendarClient(props: {
   partnerName: string;
   campgroundInfo?: ReservationCampgroundInfo;
+  makerAvailableDates?: ReservationDateItem[];
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
 }) {
@@ -229,6 +233,7 @@ function ReservationCalendarClient(props: {
     <section data-testid="variant-reservation" className="w-full max-w-full">
       <Calendar
         partnerName={props.partnerName}
+        makerAvailableDates={props.makerAvailableDates}
         className="mx-0 mt-0 w-full max-w-full"
         onCheckAvailability={props.onCheckAvailability}
         onSecondaryAction={props.onSecondaryAction}
@@ -352,6 +357,7 @@ export function InfoDropPage({
   aiSummary,
   keyPoints,
   shareUrl,
+  reservationDates,
   onPrimaryAction,
   onWatchOriginal,
   onShare,
@@ -585,6 +591,7 @@ export function InfoDropPage({
           <ReservationCalendarClient
             partnerName={safeLocal.name}
             campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
+            makerAvailableDates={reservationDates}
             onCheckAvailability={(selection) => {
               console.log("[InfoDropPage] reservation check", selection);
               onPrimaryAction?.();

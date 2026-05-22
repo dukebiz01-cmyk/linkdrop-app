@@ -8,6 +8,10 @@ import {
   MOCK_RESERVATION_DEFAULTS,
   type ReservationCampgroundInfo,
 } from "@/lib/mock-data";
+import type {
+  ReservationDateItem,
+  ReservationDateStatus,
+} from "@/components/create-drop-wizard";
 import { cn } from "@/lib/utils";
 
 export type {
@@ -154,6 +158,8 @@ export type ReservationSecondaryAction = "phone" | "sms" | "directions";
 export interface ReservationCalendarPageProps {
   partnerName: string;
   campgroundInfo?: ReservationCampgroundInfo;
+  /** 메이커가 Create Wizard 에서 보낸 예약 가능 날짜 — 달력 마킹·상세 목록용. */
+  makerAvailableDates?: ReservationDateItem[];
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
   className?: string;
@@ -225,16 +231,96 @@ function buildSummaryContent(selection: ReservationSelection): {
   dateLine: string;
   stayLine: string | null;
 } {
-  if (!selection.checkOut) {
-    return {
-      dateLine: "체크아웃 날짜를 선택해 주세요.",
-      stayLine: null,
-    };
+  if (!selection.checkIn) {
+    return { dateLine: "예약할 날짜를 선택해 주세요.", stayLine: null };
   }
-  const dateLine = `${formatKoDate(selection.checkIn!)} 체크인 · ${formatKoDate(selection.checkOut)} 체크아웃`;
+  if (!selection.checkOut) {
+    return { dateLine: "체크아웃 날짜를 선택해 주세요.", stayLine: null };
+  }
+  const dateLine = `${formatKoDate(selection.checkIn)} 체크인 · ${formatKoDate(selection.checkOut)} 체크아웃`;
   const petsPart = selection.pets ? " · 반려견 동반" : "";
   const stayLine = `${selection.nights}박 · 성인 ${selection.adults}명 · 소인 ${selection.children}명${petsPart}`;
   return { dateLine, stayLine };
+}
+
+// ── 메이커 예약 가능 날짜 (makerAvailableDates) — 마킹·상세 목록 헬퍼 ───────────
+// WHY: create-drop-wizard 의 포맷터를 import 하면 wizard 번들 전체가 /d 로 딸려온다.
+//      수신자 화면용으로 표시 로직만 가볍게 재구현한다(타입만 import).
+
+const MAKER_STATUS_LABEL: Record<ReservationDateStatus, string> = {
+  available: "여유",
+  few_left: "잔여 자리",
+  almost_full: "마감 임박",
+  closed: "마감",
+  inquiry: "문의 필요",
+};
+
+const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
+
+function makerDateFromIso(iso: string): Date | null {
+  const [y, m, d] = (iso ?? "").split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const dt = new Date(y, m - 1, d);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function isoFromDate(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+// 한 항목이 차지하는 모든 ISO 날짜 (range 는 시작~끝 전체).
+function isoListForItem(item: ReservationDateItem): string[] {
+  if (item.mode === "range" && item.startDate && item.endDate) {
+    const s = makerDateFromIso(item.startDate);
+    const e = makerDateFromIso(item.endDate);
+    if (!s || !e) return [];
+    const out: string[] = [];
+    for (let d = new Date(s); d.getTime() <= e.getTime(); d.setDate(d.getDate() + 1)) {
+      out.push(isoFromDate(d));
+    }
+    return out;
+  }
+  if (item.mode === "multiple") return item.dates;
+  return item.dates.slice(0, 1);
+}
+
+// 항목 1건의 날짜 라벨 — single "5월 24일 토" · range "5월 18일~20일" · multiple "5월 18일, 21일".
+function makerItemDateLabel(item: ReservationDateItem): string {
+  if (item.mode === "range" && item.startDate && item.endDate) {
+    const s = makerDateFromIso(item.startDate);
+    const e = makerDateFromIso(item.endDate);
+    if (!s || !e) return `${item.startDate}~${item.endDate}`;
+    const sm = s.getMonth() + 1;
+    const em = e.getMonth() + 1;
+    const endPart = sm === em ? `${e.getDate()}일` : `${em}월 ${e.getDate()}일`;
+    return `${sm}월 ${s.getDate()}일~${endPart}`;
+  }
+  if (item.mode === "multiple") {
+    let lastMonth = -1;
+    return item.dates
+      .map((iso) => {
+        const d = makerDateFromIso(iso);
+        if (!d) return iso;
+        const m = d.getMonth() + 1;
+        const part = m === lastMonth ? `${d.getDate()}일` : `${m}월 ${d.getDate()}일`;
+        lastMonth = m;
+        return part;
+      })
+      .join(", ");
+  }
+  const d = makerDateFromIso(item.dates[0] ?? "");
+  if (!d) return item.dates[0] ?? "";
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${WEEKDAY_KO[d.getDay()]}`;
+}
+
+// 항목 상태 라벨 — few_left + 잔여수면 "잔여 N자리".
+function makerItemStatusLabel(item: ReservationDateItem): string {
+  if (item.status === "few_left" && item.remainingCount && item.remainingCount > 0) {
+    return `잔여 ${item.remainingCount}자리`;
+  }
+  return MAKER_STATUS_LABEL[item.status];
 }
 
 /**
@@ -272,19 +358,17 @@ function applyRangeSelection(next: DateRange | undefined): {
  */
 export function ReservationCalendarPage({
   campgroundInfo = MOCK_RESERVATION_CAMPGROUND_INFO,
+  makerAvailableDates = [],
   onCheckAvailability,
   onSecondaryAction,
   className,
 }: ReservationCalendarPageProps) {
-  const [checkIn, setCheckIn] = useState<Date | undefined>(() =>
-    parseLocalDate(MOCK_RESERVATION_DEFAULTS.checkIn),
-  );
-  const [checkOut, setCheckOut] = useState<Date | undefined>(() =>
-    parseLocalDate(MOCK_RESERVATION_DEFAULTS.checkOut),
-  );
-  const [adults, setAdults] = useState(MOCK_RESERVATION_DEFAULTS.adults);
-  const [children, setChildren] = useState(MOCK_RESERVATION_DEFAULTS.children);
-  const [pets, setPets] = useState(MOCK_RESERVATION_DEFAULTS.pets);
+  // 수신자가 선택한 날짜 — 메이커 예약 가능 날짜와 별개 상태. mock 으로 미리 채우지 않는다.
+  const [checkIn, setCheckIn] = useState<Date | undefined>(undefined);
+  const [checkOut, setCheckOut] = useState<Date | undefined>(undefined);
+  const [adults, setAdults] = useState<number>(MOCK_RESERVATION_DEFAULTS.adults);
+  const [children, setChildren] = useState<number>(MOCK_RESERVATION_DEFAULTS.children);
+  const [pets, setPets] = useState<boolean>(MOCK_RESERVATION_DEFAULTS.pets);
   const [checkFeedback, setCheckFeedback] = useState<string | null>(null);
 
   const nights = calcNights(checkIn, checkOut);
@@ -304,7 +388,34 @@ export function ReservationCalendarPage({
 
   const canCheck = Boolean(checkIn && checkOut && nights >= 1 && adults >= 1);
   const { dateLine, stayLine } = buildSummaryContent(selection);
-  const defaultMonth = checkIn ?? parseLocalDate(MOCK_RESERVATION_DEFAULTS.checkIn);
+
+  // 메이커 예약 가능 날짜 → 달력 마킹용 Date 배열 (상태별 분류) + 최초 날짜.
+  const hasMakerDates = makerAvailableDates.length > 0;
+  const { makerOpenDates, makerWarnDates, makerClosedDates, earliestMakerDate } = useMemo(() => {
+    const open: Date[] = [];
+    const warn: Date[] = [];
+    const closed: Date[] = [];
+    let earliest: Date | null = null;
+    for (const item of makerAvailableDates) {
+      for (const iso of isoListForItem(item)) {
+        const d = makerDateFromIso(iso);
+        if (!d) continue;
+        if (item.status === "closed") closed.push(d);
+        else if (item.status === "almost_full") warn.push(d);
+        else open.push(d);
+        if (!earliest || d.getTime() < earliest.getTime()) earliest = d;
+      }
+    }
+    return {
+      makerOpenDates: open,
+      makerWarnDates: warn,
+      makerClosedDates: closed,
+      earliestMakerDate: earliest,
+    };
+  }, [makerAvailableDates]);
+
+  const defaultMonth =
+    checkIn ?? earliestMakerDate ?? parseLocalDate(MOCK_RESERVATION_DEFAULTS.checkIn);
 
   function handleRangeSelect(next: DateRange | undefined) {
     const applied = applyRangeSelection(next);
@@ -332,11 +443,72 @@ export function ReservationCalendarPage({
           defaultMonth={defaultMonth}
           numberOfMonths={1}
           showOutsideDays
-          disabled={{ before: parseLocalDate("2026-05-01") }}
+          disabled={
+            hasMakerDates
+              ? [{ before: parseLocalDate("2026-05-01") }, ...makerClosedDates]
+              : { before: parseLocalDate("2026-05-01") }
+          }
+          modifiers={{ makerOpen: makerOpenDates, makerWarn: makerWarnDates }}
+          modifiersClassNames={{
+            makerOpen: "rounded-lg bg-intent-success-bg",
+            makerWarn: "rounded-lg bg-intent-warning-bg",
+          }}
           className="w-full max-w-full p-0 [--cell-size:2.25rem] [&_.rdp-day_button]:mx-auto [&_.rdp-day_button]:flex [&_.rdp-day_button]:aspect-square [&_.rdp-day_button]:h-full [&_.rdp-day_button]:w-full [&_.rdp-day_button]:items-center [&_.rdp-day_button]:justify-center [&_.rdp-day_button]:rounded-lg [&_.rdp-day_button]:text-sm [&_.rdp-range_start_.rdp-day_button]:bg-[#2563EB] [&_.rdp-range_start_.rdp-day_button]:text-white [&_.rdp-range_end_.rdp-day_button]:bg-[#2563EB] [&_.rdp-range_end_.rdp-day_button]:text-white [&_.rdp-range_middle_.rdp-day_button]:bg-[#EFF6FF] [&_.rdp-range_middle_.rdp-day_button]:text-[#2563EB]"
           classNames={RESERVATION_CALENDAR_CLASS_NAMES}
         />
       </div>
+
+      {hasMakerDates && (
+        <div className="w-full max-w-full space-y-2 rounded-2xl border border-border bg-surface p-4">
+          <p className="text-sm font-bold tracking-ko text-text-strong">
+            메이커가 보낸 예약 가능 날짜
+          </p>
+          <p className="text-xs font-medium leading-relaxed tracking-ko text-text-muted">
+            아래 날짜가 달력에 표시돼 있어요. 원하는 날짜로 체크인·체크아웃을 선택하세요.
+          </p>
+          <ul className="space-y-2">
+            {makerAvailableDates.map((item) => (
+              <li key={item.id} className="rounded-lg border border-border bg-bg p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-bold tracking-ko text-text-strong">
+                    {makerItemDateLabel(item)}
+                  </p>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold tracking-ko",
+                      item.status === "closed"
+                        ? "bg-surface text-text-subtle"
+                        : item.status === "almost_full"
+                          ? "bg-intent-warning-bg text-intent-warning"
+                          : "bg-intent-success-bg text-intent-success",
+                    )}
+                  >
+                    {makerItemStatusLabel(item)}
+                  </span>
+                </div>
+                {item.eventTitle && (
+                  <p className="mt-1 text-xs font-semibold tracking-ko text-text-strong">
+                    {item.eventTitle}
+                  </p>
+                )}
+                {item.eventDescription && (
+                  <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
+                    {item.eventDescription}
+                  </p>
+                )}
+                {item.memo && (
+                  <p className="mt-1 text-[11px] font-medium tracking-ko text-text-subtle">
+                    {item.memo}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
+            최종 예약 가능 여부는 예약처에서 확인해 주세요.
+          </p>
+        </div>
+      )}
 
       <div className="w-full max-w-full space-y-3 rounded-2xl border border-border bg-surface p-4">
         <p className="text-sm font-semibold tracking-ko text-text-strong">인원</p>
