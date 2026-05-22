@@ -44,9 +44,9 @@ export const Route = createFileRoute("/api/price-compare")({
           // 기존 product_detections 캐시 조회
           const { data: existing } = await supabase
             .from("product_detections")
+            // 단일 리터럴 문자열 — concat 시 TS 리터럴 타입이 풀려 Supabase 추론이 깨진다.
             .select(
-              "id, product_name_guess, brand_guess, category, confidence, " +
-                "product_offers(seller_name, seller_country, platform, price, currency, product_url, estimated_total_price)",
+              "id, product_name_guess, brand_guess, category, confidence, product_offers(seller_name, seller_country, platform, price, currency, product_url, estimated_total_price)",
             )
             .eq("drop_id", body.drop_id)
             .limit(1)
