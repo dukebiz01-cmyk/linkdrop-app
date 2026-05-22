@@ -114,9 +114,12 @@ export function resolvePublicDropVariant(
     if (shareCode === "test") {
       return normalizeVariant(variantFromLoader);
     }
-    if (variantFromLoader) return normalizeVariant(variantFromLoader);
+    // preview-* 는 슬러그가 우선이다. validateSearch 가 ?variant= 부재 시
+    // variant 를 "info" 로 정규화해 넘기므로, loader variant 를 먼저 보면
+    // preview-reservation-* 도 항상 "info" 로 떨어진다. 슬러그를 먼저 본다.
     const fromPreview = parsePreviewVariant(shareCode);
     if (fromPreview) return fromPreview;
+    if (variantFromLoader) return normalizeVariant(variantFromLoader);
     return "info";
   } catch {
     return "info";
