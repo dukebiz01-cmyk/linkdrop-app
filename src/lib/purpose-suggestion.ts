@@ -174,9 +174,7 @@ export function suggestPurposeLocalRule(input: SuggestPurposeInput): PurposeSugg
   };
 }
 
-async function trySuggestPurposeApi(
-  input: SuggestPurposeInput,
-): Promise<PurposeSuggestion | null> {
+async function trySuggestPurposeApi(input: SuggestPurposeInput): Promise<PurposeSuggestion | null> {
   if (!input.sourceId) return null;
   try {
     const res = await fetch("/api/suggest-purpose", {

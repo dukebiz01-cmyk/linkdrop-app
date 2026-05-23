@@ -587,7 +587,24 @@ export function InfoDropPage({
           </section>
         )}
 
+        {/* 예약 섹션 헤더 — reservationDates 길이에 따라 title/description 분기. */}
         {isReservation && (
+          <section className="rounded-2xl border border-border bg-surface p-4">
+            <h2 className="text-base font-bold tracking-ko text-text-strong">
+              {Array.isArray(reservationDates) && reservationDates.length > 0
+                ? "날짜 선택과 예약 연결"
+                : "예약하기"}
+            </h2>
+            <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
+              {Array.isArray(reservationDates) && reservationDates.length > 0
+                ? "예약 가능한 날짜를 확인하고 버튼으로 예약을 진행할 수 있어요."
+                : "아래 버튼을 눌러 예약 페이지로 이동할 수 있어요."}
+            </p>
+          </section>
+        )}
+
+        {/* reservationDates 가 비어 있으면 캘린더 카드를 숨긴다 — 예약 버튼은 하단 CTA 영역에 그대로 남는다. */}
+        {isReservation && Array.isArray(reservationDates) && reservationDates.length > 0 && (
           <ReservationCalendarClient
             partnerName={safeLocal.name}
             campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
