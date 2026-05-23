@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { InfoDropPage, type InfoDropPageProps, type DropViewVariant } from "@/components/info-drop-page";
 import type { PriceOfferRow } from "@/components/ai-price-comparison-card";
+import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import type { DropPurpose } from "@/lib/types";
 import {
   MOCK_DROP_AI_BY_VARIANT,
@@ -55,6 +56,36 @@ export function isPublicDropMockPath(shareCode: string): boolean {
   return shareCode === "test" || shareCode.startsWith("preview-");
 }
 
+/**
+ * 공유 URL(?r=)의 base64url(JSON) → 메이커 예약 가능 날짜.
+ * WHY: DB 영속화 없이 Create Wizard 입력값을 /d 수신자 화면까지 전달.
+ *      인코더는 create-drop-wizard.tsx 의 encodeReservationDates.
+ */
+export function decodeReservationDates(
+  encoded: string | undefined | null,
+): ReservationDateItem[] {
+  if (!encoded) return [];
+  try {
+    const b64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+    const bin = atob(b64);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (!Array.isArray(parsed)) return [];
+    // 최소 형태 검증 — id·mode·dates 누락/손상 항목은 버린다.
+    return parsed.filter(
+      (it): it is ReservationDateItem =>
+        it != null &&
+        typeof (it as ReservationDateItem).id === "string" &&
+        ((it as ReservationDateItem).mode === "single" ||
+          (it as ReservationDateItem).mode === "range" ||
+          (it as ReservationDateItem).mode === "multiple") &&
+        Array.isArray((it as ReservationDateItem).dates),
+    );
+  } catch {
+    return [];
+  }
+}
+
 export function parsePreviewVariant(shareCode: string): DropViewVariant | null {
   if (!shareCode.startsWith("preview-")) return null;
   try {
@@ -83,9 +114,12 @@ export function resolvePublicDropVariant(
     if (shareCode === "test") {
       return normalizeVariant(variantFromLoader);
     }
-    if (variantFromLoader) return normalizeVariant(variantFromLoader);
+    // preview-* 는 슬러그가 우선이다. validateSearch 가 ?variant= 부재 시
+    // variant 를 "info" 로 정규화해 넘기므로, loader variant 를 먼저 보면
+    // preview-reservation-* 도 항상 "info" 로 떨어진다. 슬러그를 먼저 본다.
     const fromPreview = parsePreviewVariant(shareCode);
     if (fromPreview) return fromPreview;
+    if (variantFromLoader) return normalizeVariant(variantFromLoader);
     return "info";
   } catch {
     return "info";
@@ -236,6 +270,7 @@ async function safeKakaoShare(props: InfoDropPageProps, shareCode: string) {
 export function renderMockInfoDropPage(
   shareCode: string,
   variantInput?: DropViewVariant,
+  reservationDates?: ReservationDateItem[],
 ): ReactElement {
   const variant = resolvePublicDropVariant(shareCode, variantInput);
   const props = buildMockInfoDropProps(variant, shareCode);
@@ -243,6 +278,7 @@ export function renderMockInfoDropPage(
     <InfoDropPage
       {...props}
       variant={variant}
+      reservationDates={reservationDates}
       onWatchOriginal={() => {
         if (typeof window !== "undefined") {
           window.open("https://youtu.be/dQw4w9WgXcQ", "_blank", "noopener,noreferrer");

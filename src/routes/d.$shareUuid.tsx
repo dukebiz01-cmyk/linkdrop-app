@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { InfoDropPage } from "@/components/info-drop-page";
 import { getAuthClient } from "@/lib/auth-context";
 import {
+  decodeReservationDates,
   isPublicDropMockPath,
   renderMockInfoDropPage,
   normalizeVariant,
@@ -10,37 +11,52 @@ import {
 } from "@/lib/public-drop-page";
 import { MOCK_DROP_VIEW_BY_VARIANT, MOCK_VIDEO_INFO } from "@/lib/mock-data";
 import { infoDropAdapter, type DropDetailRpc } from "@/lib/adapters";
+import type { ReservationDateItem } from "@/components/create-drop-wizard";
 
 const PROD_BASE = "https://app.drop.how";
 const BRAND_TITLE = "LinkDrop — 친구가 보내준 드롭";
 const BRAND_DESCRIPTION = "영상 속 정보를 친구와 카톡으로 나누는 가장 빠른 방법";
 
-type DropSearch = { variant?: DropVariant };
+// r = 메이커가 공유 URL 에 실어 보낸 예약 가능 날짜(base64url). 수신자 화면 달력용.
+type DropSearch = { variant?: DropVariant; r?: string };
 
-type MockLoaderData = { mode: "mock"; shareUuid: string; variant: DropVariant };
+type MockLoaderData = {
+  mode: "mock";
+  shareUuid: string;
+  variant: DropVariant;
+  reservationDates: ReservationDateItem[];
+};
 type DbLoaderData = { mode: "db"; detail: DropDetailRpc | null; shareUuid: string };
 type LoaderData = MockLoaderData | DbLoaderData;
 
-function mockLoaderData(shareUuid: string, searchVariant: unknown): MockLoaderData {
+function mockLoaderData(
+  shareUuid: string,
+  searchVariant: unknown,
+  reservationDates: ReservationDateItem[],
+): MockLoaderData {
   const code = shareUuid || "test";
   return {
     mode: "mock",
     shareUuid: code,
     variant: resolvePublicDropVariant(code, normalizeVariant(searchVariant)),
+    reservationDates,
   };
 }
 
 export const Route = createFileRoute("/d/$shareUuid")({
   validateSearch: (search: Record<string, unknown>): DropSearch => ({
     variant: normalizeVariant(search.variant),
+    r: typeof search.r === "string" ? search.r : undefined,
   }),
   loader: async ({ params, location }): Promise<LoaderData> => {
     const shareUuid = params.shareUuid ?? "";
     const searchVariant = (location.search as DropSearch)?.variant;
+    // 메이커가 보낸 예약 가능 날짜(?r=) 디코딩 — 없으면 빈 배열.
+    const reservationDates = decodeReservationDates((location.search as DropSearch)?.r);
 
     // test / preview-* → mock only (DB 미호출)
     if (isPublicDropMockPath(shareUuid)) {
-      return mockLoaderData(shareUuid, searchVariant);
+      return mockLoaderData(shareUuid, searchVariant, reservationDates);
     }
 
     // 실제 share_uuid → get_drop_detail RPC (v3.5: maker/store 포함, 조회수 +1)
@@ -125,7 +141,11 @@ function DropPage() {
   const loaderData = Route.useLoaderData();
 
   if (loaderData.mode === "mock") {
-    return renderMockInfoDropPage(loaderData.shareUuid, loaderData.variant);
+    return renderMockInfoDropPage(
+      loaderData.shareUuid,
+      loaderData.variant,
+      loaderData.reservationDates,
+    );
   }
 
   const { detail, shareUuid } = loaderData;

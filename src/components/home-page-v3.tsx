@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import {
   suggestPurpose,
+  saveCreateDraft,
   type HomePurpose,
   type SuggestionConfidence,
 } from "@/lib/purpose-suggestion";
@@ -227,7 +228,7 @@ export function HomePageV3({
     if (!hasValidUrl && !selectedPurpose) return "영상 링크와 목적을 선택해 주세요";
     if (hasValidUrl && !selectedPurpose) return "목적을 선택해 주세요";
     if (!hasValidUrl && selectedPurpose) return "영상 링크를 넣어 주세요";
-    return "Drop 만들기 →";
+    return "Drop 만들기";
   })();
 
   useEffect(() => {
@@ -337,8 +338,15 @@ export function HomePageV3({
     };
 
     // TODO(analytics): user_selected_purpose, suggested_equals_selected, source_id, url_platform
-    // TODO(/create): url, purpose, source_id search param을 읽어 Step 1/2 prefill.
-    // url + purpose가 모두 있으면 나중에 Step 3부터 시작 가능. 누락 시 Step 1 또는 Step 2 fallback.
+    saveCreateDraft({
+      url: params.url,
+      purpose: params.purpose,
+      suggestedPurpose: params.intent_suggested,
+      confidence: params.confidence,
+      platform: params.platform,
+      source_id: params.source_id,
+      metadata: videoMetadata,
+    });
 
     if (onStartCreate) {
       onStartCreate(params);

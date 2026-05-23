@@ -16,7 +16,7 @@ function HomeRoute() {
   const handleNavTab = (tab: HomePageV3NavTab) => {
     if (tab === "home") return;
     if (tab === "create") {
-      navigate({ to: "/create" });
+      navigate({ to: "/create-wizard" });
       return;
     }
     if (tab === "my-drops") {
@@ -34,7 +34,7 @@ function HomeRoute() {
 
   const handleStartCreate = (params: HomeStartCreateParams) => {
     navigate({
-      to: "/create",
+      to: "/create-wizard",
       search: {
         url: params.url,
         purpose: params.purpose,

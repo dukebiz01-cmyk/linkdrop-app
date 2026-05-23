@@ -16,6 +16,7 @@ import { Route as AdminRouteImport } from './routes/_admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DTestRouteImport } from './routes/d.test'
 import { Route as DShareUuidRouteImport } from './routes/d.$shareUuid'
+import { Route as ApiSuggestPurposeRouteImport } from './routes/api/suggest-purpose'
 import { Route as ApiPriceCompareRouteImport } from './routes/api/price-compare'
 import { Route as ApiOembedRouteImport } from './routes/api/oembed'
 import { Route as ApiEventsRouteImport } from './routes/api/events'
@@ -73,6 +74,11 @@ const DTestRoute = DTestRouteImport.update({
 const DShareUuidRoute = DShareUuidRouteImport.update({
   id: '/d/$shareUuid',
   path: '/d/$shareUuid',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSuggestPurposeRoute = ApiSuggestPurposeRouteImport.update({
+  id: '/api/suggest-purpose',
+  path: '/api/suggest-purpose',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPriceCompareRoute = ApiPriceCompareRouteImport.update({
@@ -218,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/api/events': typeof ApiEventsRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
+  '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
@@ -250,6 +257,7 @@ export interface FileRoutesByTo {
   '/api/events': typeof ApiEventsRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
+  '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
@@ -286,6 +294,7 @@ export interface FileRoutesById {
   '/api/events': typeof ApiEventsRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
+  '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
   '/_admin/admin/campaigns': typeof AdminAdminCampaignsRoute
@@ -320,6 +329,7 @@ export interface FileRouteTypes {
     | '/api/events'
     | '/api/oembed'
     | '/api/price-compare'
+    | '/api/suggest-purpose'
     | '/d/$shareUuid'
     | '/d/test'
     | '/admin/campaigns'
@@ -352,6 +362,7 @@ export interface FileRouteTypes {
     | '/api/events'
     | '/api/oembed'
     | '/api/price-compare'
+    | '/api/suggest-purpose'
     | '/d/$shareUuid'
     | '/d/test'
     | '/admin/campaigns'
@@ -387,6 +398,7 @@ export interface FileRouteTypes {
     | '/api/events'
     | '/api/oembed'
     | '/api/price-compare'
+    | '/api/suggest-purpose'
     | '/d/$shareUuid'
     | '/d/test'
     | '/_admin/admin/campaigns'
@@ -418,6 +430,7 @@ export interface RootRouteChildren {
   ApiEventsRoute: typeof ApiEventsRoute
   ApiOembedRoute: typeof ApiOembedRoute
   ApiPriceCompareRoute: typeof ApiPriceCompareRoute
+  ApiSuggestPurposeRoute: typeof ApiSuggestPurposeRoute
   DShareUuidRoute: typeof DShareUuidRoute
   DTestRoute: typeof DTestRoute
   ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
@@ -474,6 +487,13 @@ declare module '@tanstack/react-router' {
       path: '/d/$shareUuid'
       fullPath: '/d/$shareUuid'
       preLoaderRoute: typeof DShareUuidRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/suggest-purpose': {
+      id: '/api/suggest-purpose'
+      path: '/api/suggest-purpose'
+      fullPath: '/api/suggest-purpose'
+      preLoaderRoute: typeof ApiSuggestPurposeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/price-compare': {
@@ -734,6 +754,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiEventsRoute: ApiEventsRoute,
   ApiOembedRoute: ApiOembedRoute,
   ApiPriceCompareRoute: ApiPriceCompareRoute,
+  ApiSuggestPurposeRoute: ApiSuggestPurposeRoute,
   DShareUuidRoute: DShareUuidRoute,
   DTestRoute: DTestRoute,
   ApiCouponsClaimRoute: ApiCouponsClaimRoute,

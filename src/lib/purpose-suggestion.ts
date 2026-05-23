@@ -1,8 +1,8 @@
 /**
- * Home UX — 영상 메타 기반 목적 추천 (얇은 helper)
- * API 실패 시 local rule fallback; 사용자 흐름을 막지 않음.
+ * Home UX — 목적 추천 + /create draft (sessionStorage)
  */
 
+import type { DropPurpose } from "@/lib/types";
 import type { VideoMetadata } from "@/lib/video-metadata";
 
 export type HomePurpose = "info" | "coupon" | "reservation" | "purchase" | "lead";
@@ -25,50 +25,112 @@ export type SuggestPurposeInput = {
   platform?: string;
 };
 
-const PURPOSE_KO_TO_ID: Record<string, HomePurpose> = {
-  정보: "info",
-  info: "info",
-  쿠폰: "coupon",
-  coupon: "coupon",
-  예약: "reservation",
-  reservation: "reservation",
-  구매: "purchase",
-  purchase: "purchase",
-  commerce: "purchase",
-  상담: "lead",
-  lead: "lead",
+export const CREATE_DRAFT_STORAGE_KEY = "linkdrop:createDraft";
+const DRAFT_TTL_MS = 10 * 60 * 1000;
+
+export type CreateDraftPayload = {
+  url: string;
+  purpose: HomePurpose;
+  suggestedPurpose?: HomePurpose;
+  confidence?: SuggestionConfidence;
+  platform?: string;
+  source_id?: string;
+  metadata?: VideoMetadata;
+  savedAt: number;
 };
 
-function mapApiPurpose(raw: string): HomePurpose | null {
+const HOME_TO_WIZARD: Record<HomePurpose, DropPurpose> = {
+  info: "정보",
+  coupon: "쿠폰",
+  reservation: "예약",
+  purchase: "구매",
+  lead: "상담",
+};
+
+const SLUG_ALIASES: Record<string, HomePurpose> = {
+  info: "info",
+  coupon: "coupon",
+  reservation: "reservation",
+  purchase: "purchase",
+  commerce: "purchase",
+  lead: "lead",
+  정보: "info",
+  쿠폰: "coupon",
+  예약: "reservation",
+  구매: "purchase",
+  상담: "lead",
+};
+
+export function parseHomePurposeSlug(raw: string | undefined): HomePurpose | null {
+  if (!raw) return null;
   const key = raw.trim().toLowerCase();
-  return PURPOSE_KO_TO_ID[raw.trim()] ?? PURPOSE_KO_TO_ID[key] ?? null;
+  return SLUG_ALIASES[key] ?? SLUG_ALIASES[raw.trim()] ?? null;
+}
+
+export function homePurposeToWizardPurpose(slug: HomePurpose): DropPurpose {
+  return HOME_TO_WIZARD[slug];
+}
+
+export function parseWizardSuggestionConfidence(
+  raw: string | undefined,
+): SuggestionConfidence | null {
+  if (!raw) return null;
+  const v = raw.toLowerCase();
+  if (v === "high" || v === "medium" || v === "low") return v;
+  return null;
+}
+
+export function saveCreateDraft(payload: Omit<CreateDraftPayload, "savedAt">): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(
+      CREATE_DRAFT_STORAGE_KEY,
+      JSON.stringify({ ...payload, savedAt: Date.now() }),
+    );
+  } catch {
+    // quota / private mode
+  }
+}
+
+export function readCreateDraft(): CreateDraftPayload | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(CREATE_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CreateDraftPayload;
+    if (!parsed.url || !parsed.purpose || !parsed.savedAt) return null;
+    if (Date.now() - parsed.savedAt > DRAFT_TTL_MS) {
+      sessionStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function clearCreateDraft(): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 function buildCorpus(input: SuggestPurposeInput): string {
-  const { metadata, url } = input;
-  return `${metadata.title} ${metadata.authorName ?? ""} ${url}`.toLowerCase();
+  return `${input.metadata.title} ${input.metadata.authorName ?? ""} ${input.url}`.toLowerCase();
 }
 
 function hasWord(corpus: string, ...words: string[]): boolean {
   return words.some((w) => corpus.includes(w.toLowerCase()));
 }
 
-/** 키워드 우선순위: 구체적(lead) → coupon → purchase → reservation → info */
 export function suggestPurposeLocalRule(input: SuggestPurposeInput): PurposeSuggestion {
   const corpus = buildCorpus(input);
 
   if (
-    hasWord(
-      corpus,
-      "상담",
-      "문의",
-      "견적",
-      "신청",
-      "예약문의",
-      "전화",
-      "contact",
-      "consult",
-    )
+    hasWord(corpus, "상담", "문의", "견적", "신청", "예약문의", "전화", "contact", "consult")
   ) {
     return {
       purpose: "lead",
@@ -77,10 +139,7 @@ export function suggestPurposeLocalRule(input: SuggestPurposeInput): PurposeSugg
       source: "local_rule",
     };
   }
-
-  if (
-    hasWord(corpus, "할인", "쿠폰", "이벤트", "혜택", "무료", "증정", "coupon", "sale", "promo")
-  ) {
+  if (hasWord(corpus, "할인", "쿠폰", "이벤트", "혜택", "무료", "증정", "coupon", "sale")) {
     return {
       purpose: "coupon",
       confidence: "high",
@@ -88,23 +147,7 @@ export function suggestPurposeLocalRule(input: SuggestPurposeInput): PurposeSugg
       source: "local_rule",
     };
   }
-
-  if (
-    hasWord(
-      corpus,
-      "가격",
-      "구매",
-      "상품",
-      "리뷰",
-      "언박싱",
-      "비교",
-      "최저가",
-      "unbox",
-      "review",
-      "price",
-      "buy",
-    )
-  ) {
+  if (hasWord(corpus, "가격", "구매", "상품", "리뷰", "언박싱", "비교", "최저가", "unbox", "buy")) {
     return {
       purpose: "purchase",
       confidence: "medium",
@@ -112,23 +155,8 @@ export function suggestPurposeLocalRule(input: SuggestPurposeInput): PurposeSugg
       source: "local_rule",
     };
   }
-
   if (
-    hasWord(
-      corpus,
-      "캠핑",
-      "숙소",
-      "펜션",
-      "예약",
-      "날짜",
-      "객실",
-      "사이트",
-      "호텔",
-      "장소",
-      "camp",
-      "resort",
-      "stay",
-    )
+    hasWord(corpus, "캠핑", "숙소", "펜션", "예약", "날짜", "객실", "사이트", "호텔", "camp", "stay")
   ) {
     return {
       purpose: "reservation",
@@ -146,11 +174,8 @@ export function suggestPurposeLocalRule(input: SuggestPurposeInput): PurposeSugg
   };
 }
 
-async function trySuggestPurposeApi(
-  input: SuggestPurposeInput,
-): Promise<PurposeSuggestion | null> {
+async function trySuggestPurposeApi(input: SuggestPurposeInput): Promise<PurposeSuggestion | null> {
   if (!input.sourceId) return null;
-
   try {
     const res = await fetch("/api/suggest-purpose", {
       method: "POST",
@@ -160,30 +185,21 @@ async function trySuggestPurposeApi(
         url: input.url,
         title: input.metadata.title,
         platform: input.platform ?? input.metadata.platform,
-        author_name: input.metadata.authorName,
       }),
     });
-
     if (!res.ok) return null;
-
     const data = (await res.json()) as {
       purpose?: string;
       confidence?: string;
       reasoning?: string;
-      reason?: string;
     };
-
-    const purpose = data.purpose ? mapApiPurpose(data.purpose) : null;
+    const purpose = parseHomePurposeSlug(data.purpose);
     if (!purpose) return null;
-
-    const confidenceRaw = (data.confidence ?? "medium").toLowerCase();
-    const confidence: SuggestionConfidence =
-      confidenceRaw === "high" || confidenceRaw === "low" ? confidenceRaw : "medium";
-
+    const confidence = parseWizardSuggestionConfidence(data.confidence) ?? "medium";
     return {
       purpose,
       confidence,
-      reason: data.reasoning ?? data.reason ?? "AI가 이 목적을 추천했어요.",
+      reason: data.reasoning ?? "AI가 이 목적을 추천했어요.",
       source: "api",
     };
   } catch {
@@ -191,10 +207,6 @@ async function trySuggestPurposeApi(
   }
 }
 
-/**
- * Home용 목적 추천. API(있을 때) → local rule → info fallback.
- * null을 반환하지 않습니다 (항상 추천 객체).
- */
 export async function suggestPurpose(input: SuggestPurposeInput): Promise<PurposeSuggestion> {
   const api = await trySuggestPurposeApi(input);
   if (api) return api;
