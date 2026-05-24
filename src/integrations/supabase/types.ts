@@ -537,14 +537,17 @@ export type Database = {
           direct_advocate_user_id: string | null
           gross_amount_krw: number
           id: string
+          info_drop_id: string | null
           is_settled: boolean | null
           occurred_at: string | null
           partner_fee_krw: number
           platform_fee_krw: number
+          reservation_id: string | null
           reward_pool_krw: number
           settled_at: string | null
           share_event_id: string
           source_id: string
+          visitor_id: string | null
         }
         Insert: {
           campaign_id?: string | null
@@ -555,14 +558,17 @@ export type Database = {
           direct_advocate_user_id?: string | null
           gross_amount_krw?: number
           id?: string
+          info_drop_id?: string | null
           is_settled?: boolean | null
           occurred_at?: string | null
           partner_fee_krw?: number
           platform_fee_krw?: number
+          reservation_id?: string | null
           reward_pool_krw?: number
           settled_at?: string | null
           share_event_id: string
           source_id: string
+          visitor_id?: string | null
         }
         Update: {
           campaign_id?: string | null
@@ -573,14 +579,17 @@ export type Database = {
           direct_advocate_user_id?: string | null
           gross_amount_krw?: number
           id?: string
+          info_drop_id?: string | null
           is_settled?: boolean | null
           occurred_at?: string | null
           partner_fee_krw?: number
           platform_fee_krw?: number
+          reservation_id?: string | null
           reward_pool_krw?: number
           settled_at?: string | null
           share_event_id?: string
           source_id?: string
+          visitor_id?: string | null
         }
         Relationships: [
           {
@@ -619,10 +628,31 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "conversion_events_info_drop_id_fkey"
+            columns: ["info_drop_id"]
+            isOneToOne: false
+            referencedRelation: "info_drops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversion_events_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "conversion_events_share_event_id_fkey"
             columns: ["share_event_id"]
             isOneToOne: false
             referencedRelation: "share_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversion_events_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "visitors"
             referencedColumns: ["id"]
           },
         ]
@@ -1674,6 +1704,7 @@ export type Database = {
           intent_id: string
           legal_flags: Json | null
           owner_user_id: string
+          partner_id: string | null
           published_at: string | null
           purpose: Database["public"]["Enums"]["drop_purpose"]
           reservation_data: Json | null
@@ -1700,6 +1731,7 @@ export type Database = {
           intent_id: string
           legal_flags?: Json | null
           owner_user_id: string
+          partner_id?: string | null
           published_at?: string | null
           purpose: Database["public"]["Enums"]["drop_purpose"]
           reservation_data?: Json | null
@@ -1726,6 +1758,7 @@ export type Database = {
           intent_id?: string
           legal_flags?: Json | null
           owner_user_id?: string
+          partner_id?: string | null
           published_at?: string | null
           purpose?: Database["public"]["Enums"]["drop_purpose"]
           reservation_data?: Json | null
@@ -1765,6 +1798,13 @@ export type Database = {
             columns: ["owner_user_id"]
             isOneToOne: false
             referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "info_drops_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
             referencedColumns: ["id"]
           },
           {
@@ -2158,6 +2198,7 @@ export type Database = {
         Row: {
           address: string | null
           business_no: string | null
+          business_type: string | null
           contact_phone: string | null
           created_at: string | null
           display_name: string
@@ -2165,16 +2206,20 @@ export type Database = {
           lat: number | null
           lng: number | null
           metadata: Json | null
+          operating_end: string | null
+          operating_start: string | null
           owner_user_id: string
           partner_kind: Database["public"]["Enums"]["partner_kind"]
           rejection_reason: string | null
           reservation_url: string | null
+          slot_duration_min: number | null
           updated_at: string | null
           verification_status: Database["public"]["Enums"]["verification_status"]
         }
         Insert: {
           address?: string | null
           business_no?: string | null
+          business_type?: string | null
           contact_phone?: string | null
           created_at?: string | null
           display_name: string
@@ -2182,16 +2227,20 @@ export type Database = {
           lat?: number | null
           lng?: number | null
           metadata?: Json | null
+          operating_end?: string | null
+          operating_start?: string | null
           owner_user_id: string
           partner_kind: Database["public"]["Enums"]["partner_kind"]
           rejection_reason?: string | null
           reservation_url?: string | null
+          slot_duration_min?: number | null
           updated_at?: string | null
           verification_status?: Database["public"]["Enums"]["verification_status"]
         }
         Update: {
           address?: string | null
           business_no?: string | null
+          business_type?: string | null
           contact_phone?: string | null
           created_at?: string | null
           display_name?: string
@@ -2199,10 +2248,13 @@ export type Database = {
           lat?: number | null
           lng?: number | null
           metadata?: Json | null
+          operating_end?: string | null
+          operating_start?: string | null
           owner_user_id?: string
           partner_kind?: Database["public"]["Enums"]["partner_kind"]
           rejection_reason?: string | null
           reservation_url?: string | null
+          slot_duration_min?: number | null
           updated_at?: string | null
           verification_status?: Database["public"]["Enums"]["verification_status"]
         }
@@ -2389,6 +2441,250 @@ export type Database = {
           primary_role?: Database["public"]["Enums"]["user_role"] | null
         }
         Relationships: []
+      }
+      reservation_contacts: {
+        Row: {
+          created_at: string
+          id: string
+          me_user_id: string | null
+          me_verified_at: string | null
+          phone_hash: string
+          phone_last4: string
+          requester_name: string
+          reservation_id: string
+          visitor_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          me_user_id?: string | null
+          me_verified_at?: string | null
+          phone_hash: string
+          phone_last4: string
+          requester_name: string
+          reservation_id: string
+          visitor_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          me_user_id?: string | null
+          me_verified_at?: string | null
+          phone_hash?: string
+          phone_last4?: string
+          requester_name?: string
+          reservation_id?: string
+          visitor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_contacts_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_contacts_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "visitors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservation_notifications: {
+        Row: {
+          channel: string
+          created_at: string
+          error_message: string | null
+          id: string
+          reservation_id: string
+          sent_at: string | null
+          status: string
+          target_type: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          reservation_id: string
+          sent_at?: string | null
+          status?: string
+          target_type: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          reservation_id?: string
+          sent_at?: string | null
+          status?: string
+          target_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_notifications_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservation_slots: {
+        Row: {
+          calendar_mode: string
+          created_at: string
+          current_bookings: number
+          drop_id: string
+          id: string
+          is_blocked: boolean
+          max_capacity: number
+          partner_id: string
+          slot_date: string
+          slot_time: string | null
+          updated_at: string
+        }
+        Insert: {
+          calendar_mode: string
+          created_at?: string
+          current_bookings?: number
+          drop_id: string
+          id?: string
+          is_blocked?: boolean
+          max_capacity?: number
+          partner_id: string
+          slot_date: string
+          slot_time?: string | null
+          updated_at?: string
+        }
+        Update: {
+          calendar_mode?: string
+          created_at?: string
+          current_bookings?: number
+          drop_id?: string
+          id?: string
+          is_blocked?: boolean
+          max_capacity?: number
+          partner_id?: string
+          slot_date?: string
+          slot_time?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_slots_drop_id_fkey"
+            columns: ["drop_id"]
+            isOneToOne: false
+            referencedRelation: "info_drops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_slots_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservations: {
+        Row: {
+          calendar_mode: string
+          check_in_date: string | null
+          check_out_date: string | null
+          completed_at: string | null
+          confirmed_at: string | null
+          created_at: string
+          customer_message: string | null
+          drop_id: string
+          expires_at: string
+          guest_count: number
+          id: string
+          partner_id: string
+          partner_message: string | null
+          reserved_date: string | null
+          share_event_id: string | null
+          status: string
+          time_slot: string | null
+          updated_at: string
+          visitor_id: string | null
+        }
+        Insert: {
+          calendar_mode: string
+          check_in_date?: string | null
+          check_out_date?: string | null
+          completed_at?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          customer_message?: string | null
+          drop_id: string
+          expires_at?: string
+          guest_count?: number
+          id?: string
+          partner_id: string
+          partner_message?: string | null
+          reserved_date?: string | null
+          share_event_id?: string | null
+          status?: string
+          time_slot?: string | null
+          updated_at?: string
+          visitor_id?: string | null
+        }
+        Update: {
+          calendar_mode?: string
+          check_in_date?: string | null
+          check_out_date?: string | null
+          completed_at?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          customer_message?: string | null
+          drop_id?: string
+          expires_at?: string
+          guest_count?: number
+          id?: string
+          partner_id?: string
+          partner_message?: string | null
+          reserved_date?: string | null
+          share_event_id?: string | null
+          status?: string
+          time_slot?: string | null
+          updated_at?: string
+          visitor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservations_drop_id_fkey"
+            columns: ["drop_id"]
+            isOneToOne: false
+            referencedRelation: "info_drops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_share_event_id_fkey"
+            columns: ["share_event_id"]
+            isOneToOne: false
+            referencedRelation: "share_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "visitors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reward_ledger: {
         Row: {
@@ -2600,7 +2896,10 @@ export type Database = {
           reshared_from_claim_id: string | null
           sender_user_id: string
           session_hash: string | null
+          share_code: string | null
           share_uuid: string
+          sharer_label: string | null
+          sharer_type: string | null
           unique_clicker_count: number | null
           user_agent_hash: string | null
         }
@@ -2626,7 +2925,10 @@ export type Database = {
           reshared_from_claim_id?: string | null
           sender_user_id: string
           session_hash?: string | null
+          share_code?: string | null
           share_uuid?: string
+          sharer_label?: string | null
+          sharer_type?: string | null
           unique_clicker_count?: number | null
           user_agent_hash?: string | null
         }
@@ -2652,7 +2954,10 @@ export type Database = {
           reshared_from_claim_id?: string | null
           sender_user_id?: string
           session_hash?: string | null
+          share_code?: string | null
           share_uuid?: string
+          sharer_label?: string | null
+          sharer_type?: string | null
           unique_clicker_count?: number | null
           user_agent_hash?: string | null
         }
@@ -3040,6 +3345,10 @@ export type Database = {
         Args: { email_in: string; meta: Json }
         Returns: string
       }
+      confirm_reservation: {
+        Args: { p_partner_message: string; p_reservation_id: string }
+        Returns: undefined
+      }
       create_drop_v2: {
         Args: {
           p_blocks?: Json
@@ -3049,6 +3358,24 @@ export type Database = {
           p_source_id: string
         }
         Returns: Json
+      }
+      create_reservation_anon: {
+        Args: {
+          p_calendar_mode: string
+          p_check_in_date: string
+          p_check_out_date: string
+          p_customer_message: string
+          p_drop_id: string
+          p_guest_count: number
+          p_name: string
+          p_phone_hash: string
+          p_phone_last4: string
+          p_reserved_date: string
+          p_share_event_id: string
+          p_time_slot: string
+          p_visitor_id: string
+        }
+        Returns: string
       }
       distribute_rewards_safe: {
         Args: { p_conversion_event_id: string }
@@ -3060,8 +3387,34 @@ export type Database = {
         }[]
       }
       generate_claim_code_v2: { Args: { p_length?: number }; Returns: string }
+      get_available_slots: {
+        Args: { p_date: string; p_drop_id: string }
+        Returns: {
+          available: boolean
+          remaining: number
+          slot_time: string
+        }[]
+      }
       get_drop_detail: { Args: { p_share_uuid: string }; Returns: Json }
       get_drop_results: { Args: { p_share_uuid: string }; Returns: Json }
+      get_partner_reservations: {
+        Args: { p_partner_id: string }
+        Returns: {
+          calendar_mode: string
+          check_in_date: string
+          check_out_date: string
+          created_at: string
+          customer_message: string
+          customer_name: string
+          drop_id: string
+          guest_count: number
+          phone_last4: string
+          reservation_id: string
+          reserved_date: string
+          status: string
+          time_slot: string
+        }[]
+      }
       has_role: { Args: { _role: string; _user_id: string }; Returns: boolean }
       hash_phone: { Args: { p_phone: string }; Returns: string }
       increment_share_view: {
@@ -3166,6 +3519,10 @@ export type Database = {
           p_user_agent?: string
         }
         Returns: string
+      }
+      reject_reservation: {
+        Args: { p_reason: string; p_reservation_id: string }
+        Returns: undefined
       }
       show_chain_graph: {
         Args: { p_share_uuid: string }
