@@ -16,6 +16,7 @@ export type VideoMetadata = {
   platform: VideoPlatform;
   sourceUrl: string;
   videoId?: string;
+  sourceId?: string;              // content_sources.id UUID (from /api/oembed)
   title: string;
   authorName?: string;
   thumbnailUrl?: string;
@@ -157,18 +158,26 @@ export async function fetchVideoMetadata(url: string): Promise<VideoMetadata> {
   }
 
   if (parsed.platform === "youtube") {
-    const oembed = await fetchYoutubeOEmbed(parsed.oembedUrl);
-    if (oembed) {
-      return {
-        platform: "youtube",
-        sourceUrl: parsed.sourceUrl,
-        videoId: parsed.videoId,
-        title: oembed.title,
-        authorName: oembed.authorName,
-        thumbnailUrl: oembed.thumbnailUrl ?? youtubeThumbnailUrl(parsed.videoId),
-        providerUrl: oembed.providerUrl ?? parsed.oembedUrl,
-        fetchedBy: "youtube_oembed",
-      };
+    try {
+      const res = await fetch(`/api/oembed?url=${encodeURIComponent(parsed.sourceUrl)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.source_id) {
+          return {
+            platform: "youtube",
+            sourceUrl: parsed.sourceUrl,
+            videoId: parsed.videoId,
+            sourceId: data.source_id,                          // UUID from content_sources
+            title: data.title ?? "",
+            authorName: data.author_name ?? undefined,
+            thumbnailUrl: data.thumbnail_url ?? undefined,
+            providerUrl: data.raw_meta?.provider_url ?? undefined,
+            fetchedBy: "youtube_oembed",
+          };
+        }
+      }
+    } catch {
+      // network/parse fail — fall through to fallback
     }
     return youtubeFallback(parsed);
   }

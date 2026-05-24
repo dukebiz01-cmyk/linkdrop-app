@@ -297,7 +297,7 @@ export function HomePageV3({
       void suggestPurpose({
         metadata: videoMetadata,
         url: videoUrl,
-        sourceId: videoMetadata.videoId,
+        sourceId: videoMetadata.sourceId,
         platform:
           videoMetadata.platform !== "unknown" ? videoMetadata.platform : undefined,
       }).then((suggestion) => {
