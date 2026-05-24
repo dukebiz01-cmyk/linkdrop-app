@@ -2120,6 +2120,19 @@ function Step3ReservationCards({
     label: "고객 메시지",
   };
 
+  // Card assembly — 섹션 #6 빠른 입력 추천. AI 추천 카드.
+  const quickTemplateCardConfig: CardConfig = {
+    id: "quick_template",
+    type: "message",
+    required: false,
+    enabled: true,
+    position: 6,
+    status: "ai_suggested",
+    data: {},
+    ai_suggested: true,
+    label: "빠른 입력 추천",
+  };
+
   // Card assembly — 섹션 #9 고급 설정. 필드 하나라도 입력되어 있으면 completed.
   const hasAdvancedData = Boolean(
     fields.checkInTime ||
@@ -2515,22 +2528,28 @@ function Step3ReservationCards({
             </div>
           )}
 
-          {/* 6. 빠른 입력 템플릿 — 작게 */}
-          <div className="mt-3">
-            <p className="text-xs font-semibold tracking-ko text-text-subtle">빠른 입력</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {QUICK_TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => applyQuickTemplate(t.id)}
-                  className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-strong transition-colors hover:border-text-muted"
-                >
-                  <Plus className="size-3" strokeWidth={2} />
-                  {t.label}
-                </button>
-              ))}
-            </div>
+        </CardShell>
+
+        {/* 6. 빠른 입력 템플릿 — 작게 */}
+        <CardShell
+          config={quickTemplateCardConfig}
+          onDismiss={() => {
+            /* placeholder */
+          }}
+        >
+          <p className="text-xs font-semibold tracking-ko text-text-subtle">빠른 입력</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {QUICK_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => applyQuickTemplate(t.id)}
+                className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-strong transition-colors hover:border-text-muted"
+              >
+                <Plus className="size-3" strokeWidth={2} />
+                {t.label}
+              </button>
+            ))}
           </div>
         </CardShell>
 
