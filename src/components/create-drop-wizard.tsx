@@ -23,6 +23,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ActionButton } from "@/components/ActionButton";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { WizardSharePreview, type WizardSharePreviewData } from "@/components/wizard-share-preview";
+import { CardShell } from "@/components/cards/CardShell";
+import type { CardConfig } from "@/components/cards/types";
 import { shareToKakao } from "@/lib/kakao";
 import {
   fetchVideoMetadata,
@@ -990,11 +992,24 @@ function Step2PurposeSelect({
   const suggestedConfig = suggestedPurpose ? findPurposeConfig(suggestedPurpose) : null;
   const purposeDiffers = suggestedPurpose && selected && suggestedPurpose !== selected;
 
+  // Card assembly — Step 2 purpose 카드. 시각만 통일, onSelect 로직은 그대로 사용.
+  const purposeCardConfig: CardConfig = {
+    id: "purpose",
+    type: "purpose",
+    required: true,
+    enabled: true,
+    position: 2,
+    status: selected ? "completed" : "needs_confirmation",
+    data: {},
+    label: "목적",
+  };
+
   if (isPurposePrefilled && selected && selectedConfig) {
     const SelectedIcon = selectedConfig.icon;
     return (
       <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
         <StepBadge n={2} />
+        <CardShell config={purposeCardConfig}>
         <h1 className="mt-3 text-2xl font-extrabold leading-snug tracking-ko text-text-strong">
           선택한 목적을 확인해 주세요
         </h1>
@@ -1064,6 +1079,7 @@ function Step2PurposeSelect({
             />
           </div>
         )}
+        </CardShell>
       </main>
     );
   }
@@ -1071,6 +1087,7 @@ function Step2PurposeSelect({
   return (
     <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
       <StepBadge n={2} />
+      <CardShell config={purposeCardConfig}>
       <h1 className="mt-3 text-2xl font-extrabold leading-snug tracking-ko text-text-strong">
         이 Drop의 목적을 선택하세요
       </h1>
@@ -1087,6 +1104,7 @@ function Step2PurposeSelect({
       <p className="mt-6 text-xs font-medium leading-relaxed tracking-ko text-text-muted">
         선택한 목적에 따라 AI가 요약, 버튼, 공유 문구를 다르게 추천합니다.
       </p>
+      </CardShell>
     </main>
   );
 }
