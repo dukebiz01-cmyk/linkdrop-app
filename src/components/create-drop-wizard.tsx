@@ -2120,6 +2120,27 @@ function Step3ReservationCards({
     label: "고객 메시지",
   };
 
+  // Card assembly — 섹션 #9 고급 설정. 필드 하나라도 입력되어 있으면 completed.
+  const hasAdvancedData = Boolean(
+    fields.checkInTime ||
+      fields.checkOutTime ||
+      fields.baseGuests ||
+      fields.maxGuests ||
+      fields.facilityDetail ||
+      fields.cautionNote,
+  );
+  const advancedCardConfig: CardConfig = {
+    id: "advanced",
+    type: "hours",
+    required: false,
+    enabled: true,
+    position: 9,
+    status: hasAdvancedData ? "completed" : "ai_suggested",
+    data: { advancedOpen },
+    ai_suggested: !hasAdvancedData,
+    label: "고급 설정",
+  };
+
   // 날짜를 누르면 설정 시트가 캘린더 아래에 열린다 — 시트 상단이 보이도록 스크롤한다.
   // WHY: block:"start" 로 시트 제목부터 노출 — 하단 고정 CTA 에 시트가 가리지 않도록.
   useEffect(() => {
@@ -2627,7 +2648,7 @@ function Step3ReservationCards({
         </CardShell>
 
         {/* 9. 더 자세히 만들기 — 접힘 기본 */}
-        <section>
+        <CardShell config={advancedCardConfig}>
           <button
             type="button"
             onClick={() => setAdvancedOpen((v) => !v)}
@@ -2778,7 +2799,7 @@ function Step3ReservationCards({
               </label>
             </div>
           )}
-        </section>
+        </CardShell>
 
         {/* CTA 게이트 문구 — 첫 미충족 조건 안내 */}
         <div
