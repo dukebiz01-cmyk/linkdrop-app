@@ -2059,6 +2059,30 @@ function Step3ReservationCards({
   const selectedDest = RESERVATION_DESTS.find((d) => d.id === fields.reservationDest) ?? null;
   const gateReason = reservationStep3GateReason(fields);
 
+  // Card assembly — 섹션 #2 예약 유형. (Batch 3 — 향후 status 동적화 예정)
+  const reservationTypeCardConfig: CardConfig = {
+    id: "reservation_type",
+    type: "purpose",
+    required: true,
+    enabled: true,
+    position: 2,
+    status: "needs_confirmation",
+    data: {},
+    label: "예약 유형",
+  };
+
+  // Card assembly — 섹션 #3 장소/객실 정보. (Batch 3 — 향후 status 동적화 예정)
+  const placeCardConfig: CardConfig = {
+    id: "place",
+    type: "map",
+    required: false,
+    enabled: true,
+    position: 3,
+    status: "needs_confirmation",
+    data: {},
+    label: "장소/객실 정보",
+  };
+
   // Card assembly — 섹션 #4 예약 캘린더. 선택 날짜가 있으면 completed.
   const calendarCardConfig: CardConfig = {
     id: "calendar",
@@ -2304,7 +2328,7 @@ function Step3ReservationCards({
         <ReservationPreviewCard fields={fields} />
 
         {/* 2. 어떤 예약을 알릴까요 — 보조 */}
-        <section>
+        <CardShell config={reservationTypeCardConfig}>
           <p className="text-sm font-semibold tracking-ko text-text-strong">
             어떤 예약을 알릴까요?
           </p>
@@ -2318,10 +2342,10 @@ function Step3ReservationCards({
               onSelect={(v) => onFieldsChange({ reservationType: v })}
             />
           </div>
-        </section>
+        </CardShell>
 
         {/* 3. 어느 사이트/객실 — 보조 */}
-        <section>
+        <CardShell config={placeCardConfig}>
           <p className="text-sm font-semibold tracking-ko text-text-strong">
             어느 사이트/객실인가요?
           </p>
@@ -2391,7 +2415,7 @@ function Step3ReservationCards({
               </label>
             </div>
           )}
-        </section>
+        </CardShell>
 
         {/* 4. 캘린더 — 메인 UI */}
         <CardShell config={calendarCardConfig}>
