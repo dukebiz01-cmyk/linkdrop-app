@@ -2802,9 +2802,22 @@ function Step3Options({
   const copy = STEP3_COPY[purpose];
   const categories = PURPOSE_FLOW_CONFIG[purpose].detailCards;
 
+  // Card assembly — Step 3 옵션(세부 유형) 카드. 시각만 통일, detailId/onDetailSelect 로직은 그대로.
+  const optionsCardConfig: CardConfig = {
+    id: "step3-options",
+    type: "purpose",
+    required: true,
+    enabled: true,
+    position: 3,
+    status: detailId ? "completed" : "needs_confirmation",
+    data: {},
+    label: "세부 유형",
+  };
+
   return (
     <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
       <StepBadge n={3} />
+      <CardShell config={optionsCardConfig}>
       <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">{copy.title}</h1>
       <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
         {copy.description}
@@ -2816,6 +2829,7 @@ function Step3Options({
       {detailId && (
         <Step3PurposeFields purpose={purpose} fields={fields} onFieldsChange={onFieldsChange} />
       )}
+      </CardShell>
     </main>
   );
 }
