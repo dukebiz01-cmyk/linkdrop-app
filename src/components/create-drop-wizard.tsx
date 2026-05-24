@@ -2059,6 +2059,31 @@ function Step3ReservationCards({
   const selectedDest = RESERVATION_DESTS.find((d) => d.id === fields.reservationDest) ?? null;
   const gateReason = reservationStep3GateReason(fields);
 
+  // Card assembly — 섹션 #7 예약 버튼 연결. dest 선택 시 completed.
+  const actionButtonCardConfig: CardConfig = {
+    id: "action_button",
+    type: "action_button",
+    required: true,
+    enabled: true,
+    position: 7,
+    status: fields.reservationDest ? "completed" : "needs_confirmation",
+    data: { dest: fields.reservationDest, link: fields.bookingLink },
+    label: "예약 버튼 연결",
+  };
+
+  // Card assembly — 섹션 #8 고객 메시지. AI 추천 메시지 카드 (ai_suggested).
+  const messageCardConfig: CardConfig = {
+    id: "message",
+    type: "message",
+    required: false,
+    enabled: true,
+    position: 8,
+    status: "ai_suggested",
+    data: { message: fields.shareMessage ?? "" },
+    ai_suggested: true,
+    label: "고객 메시지",
+  };
+
   // 날짜를 누르면 설정 시트가 캘린더 아래에 열린다 — 시트 상단이 보이도록 스크롤한다.
   // WHY: block:"start" 로 시트 제목부터 노출 — 하단 고정 CTA 에 시트가 가리지 않도록.
   useEffect(() => {
@@ -2453,7 +2478,7 @@ function Step3ReservationCards({
         </section>
 
         {/* 7. 예약 버튼 연결 */}
-        <section>
+        <CardShell config={actionButtonCardConfig}>
           <p className="text-base font-bold tracking-ko text-text-strong">
             예약 버튼은 어디로 연결할까요?
           </p>
@@ -2526,10 +2551,13 @@ function Step3ReservationCards({
               </p>
             </div>
           )}
-        </section>
+        </CardShell>
 
         {/* 8. 고객 메시지 */}
-        <section>
+        <CardShell
+          config={messageCardConfig}
+          onDismiss={() => onFieldsChange({ shareMessage: "" })}
+        >
           <p className="text-base font-bold tracking-ko text-text-strong">
             고객에게 보낼 문구를 확인해 주세요
           </p>
@@ -2560,7 +2588,7 @@ function Step3ReservationCards({
               수정하기
             </button>
           </div>
-        </section>
+        </CardShell>
 
         {/* 9. 더 자세히 만들기 — 접힘 기본 */}
         <section>
