@@ -37,6 +37,7 @@ export interface WizardSharePreviewProps {
   shareUrl: string;
   onKakaoShare: () => Promise<void>;
   onCopyLink: () => Promise<void>;
+  /** "홈으로 가기" — wizard 종료 + /home. 저장은 트리거하지 않는다. */
   onGoHome: () => void;
   shareError?: string | null;
   shareFeedback?: string | null;
@@ -115,15 +116,18 @@ export function WizardSharePreview({
           카카오톡이나 링크로 공유하세요.
         </p>
 
-        {/* Kakao-style feed card mock */}
+        {/* Kakao-style feed card mock — 받는 사람이 카톡에서 보게 될 모습 미리보기. */}
         <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-surface shadow-soft">
-          <div className="border-b border-border bg-bg px-4 py-3">
+          <div className="flex items-center justify-between border-b border-border bg-bg px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FEE500]">
                 <MessageCircle className="h-4 w-4 text-[#3C1E1E]" strokeWidth={2} />
               </span>
               <span className="text-sm font-semibold tracking-ko text-text-strong">카카오톡</span>
             </div>
+            <span className="rounded-md bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-ko text-text-muted">
+              미리보기
+            </span>
           </div>
 
           <div className="p-4">

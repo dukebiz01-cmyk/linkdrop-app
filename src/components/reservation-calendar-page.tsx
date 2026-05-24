@@ -162,6 +162,12 @@ export interface ReservationCalendarPageProps {
   makerAvailableDates?: ReservationDateItem[];
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
+  /**
+   * 재공유(re-share) 수신자 화면 여부. true 면 날짜·인원·반려견 편집 UI 를 숨기고
+   * 메이커가 확정한 정보를 고정 카드로 표시한다. 첫 수신자(parentShareId·shareDepth·ref
+   * URL 마커 없음) 는 기존 편집 가능 UI 를 그대로 사용.
+   */
+  readOnly?: boolean;
   className?: string;
 }
 
@@ -192,13 +198,43 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
     "flex aspect-square items-center justify-center text-center text-[0.7rem] font-semibold text-text-muted",
   week: "mt-1 grid w-full grid-cols-7",
   day: "relative aspect-square p-0 text-center",
-  range_start: "rounded-l-lg bg-[#2563EB]",
-  range_end: "rounded-r-lg bg-[#2563EB]",
-  range_middle: "rounded-none bg-[#EFF6FF]",
+  // 셀 레벨 배경 색칠은 제거 — 강한 색은 버튼 레벨 data-attr 셀렉터로 통일 관리.
+  range_start: "rounded-l-lg",
+  range_end: "rounded-r-lg",
+  range_middle: "rounded-none",
   today: "font-bold text-[#2563EB]",
   outside: "text-text-subtle opacity-40",
   disabled: "text-text-disabled opacity-40",
 };
+
+// 수신자 선택(체크인/체크아웃/range middle) 시각 — shadcn 기본은 bg-primary(BLACK)/
+// bg-accent(INDIGO PURPLE) 라 강한 색이 떠 보인다. 받는 사람 화면의 시각 언어와 맞지
+// 않으므로 모두 연한 파란색 + 테두리로 통일한다. 메이커가 보낸 가능 날짜와는 시각
+// 언어를 분리 — 가능 날짜는 modifier 의 얇은 ring 으로만, 선택은 채움 + ring 으로.
+const CALENDAR_BUTTON_OVERRIDE = cn(
+  "[&_button[data-selected-single=true]]:!bg-[#2563EB]/15",
+  "[&_button[data-selected-single=true]]:!text-[#2563EB]",
+  "[&_button[data-selected-single=true]]:!ring-2",
+  "[&_button[data-selected-single=true]]:!ring-inset",
+  "[&_button[data-selected-single=true]]:!ring-[#2563EB]",
+  "[&_button[data-range-start=true]]:!bg-[#2563EB]/15",
+  "[&_button[data-range-start=true]]:!text-[#2563EB]",
+  "[&_button[data-range-start=true]]:!ring-2",
+  "[&_button[data-range-start=true]]:!ring-inset",
+  "[&_button[data-range-start=true]]:!ring-[#2563EB]",
+  "[&_button[data-range-end=true]]:!bg-[#2563EB]/15",
+  "[&_button[data-range-end=true]]:!text-[#2563EB]",
+  "[&_button[data-range-end=true]]:!ring-2",
+  "[&_button[data-range-end=true]]:!ring-inset",
+  "[&_button[data-range-end=true]]:!ring-[#2563EB]",
+  "[&_button[data-range-middle=true]]:!bg-[#2563EB]/5",
+  "[&_button[data-range-middle=true]]:!text-text-strong",
+);
+
+// 메이커 가능 날짜 — "선택 가능한 후보"임을 약하게 표시. 채움/긴 바 금지.
+// 얇은 ring 만 — 수신자 선택의 채움과 시각 분리.
+const MAKER_OPEN_CLASS = "rounded-md ring-1 ring-inset ring-[#15803D]/40";
+const MAKER_WARN_CLASS = "rounded-md ring-1 ring-inset ring-[#B45309]/40";
 
 function parseLocalDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
@@ -356,7 +392,24 @@ function applyRangeSelection(next: DateRange | undefined): {
 /**
  * 예약(reservation) 목적 — Phase 1 외부 예약 링크용 캘린더 UI.
  */
-export function ReservationCalendarPage({
+// Dispatcher — readOnly 여부에 따라 ReadOnlyReservationCard / EditableReservationCard.
+// hooks 충돌(rules-of-hooks) 방지를 위해 각 모드의 hooks 를 각자 함수에 격리한다.
+export function ReservationCalendarPage(props: ReservationCalendarPageProps) {
+  if (props.readOnly) {
+    return (
+      <ReadOnlyReservationCard
+        campgroundInfo={props.campgroundInfo ?? MOCK_RESERVATION_CAMPGROUND_INFO}
+        makerAvailableDates={props.makerAvailableDates ?? []}
+        onCheckAvailability={props.onCheckAvailability}
+        onSecondaryAction={props.onSecondaryAction}
+        className={props.className}
+      />
+    );
+  }
+  return <EditableReservationCard {...props} />;
+}
+
+function EditableReservationCard({
   campgroundInfo = MOCK_RESERVATION_CAMPGROUND_INFO,
   makerAvailableDates = [],
   onCheckAvailability,
@@ -450,10 +503,10 @@ export function ReservationCalendarPage({
           }
           modifiers={{ makerOpen: makerOpenDates, makerWarn: makerWarnDates }}
           modifiersClassNames={{
-            makerOpen: "rounded-lg bg-intent-success-bg",
-            makerWarn: "rounded-lg bg-intent-warning-bg",
+            makerOpen: MAKER_OPEN_CLASS,
+            makerWarn: MAKER_WARN_CLASS,
           }}
-          className="w-full max-w-full p-0 [--cell-size:2.25rem] [&_.rdp-day_button]:mx-auto [&_.rdp-day_button]:flex [&_.rdp-day_button]:aspect-square [&_.rdp-day_button]:h-full [&_.rdp-day_button]:w-full [&_.rdp-day_button]:items-center [&_.rdp-day_button]:justify-center [&_.rdp-day_button]:rounded-lg [&_.rdp-day_button]:text-sm [&_.rdp-range_start_.rdp-day_button]:bg-[#2563EB] [&_.rdp-range_start_.rdp-day_button]:text-white [&_.rdp-range_end_.rdp-day_button]:bg-[#2563EB] [&_.rdp-range_end_.rdp-day_button]:text-white [&_.rdp-range_middle_.rdp-day_button]:bg-[#EFF6FF] [&_.rdp-range_middle_.rdp-day_button]:text-[#2563EB]"
+          className={cn("w-full max-w-full p-0 [--cell-size:2.25rem]", CALENDAR_BUTTON_OVERRIDE)}
           classNames={RESERVATION_CALENDAR_CLASS_NAMES}
         />
       </div>
@@ -464,7 +517,7 @@ export function ReservationCalendarPage({
             메이커가 보낸 예약 가능 날짜
           </p>
           <p className="text-xs font-medium leading-relaxed tracking-ko text-text-muted">
-            아래 날짜가 달력에 표시돼 있어요. 원하는 날짜로 체크인·체크아웃을 선택하세요.
+            원하는 날짜를 선택해 예약 가능 여부를 확인하세요.
           </p>
           <ul className="space-y-2">
             {makerAvailableDates.map((item) => (
@@ -562,6 +615,175 @@ export function ReservationCalendarPage({
       {checkFeedback && (
         <p className="text-sm font-medium leading-relaxed tracking-ko text-text-muted">{checkFeedback}</p>
       )}
+
+      <div>
+        <p className="mb-2 text-xs font-semibold tracking-ko text-text-subtle">다른 방법으로 문의</p>
+        <div className="grid min-w-0 grid-cols-3 gap-2">
+          {(
+            [
+              ["phone", "전화", "cta-reservation-phone"],
+              ["sms", "문자", "cta-reservation-sms"],
+              ["directions", "길찾기", "cta-reservation-directions"],
+            ] as const
+          ).map(([action, label, testId]) => (
+            <button
+              key={action}
+              type="button"
+              data-testid={testId}
+              className={cn(WIZARD_SECONDARY_BUTTON_CLASS, "h-11 min-h-[44px] px-2 text-xs font-bold")}
+              onClick={() => onSecondaryAction?.(action)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Re-share 수신자 — read-only 카드 ─────────────────────────────────────────
+// 재공유된 /d 화면 (parentShareId·shareDepth·ref URL 마커 감지 시) 사용.
+// 메이커가 확정한 정보만 고정 표시. 날짜·인원·반려견 편집 불가.
+function ReadOnlyReservationCard({
+  campgroundInfo,
+  makerAvailableDates,
+  onCheckAvailability,
+  onSecondaryAction,
+  className,
+}: {
+  campgroundInfo: ReservationCampgroundInfo;
+  makerAvailableDates: ReservationDateItem[];
+  onCheckAvailability?: (selection: ReservationSelection) => void;
+  onSecondaryAction?: (action: ReservationSecondaryAction) => void;
+  className?: string;
+}) {
+  const hasMakerDates = makerAvailableDates.length > 0;
+  const { makerOpenDates, makerWarnDates, makerClosedDates, earliestMakerDate } = useMemo(() => {
+    const open: Date[] = [];
+    const warn: Date[] = [];
+    const closed: Date[] = [];
+    let earliest: Date | null = null;
+    for (const item of makerAvailableDates) {
+      for (const iso of isoListForItem(item)) {
+        const d = makerDateFromIso(iso);
+        if (!d) continue;
+        if (item.status === "closed") closed.push(d);
+        else if (item.status === "almost_full") warn.push(d);
+        else open.push(d);
+        if (!earliest || d.getTime() < earliest.getTime()) earliest = d;
+      }
+    }
+    return {
+      makerOpenDates: open,
+      makerWarnDates: warn,
+      makerClosedDates: closed,
+      earliestMakerDate: earliest,
+    };
+  }, [makerAvailableDates]);
+
+  const defaultMonth = earliestMakerDate ?? parseLocalDate(MOCK_RESERVATION_DEFAULTS.checkIn);
+
+  // 시그니처 유지를 위한 stub — 수신자 선택값 없음 → 메이커 기본값으로 채워서 전달.
+  const readonlySelection: ReservationSelection = {
+    checkIn: undefined,
+    checkOut: undefined,
+    nights: 0,
+    adults: MOCK_RESERVATION_DEFAULTS.adults,
+    children: MOCK_RESERVATION_DEFAULTS.children,
+    pets: MOCK_RESERVATION_DEFAULTS.pets,
+  };
+
+  const guestSummary = `성인 ${MOCK_RESERVATION_DEFAULTS.adults}명 · 소인 ${MOCK_RESERVATION_DEFAULTS.children}명 · 반려견 ${MOCK_RESERVATION_DEFAULTS.pets ? "동반 가능" : "동반 불가"}`;
+
+  return (
+    <div className={cn("w-full max-w-full space-y-4", className)}>
+      <CampgroundInfoCard info={campgroundInfo} />
+
+      <div
+        className="w-full max-w-full overflow-hidden rounded-2xl border border-border bg-bg p-4"
+        aria-label="메이커가 확정한 예약 가능 날짜 (재공유 · 읽기 전용)"
+      >
+        <div className="pointer-events-none select-none" aria-disabled="true">
+          <Calendar
+            mode="single"
+            defaultMonth={defaultMonth}
+            numberOfMonths={1}
+            showOutsideDays
+            disabled={hasMakerDates ? makerClosedDates : undefined}
+            modifiers={{ makerOpen: makerOpenDates, makerWarn: makerWarnDates }}
+            modifiersClassNames={{
+              makerOpen: MAKER_OPEN_CLASS,
+              makerWarn: MAKER_WARN_CLASS,
+            }}
+            className={cn("w-full max-w-full p-0 [--cell-size:2.25rem]", CALENDAR_BUTTON_OVERRIDE)}
+            classNames={RESERVATION_CALENDAR_CLASS_NAMES}
+          />
+        </div>
+        <p className="mt-2 text-[11px] font-medium tracking-ko text-text-subtle">
+          재공유된 화면이라 날짜를 변경할 수 없어요. 초록색 칸이 예약 가능한 날짜예요.
+        </p>
+      </div>
+
+      {hasMakerDates && (
+        <div className="w-full max-w-full space-y-2 rounded-2xl border border-border bg-surface p-4">
+          <p className="text-sm font-bold tracking-ko text-text-strong">
+            메이커가 보낸 예약 가능 날짜
+          </p>
+          <ul className="space-y-2">
+            {makerAvailableDates.map((item) => (
+              <li key={item.id} className="rounded-lg border border-border bg-bg p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-bold tracking-ko text-text-strong">
+                    {makerItemDateLabel(item)}
+                  </p>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold tracking-ko",
+                      item.status === "closed"
+                        ? "bg-surface text-text-subtle"
+                        : item.status === "almost_full"
+                          ? "bg-intent-warning-bg text-intent-warning"
+                          : "bg-intent-success-bg text-intent-success",
+                    )}
+                  >
+                    {makerItemStatusLabel(item)}
+                  </span>
+                </div>
+                {item.eventTitle && (
+                  <p className="mt-1 text-xs font-semibold tracking-ko text-text-strong">
+                    {item.eventTitle}
+                  </p>
+                )}
+                {item.eventDescription && (
+                  <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
+                    {item.eventDescription}
+                  </p>
+                )}
+                {item.memo && (
+                  <p className="mt-1 text-[11px] font-medium tracking-ko text-text-subtle">
+                    {item.memo}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="w-full max-w-full rounded-2xl border border-border bg-surface p-4">
+        <p className="text-sm font-semibold tracking-ko text-text-strong">예약 인원</p>
+        <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">{guestSummary}</p>
+      </div>
+
+      <button
+        type="button"
+        data-testid="cta-reservation-check"
+        className={RESERVATION_PRIMARY_ENABLED}
+        onClick={() => onCheckAvailability?.(readonlySelection)}
+      >
+        예약하기
+      </button>
 
       <div>
         <p className="mb-2 text-xs font-semibold tracking-ko text-text-subtle">다른 방법으로 문의</p>

@@ -63,9 +63,28 @@ function CreatePage() {
       initialSuggestionConfidence={confidence ?? undefined}
       initialMetadata={draft?.metadata ?? null}
       onClose={() => navigate({ to: "/home" })}
-      onComplete={(data) => {
-        // TODO: Step 5 완료 후 createDropV2 RPC 연결
-        console.log("[create] wizard complete (mock)", data);
+      onComplete={async (data) => {
+        // /create-wizard 와 동일하게 POST /api/drops 로 저장하고 share_uuid + URL 을 반환.
+        const res = await fetch("/api/drops", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            media_url: data.video.url,
+            purpose: data.purpose,
+            curator_message: data.makerMessage || null,
+          }),
+        });
+        const json = (await res.json()) as {
+          drop?: { share_uuid?: string };
+          message?: string;
+        };
+        if (!res.ok || !json.drop?.share_uuid) {
+          throw new Error(json.message ?? "DROP_CREATE_FAILED");
+        }
+        const shareUuid = json.drop.share_uuid;
+        const origin =
+          typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
+        return { shareUuid, shareUrl: `${origin}/d/${shareUuid}` };
       }}
     />
   );

@@ -80,13 +80,18 @@ export interface CreateDropWizardProps {
   /** url+purpose 동시 전달 시 빠른 생성(3단계). 미지정 시 initialUrl·initialPurpose로 판별 */
   fastCreateMode?: boolean;
   onClose?: () => void;
+  /**
+   * Step 5 진입 후 첫 카카오톡 공유/링크 복사 클릭 시 호출.
+   * 실제 /api/drops 저장을 수행하고 real share_uuid/share_url 을 반환.
+   * 실패 시 throw 하면 wizard 가 인라인 에러를 표시한다.
+   */
   onComplete?: (data: {
     video: VideoInfo;
     purpose: DropPurpose;
     local?: LocalPartner;
     ai: AiPreviewData;
     makerMessage: string;
-  }) => void;
+  }) => Promise<{ shareUuid: string; shareUrl: string }>;
 }
 
 function videoInfoFromMetadata(meta: VideoMetadata, fallbackUrl: string): VideoInfo {
@@ -1350,6 +1355,16 @@ function reservationItemFullLabel(item: ReservationDateItem): string {
     .join(" · ");
 }
 
+// 예약 URL 정규화 — 사용자가 "https://" 없이 "booking.naver.com/x" 처럼 입력해도
+// 받는 사람 화면의 new URL() 파싱이 성공하도록 https:// 를 prepend 한다.
+// 이미 http(s) 가 있으면 그대로 유지. 빈/공백은 빈 문자열 반환.
+export function normalizeReservationUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 // 예약 Step 3 입력값 → ReservationSummary (Step 4/5·공유 데이터로 전달).
 function buildReservationSummary(fields: Step3FieldState): ReservationSummary {
   const dest = RESERVATION_DESTS.find((d) => d.id === fields.reservationDest) ?? null;
@@ -1767,18 +1782,23 @@ function ReservationCalendar({
           const item = byIso.get(iso);
           const isSelected = selectedIso === iso;
           const isPast = iso < today;
+          // 과거 날짜는 비활성 — 이미 추가된 항목은 편집/삭제용으로 클릭을 허용.
+          // 오늘(isPast === false)은 그대로 선택 가능.
+          const isDisabled = isPast && !item;
           return (
             <button
               key={iso}
               type="button"
               onClick={() => onDayClick(iso)}
+              disabled={isDisabled}
+              aria-disabled={isDisabled}
               className={cn(
                 "flex min-h-[56px] flex-col items-center justify-start gap-0.5 rounded-lg border p-1 text-center transition-colors",
                 item
                   ? "border-[#2563EB] bg-[#EFF6FF]"
                   : "border-border bg-bg hover:border-text-muted",
                 isSelected && "ring-2 ring-[#2563EB] ring-offset-1",
-                isPast && !item && "opacity-45",
+                isDisabled && "cursor-not-allowed opacity-45 hover:border-border",
               )}
             >
               <span
@@ -2057,14 +2077,18 @@ function Step3ReservationCards({
     });
   }
 
-  // 캘린더 칸 클릭 — 빈 날이면 날짜 추가, 시트는 토글.
-  // WHY: 같은 날짜를 다시 누르면 시트를 닫는다(토글). reservationDates 는 건드리지 않는다.
+  // 캘린더 칸 클릭 — 빈 날이면 날짜 추가, 이미 선택된 날이면 해제.
+  // WHY: 같은 날짜를 다시 누르면 reservationDates 에서 제거하고 편집 시트도 닫는다.
+  //      편집은 "선택한 날짜" 목록의 "수정" 버튼으로 진입한다.
   function handleDayClick(iso: string) {
     const exists = fields.reservationDates.some((d) => d.dates[0] === iso);
-    if (!exists) {
-      onReservationDatesChange((prev) => [...prev, makeSingleReservationItem(iso)]);
+    if (exists) {
+      onReservationDatesChange((prev) => prev.filter((d) => d.dates[0] !== iso));
+      setSelectedIso(null);
+      return;
     }
-    setSelectedIso((cur) => (cur === iso ? null : iso));
+    onReservationDatesChange((prev) => [...prev, makeSingleReservationItem(iso)]);
+    setSelectedIso(iso);
   }
 
   // 날짜 설정 패널 적용 — 적용 범위에 따라 한 날짜/전체/주말에 patch.
@@ -2352,7 +2376,7 @@ function Step3ReservationCards({
             </div>
           )}
 
-          {/* 선택한 날짜 요약 — 캘린더 아래 목록 */}
+          {/* 선택한 날짜 요약 — 캘린더 아래 목록. 행마다 "수정"(시트 열기) 과 "선택 해제"(삭제) 두 액션. */}
           {fields.reservationDates.length > 0 && (
             <div className="mt-3 rounded-2xl border border-border bg-surface p-4">
               <p className="text-xs font-semibold tracking-ko text-text-strong">
@@ -2363,16 +2387,28 @@ function Step3ReservationCards({
                   .sort((a, b) => (a.dates[0] ?? "").localeCompare(b.dates[0] ?? ""))
                   .map((item) => (
                     <li key={item.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedIso(item.dates[0] ?? null)}
-                        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium tracking-ko text-text-strong transition-colors hover:bg-bg"
-                      >
-                        <span className="min-w-0 truncate">{reservationSummaryLine(item)}</span>
-                        <span className="shrink-0 text-[11px] font-semibold text-[#2563EB]">
-                          수정
-                        </span>
-                      </button>
+                      <div className="flex w-full items-center gap-1 rounded-lg px-1 transition-colors hover:bg-bg">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedIso(item.dates[0] ?? null)}
+                          className="flex min-w-0 flex-1 items-center justify-between gap-2 px-1 py-2 text-left text-xs font-medium tracking-ko text-text-strong"
+                        >
+                          <span className="min-w-0 truncate">{reservationSummaryLine(item)}</span>
+                          <span className="shrink-0 text-[11px] font-semibold text-[#2563EB]">
+                            수정
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onReservationDatesChange((prev) => prev.filter((d) => d.id !== item.id))
+                          }
+                          aria-label="이 날짜 선택 해제"
+                          className="flex size-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-bg hover:text-intent-danger"
+                        >
+                          <X className="size-4" strokeWidth={2} />
+                        </button>
+                      </div>
                     </li>
                   ))}
               </ul>
@@ -2449,6 +2485,12 @@ function Step3ReservationCards({
           {fields.reservationDest && (
             <p className="mt-2 text-xs font-medium tracking-ko text-text-muted">
               버튼 이름: {reservationButtonName(fields.reservationDest)}
+            </p>
+          )}
+          {selectedDest && selectedDest.kind !== "link" && (
+            <p className="mt-2 text-xs font-medium tracking-ko text-intent-warning">
+              전화/문자 문의는 Phase 2 에서 지원 예정 — 지금은 받는 사람 화면 버튼이 비활성으로
+              표시됩니다.
             </p>
           )}
           <button
@@ -3203,6 +3245,9 @@ export function CreateDropWizard({
   const [aiPreview, setAiPreview] = useState<AiPreviewData | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  // 첫 공유/복사/수신자 화면 보기 시 1회만 /api/drops 저장 — 이후 같은 URL 재사용.
+  const [realShare, setRealShare] = useState<{ shareUuid: string; shareUrl: string } | null>(null);
+  const savingRef = useRef<Promise<{ shareUuid: string; shareUrl: string }> | null>(null);
 
   function resetStep3ForPurpose() {
     setStep3DetailId(null);
@@ -3228,13 +3273,18 @@ export function CreateDropWizard({
         ]
       : "info";
     const base = `${origin}/d/preview-${slug}-${Date.now().toString(36)}`;
-    // 예약 목적 — 메이커가 입력한 예약 가능 날짜를 공유 URL(?r=)에 실어 /d 까지 전달.
-    if (purpose === "예약" && step3Fields.reservationDates.length > 0) {
+    if (purpose !== "예약") return base;
+    // 예약 목적 — 공유 URL(?r= 예약 가능 날짜, ?u= 예약 버튼 연결값)에 메이커 입력값을 실어 /d 까지 전달.
+    const params = new URLSearchParams();
+    if (step3Fields.reservationDates.length > 0) {
       const encoded = encodeReservationDates(step3Fields.reservationDates);
-      if (encoded) return `${base}?r=${encoded}`;
+      if (encoded) params.set("r", encoded);
     }
-    return base;
-  }, [purpose, step3Fields.reservationDates]);
+    const bookingLink = step3Fields.bookingLink.trim();
+    if (bookingLink) params.set("u", bookingLink);
+    const query = params.toString();
+    return query ? `${base}?${query}` : base;
+  }, [purpose, step3Fields.reservationDates, step3Fields.bookingLink]);
 
   // 예약 dates 비어 있으면 Step 4/5 미리보기·공유 카피를 "예약 버튼만" 흐름에 맞춰 좁힌다.
   // - title: "예약하기"
@@ -3382,11 +3432,54 @@ export function CreateDropWizard({
     return true;
   }
 
+  // 첫 공유/복사/수신자 화면 보기 시 /api/drops 를 1회만 호출하고 결과를 캐싱한다.
+  // 동시 클릭 race 는 savingRef 로 같은 promise 를 공유하여 중복 저장을 방지.
+  async function ensureRealShare(): Promise<{ shareUuid: string; shareUrl: string } | null> {
+    if (realShare) return realShare;
+    if (savingRef.current) return savingRef.current;
+    const ai = isFastCreateMode && editableAi ? draftToAiPreview(editableAi) : aiForPreview;
+    if (!videoInfo || !ai || !purpose || !onComplete) return null;
+    const message = isFastCreateMode ? (editableAi?.makerMessage ?? "") : step3Fields.shareMessage;
+    const promise = onComplete({ video: videoInfo, purpose, ai, makerMessage: message });
+    savingRef.current = promise;
+    try {
+      const data = await promise;
+      // 예약 목적 — ?r= 예약 가능 날짜(base64url), ?u= link kind 예약 URL 을 함께 운반.
+      // phone/sms 는 받는 사람 tel:/sms: 분기 미구현(Phase 2) 이라 ?u= 미전달 → /d 버튼은 비활성.
+      // DB(store.reservation_url / component_blocks) 저장 전까지는 query param 임시 운반.
+      const dest =
+        purpose === "예약"
+          ? RESERVATION_DESTS.find((d) => d.id === step3Fields.reservationDest)
+          : undefined;
+      const linkUrl = dest?.kind === "link" ? normalizeReservationUrl(step3Fields.bookingLink) : "";
+      const datesEncoded =
+        purpose === "예약" && step3Fields.reservationDates.length > 0
+          ? encodeReservationDates(step3Fields.reservationDates)
+          : "";
+      const params = new URLSearchParams();
+      if (datesEncoded) params.set("r", datesEncoded);
+      if (linkUrl) params.set("u", linkUrl);
+      const query = params.toString();
+      const shareUrl = query ? `${data.shareUrl}?${query}` : data.shareUrl;
+      const result = { shareUuid: data.shareUuid, shareUrl };
+      setRealShare(result);
+      return result;
+    } catch (e) {
+      setShareError("Drop 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      console.error("[CreateDropWizard] ensureRealShare", e);
+      return null;
+    } finally {
+      savingRef.current = null;
+    }
+  }
+
   async function handleKakaoShare() {
     const ai = isFastCreateMode && editableAi ? draftToAiPreview(editableAi) : aiForPreview;
     if (!videoInfo || !ai || !purpose) return;
     setShareError(null);
     setShareFeedback(null);
+    const real = await ensureRealShare();
+    if (!real) return;
     const makerNote = isFastCreateMode
       ? (editableAi?.makerMessage.trim() ?? "")
       : step3Fields.shareMessage.trim();
@@ -3394,7 +3487,7 @@ export function CreateDropWizard({
       title: ai.title,
       description: [purpose, makerNote].filter(Boolean).join(" · "),
       imageUrl: videoInfo.thumbnailUrl,
-      linkUrl: mockShareUrl,
+      linkUrl: real.shareUrl,
       buttons: [
         {
           title:
@@ -3403,7 +3496,7 @@ export function CreateDropWizard({
               : purpose
                 ? STEP5_SHARE_BY_PURPOSE[purpose].cta
                 : null) ?? "보러 가기",
-          link: mockShareUrl,
+          link: real.shareUrl,
         },
       ],
     });
@@ -3417,25 +3510,19 @@ export function CreateDropWizard({
   async function handleCopyLink() {
     setShareError(null);
     setShareFeedback(null);
+    const real = await ensureRealShare();
+    if (!real) return;
     try {
-      await navigator.clipboard.writeText(mockShareUrl);
+      await navigator.clipboard.writeText(real.shareUrl);
       setShareFeedback("링크를 복사했어요.");
     } catch {
       setShareError("링크 복사에 실패했어요.");
     }
   }
 
+  // "홈으로 가기" — wizard 종료 후 /home 으로 이동. 저장은 트리거하지 않는다.
+  // (저장은 카카오톡 공유/링크 복사 클릭 시 ensureRealShare 가 한 번만 수행)
   function handleGoHome() {
-    const message = isFastCreateMode ? (editableAi?.makerMessage ?? "") : step3Fields.shareMessage;
-    const ai = isFastCreateMode && editableAi ? draftToAiPreview(editableAi) : aiForPreview;
-    if (videoInfo && purpose && ai) {
-      onComplete?.({
-        video: videoInfo,
-        purpose,
-        ai,
-        makerMessage: message,
-      });
-    }
     onClose?.();
   }
 
@@ -3511,7 +3598,7 @@ export function CreateDropWizard({
             purpose={purpose}
             videoInfo={videoInfo}
             ai={fastAi}
-            shareUrl={mockShareUrl}
+            shareUrl={realShare?.shareUrl ?? mockShareUrl}
             onKakaoShare={handleKakaoShare}
             onCopyLink={handleCopyLink}
             onGoHome={handleGoHome}
@@ -3623,7 +3710,7 @@ export function CreateDropWizard({
           purpose={purpose}
           videoInfo={videoInfo}
           ai={aiForPreview!}
-          shareUrl={mockShareUrl}
+          shareUrl={realShare?.shareUrl ?? mockShareUrl}
           onKakaoShare={handleKakaoShare}
           onCopyLink={handleCopyLink}
           onGoHome={handleGoHome}
