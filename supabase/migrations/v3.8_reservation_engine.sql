@@ -1,0 +1,384 @@
+-- v3.8: Reservation Engine + Share Attribution (rev2)
+-- rev2: real schema corrections
+-- See v3.8_v1_buggy.sql.bak for original (had wrong assumptions)
+
+BEGIN;
+
+-- Section 1: share_events extension
+-- (3 new cols; reuse existing parent_share_event_id/chain_depth)
+ALTER TABLE share_events
+  ADD COLUMN IF NOT EXISTS share_code text UNIQUE,
+  ADD COLUMN IF NOT EXISTS sharer_type text DEFAULT 'anonymous'
+    CHECK (sharer_type IN ('anonymous','owner','staff','regular','influencer','qr','ad','other')),
+  ADD COLUMN IF NOT EXISTS sharer_label text;
+
+CREATE INDEX IF NOT EXISTS idx_share_events_code ON share_events(share_code);
+
+-- Section 2: partners extension
+ALTER TABLE partners
+  ADD COLUMN IF NOT EXISTS business_type text,
+  ADD COLUMN IF NOT EXISTS operating_start text,
+  ADD COLUMN IF NOT EXISTS operating_end text,
+  ADD COLUMN IF NOT EXISTS slot_duration_min int DEFAULT 60;
+
+-- Section 2.5: info_drops.partner_id (NEW - bridges drop to partner)
+ALTER TABLE info_drops
+  ADD COLUMN IF NOT EXISTS partner_id uuid REFERENCES partners(id);
+
+-- Backfill: link existing drops to partners via owner_user_id
+UPDATE info_drops d
+SET partner_id = (
+  SELECT id FROM partners p
+  WHERE p.owner_user_id = d.owner_user_id
+  LIMIT 1
+)
+WHERE partner_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_info_drops_partner ON info_drops(partner_id);
+
+-- Section 3: reservation_slots
+CREATE TABLE IF NOT EXISTS reservation_slots (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  drop_id uuid NOT NULL REFERENCES info_drops(id) ON DELETE CASCADE,
+  partner_id uuid NOT NULL REFERENCES partners(id),
+  calendar_mode text NOT NULL CHECK (calendar_mode IN ('date_range','date_time_slot')),
+  slot_date date NOT NULL,
+  slot_time text,
+  max_capacity int NOT NULL DEFAULT 1,
+  current_bookings int NOT NULL DEFAULT 0,
+  is_blocked boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (drop_id, slot_date, slot_time)
+);
+
+CREATE INDEX IF NOT EXISTS idx_slots_drop_date ON reservation_slots(drop_id, slot_date);
+
+-- Section 4: reservations
+CREATE TABLE IF NOT EXISTS reservations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  drop_id uuid NOT NULL REFERENCES info_drops(id),
+  share_event_id uuid REFERENCES share_events(id),
+  partner_id uuid NOT NULL REFERENCES partners(id),
+  visitor_id uuid REFERENCES visitors(id),
+  calendar_mode text NOT NULL CHECK (calendar_mode IN ('date_range','date_time_slot')),
+  reserved_date date,
+  time_slot text,
+  check_in_date date,
+  check_out_date date,
+  guest_count int NOT NULL DEFAULT 1,
+  customer_message text,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','confirmed','completed','cancelled','rejected','expired')),
+  partner_message text,
+  confirmed_at timestamptz,
+  completed_at timestamptz,
+  expires_at timestamptz NOT NULL DEFAULT (now() + interval '24 hours'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reservations_drop ON reservations(drop_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_partner ON reservations(partner_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_share ON reservations(share_event_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations(status);
+
+-- Section 5: reservation_contacts (PII isolated + ME bridge)
+CREATE TABLE IF NOT EXISTS reservation_contacts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reservation_id uuid NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
+  visitor_id uuid REFERENCES visitors(id),
+  requester_name text NOT NULL,
+  phone_hash text NOT NULL,
+  phone_last4 text NOT NULL,
+  me_user_id uuid,
+  me_verified_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_contacts_reservation ON reservation_contacts(reservation_id);
+
+-- Section 6: reservation_notifications
+CREATE TABLE IF NOT EXISTS reservation_notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reservation_id uuid NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
+  target_type text NOT NULL CHECK (target_type IN ('partner','visitor')),
+  channel text NOT NULL CHECK (channel IN ('email','kakao_alimtalk','sms')),
+  status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sent','failed')),
+  sent_at timestamptz,
+  error_message text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Section 7: conversion_events extension (rev2)
+-- rev2: add info_drop_id, visitor_id (real schema lacked drop_id/visitor_id)
+ALTER TABLE conversion_events
+  ADD COLUMN IF NOT EXISTS info_drop_id uuid REFERENCES info_drops(id),
+  ADD COLUMN IF NOT EXISTS visitor_id uuid REFERENCES visitors(id),
+  ADD COLUMN IF NOT EXISTS reservation_id uuid REFERENCES reservations(id);
+
+CREATE INDEX IF NOT EXISTS idx_conversion_info_drop ON conversion_events(info_drop_id);
+CREATE INDEX IF NOT EXISTS idx_conversion_reservation ON conversion_events(reservation_id);
+
+-- Section 8: get_available_slots RPC
+CREATE OR REPLACE FUNCTION get_available_slots(p_drop_id uuid, p_date date)
+RETURNS TABLE(slot_time text, available boolean, remaining int)
+LANGUAGE sql STABLE
+AS $$
+  SELECT
+    slot_time,
+    (current_bookings < max_capacity AND NOT is_blocked) AS available,
+    GREATEST(0, max_capacity - current_bookings) AS remaining
+  FROM reservation_slots
+  WHERE drop_id = p_drop_id AND slot_date = p_date
+  ORDER BY slot_time NULLS FIRST;
+$$;
+GRANT EXECUTE ON FUNCTION get_available_slots TO anon, authenticated;
+
+-- Section 9: create_reservation_anon RPC (rev2 — uses info_drops.partner_id)
+CREATE OR REPLACE FUNCTION create_reservation_anon(
+  p_drop_id uuid,
+  p_share_event_id uuid,
+  p_visitor_id uuid,
+  p_calendar_mode text,
+  p_reserved_date date,
+  p_time_slot text,
+  p_check_in_date date,
+  p_check_out_date date,
+  p_guest_count int,
+  p_name text,
+  p_phone_hash text,
+  p_phone_last4 text,
+  p_customer_message text
+)
+RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_partner_id uuid;
+  v_reservation_id uuid;
+BEGIN
+  SELECT partner_id INTO v_partner_id FROM info_drops WHERE id = p_drop_id;
+  IF v_partner_id IS NULL THEN
+    RAISE EXCEPTION 'Drop has no partner';
+  END IF;
+
+  INSERT INTO reservations (
+    drop_id, share_event_id, partner_id, visitor_id,
+    calendar_mode, reserved_date, time_slot,
+    check_in_date, check_out_date,
+    guest_count, customer_message
+  ) VALUES (
+    p_drop_id, p_share_event_id, v_partner_id, p_visitor_id,
+    p_calendar_mode, p_reserved_date, p_time_slot,
+    p_check_in_date, p_check_out_date,
+    p_guest_count, p_customer_message
+  ) RETURNING id INTO v_reservation_id;
+
+  INSERT INTO reservation_contacts (
+    reservation_id, visitor_id, requester_name, phone_hash, phone_last4
+  ) VALUES (
+    v_reservation_id, p_visitor_id, p_name, p_phone_hash, p_phone_last4
+  );
+
+  INSERT INTO reservation_notifications (reservation_id, target_type, channel)
+  VALUES (v_reservation_id, 'partner', 'email');
+
+  UPDATE reservation_slots
+  SET current_bookings = current_bookings + 1,
+      updated_at = now()
+  WHERE drop_id = p_drop_id
+    AND slot_date = COALESCE(p_reserved_date, p_check_in_date)
+    AND (slot_time = p_time_slot OR (slot_time IS NULL AND p_time_slot IS NULL));
+
+  RETURN v_reservation_id;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION create_reservation_anon TO anon, authenticated;
+-- Section 10: confirm_reservation RPC
+CREATE OR REPLACE FUNCTION confirm_reservation(
+  p_reservation_id uuid,
+  p_partner_message text
+)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE reservations
+  SET status = 'confirmed',
+      partner_message = p_partner_message,
+      confirmed_at = now(),
+      updated_at = now()
+  WHERE id = p_reservation_id AND status = 'pending';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or already processed';
+  END IF;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION confirm_reservation TO authenticated;
+
+-- Section 11: reject_reservation RPC
+CREATE OR REPLACE FUNCTION reject_reservation(
+  p_reservation_id uuid,
+  p_reason text
+)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_drop_id uuid;
+  v_date date;
+  v_time text;
+BEGIN
+  SELECT drop_id, COALESCE(reserved_date, check_in_date), time_slot
+    INTO v_drop_id, v_date, v_time
+  FROM reservations
+  WHERE id = p_reservation_id AND status = 'pending';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or already processed';
+  END IF;
+
+  UPDATE reservations
+  SET status = 'rejected',
+      partner_message = p_reason,
+      updated_at = now()
+  WHERE id = p_reservation_id;
+
+  UPDATE reservation_slots
+  SET current_bookings = GREATEST(0, current_bookings - 1),
+      updated_at = now()
+  WHERE drop_id = v_drop_id
+    AND slot_date = v_date
+    AND (slot_time = v_time OR (slot_time IS NULL AND v_time IS NULL));
+END;
+$$;
+GRANT EXECUTE ON FUNCTION reject_reservation TO authenticated;
+
+-- Section 12: get_partner_reservations RPC
+CREATE OR REPLACE FUNCTION get_partner_reservations(p_partner_id uuid)
+RETURNS TABLE(
+  reservation_id uuid,
+  drop_id uuid,
+  calendar_mode text,
+  reserved_date date,
+  time_slot text,
+  check_in_date date,
+  check_out_date date,
+  guest_count int,
+  status text,
+  customer_name text,
+  phone_last4 text,
+  customer_message text,
+  created_at timestamptz
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+AS $$
+  SELECT
+    r.id,
+    r.drop_id,
+    r.calendar_mode,
+    r.reserved_date,
+    r.time_slot,
+    r.check_in_date,
+    r.check_out_date,
+    r.guest_count,
+    r.status,
+    c.requester_name,
+    c.phone_last4,
+    r.customer_message,
+    r.created_at
+  FROM reservations r
+  LEFT JOIN reservation_contacts c ON c.reservation_id = r.id
+  WHERE r.partner_id = p_partner_id
+  ORDER BY r.created_at DESC;
+$$;
+GRANT EXECUTE ON FUNCTION get_partner_reservations TO authenticated;
+
+
+-- Section 13: Trigger — reservation confirmed → conversion event (rev2)
+-- rev2: uses 'reservation_confirm' enum value, info_drop_id, occurred_at,
+--       fills required NOT NULL columns (source_id, chain_path, amounts)
+--       skips if share_event_id IS NULL (no attribution to track)
+CREATE OR REPLACE FUNCTION trigger_reservation_conversion()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_source_id uuid;
+  v_chain_path uuid[];
+  v_chain_depth int;
+BEGIN
+  IF NEW.status = 'confirmed'
+     AND OLD.status = 'pending'
+     AND NEW.share_event_id IS NOT NULL THEN
+
+    SELECT source_id INTO v_source_id FROM info_drops WHERE id = NEW.drop_id;
+
+    SELECT chain_path, chain_depth
+    INTO v_chain_path, v_chain_depth
+    FROM share_events
+    WHERE id = NEW.share_event_id;
+
+    INSERT INTO conversion_events (
+      share_event_id, conversion_type, source_id,
+      gross_amount_krw, partner_fee_krw, reward_pool_krw, platform_fee_krw,
+      occurred_at, chain_path, chain_depth,
+      info_drop_id, visitor_id, reservation_id
+    ) VALUES (
+      NEW.share_event_id, 'reservation_confirm', v_source_id,
+      0, 0, 0, 0,
+      now(),
+      COALESCE(v_chain_path, ARRAY[]::uuid[]),
+      COALESCE(v_chain_depth, 0),
+      NEW.drop_id, NEW.visitor_id, NEW.id
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_reservation_confirmed ON reservations;
+CREATE TRIGGER on_reservation_confirmed
+  AFTER UPDATE ON reservations
+  FOR EACH ROW EXECUTE FUNCTION trigger_reservation_conversion();
+
+-- Section 14: RLS policies (rev2 — partners.owner_user_id, not owner_id)
+ALTER TABLE reservations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reservation_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reservation_slots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reservation_notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY reservations_partner_select ON reservations
+  FOR SELECT TO authenticated
+  USING (partner_id IN (SELECT id FROM partners WHERE owner_user_id = auth.uid()));
+
+CREATE POLICY reservations_partner_update ON reservations
+  FOR UPDATE TO authenticated
+  USING (partner_id IN (SELECT id FROM partners WHERE owner_user_id = auth.uid()));
+
+CREATE POLICY contacts_partner_select ON reservation_contacts
+  FOR SELECT TO authenticated
+  USING (
+    reservation_id IN (
+      SELECT id FROM reservations
+      WHERE partner_id IN (SELECT id FROM partners WHERE owner_user_id = auth.uid())
+    )
+  );
+
+CREATE POLICY slots_partner_all ON reservation_slots
+  FOR ALL TO authenticated
+  USING (partner_id IN (SELECT id FROM partners WHERE owner_user_id = auth.uid()));
+
+CREATE POLICY slots_public_select ON reservation_slots
+  FOR SELECT TO anon
+  USING (true);
+
+CREATE POLICY notifications_partner_select ON reservation_notifications
+  FOR SELECT TO authenticated
+  USING (
+    reservation_id IN (
+      SELECT id FROM reservations
+      WHERE partner_id IN (SELECT id FROM partners WHERE owner_user_id = auth.uid())
+    )
+  );
+
+COMMIT;
