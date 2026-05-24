@@ -67,6 +67,18 @@ export interface InfoDropPageProps {
   shareUrl?: string;
   /** 예약 목적 — 메이커가 보낸 예약 가능 날짜 (수신자 달력 마킹용). */
   reservationDates?: ReservationDateItem[];
+  /**
+   * 예약 목적 — 메이커가 설정한 예약 버튼 연결 URL.
+   * 값이 있으면 "예약하기" CTA 활성, 클릭 시 onPrimaryAction 발화.
+   * 빈 값/undefined 이면 CTA 비활성 + 안내 문구 노출.
+   */
+  reservationUrl?: string | null;
+  /**
+   * 재공유(re-share) 수신자 화면 여부. 부모 라우트가 URL 마커
+   * (parentShareId · shareDepth · ref) 로 판별해 전달.
+   * true 면 예약 캘린더가 read-only 카드로 전환된다.
+   */
+  isReshare?: boolean;
   onPrimaryAction?: () => void;
   onWatchOriginal?: () => void;
   onShare?: () => void;
@@ -203,6 +215,7 @@ function ReservationCalendarClient(props: {
   partnerName: string;
   campgroundInfo?: ReservationCampgroundInfo;
   makerAvailableDates?: ReservationDateItem[];
+  readOnly?: boolean;
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
 }) {
@@ -234,6 +247,7 @@ function ReservationCalendarClient(props: {
       <Calendar
         partnerName={props.partnerName}
         makerAvailableDates={props.makerAvailableDates}
+        readOnly={props.readOnly}
         className="mx-0 mt-0 w-full max-w-full"
         onCheckAvailability={props.onCheckAvailability}
         onSecondaryAction={props.onSecondaryAction}
@@ -358,6 +372,8 @@ export function InfoDropPage({
   keyPoints,
   shareUrl,
   reservationDates,
+  reservationUrl,
+  isReshare = false,
   onPrimaryAction,
   onWatchOriginal,
   onShare,
@@ -402,9 +418,14 @@ export function InfoDropPage({
       setCopyFeedback("링크를 복사했어요.");
       return;
     }
-    if (!shareUrl) return;
+    // 폴백 — 부모가 onCopyLink 를 주지 않으면 현재 페이지의 전체 URL(?r=, ?u= 포함)을
+    // 복사한다. adapter 의 shareUrl 은 hardcoded PROD_BASE 라 dev 환경 + query 누락으로
+    // 재공유 시 화면 일관성이 깨지는 문제를 방지.
+    const fallbackUrl =
+      typeof window !== "undefined" && window.location.href ? window.location.href : shareUrl;
+    if (!fallbackUrl) return;
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(fallbackUrl);
       setCopyFeedback("링크를 복사했어요.");
     } catch {
       setShareError("링크 복사에 실패했어요.");
@@ -609,6 +630,7 @@ export function InfoDropPage({
             partnerName={safeLocal.name}
             campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
             makerAvailableDates={reservationDates}
+            readOnly={isReshare}
             onCheckAvailability={(selection) => {
               console.log("[InfoDropPage] reservation check", selection);
               onPrimaryAction?.();
@@ -616,6 +638,35 @@ export function InfoDropPage({
             onSecondaryAction={(action) => handleCtaClick(action)}
           />
         )}
+
+        {/* 캘린더 카드가 숨겨질 때 fallback 예약 CTA. reservationUrl 이 없으면 비활성 + 안내. */}
+        {isReservation &&
+          (!Array.isArray(reservationDates) || reservationDates.length === 0) &&
+          (reservationUrl ? (
+            <ActionButton
+              type="button"
+              data-testid="cta-reservation-fallback"
+              onClick={() => onPrimaryAction?.()}
+              className={WIZARD_PRIMARY_BUTTON_CLASS}
+            >
+              예약하기
+            </ActionButton>
+          ) : (
+            <div className="space-y-2">
+              <ActionButton
+                type="button"
+                data-testid="cta-reservation-fallback-disabled"
+                disabled
+                aria-disabled
+                className={WIZARD_PRIMARY_BUTTON_CLASS}
+              >
+                예약하기
+              </ActionButton>
+              <p className="text-xs font-medium tracking-ko text-text-muted">
+                예약 링크가 설정되지 않았습니다.
+              </p>
+            </div>
+          ))}
 
         {resolvedVariant === "purchase" && (
           <section data-testid="variant-purchase">

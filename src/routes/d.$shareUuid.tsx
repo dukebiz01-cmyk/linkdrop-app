@@ -18,13 +18,23 @@ const BRAND_TITLE = "LinkDrop — 친구가 보내준 드롭";
 const BRAND_DESCRIPTION = "영상 속 정보를 친구와 카톡으로 나누는 가장 빠른 방법";
 
 // r = 메이커가 공유 URL 에 실어 보낸 예약 가능 날짜(base64url). 수신자 화면 달력용.
-type DropSearch = { variant?: DropVariant; r?: string };
+// u = 메이커가 입력한 예약 버튼 연결값(URL/연락처). 미리보기 CTA 클릭 시 연결.
+// parentShareId / shareDepth / ref = 재공유 마커. 하나라도 있으면 read-only 모드.
+type DropSearch = {
+  variant?: DropVariant;
+  r?: string;
+  u?: string;
+  parentShareId?: string;
+  shareDepth?: number;
+  ref?: string;
+};
 
 type MockLoaderData = {
   mode: "mock";
   shareUuid: string;
   variant: DropVariant;
   reservationDates: ReservationDateItem[];
+  reservationUrl: string | null;
 };
 type DbLoaderData = { mode: "db"; detail: DropDetailRpc | null; shareUuid: string };
 type LoaderData = MockLoaderData | DbLoaderData;
@@ -33,6 +43,7 @@ function mockLoaderData(
   shareUuid: string,
   searchVariant: unknown,
   reservationDates: ReservationDateItem[],
+  reservationUrl: string | null,
 ): MockLoaderData {
   const code = shareUuid || "test";
   return {
@@ -40,23 +51,39 @@ function mockLoaderData(
     shareUuid: code,
     variant: resolvePublicDropVariant(code, normalizeVariant(searchVariant)),
     reservationDates,
+    reservationUrl,
   };
 }
 
 export const Route = createFileRoute("/d/$shareUuid")({
-  validateSearch: (search: Record<string, unknown>): DropSearch => ({
-    variant: normalizeVariant(search.variant),
-    r: typeof search.r === "string" ? search.r : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): DropSearch => {
+    const depthRaw = search.shareDepth;
+    const depth =
+      typeof depthRaw === "number"
+        ? depthRaw
+        : typeof depthRaw === "string" && /^\d+$/.test(depthRaw)
+          ? Number(depthRaw)
+          : undefined;
+    return {
+      variant: normalizeVariant(search.variant),
+      r: typeof search.r === "string" ? search.r : undefined,
+      u: typeof search.u === "string" ? search.u : undefined,
+      parentShareId: typeof search.parentShareId === "string" ? search.parentShareId : undefined,
+      shareDepth: depth,
+      ref: typeof search.ref === "string" ? search.ref : undefined,
+    };
+  },
   loader: async ({ params, location }): Promise<LoaderData> => {
     const shareUuid = params.shareUuid ?? "";
     const searchVariant = (location.search as DropSearch)?.variant;
     // 메이커가 보낸 예약 가능 날짜(?r=) 디코딩 — 없으면 빈 배열.
     const reservationDates = decodeReservationDates((location.search as DropSearch)?.r);
+    // 메이커가 보낸 예약 버튼 연결값(?u=) — preview 흐름에서 CTA 클릭 시 사용.
+    const reservationUrl = (location.search as DropSearch)?.u ?? null;
 
     // test / preview-* → mock only (DB 미호출)
     if (isPublicDropMockPath(shareUuid)) {
-      return mockLoaderData(shareUuid, searchVariant, reservationDates);
+      return mockLoaderData(shareUuid, searchVariant, reservationDates, reservationUrl);
     }
 
     // 실제 share_uuid → get_drop_detail RPC (v3.5: maker/store 포함, 조회수 +1)
@@ -139,12 +166,23 @@ function ShareUuidRouteErrorFallback({ error }: { error: Error }) {
 
 function DropPage() {
   const loaderData = Route.useLoaderData();
+  // ?u= — wizard 가 메이커 입력 예약 URL 을 query 로 운반. store.reservation_url 이
+  // DB 에 아직 저장되지 않은 동안의 임시 경로 (Phase 1 호환).
+  const search = Route.useSearch();
+
+  // 재공유 마커 — parentShareId / shareDepth>0 / ref 중 하나라도 있으면 read-only.
+  // 첫 수신자(마커 없음)는 기존 편집 가능 UI 유지.
+  const isReshare = Boolean(
+    search.parentShareId || (search.shareDepth ?? 0) > 0 || search.ref,
+  );
 
   if (loaderData.mode === "mock") {
     return renderMockInfoDropPage(
       loaderData.shareUuid,
       loaderData.variant,
       loaderData.reservationDates,
+      loaderData.reservationUrl,
+      isReshare,
     );
   }
 
@@ -156,9 +194,31 @@ function DropPage() {
   }
 
   const props = infoDropAdapter(detail);
+  // store.reservation_url 우선, 없으면 wizard 의 ?u= 사용. http(s) 만 허용.
+  // InfoDropPage 가 이 값으로 CTA 활성/비활성 + 안내 문구를 결정한다.
+  const reservationUrlSource = detail.store?.reservation_url ?? search.u ?? null;
+  const reservationUrl = (() => {
+    if (!reservationUrlSource) return null;
+    try {
+      const u = new URL(reservationUrlSource);
+      return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
+    } catch {
+      return null;
+    }
+  })();
+  // 예약 가능 날짜 — wizard 의 ?r= 디코드. DB 미저장이라 query param 으로 임시 운반.
+  // 빈 배열이면 InfoDropPage 가 캘린더 카드를 자동 숨김.
+  const reservationDatesFromQuery = decodeReservationDates(search.r);
   return (
     <InfoDropPage
       {...props}
+      reservationDates={reservationDatesFromQuery}
+      reservationUrl={reservationUrl}
+      isReshare={isReshare}
+      onPrimaryAction={() => {
+        if (!reservationUrl || typeof window === "undefined") return;
+        window.open(reservationUrl, "_blank", "noopener,noreferrer");
+      }}
       onWatchOriginal={() => {
         const url = detail.source?.source_url;
         if (url) window.open(url, "_blank", "noopener,noreferrer");

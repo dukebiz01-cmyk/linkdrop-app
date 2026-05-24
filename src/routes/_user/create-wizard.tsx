@@ -72,29 +72,30 @@ function CreateWizardPage() {
       initialSourceId={search.source_id}
       onClose={() => navigate({ to: "/home" })}
       onComplete={async (data) => {
-        // wizard 완료 → POST /api/drops (orchestration) → /d/$shareUuid
-        try {
-          const res = await fetch("/api/drops", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              media_url: data.video.url,
-              purpose: data.purpose,
-              curator_message: data.makerMessage || null,
-            }),
-          });
-          const json = (await res.json()) as {
-            drop?: { share_uuid?: string };
-            message?: string;
-          };
-          if (!res.ok || !json.drop?.share_uuid) {
-            console.error("[create-wizard] /api/drops 실패:", json.message);
-            return;
-          }
-          navigate({ to: "/d/$shareUuid", params: { shareUuid: json.drop.share_uuid } });
-        } catch (e) {
-          console.error("[create-wizard] Drop 생성 오류:", e);
+        // wizard 의 첫 카카오톡 공유/링크 복사 클릭 시 호출.
+        // POST /api/drops 로 실제 저장하고 share_uuid + 공유 URL 을 반환한다.
+        const res = await fetch("/api/drops", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            media_url: data.video.url,
+            purpose: data.purpose,
+            curator_message: data.makerMessage || null,
+          }),
+        });
+        const json = (await res.json()) as {
+          drop?: { share_uuid?: string };
+          shareable_url?: string;
+          message?: string;
+        };
+        if (!res.ok || !json.drop?.share_uuid) {
+          throw new Error(json.message ?? "DROP_CREATE_FAILED");
         }
+        const shareUuid = json.drop.share_uuid;
+        // shareable_url 은 prod 도메인 기준 — 로컬·preview 환경에선 현재 origin 으로 다시 만든다.
+        const origin =
+          typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
+        return { shareUuid, shareUrl: `${origin}/d/${shareUuid}` };
       }}
     />
   );

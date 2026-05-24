@@ -233,8 +233,6 @@ export function buildMockInfoDropProps(
   }
 }
 
-function noop() {}
-
 async function safeCopyLink(shareUrl: string) {
   try {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -271,14 +269,29 @@ export function renderMockInfoDropPage(
   shareCode: string,
   variantInput?: DropViewVariant,
   reservationDates?: ReservationDateItem[],
+  reservationUrl?: string | null,
+  isReshare?: boolean,
 ): ReactElement {
   const variant = resolvePublicDropVariant(shareCode, variantInput);
   const props = buildMockInfoDropProps(variant, shareCode);
+  // ?u= 검증 — http(s) 만 통과. javascript:/data: 등은 null 처리.
+  // InfoDropPage 가 이 값으로 CTA 활성/비활성 + 안내 문구를 결정한다.
+  const safeReservationUrl = (() => {
+    if (!reservationUrl) return null;
+    try {
+      const u = new URL(reservationUrl);
+      return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
+    } catch {
+      return null;
+    }
+  })();
   return (
     <InfoDropPage
       {...props}
       variant={variant}
       reservationDates={reservationDates}
+      reservationUrl={safeReservationUrl}
+      isReshare={isReshare}
       onWatchOriginal={() => {
         if (typeof window !== "undefined") {
           window.open("https://youtu.be/dQw4w9WgXcQ", "_blank", "noopener,noreferrer");
@@ -286,7 +299,10 @@ export function renderMockInfoDropPage(
       }}
       onCopyLink={() => safeCopyLink(props.shareUrl ?? buildPublicDropShareUrl(shareCode))}
       onKakaoShare={() => safeKakaoShare(props, shareCode)}
-      onPrimaryAction={noop}
+      onPrimaryAction={() => {
+        if (!safeReservationUrl || typeof window === "undefined") return;
+        window.open(safeReservationUrl, "_blank", "noopener,noreferrer");
+      }}
     />
   );
 }
