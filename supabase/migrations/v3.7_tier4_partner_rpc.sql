@@ -51,11 +51,13 @@ DECLARE
   v_partner_id uuid;
   v_result     jsonb;
 BEGIN
-  -- 검증 완료 매장만 공개. ⚠ verification_status enum 라벨 확인 필요.
+  -- 검증 완료 매장만 공개.
+  -- 'approved' = partners verification_status enum의 verified 의미 라벨
+  -- (enum: pending, in_review, approved, rejected, revoked)
   SELECT id INTO v_partner_id
   FROM public.partners
   WHERE lower(slug) = lower(p_slug)
-    AND verification_status::text = 'verified';
+    AND verification_status::text = 'approved';
 
   IF v_partner_id IS NULL THEN
     RETURN NULL;   -- 라우트에서 404 처리
@@ -144,8 +146,8 @@ BEGIN
   END IF;
 
   -- owner 본인 또는 partner_staff 만 열람.
-  -- ⚠ is_partner_staff 인자 순서 확인 필요 — 가정: (p_partner_id, p_user_id).
-  IF v_owner <> v_uid AND NOT public.is_partner_staff(p_partner_id, v_uid) THEN
+  -- is_partner_staff 시그니처: (_user_id uuid, _partner_id uuid)
+  IF v_owner <> v_uid AND NOT public.is_partner_staff(v_uid, p_partner_id) THEN
     RAISE EXCEPTION 'FORBIDDEN' USING errcode = '42501';
   END IF;
 

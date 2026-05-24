@@ -2213,6 +2213,7 @@ export type Database = {
           rejection_reason: string | null
           reservation_url: string | null
           slot_duration_min: number | null
+          slug: string | null
           updated_at: string | null
           verification_status: Database["public"]["Enums"]["verification_status"]
         }
@@ -2234,6 +2235,7 @@ export type Database = {
           rejection_reason?: string | null
           reservation_url?: string | null
           slot_duration_min?: number | null
+          slug?: string | null
           updated_at?: string | null
           verification_status?: Database["public"]["Enums"]["verification_status"]
         }
@@ -2255,6 +2257,7 @@ export type Database = {
           rejection_reason?: string | null
           reservation_url?: string | null
           slot_duration_min?: number | null
+          slug?: string | null
           updated_at?: string | null
           verification_status?: Database["public"]["Enums"]["verification_status"]
         }
@@ -2407,6 +2410,7 @@ export type Database = {
         Row: {
           active_roles: Database["public"]["Enums"]["user_role"][] | null
           avatar_url: string | null
+          bio: string | null
           created_at: string | null
           display_name: string | null
           id: string
@@ -2415,10 +2419,12 @@ export type Database = {
           marketing_consent_at: string | null
           pii_consent_at: string | null
           primary_role: Database["public"]["Enums"]["user_role"] | null
+          username: string | null
         }
         Insert: {
           active_roles?: Database["public"]["Enums"]["user_role"][] | null
           avatar_url?: string | null
+          bio?: string | null
           created_at?: string | null
           display_name?: string | null
           id: string
@@ -2427,10 +2433,12 @@ export type Database = {
           marketing_consent_at?: string | null
           pii_consent_at?: string | null
           primary_role?: Database["public"]["Enums"]["user_role"] | null
+          username?: string | null
         }
         Update: {
           active_roles?: Database["public"]["Enums"]["user_role"][] | null
           avatar_url?: string | null
+          bio?: string | null
           created_at?: string | null
           display_name?: string | null
           id?: string
@@ -2439,6 +2447,7 @@ export type Database = {
           marketing_consent_at?: string | null
           pii_consent_at?: string | null
           primary_role?: Database["public"]["Enums"]["user_role"] | null
+          username?: string | null
         }
         Relationships: []
       }
@@ -3301,18 +3310,24 @@ export type Database = {
       public_profiles: {
         Row: {
           avatar_url: string | null
+          bio: string | null
           display_name: string | null
           id: string | null
+          username: string | null
         }
         Insert: {
           avatar_url?: string | null
+          bio?: string | null
           display_name?: string | null
           id?: string | null
+          username?: string | null
         }
         Update: {
           avatar_url?: string | null
+          bio?: string | null
           display_name?: string | null
           id?: string | null
+          username?: string | null
         }
         Relationships: []
       }
@@ -3397,6 +3412,12 @@ export type Database = {
       }
       get_drop_detail: { Args: { p_share_uuid: string }; Returns: Json }
       get_drop_results: { Args: { p_share_uuid: string }; Returns: Json }
+      get_my_coupons: { Args: { p_status?: string }; Returns: Json }
+      get_my_drops: {
+        Args: { p_limit?: number; p_offset?: number; p_status?: string }
+        Returns: Json
+      }
+      get_partner_dashboard: { Args: { p_partner_id: string }; Returns: Json }
       get_partner_reservations: {
         Args: { p_partner_id: string }
         Returns: {
@@ -3415,6 +3436,8 @@ export type Database = {
           time_slot: string
         }[]
       }
+      get_store_by_slug: { Args: { p_slug: string }; Returns: Json }
+      get_user_stats: { Args: never; Returns: Json }
       has_role: { Args: { _role: string; _user_id: string }; Returns: boolean }
       hash_phone: { Args: { p_phone: string }; Returns: string }
       increment_share_view: {
