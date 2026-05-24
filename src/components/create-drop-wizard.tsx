@@ -2059,6 +2059,18 @@ function Step3ReservationCards({
   const selectedDest = RESERVATION_DESTS.find((d) => d.id === fields.reservationDest) ?? null;
   const gateReason = reservationStep3GateReason(fields);
 
+  // Card assembly — 섹션 #4 예약 캘린더. 선택 날짜가 있으면 completed.
+  const calendarCardConfig: CardConfig = {
+    id: "calendar",
+    type: "calendar",
+    required: true,
+    enabled: true,
+    position: 4,
+    status: fields.reservationDates.length > 0 ? "completed" : "needs_confirmation",
+    data: { dateCount: fields.reservationDates.length },
+    label: "예약 날짜 설정",
+  };
+
   // Card assembly — 섹션 #7 예약 버튼 연결. dest 선택 시 completed.
   const actionButtonCardConfig: CardConfig = {
     id: "action_button",
@@ -2382,7 +2394,7 @@ function Step3ReservationCards({
         </section>
 
         {/* 4. 캘린더 — 메인 UI */}
-        <section>
+        <CardShell config={calendarCardConfig}>
           <div className="flex items-center gap-2">
             <p className="text-base font-bold tracking-ko text-text-strong">예약 가능 날짜</p>
             <span className="rounded-lg bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-ko text-text-muted">
@@ -2475,7 +2487,7 @@ function Step3ReservationCards({
               ))}
             </div>
           </div>
-        </section>
+        </CardShell>
 
         {/* 7. 예약 버튼 연결 */}
         <CardShell config={actionButtonCardConfig}>
