@@ -270,15 +270,14 @@ export interface Step3InfoCardsProps {
 
 export function Step3InfoCards({
   detailId,
-  onDetailSelect: _onDetailSelect,
+  onDetailSelect,
   fields,
   onFieldsChange,
   onNext: _onNext,
 }: Step3InfoCardsProps) {
-  // CategoryChangeSheet 는 청크 3-B 에서 도입. 지금은 placeholder.
+  const [showCategoryGrid, setShowCategoryGrid] = useState(false);
   const handleOpenChangeSheet = () => {
-    // TODO(chunk 3-B): CategoryChangeSheet 트리거 (onDetailSelect 콜백 연결)
-    console.log("[Step3InfoCards] open change sheet (chunk 3-B wiring 대기)");
+    setShowCategoryGrid((s) => !s);
   };
 
   return (
@@ -288,6 +287,28 @@ export function Step3InfoCards({
         <InfoPreviewCard fields={fields} detailId={detailId} />
         <InfoHeadlineCard fields={fields} onFieldsChange={onFieldsChange} />
         <InfoDetailCategoryCard detailId={detailId} onOpenChangeSheet={handleOpenChangeSheet} />
+        {showCategoryGrid && (
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-[#E5E5E5] p-3">
+            {Object.entries(INFO_DETAIL_LABELS).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  onDetailSelect(id);
+                  setShowCategoryGrid(false);
+                }}
+                className={`rounded-lg border px-3 py-2 text-sm tracking-ko text-left
+                  ${
+                    detailId === id
+                      ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                      : "border-[#E5E5E5] bg-white text-text-strong"
+                  }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <PurposeMessageCard fields={fields} onFieldsChange={onFieldsChange} />
         <InfoAdvancedCard fields={fields} onFieldsChange={onFieldsChange} />
       </div>

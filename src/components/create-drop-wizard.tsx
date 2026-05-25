@@ -39,6 +39,7 @@ import {
   WIZARD_SECONDARY_BUTTON_CLASS,
 } from "@/components/create-wizard-button-styles";
 import { cn } from "@/lib/utils";
+import { Step3InfoCards } from "@/components/create/Step3InfoCards";
 
 // =============================================================================
 // Types
@@ -2881,6 +2882,18 @@ function Step3Options({
         onReservationDatesChange={onReservationDatesChange}
         onNext={onNext}
         onSkip={onSkip}
+      />
+    );
+  }
+
+  if (purpose === "정보") {
+    return (
+      <Step3InfoCards
+        detailId={detailId}
+        onDetailSelect={onDetailSelect}
+        fields={fields}
+        onFieldsChange={onFieldsChange}
+        onNext={onNext}
       />
     );
   }
