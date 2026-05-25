@@ -204,7 +204,7 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
   range_middle: "rounded-none",
   today: "font-bold text-[#2563EB]",
   outside: "text-text-subtle opacity-40",
-  disabled: "text-text-disabled opacity-40",
+  disabled: "text-[#A3A3A3]",
 };
 
 // 수신자 선택(체크인/체크아웃/range middle) 시각 — shadcn 기본은 bg-primary(BLACK)/
