@@ -218,11 +218,20 @@ function DropPage() {
       videoSourceUrl={detail.source?.source_url ?? undefined}
       onPrimaryAction={() => {
         if (!reservationUrl || typeof window === "undefined") return;
-        window.open(reservationUrl, "_blank", "noopener,noreferrer");
+        const safeRes =
+          reservationUrl.startsWith("https://booking.naver.com") ||
+          reservationUrl.startsWith("https://naver.me") ||
+          reservationUrl.startsWith("tel:");
+        if (safeRes) window.open(reservationUrl, "_blank", "noopener,noreferrer");
       }}
       onWatchOriginal={() => {
         const url = detail.source?.source_url;
-        if (url) window.open(url, "_blank", "noopener,noreferrer");
+        if (!url || typeof window === "undefined") return;
+        const safeVid =
+          url.startsWith("https://www.youtube.com") ||
+          url.startsWith("https://youtu.be") ||
+          url.startsWith("https://www.instagram.com");
+        if (safeVid) window.open(url, "_blank", "noopener,noreferrer");
       }}
       onBack={() => window.history.back()}
       onShare={() => console.log("[d/$shareUuid] share", shareUuid)}
