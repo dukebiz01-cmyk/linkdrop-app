@@ -651,7 +651,7 @@ export function InfoDropPage({
             readOnly={isReshare}
             onCheckAvailability={(selection) => {
               console.log("[InfoDropPage] reservation check", selection);
-              onPrimaryAction?.();
+              if (reservationUrl) window.open(reservationUrl, "_blank", "noopener");
             }}
             onSecondaryAction={(action) => handleCtaClick(action)}
           />
