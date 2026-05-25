@@ -215,6 +215,7 @@ function DropPage() {
       reservationDates={reservationDatesFromQuery}
       reservationUrl={reservationUrl}
       isReshare={isReshare}
+      videoSourceUrl={detail.source?.source_url ?? undefined}
       onPrimaryAction={() => {
         if (!reservationUrl || typeof window === "undefined") return;
         window.open(reservationUrl, "_blank", "noopener,noreferrer");

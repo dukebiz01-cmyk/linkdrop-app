@@ -25,6 +25,8 @@ import type {
   ReservationSelection,
 } from "@/components/reservation-calendar-page";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
+import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
+import { parseVideoUrl } from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
 
 // ============================================================
@@ -79,6 +81,8 @@ export interface InfoDropPageProps {
    * true 면 예약 캘린더가 read-only 카드로 전환된다.
    */
   isReshare?: boolean;
+  /** 영상 원본 URL — youtube 인 경우 in-app embed 모달 활성 */
+  videoSourceUrl?: string;
   onPrimaryAction?: () => void;
   onWatchOriginal?: () => void;
   onShare?: () => void;
@@ -374,12 +378,26 @@ export function InfoDropPage({
   reservationDates,
   reservationUrl,
   isReshare = false,
+  videoSourceUrl,
   onPrimaryAction,
   onWatchOriginal,
   onShare,
   onCopyLink,
   onKakaoShare,
 }: InfoDropPageProps) {
+  const [isEmbedOpen, setIsEmbedOpen] = useState(false);
+  const parsedVideo = videoSourceUrl ? parseVideoUrl(videoSourceUrl) : null;
+  const canEmbed = parsedVideo?.platform === "youtube";
+
+  const handleVideoClick = () => {
+    console.log("[analytics] video_card_view", { canEmbed });
+    if (canEmbed) {
+      setIsEmbedOpen(true);
+      return;
+    }
+    onWatchOriginal?.();
+  };
+
   const safeIntent = intent ?? "info";
   const resolvedVariant: DropViewVariant =
     variant && VARIANT_PAGE_COPY[variant] ? variant : intentToVariant(safeIntent);
@@ -547,7 +565,7 @@ export function InfoDropPage({
         <button
               type="button"
           className="absolute inset-0 flex items-center justify-center"
-              onClick={() => onWatchOriginal?.()}
+              onClick={handleVideoClick}
           aria-label="영상 재생"
         >
               <span className="flex size-16 items-center justify-center rounded-full bg-bg/95 shadow-soft">
@@ -768,6 +786,15 @@ export function InfoDropPage({
           </p>
         </div>
       </footer>
+      {canEmbed && parsedVideo && (
+        <YouTubeEmbedModal
+          open={isEmbedOpen}
+          onOpenChange={setIsEmbedOpen}
+          videoId={parsedVideo.videoId}
+          originalUrl={videoSourceUrl!}
+          title={safeTitle}
+        />
+      )}
     </div>
   );
 }
