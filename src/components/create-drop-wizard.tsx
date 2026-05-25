@@ -3560,6 +3560,7 @@ export function CreateDropWizard({
     if (step === 3) {
       // 예약은 캘린더 화면 — 예약 종류·시설·날짜·날짜 상태·예약 버튼 연결을 모두 요구한다.
       if (purpose === "예약") return canProceedReservationStep3(step3Fields);
+      if (purpose === "정보") return true;
       return step3DetailId !== null;
     }
     return true;
