@@ -651,7 +651,12 @@ export function InfoDropPage({
             readOnly={isReshare}
             onCheckAvailability={(selection) => {
               console.log("[InfoDropPage] reservation check", selection);
-              if (reservationUrl) window.open(reservationUrl, "_blank", "noopener");
+              if (!reservationUrl) return;
+              const safe =
+                reservationUrl.startsWith("https://booking.naver.com") ||
+                reservationUrl.startsWith("https://naver.me") ||
+                reservationUrl.startsWith("tel:");
+              if (safe) window.open(reservationUrl, "_blank", "noopener");
             }}
             onSecondaryAction={(action) => handleCtaClick(action)}
           />

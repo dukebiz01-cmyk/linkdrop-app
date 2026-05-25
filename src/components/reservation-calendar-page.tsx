@@ -612,7 +612,7 @@ function EditableReservationCard({
           setCheckFeedback(`${dateLine} · ${stayLine} 조건으로 예약 가능 여부를 확인합니다.`);
         }}
       >
-        예약 가능 여부 확인
+        네이버 예약하기
       </button>
 
       {checkFeedback && (
