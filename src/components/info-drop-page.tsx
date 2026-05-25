@@ -793,6 +793,11 @@ export function InfoDropPage({
           videoId={parsedVideo.videoId}
           originalUrl={videoSourceUrl!}
           title={safeTitle}
+          ctaItems={ctas}
+          onCtaClick={handleCtaClick}
+          createDropUrl={
+            videoSourceUrl ? `/create?url=${encodeURIComponent(videoSourceUrl)}` : undefined
+          }
         />
       )}
     </div>

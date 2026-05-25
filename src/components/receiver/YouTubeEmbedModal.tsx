@@ -8,6 +8,9 @@ export interface YouTubeEmbedModalProps {
   videoId: string;
   originalUrl: string;
   title?: string;
+  ctaItems?: Array<{ id: string; label: string; primary?: boolean }>;
+  onCtaClick?: (id: string) => void;
+  createDropUrl?: string;
 }
 
 export function YouTubeEmbedModal({
@@ -16,6 +19,9 @@ export function YouTubeEmbedModal({
   videoId,
   originalUrl,
   title = "영상 재생",
+  ctaItems,
+  onCtaClick,
+  createDropUrl,
 }: YouTubeEmbedModalProps) {
   useEffect(() => {
     if (open) {
@@ -32,6 +38,11 @@ export function YouTubeEmbedModal({
 
   const handleOriginalClick = () => {
     console.log("[analytics] video_original_click", { videoId });
+  };
+
+  const handleCtaClick = (id: string) => {
+    console.log("[analytics] video_modal_cta_click", { videoId, ctaId: id });
+    onCtaClick?.(id);
   };
 
   const embedSrc = `https://www.youtube-nocookie.com/embed/${videoId}?playsinline=1&rel=0&autoplay=1`;
@@ -66,6 +77,37 @@ export function YouTubeEmbedModal({
             YouTube에서 원본 보기
           </a>
         </div>
+        {ctaItems?.length || createDropUrl ? (
+          <div className="space-y-3 rounded-b-2xl bg-white px-4 py-4">
+            {ctaItems && ctaItems.length > 0 && (
+              <div className="flex gap-2">
+                {ctaItems.slice(0, 3).map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => handleCtaClick(c.id)}
+                    className={`flex-1 rounded-2xl py-3 text-sm font-semibold tracking-ko
+                      ${
+                        c.primary
+                          ? "bg-[#2563EB] text-white"
+                          : "border border-[#E5E5E5] text-text-strong"
+                      }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {createDropUrl && (
+              <a
+                href={createDropUrl}
+                className="block text-center text-xs tracking-ko text-[#A3A3A3] hover:text-[#2563EB]"
+              >
+                나도 이 영상 Drop 만들기 →
+              </a>
+            )}
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   );
