@@ -1,29 +1,20 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ChevronRight, Eye } from "lucide-react";
 import { CardShell } from "@/components/cards/CardShell";
 import type { CardConfig, CardStatus } from "@/components/cards/types";
-import { StepBadge, type Step3FieldState } from "@/components/create-drop-wizard";
-import { CategoryChangeSheet } from "@/components/create/CategoryChangeSheet";
+import type { Step3FieldState } from "@/components/create-drop-wizard";
 import { PurposeMessageCard } from "@/components/create/PurposeMessageCard";
 
 // 정적 placeholder (청크 3-D 에서 AI 호출 결과로 교체)
 const INFO_HEADLINE_PLACEHOLDER = "이 영상 핵심 내용을 한 줄로 정리합니다.";
 
-// 정적 데이터 (단일 소스) — PURPOSE_FLOW_CONFIG["정보"].detailCards 와 동기 유지
-const INFO_DETAIL_CATEGORIES: Array<{
-  id: string;
-  label: string;
-  description?: string;
-}> = [
-  { id: "summary", label: "영상 핵심 요약", description: "한 줄 요약 + 키포인트" },
-  { id: "place", label: "장소/매장 소개", description: "위치·주소·연락처" },
-  { id: "review", label: "후기 정리", description: "체험 요약" },
-  { id: "checklist", label: "체크리스트", description: "방문 전 확인 항목" },
-];
-
-const INFO_DETAIL_LABELS: Record<string, string> = Object.fromEntries(
-  INFO_DETAIL_CATEGORIES.map((c) => [c.id, c.label]),
-);
+// PURPOSE_FLOW_CONFIG["정보"].detailCards 의 id → label 매핑
+const INFO_DETAIL_LABELS: Record<string, string> = {
+  summary: "영상 핵심 요약",
+  place: "장소/매장 소개",
+  review: "후기 정리",
+  checklist: "체크리스트",
+};
 
 // ─────────── ① InfoPreviewCard (wrap X — 자체 border 미리보기) ───────────
 function InfoPreviewCard({
@@ -279,44 +270,27 @@ export interface Step3InfoCardsProps {
 
 export function Step3InfoCards({
   detailId,
-  onDetailSelect,
+  onDetailSelect: _onDetailSelect,
   fields,
   onFieldsChange,
   onNext: _onNext,
 }: Step3InfoCardsProps) {
-  const [isChangeSheetOpen, setIsChangeSheetOpen] = useState(false);
-
-  // 마운트 시 detailId 가 없으면 기본값 "summary" 자동 설정 (사용자는 시트로 변경 가능)
-  useEffect(() => {
-    if (!detailId) {
-      onDetailSelect("summary");
-    }
-  }, [detailId, onDetailSelect]);
-
+  // CategoryChangeSheet 는 청크 3-B 에서 도입. 지금은 placeholder.
   const handleOpenChangeSheet = () => {
-    setIsChangeSheetOpen(true);
+    // TODO(chunk 3-B): CategoryChangeSheet 트리거 (onDetailSelect 콜백 연결)
+    console.log("[Step3InfoCards] open change sheet (chunk 3-B wiring 대기)");
   };
 
   return (
-    <>
-      <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
-        <StepBadge n={3} />
-        <div className="mt-4 space-y-4">
-          <InfoPreviewCard fields={fields} detailId={detailId} />
-          <InfoHeadlineCard fields={fields} onFieldsChange={onFieldsChange} />
-          <InfoDetailCategoryCard detailId={detailId} onOpenChangeSheet={handleOpenChangeSheet} />
-          <PurposeMessageCard fields={fields} onFieldsChange={onFieldsChange} />
-          <InfoAdvancedCard fields={fields} onFieldsChange={onFieldsChange} />
-        </div>
-      </main>
-      <CategoryChangeSheet
-        open={isChangeSheetOpen}
-        onOpenChange={setIsChangeSheetOpen}
-        categories={INFO_DETAIL_CATEGORIES}
-        selectedId={detailId}
-        onSelect={onDetailSelect}
-        title="정보 유형을 바꿀까요?"
-      />
-    </>
+    <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
+      {/* StepBadge 는 dispatcher(Step3Options) 가 처리. 여기는 카드만. */}
+      <div className="mt-4 space-y-4">
+        <InfoPreviewCard fields={fields} detailId={detailId} />
+        <InfoHeadlineCard fields={fields} onFieldsChange={onFieldsChange} />
+        <InfoDetailCategoryCard detailId={detailId} onOpenChangeSheet={handleOpenChangeSheet} />
+        <PurposeMessageCard fields={fields} onFieldsChange={onFieldsChange} />
+        <InfoAdvancedCard fields={fields} onFieldsChange={onFieldsChange} />
+      </div>
+    </main>
   );
 }

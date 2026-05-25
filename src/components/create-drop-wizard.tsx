@@ -26,7 +26,6 @@ import { WizardSharePreview, type WizardSharePreviewData } from "@/components/wi
 import { CardShell } from "@/components/cards/CardShell";
 import type { CardConfig, CardUserAction } from "@/components/cards/types";
 import { PurposeMessageCard } from "@/components/create/PurposeMessageCard";
-import { Step3InfoCards } from "@/components/create/Step3InfoCards";
 import { shareToKakao } from "@/lib/kakao";
 import {
   fetchVideoMetadata,
@@ -753,7 +752,7 @@ function platformLabel(platform: VideoInfo["platform"]): string {
   return platform === "youtube" ? "YouTube" : "Instagram";
 }
 
-export function StepBadge({ n }: { n: StepNum }) {
+function StepBadge({ n }: { n: StepNum }) {
   return <p className="text-xs font-semibold tracking-ko text-text-subtle">Step {n} / 5</p>;
 }
 
@@ -1633,20 +1632,6 @@ function reservationStep3GateReason(fields: Step3FieldState): string | null {
 
 function canProceedReservationStep3(fields: Step3FieldState): boolean {
   return reservationStep3GateReason(fields) === null;
-}
-
-// 정보 Step 3 — 첫 미충족 조건을 한국어로 반환. 모두 충족이면 null.
-// WHY: infoHeadline 은 AI 자동 채움이라 강제 검증 X — detailId 만 필수.
-function infoStep3GateReason(
-  _fields: Step3FieldState,
-  detailId: string | null,
-): string | null {
-  if (!detailId) return "정보 유형을 선택해 주세요";
-  return null;
-}
-
-function canProceedInfoStep3(fields: Step3FieldState, detailId: string | null): boolean {
-  return infoStep3GateReason(fields, detailId) === null;
 }
 
 // 예약 Step 3 — 고객 미리보기 카드 (현재 state 로 라이브 갱신).
@@ -2900,19 +2885,6 @@ function Step3Options({
     );
   }
 
-  // 정보 목적은 5카드 조립형 (Step3InfoCards). detailId 기본 "summary" 자동 설정.
-  if (purpose === "정보") {
-    return (
-      <Step3InfoCards
-        detailId={detailId}
-        onDetailSelect={onDetailSelect}
-        fields={fields}
-        onFieldsChange={onFieldsChange}
-        onNext={onNext}
-      />
-    );
-  }
-
   const copy = STEP3_COPY[purpose];
   const categories = PURPOSE_FLOW_CONFIG[purpose].detailCards;
 
@@ -3575,7 +3547,6 @@ export function CreateDropWizard({
     if (step === 3) {
       // 예약은 캘린더 화면 — 예약 종류·시설·날짜·날짜 상태·예약 버튼 연결을 모두 요구한다.
       if (purpose === "예약") return canProceedReservationStep3(step3Fields);
-      if (purpose === "정보") return canProceedInfoStep3(step3Fields, step3DetailId);
       return step3DetailId !== null;
     }
     return true;
