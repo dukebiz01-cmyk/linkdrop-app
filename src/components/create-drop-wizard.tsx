@@ -24,7 +24,7 @@ import { ActionButton } from "@/components/ActionButton";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { WizardSharePreview, type WizardSharePreviewData } from "@/components/wizard-share-preview";
 import { CardShell } from "@/components/cards/CardShell";
-import type { CardConfig } from "@/components/cards/types";
+import type { CardConfig, CardStatus, CardUserAction } from "@/components/cards/types";
 import { shareToKakao } from "@/lib/kakao";
 import {
   fetchVideoMetadata,
@@ -381,6 +381,7 @@ export type Step3FieldState = {
   consultItem: string;
   ctaCopy: string;
   privacyNotice: string;
+  shareMessageUserAction: CardUserAction;
 };
 
 // 예약 Step 3 입력값 → 받는 사람 화면/공유 데이터로 흐를 요약.
@@ -443,6 +444,7 @@ function createEmptyStep3Fields(): Step3FieldState {
     consultItem: "",
     ctaCopy: "",
     privacyNotice: "문의 시 개인정보 수집·이용에 동의합니다.",
+    shareMessageUserAction: null,
   };
 }
 
@@ -1599,38 +1601,123 @@ function buildReservationCustomerMessage(fields: Step3FieldState): string {
   return lines.join("\n");
 }
 
-function Step3PurposeFields({
-  purpose,
+const PURPOSE_MESSAGE_PLACEHOLDER = "여기 분위기 좋아 보여서 공유해요.";
+
+function PurposeMessageCard({
   fields,
   onFieldsChange,
 }: {
-  purpose: DropPurpose;
   fields: Step3FieldState;
   onFieldsChange: (patch: Partial<Step3FieldState>) => void;
 }) {
-  const flow = PURPOSE_FLOW_CONFIG[purpose];
+  const [isEditing, setIsEditing] = useState(false);
+  const action = fields.shareMessageUserAction;
+
+  const status: CardStatus =
+    action === "removed"
+      ? "hidden"
+      : action === "accepted" || action === "edited"
+        ? "completed"
+        : "ai_suggested";
+
+  const displayText = fields.shareMessage || PURPOSE_MESSAGE_PLACEHOLDER;
+
+  const messageCardConfig: CardConfig = {
+    id: "purpose_message",
+    type: "message",
+    required: false,
+    enabled: true,
+    position: 1,
+    status,
+    data: { message: displayText },
+    ai_suggested: action === null,
+    label: "친구에게 한마디",
+    userAction: action,
+    receiverVisible: status !== "hidden",
+  };
+
+  if (status === "hidden") {
+    return (
+      <CardShell config={messageCardConfig}>
+        <p className="text-sm tracking-ko text-text-muted">
+          한마디 없이 카드를 보냅니다. 받는 친구에게는 한마디가 보이지 않아요.
+        </p>
+        <button
+          type="button"
+          onClick={() =>
+            onFieldsChange({ shareMessage: "", shareMessageUserAction: null })
+          }
+          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[#2563EB]"
+        >
+          다시 넣기
+        </button>
+      </CardShell>
+    );
+  }
+
+  if (isEditing) {
+    return (
+      <CardShell config={messageCardConfig}>
+        <textarea
+          value={fields.shareMessage || PURPOSE_MESSAGE_PLACEHOLDER}
+          onChange={(e) =>
+            onFieldsChange({
+              shareMessage: e.target.value.slice(0, 200),
+              shareMessageUserAction: "edited",
+            })
+          }
+          rows={3}
+          autoFocus
+          onBlur={() => setIsEditing(false)}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm tracking-ko text-text-strong focus:border-[#2563EB] focus:outline-none focus:ring-1 focus:ring-[#2563EB]/25"
+        />
+        <button
+          type="button"
+          onClick={() => setIsEditing(false)}
+          className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-[#2563EB]"
+        >
+          완료
+        </button>
+      </CardShell>
+    );
+  }
 
   return (
-    <div className="mt-6 space-y-4">
-      <div className="rounded-2xl border border-border bg-surface p-4">
-        <p className="text-sm font-medium leading-relaxed tracking-ko text-text-muted">
-          선택한 세부 유형으로 AI가 {flow.badge} Drop을 구성해요. 다음 단계에서 결과를 확인할 수
-          있어요.
-        </p>
+    <CardShell config={messageCardConfig}>
+      <p className="text-sm tracking-ko text-text-strong">{displayText}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {status === "ai_suggested" && (
+          <button
+            type="button"
+            onClick={() =>
+              onFieldsChange({
+                shareMessage: PURPOSE_MESSAGE_PLACEHOLDER,
+                shareMessageUserAction: "accepted",
+              })
+            }
+            className="rounded-lg bg-[#2563EB] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1D4ED8]"
+          >
+            그대로 사용
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setIsEditing(true)}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-text-strong hover:bg-slate-50"
+        >
+          수정
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onFieldsChange({ shareMessage: "", shareMessageUserAction: "removed" })
+          }
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-slate-50"
+        >
+          한마디 빼기
+        </button>
       </div>
-      <label className="block rounded-2xl border border-border bg-bg p-4">
-        <span className="text-sm font-semibold tracking-ko text-text-strong">
-          친구에게 한마디 (선택)
-        </span>
-        <textarea
-          value={fields.shareMessage}
-          onChange={(e) => onFieldsChange({ shareMessage: e.target.value.slice(0, 100) })}
-          rows={2}
-          placeholder="예: 여기 진짜 좋더라"
-          className="mt-2 block w-full resize-none border-0 bg-transparent p-0 text-sm font-medium tracking-ko text-text-strong placeholder:text-text-subtle focus-visible:outline-none"
-        />
-      </label>
-    </div>
+    </CardShell>
   );
 }
 
@@ -2922,18 +3009,20 @@ function Step3Options({
     <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
       <StepBadge n={3} />
       <CardShell config={optionsCardConfig}>
-      <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">{copy.title}</h1>
-      <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
-        {copy.description}
-      </p>
+        <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">{copy.title}</h1>
+        <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
+          {copy.description}
+        </p>
 
-      <p className="mt-6 text-sm font-semibold tracking-ko text-text-strong">세부 유형</p>
-      <DetailCategoryGrid categories={categories} selectedId={detailId} onSelect={onDetailSelect} />
+        <p className="mt-6 text-sm font-semibold tracking-ko text-text-strong">세부 유형</p>
+        <DetailCategoryGrid categories={categories} selectedId={detailId} onSelect={onDetailSelect} />
+      </CardShell>
 
       {detailId && (
-        <Step3PurposeFields purpose={purpose} fields={fields} onFieldsChange={onFieldsChange} />
+        <div className="mt-4">
+          <PurposeMessageCard fields={fields} onFieldsChange={onFieldsChange} />
+        </div>
       )}
-      </CardShell>
     </main>
   );
 }
@@ -3860,21 +3949,6 @@ export function CreateDropWizard({
       {/* 예약 Step 3은 자체 in-flow CTA를 쓰므로 공유 sticky CTA에서 제외한다. */}
       {step < 5 && !(step === 3 && purpose === "예약") && (
         <div className="sticky bottom-0 border-t border-[#E5E7EB] bg-white px-6 py-4">
-          {step === 3 && (
-            <button
-              type="button"
-              disabled={purpose === "예약" && !canProceed()}
-              onClick={() => {
-                if (purpose) {
-                  setAiPreview(buildAiPreview(purpose));
-                  setStep(4);
-                }
-              }}
-              className={WIZARD_SECONDARY_BUTTON_CLASS}
-            >
-              {purpose === "예약" ? "안내 문구 없이 계속" : "메시지 없이 계속"}
-            </button>
-          )}
           <ActionButton
             type="button"
             disabled={!canProceed()}
