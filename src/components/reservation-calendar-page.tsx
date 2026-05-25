@@ -217,16 +217,10 @@ const CALENDAR_BUTTON_OVERRIDE = cn(
   "[&_button[data-selected-single=true]]:!ring-2",
   "[&_button[data-selected-single=true]]:!ring-inset",
   "[&_button[data-selected-single=true]]:!ring-[#2563EB]",
-  "[&_button[data-range-start=true]]:!bg-[#2563EB]/15",
-  "[&_button[data-range-start=true]]:!text-[#2563EB]",
-  "[&_button[data-range-start=true]]:!ring-2",
-  "[&_button[data-range-start=true]]:!ring-inset",
-  "[&_button[data-range-start=true]]:!ring-[#2563EB]",
-  "[&_button[data-range-end=true]]:!bg-[#2563EB]/15",
-  "[&_button[data-range-end=true]]:!text-[#2563EB]",
-  "[&_button[data-range-end=true]]:!ring-2",
-  "[&_button[data-range-end=true]]:!ring-inset",
-  "[&_button[data-range-end=true]]:!ring-[#2563EB]",
+  "[&_button[data-range-start=true]]:!bg-[#2563EB]",
+  "[&_button[data-range-start=true]]:!text-white",
+  "[&_button[data-range-end=true]]:!bg-[#2563EB]",
+  "[&_button[data-range-end=true]]:!text-white",
   "[&_button[data-range-middle=true]]:!bg-[#2563EB]/5",
   "[&_button[data-range-middle=true]]:!text-text-strong",
 );
@@ -498,7 +492,16 @@ function EditableReservationCard({
           showOutsideDays
           disabled={
             hasMakerDates
-              ? [{ before: parseLocalDate("2026-05-01") }, ...makerClosedDates]
+              ? [
+                  { before: parseLocalDate("2026-05-01") },
+                  (date: Date) => {
+                    const t = startOfDay(date).getTime();
+                    return (
+                      !makerOpenDates.some((d) => d.getTime() === t) &&
+                      !makerWarnDates.some((d) => d.getTime() === t)
+                    );
+                  },
+                ]
               : { before: parseLocalDate("2026-05-01") }
           }
           modifiers={{ makerOpen: makerOpenDates, makerWarn: makerWarnDates }}
