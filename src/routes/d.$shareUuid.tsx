@@ -1,5 +1,7 @@
+import { useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { InfoDropPage } from "@/components/info-drop-page";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getAuthClient } from "@/lib/auth-context";
 import {
   decodeReservationDates,
@@ -166,6 +168,21 @@ function ShareUuidRouteErrorFallback({ error }: { error: Error }) {
 
 function DropPage() {
   const loaderData = Route.useLoaderData();
+  const [naverPending, setNaverPending] = useState(false);
+  const [pendingNaverUrl, setPendingNaverUrl] = useState<string | null>(null);
+  const [returnPrompt, setReturnPrompt] = useState(false);
+
+  useEffect(() => {
+    if (!pendingNaverUrl) return;
+    const handler = () => {
+      if (document.visibilityState === "visible") {
+        setNaverPending(false);
+        setReturnPrompt(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [pendingNaverUrl]);
   // ?u= — wizard 가 메이커 입력 예약 URL 을 query 로 운반. store.reservation_url 이
   // DB 에 아직 저장되지 않은 동안의 임시 경로 (Phase 1 호환).
   const search = Route.useSearch();
@@ -210,33 +227,99 @@ function DropPage() {
   // 빈 배열이면 InfoDropPage 가 캘린더 카드를 자동 숨김.
   const reservationDatesFromQuery = decodeReservationDates(search.r);
   return (
-    <InfoDropPage
-      {...props}
-      reservationDates={reservationDatesFromQuery}
-      reservationUrl={reservationUrl}
-      isReshare={isReshare}
-      videoSourceUrl={detail.source?.source_url ?? undefined}
-      onPrimaryAction={() => {
-        if (!reservationUrl || typeof window === "undefined") return;
-        const safeRes =
-          reservationUrl.startsWith("https://booking.naver.com") ||
-          reservationUrl.startsWith("https://naver.me") ||
-          reservationUrl.startsWith("tel:");
-        if (safeRes) window.open(reservationUrl, "_blank", "noopener,noreferrer");
-      }}
-      onWatchOriginal={() => {
-        const url = detail.source?.source_url;
-        if (!url || typeof window === "undefined") return;
-        const safeVid =
-          url.startsWith("https://www.youtube.com") ||
-          url.startsWith("https://youtu.be") ||
-          url.startsWith("https://www.instagram.com");
-        if (safeVid) window.open(url, "_blank", "noopener,noreferrer");
-      }}
-      onBack={() => window.history.back()}
-      onShare={() => console.log("[d/$shareUuid] share", shareUuid)}
-      onSave={() => console.log("[d/$shareUuid] save (Phase 2)")}
-      onForward={() => console.log("[d/$shareUuid] forward")}
-    />
+    <>
+      <InfoDropPage
+        {...props}
+        reservationDates={reservationDatesFromQuery}
+        reservationUrl={reservationUrl}
+        isReshare={isReshare}
+        videoSourceUrl={detail.source?.source_url ?? undefined}
+        onPrimaryAction={() => {
+          if (!reservationUrl || typeof window === "undefined") return;
+          const safeRes =
+            reservationUrl.startsWith("https://booking.naver.com") ||
+            reservationUrl.startsWith("https://naver.me") ||
+            reservationUrl.startsWith("tel:");
+          if (safeRes) {
+            setPendingNaverUrl(reservationUrl);
+            setNaverPending(true);
+          }
+        }}
+        onWatchOriginal={() => {
+          const url = detail.source?.source_url;
+          if (!url || typeof window === "undefined") return;
+          const safeVid =
+            url.startsWith("https://www.youtube.com") ||
+            url.startsWith("https://youtu.be") ||
+            url.startsWith("https://www.instagram.com");
+          if (safeVid) window.open(url, "_blank", "noopener,noreferrer");
+        }}
+        onBack={() => window.history.back()}
+        onShare={() => console.log("[d/$shareUuid] share", shareUuid)}
+        onSave={() => console.log("[d/$shareUuid] save (Phase 2)")}
+        onForward={() => console.log("[d/$shareUuid] forward")}
+      />
+
+      <Sheet open={naverPending} onOpenChange={setNaverPending}>
+        <SheetContent side="bottom" className="rounded-t-2xl pb-8 px-6">
+          <div className="flex flex-col gap-3 pt-6">
+            <h2 className="text-lg font-bold tracking-ko text-text-strong">
+              네이버 예약 페이지로 이동합니다
+            </h2>
+            <p className="text-sm tracking-ko text-text-muted">
+              예약 완료 후 이 화면으로 돌아오세요
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (pendingNaverUrl) {
+                  window.open(pendingNaverUrl, "_blank", "noopener,noreferrer");
+                }
+              }}
+              className="w-full min-h-[44px] rounded-2xl bg-[#2563EB] py-4 font-bold text-white"
+            >
+              예약 페이지 열기
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setNaverPending(false);
+                setPendingNaverUrl(null);
+              }}
+              className="min-h-[44px] text-sm text-[#A3A3A3]"
+            >
+              취소
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={returnPrompt} onOpenChange={setReturnPrompt}>
+        <SheetContent side="bottom" className="rounded-t-2xl pb-8 px-6">
+          <div className="flex flex-col gap-3 pt-6">
+            <h2 className="text-lg font-bold tracking-ko text-text-strong">
+              예약하셨나요?
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setReturnPrompt(false);
+                setPendingNaverUrl(null);
+              }}
+              className="w-full min-h-[44px] rounded-2xl bg-[#2563EB] py-4 font-bold text-white"
+            >
+              예약했어요
+            </button>
+            <button
+              type="button"
+              onClick={() => setReturnPrompt(false)}
+              className="min-h-[44px] text-sm text-[#A3A3A3]"
+            >
+              나중에 할게요
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
