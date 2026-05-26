@@ -9,6 +9,9 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { initSentry } from "@/lib/sentry";
+
+initSentry();
 
 function NotFoundComponent() {
   return (
