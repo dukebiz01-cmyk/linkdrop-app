@@ -49,23 +49,24 @@ export function YouTubeEmbedModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl border-0 bg-black p-0 sm:rounded-2xl">
+      <DialogContent className="w-[95vw] max-w-lg border-0 bg-zinc-950 p-0 rounded-2xl overflow-hidden">
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">
           YouTube 영상을 LinkDrop 안에서 재생합니다.
         </DialogDescription>
-        <div className="relative w-full" style={{ aspectRatio: "16 / 9" }}>
+        <div className="w-full bg-black">
           <iframe
             src={embedSrc}
             title={title}
-            className="absolute inset-0 h-full w-full"
+            className="w-full"
+            style={{ height: "min(56.25vw, 60vh)" }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
             loading="lazy"
             referrerPolicy="strict-origin-when-cross-origin"
           />
         </div>
-        <div className="flex items-center justify-between gap-3 bg-black px-4 py-3">
+        <div className="flex items-center justify-between gap-3 bg-zinc-900 border-t border-zinc-800 px-4 py-3">
           <a
             href={originalUrl}
             target="_blank"
