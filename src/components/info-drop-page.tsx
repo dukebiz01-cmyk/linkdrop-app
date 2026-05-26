@@ -787,12 +787,14 @@ export function InfoDropPage({
             </>
           )}
           <div className="flex flex-col gap-2 px-4 pb-2">
-            <a
-              href={`/create?url=${encodeURIComponent(videoSourceUrl ?? "")}`}
-              className="flex items-center justify-center gap-1 w-full py-3 text-sm font-bold text-[#2563EB] border border-[#E5E5E5] rounded-2xl"
-            >
-              나도 이 영상 Drop 만들기 →
-            </a>
+            {videoSourceUrl && (
+              <a
+                href={`/create?url=${encodeURIComponent(videoSourceUrl)}`}
+                className="flex items-center justify-center gap-1 w-full py-3 text-sm font-bold text-[#2563EB] border border-[#E5E5E5] rounded-2xl"
+              >
+                나도 이 영상 Drop 만들기 →
+              </a>
+            )}
             <a
               href="/home"
               className="flex items-center justify-center w-full py-3 text-sm text-[#525252] border border-[#E5E5E5] rounded-2xl"
