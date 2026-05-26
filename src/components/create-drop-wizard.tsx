@@ -54,7 +54,7 @@ import {
   normalizeReservationUrl,
   reservationItemFullLabel,
   searchPlaces,
-} from "@/components/create/reservation-helpers";
+} from "@/components/create/step3/reservation-helpers";
 
 // 외부 consumer 호환 — reservation-helpers 의 4 함수 re-export.
 export {

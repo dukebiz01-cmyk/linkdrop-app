@@ -3,7 +3,7 @@ import { ChevronRight, Eye } from "lucide-react";
 import { CardShell } from "@/components/cards/CardShell";
 import type { CardConfig, CardStatus } from "@/components/cards/types";
 import type { Step3FieldState } from "@/components/create-drop-wizard";
-import { PurposeMessageCard } from "@/components/create/PurposeMessageCard";
+import { PurposeMessageCard } from "@/components/create/step3/PurposeMessageCard";
 
 // 정적 placeholder (청크 3-D 에서 AI 호출 결과로 교체)
 const INFO_HEADLINE_PLACEHOLDER = "이 영상 핵심 내용을 한 줄로 정리합니다.";

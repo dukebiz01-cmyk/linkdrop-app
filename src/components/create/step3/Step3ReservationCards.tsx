@@ -36,7 +36,7 @@ import {
   todayIso,
   upcomingWeekdayIsos,
   type QuickTemplateId,
-} from "@/components/create/reservation-helpers";
+} from "@/components/create/step3/reservation-helpers";
 import type {
   ReservationDateItem,
   ReservationDateStatus,

@@ -1,4 +1,4 @@
-import { reservationItemFullLabel } from "@/components/create/reservation-helpers";
+import { reservationItemFullLabel } from "@/components/create/step3/reservation-helpers";
 import {
   PURPOSE_FLOW_CONFIG,
   type AiPreviewData,

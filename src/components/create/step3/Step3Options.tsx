@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { CardShell } from "@/components/cards/CardShell";
 import type { CardConfig } from "@/components/cards/types";
-import { PurposeMessageCard } from "@/components/create/PurposeMessageCard";
+import { PurposeMessageCard } from "@/components/create/step3/PurposeMessageCard";
 import { StepBadge } from "@/components/create/StepBadge";
-import { Step3InfoCards } from "@/components/create/Step3InfoCards";
+import { Step3InfoCards } from "@/components/create/step3/Step3InfoCards";
 import { Step3ReservationCards } from "@/components/create/step3/Step3ReservationCards";
 import {
   PURPOSE_FLOW_CONFIG,
