@@ -36,7 +36,7 @@ import { WIZARD_PRIMARY_BUTTON_CLASS } from "@/components/create-wizard-button-s
 import { cn } from "@/lib/utils";
 import { Step1UrlInput } from "@/components/create/Step1VideoInput";
 import { Step2PurposeSelect } from "@/components/create/Step2Purpose";
-import { Step4AiPreview } from "@/components/create/Step4AiPreview";
+import { Step4DropPreview } from "@/components/create/Step4DropPreview";
 import { Step5PurposeShare } from "@/components/create/Step5Share";
 import { Step3Options } from "@/components/create/step3/Step3Options";
 import {
@@ -542,7 +542,7 @@ export function CreateDropWizard({
         />
       )}
       {step === 4 && purpose && videoInfo && aiPreview && (
-        <Step4AiPreview
+        <Step4DropPreview
           purpose={purpose}
           ai={aiForPreview!}
           videoInfo={videoInfo}

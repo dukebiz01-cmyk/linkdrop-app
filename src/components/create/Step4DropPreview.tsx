@@ -71,7 +71,7 @@ export function AiResultPreviewCard({
   );
 }
 
-export function Step4AiPreview({
+export function Step4DropPreview({
   purpose,
   ai,
   videoInfo,
