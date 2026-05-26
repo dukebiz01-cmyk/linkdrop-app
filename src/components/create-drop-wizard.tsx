@@ -40,6 +40,7 @@ import {
 } from "@/components/create-wizard-button-styles";
 import { cn } from "@/lib/utils";
 import { Step3InfoCards } from "@/components/create/Step3InfoCards";
+import { Step5PurposeShare } from "@/components/create/Step5Share";
 import {
   PURPOSE_FLOW_CONFIG,
   type AiPreviewData,
@@ -2694,46 +2695,6 @@ function Step4AiPreview({
 // Step 5 — 공유 미리보기 (v0 WizardSharePreview 재사용)
 // =============================================================================
 
-// WHY: 기존 v0 공유 미리보기 디자인(WizardSharePreview)을 그대로 재사용하고,
-//      목적별 데이터(purpose chip / aiTitle / description)만 주입한다.
-function Step5PurposeShare({
-  purpose,
-  videoInfo,
-  ai,
-  shareUrl,
-  onKakaoShare,
-  onCopyLink,
-  onGoHome,
-  shareError,
-  shareFeedback,
-  makerMessage,
-  reservation,
-}: {
-  purpose: DropPurpose;
-  videoInfo: VideoInfo;
-  ai: AiPreviewData;
-  shareUrl: string;
-  onKakaoShare: () => Promise<void>;
-  onCopyLink: () => Promise<void>;
-  onGoHome: () => void;
-  shareError: string | null;
-  shareFeedback: string | null;
-  makerMessage?: string;
-  reservation?: ReservationSummary;
-}) {
-  return (
-    <WizardSharePreview
-      data={buildWizardShareData(videoInfo, purpose, ai.title, makerMessage, reservation)}
-      shareUrl={shareUrl}
-      onKakaoShare={onKakaoShare}
-      onCopyLink={onCopyLink}
-      onGoHome={onGoHome}
-      shareError={shareError}
-      shareFeedback={shareFeedback}
-    />
-  );
-}
-
 // =============================================================================
 // Fast mode — Home 진입 3단계
 // =============================================================================
@@ -3130,17 +3091,19 @@ export function CreateDropWizard({
       )}
       {step === 5 && purpose && videoInfo && aiPreview && (
         <Step5PurposeShare
-          purpose={purpose}
-          videoInfo={videoInfo}
-          ai={aiForPreview!}
+          data={buildWizardShareData(
+            videoInfo,
+            purpose,
+            aiForPreview!.title,
+            step3Fields.shareMessage.trim() || undefined,
+            purpose === "예약" ? buildReservationSummary(step3Fields) : undefined,
+          )}
           shareUrl={realShare?.shareUrl ?? mockShareUrl}
           onKakaoShare={handleKakaoShare}
           onCopyLink={handleCopyLink}
           onGoHome={handleGoHome}
           shareError={shareError}
           shareFeedback={shareFeedback}
-          makerMessage={step3Fields.shareMessage.trim() || undefined}
-          reservation={purpose === "예약" ? buildReservationSummary(step3Fields) : undefined}
         />
       )}
 
