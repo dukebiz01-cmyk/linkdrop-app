@@ -23,9 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ActionButton } from "@/components/ActionButton";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { WizardSharePreview, type WizardSharePreviewData } from "@/components/wizard-share-preview";
-import { CardShell } from "@/components/cards/CardShell";
-import type { CardConfig, CardUserAction } from "@/components/cards/types";
-import { PurposeMessageCard } from "@/components/create/PurposeMessageCard";
+import type { CardUserAction } from "@/components/cards/types";
 import { shareToKakao } from "@/lib/kakao";
 import {
   fetchVideoMetadata,
@@ -41,10 +39,9 @@ import {
 import { cn } from "@/lib/utils";
 import { Step1UrlInput } from "@/components/create/Step1VideoInput";
 import { Step2PurposeSelect } from "@/components/create/Step2Purpose";
-import { Step3InfoCards } from "@/components/create/Step3InfoCards";
 import { Step4AiPreview } from "@/components/create/Step4AiPreview";
 import { Step5PurposeShare } from "@/components/create/Step5Share";
-import { Step3ReservationCards } from "@/components/create/step3/Step3ReservationCards";
+import { Step3Options } from "@/components/create/step3/Step3Options";
 import {
   RESERVATION_DESTS,
   buildReservationSummary,
@@ -179,29 +176,6 @@ function createEmptyStep3Fields(): Step3FieldState {
   };
 }
 
-const STEP3_COPY: Record<DropPurpose, { title: string; description: string }> = {
-  정보: {
-    title: "정보 구성을 정해 주세요",
-    description: "영상에서 어떤 정보를 중심으로 정리할지 선택하세요.",
-  },
-  쿠폰: {
-    title: "쿠폰 조건을 정해 주세요",
-    description: "친구에게 보낼 혜택과 사용 조건을 정하세요.",
-  },
-  예약: {
-    title: "예약 정보를 정해 주세요",
-    description: "날짜, 인원, 예약 연결 방식을 정하세요.",
-  },
-  구매: {
-    title: "구매 연결을 정해 주세요",
-    description: "상품 후보와 가격비교 방식을 정하세요.",
-  },
-  상담: {
-    title: "상담 방식을 정해 주세요",
-    description: "문의 받을 항목과 상담 방식을 정하세요.",
-  },
-};
-
 type Step5ShareConfig = {
   label: string;
   badge: string;
@@ -302,133 +276,6 @@ function platformLabel(platform: VideoInfo["platform"]): string {
   return platform === "youtube" ? "YouTube" : "Instagram";
 }
 
-
-// =============================================================================
-// Step 3 — 목적별 세부 설정
-// =============================================================================
-
-function Step3FieldLabel({ children }: { children: ReactNode }) {
-  return <span className="text-sm font-semibold tracking-ko text-text-strong">{children}</span>;
-}
-
-function DetailCategoryGrid({
-  categories,
-  selectedId,
-  onSelect,
-}: {
-  categories: { id: Step3DetailId; label: string }[];
-  selectedId: Step3DetailId | null;
-  onSelect: (id: Step3DetailId) => void;
-}) {
-  return (
-    <ul className="mt-4 grid grid-cols-2 gap-2">
-      {categories.map((cat) => {
-        const active = selectedId === cat.id;
-        return (
-          <li key={cat.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(cat.id)}
-              className={cn(
-                "flex min-h-[44px] w-full items-center justify-center rounded-2xl border px-3 py-3 text-center text-sm font-semibold tracking-ko transition-colors",
-                active
-                  ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] ring-1 ring-[#2563EB]/25"
-                  : "border-border bg-bg text-text-strong hover:border-text-muted",
-              )}
-            >
-              {cat.label}
-            </button>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-// 예약 Step 3 — 고객 미리보기 카드 (현재 state 로 라이브 갱신).
-
-function Step3Options({
-  purpose,
-  detailId,
-  onDetailSelect,
-  fields,
-  onFieldsChange,
-  onReservationDatesChange,
-  onNext,
-  onSkip,
-}: {
-  purpose: DropPurpose;
-  detailId: Step3DetailId | null;
-  onDetailSelect: (id: Step3DetailId) => void;
-  fields: Step3FieldState;
-  onFieldsChange: (patch: Partial<Step3FieldState>) => void;
-  onReservationDatesChange: (
-    updater: (prev: ReservationDateItem[]) => ReservationDateItem[],
-  ) => void;
-  onNext: () => void;
-  onSkip: () => void;
-}) {
-  // 예약 목적은 세부 유형 게이트 없이 3개 카드 UI 로 바로 구성한다.
-  if (purpose === "예약") {
-    return (
-      <Step3ReservationCards
-        fields={fields}
-        onFieldsChange={onFieldsChange}
-        onReservationDatesChange={onReservationDatesChange}
-        onNext={onNext}
-        onSkip={onSkip}
-      />
-    );
-  }
-
-  if (purpose === "정보") {
-    return (
-      <Step3InfoCards
-        detailId={detailId}
-        onDetailSelect={onDetailSelect}
-        fields={fields}
-        onFieldsChange={onFieldsChange}
-        onNext={onNext}
-      />
-    );
-  }
-
-  const copy = STEP3_COPY[purpose];
-  const categories = PURPOSE_FLOW_CONFIG[purpose].detailCards;
-
-  // Card assembly — Step 3 옵션(세부 유형) 카드. 시각만 통일, detailId/onDetailSelect 로직은 그대로.
-  const optionsCardConfig: CardConfig = {
-    id: "step3-options",
-    type: "purpose",
-    required: true,
-    enabled: true,
-    position: 3,
-    status: detailId ? "completed" : "needs_confirmation",
-    data: {},
-    label: "세부 유형",
-  };
-
-  return (
-    <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
-      <StepBadge n={3} />
-      <CardShell config={optionsCardConfig}>
-        <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">{copy.title}</h1>
-        <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
-          {copy.description}
-        </p>
-
-        <p className="mt-6 text-sm font-semibold tracking-ko text-text-strong">세부 유형</p>
-        <DetailCategoryGrid categories={categories} selectedId={detailId} onSelect={onDetailSelect} />
-      </CardShell>
-
-      {detailId && (
-        <div className="mt-4">
-          <PurposeMessageCard fields={fields} onFieldsChange={onFieldsChange} />
-        </div>
-      )}
-    </main>
-  );
-}
 
 // =============================================================================
 // Step 5 — 공유 미리보기 (v0 WizardSharePreview 재사용)
