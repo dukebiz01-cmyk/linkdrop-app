@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as UserRouteImport } from './routes/_user'
 import { Route as PartnerRouteImport } from './routes/_partner'
@@ -44,6 +45,11 @@ import { Route as AdminAdminExtractRouteImport } from './routes/_admin/admin.ext
 import { Route as AdminAdminDefamationRouteImport } from './routes/_admin/admin.defamation'
 import { Route as AdminAdminCampaignsRouteImport } from './routes/_admin/admin.campaigns'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -215,6 +221,7 @@ const AdminAdminCampaignsRoute = AdminAdminCampaignsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/terms': typeof TermsRoute
   '/create': typeof UserCreateRoute
   '/create-wizard': typeof UserCreateWizardRoute
   '/home': typeof UserHomeRoute
@@ -248,6 +255,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/terms': typeof TermsRoute
   '/create': typeof UserCreateRoute
   '/create-wizard': typeof UserCreateWizardRoute
   '/home': typeof UserHomeRoute
@@ -285,6 +293,7 @@ export interface FileRoutesById {
   '/_partner': typeof PartnerRouteWithChildren
   '/_user': typeof UserRouteWithChildren
   '/login': typeof LoginRoute
+  '/terms': typeof TermsRoute
   '/_user/create': typeof UserCreateRoute
   '/_user/create-wizard': typeof UserCreateWizardRoute
   '/_user/home': typeof UserHomeRoute
@@ -320,6 +329,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/terms'
     | '/create'
     | '/create-wizard'
     | '/home'
@@ -353,6 +363,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/terms'
     | '/create'
     | '/create-wizard'
     | '/home'
@@ -389,6 +400,7 @@ export interface FileRouteTypes {
     | '/_partner'
     | '/_user'
     | '/login'
+    | '/terms'
     | '/_user/create'
     | '/_user/create-wizard'
     | '/_user/home'
@@ -426,6 +438,7 @@ export interface RootRouteChildren {
   PartnerRoute: typeof PartnerRouteWithChildren
   UserRoute: typeof UserRouteWithChildren
   LoginRoute: typeof LoginRoute
+  TermsRoute: typeof TermsRoute
   ApiConsultationsRoute: typeof ApiConsultationsRoute
   ApiEventsRoute: typeof ApiEventsRoute
   ApiOembedRoute: typeof ApiOembedRoute
@@ -440,6 +453,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -750,6 +770,7 @@ const rootRouteChildren: RootRouteChildren = {
   PartnerRoute: PartnerRouteWithChildren,
   UserRoute: UserRouteWithChildren,
   LoginRoute: LoginRoute,
+  TermsRoute: TermsRoute,
   ApiConsultationsRoute: ApiConsultationsRoute,
   ApiEventsRoute: ApiEventsRoute,
   ApiOembedRoute: ApiOembedRoute,
