@@ -12,10 +12,7 @@ import {
 import { ActionButton } from "@/components/ActionButton";
 import { CardShell } from "@/components/cards/CardShell";
 import type { CardConfig } from "@/components/cards/types";
-import {
-  WIZARD_PRIMARY_BUTTON_CLASS,
-  WIZARD_SECONDARY_BUTTON_CLASS,
-} from "@/components/create-wizard-button-styles";
+import { WIZARD_PRIMARY_BUTTON_CLASS } from "@/components/create-wizard-button-styles";
 import { StepBadge } from "@/components/create/StepBadge";
 import {
   FACILITY_TARGET_OPTIONS,
@@ -428,7 +425,6 @@ export function Step3ReservationCards({
   onFieldsChange,
   onReservationDatesChange,
   onNext,
-  onSkip,
 }: {
   fields: Step3FieldState;
   onFieldsChange: (patch: Partial<Step3FieldState>) => void;
@@ -436,7 +432,6 @@ export function Step3ReservationCards({
     updater: (prev: ReservationDateItem[]) => ReservationDateItem[],
   ) => void;
   onNext: () => void;
-  onSkip: () => void;
 }) {
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -1250,14 +1245,6 @@ export function Step3ReservationCards({
           >
             다음
           </ActionButton>
-          <button
-            type="button"
-            disabled={gateReason !== null}
-            onClick={onSkip}
-            className={WIZARD_SECONDARY_BUTTON_CLASS}
-          >
-            안내 문구 없이 계속
-          </button>
         </div>
       </div>
     </main>

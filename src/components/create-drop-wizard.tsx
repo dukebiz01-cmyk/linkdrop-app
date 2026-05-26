@@ -32,10 +32,7 @@ import {
   type VideoMetadataFetchedBy,
 } from "@/lib/video-metadata";
 import type { DropPurpose } from "@/lib/types";
-import {
-  WIZARD_PRIMARY_BUTTON_CLASS,
-  WIZARD_SECONDARY_BUTTON_CLASS,
-} from "@/components/create-wizard-button-styles";
+import { WIZARD_PRIMARY_BUTTON_CLASS } from "@/components/create-wizard-button-styles";
 import { cn } from "@/lib/utils";
 import { Step1UrlInput } from "@/components/create/Step1VideoInput";
 import { Step2PurposeSelect } from "@/components/create/Step2Purpose";
@@ -542,12 +539,6 @@ export function CreateDropWizard({
             }))
           }
           onNext={handleNext}
-          onSkip={() => {
-            if (purpose) {
-              setAiPreview(buildAiPreview(purpose));
-              setStep(4);
-            }
-          }}
         />
       )}
       {step === 4 && purpose && videoInfo && aiPreview && (

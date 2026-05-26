@@ -83,7 +83,6 @@ export function Step3Options({
   onFieldsChange,
   onReservationDatesChange,
   onNext,
-  onSkip,
 }: {
   purpose: DropPurpose;
   detailId: Step3DetailId | null;
@@ -94,7 +93,6 @@ export function Step3Options({
     updater: (prev: ReservationDateItem[]) => ReservationDateItem[],
   ) => void;
   onNext: () => void;
-  onSkip: () => void;
 }) {
   // 예약 목적은 세부 유형 게이트 없이 3개 카드 UI 로 바로 구성한다.
   if (purpose === "예약") {
@@ -104,7 +102,6 @@ export function Step3Options({
         onFieldsChange={onFieldsChange}
         onReservationDatesChange={onReservationDatesChange}
         onNext={onNext}
-        onSkip={onSkip}
       />
     );
   }
