@@ -438,7 +438,14 @@ function EditableReservationCard({
 
   // 메이커 예약 가능 날짜 → 달력 마킹용 Date 배열 (상태별 분류) + 최초 날짜.
   const hasMakerDates = makerAvailableDates.length > 0;
-  const { makerOpenDates, makerWarnDates, makerClosedDates, earliestMakerDate } = useMemo(() => {
+  const {
+    makerOpenDates,
+    makerWarnDates,
+    makerClosedDates,
+    earliestMakerDate,
+    openSet,
+    warnSet,
+  } = useMemo(() => {
     const open: Date[] = [];
     const warn: Date[] = [];
     const closed: Date[] = [];
@@ -458,6 +465,8 @@ function EditableReservationCard({
       makerWarnDates: warn,
       makerClosedDates: closed,
       earliestMakerDate: earliest,
+      openSet: new Set(open.map(isoFromDate)),
+      warnSet: new Set(warn.map(isoFromDate)),
     };
   }, [makerAvailableDates]);
 
@@ -490,20 +499,20 @@ function EditableReservationCard({
           defaultMonth={defaultMonth}
           numberOfMonths={1}
           showOutsideDays
-          disabled={
-            hasMakerDates
-              ? [
-                  { before: parseLocalDate("2026-05-01") },
-                  (date: Date) => {
-                    const t = startOfDay(date).getTime();
-                    return (
-                      !makerOpenDates.some((d) => d.getTime() === t) &&
-                      !makerWarnDates.some((d) => d.getTime() === t)
-                    );
-                  },
-                ]
-              : { before: parseLocalDate("2026-05-01") }
-          }
+          disabled={(date: Date) => {
+            const t = startOfDay(date).getTime();
+            const today = startOfDay(new Date()).getTime();
+            if (t < today) return true;
+            // 체크아웃 선택 중 (체크인 선택 완료 상태)
+            if (checkIn && !checkOut) {
+              return t <= startOfDay(checkIn).getTime();
+            }
+            // 체크인 선택 중: 메이커 whitelist
+            if (hasMakerDates) {
+              return !openSet.has(isoFromDate(date)) && !warnSet.has(isoFromDate(date));
+            }
+            return false;
+          }}
           modifiers={{ makerOpen: makerOpenDates, makerWarn: makerWarnDates }}
           modifiersClassNames={{
             makerOpen: MAKER_OPEN_CLASS,
