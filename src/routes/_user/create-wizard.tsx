@@ -59,11 +59,9 @@ export const Route = createFileRoute("/_user/create-wizard")({
 function CreateWizardPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
-  const isFastCreateMode = false; // chunk3: always 5-step
 
   return (
     <CreateDropWizard
-      fastCreateMode={isFastCreateMode}
       initialUrl={search.url}
       initialPurpose={toDropPurpose(search.purpose)}
       initialSuggestedPurpose={toDropPurpose(search.intent_suggested)}

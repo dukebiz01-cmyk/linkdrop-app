@@ -81,8 +81,6 @@ export interface CreateDropWizardProps {
   initialSourceId?: string;
   /** Home sessionStorage draft — Step 1 즉시 preview */
   initialMetadata?: VideoMetadata | null;
-  /** url+purpose 동시 전달 시 빠른 생성(3단계). 미지정 시 initialUrl·initialPurpose로 판별 */
-  fastCreateMode?: boolean;
   onClose?: () => void;
   /**
    * Step 5 진입 후 첫 카카오톡 공유/링크 복사 클릭 시 호출.
@@ -116,7 +114,6 @@ function videoInfoFromMetadata(meta: VideoMetadata, fallbackUrl: string): VideoI
 }
 
 type StepNum = 1 | 2 | 3 | 4 | 5;
-type FastStepNum = 1 | 2 | 3;
 
 type PurposeFlowConfig = {
   badge: string;
@@ -208,17 +205,6 @@ const PURPOSE_FLOW_CONFIG: Record<DropPurpose, PurposeFlowConfig> = {
     ],
     editFields: ["상담 항목", "응답 방식"],
   },
-};
-
-export type EditableAiDraft = {
-  title: string;
-  summary: string;
-  keyPoints: string[];
-  suggestedShareText: string;
-  makerMessage: string;
-  ctaLabel: string;
-  /** 목적별 추가 편집 필드 — PURPOSE_FLOW_CONFIG.editFields 기반 */
-  extraFields: { label: string; value: string }[];
 };
 
 // WHY: UX 레이어는 5 목적만 노출. DB intent_types 9행은 Phase 1 UI에서 숨김 (v3 결정 락).
@@ -549,29 +535,6 @@ function aiPreviewFromPurpose(p: DropPurpose): AiPreviewData {
 // TODO: createDropV2 RPC 연결
 // TODO: ai_suggested_purpose vs user_selected_purpose 분석 이벤트 저장
 
-function createFastAiDraft(p: DropPurpose): EditableAiDraft {
-  const flow = PURPOSE_FLOW_CONFIG[p];
-  const ai = aiPreviewFromPurpose(p);
-  return {
-    title: ai.title,
-    summary: ai.summary,
-    keyPoints: ai.keyPoints,
-    suggestedShareText: ai.suggestedShareText,
-    makerMessage: "",
-    ctaLabel: flow.cta,
-    extraFields: flow.editFields.map((label) => ({ label, value: "" })),
-  };
-}
-
-function draftToAiPreview(draft: EditableAiDraft): AiPreviewData {
-  return {
-    title: draft.title,
-    summary: draft.summary,
-    keyPoints: draft.keyPoints,
-    suggestedShareText: draft.suggestedShareText,
-  };
-}
-
 /** Step 4 / Fast Step 2 — 목적별 AI 결과 카드 (config 주입) */
 function AiResultPreviewCard({
   purpose,
@@ -633,84 +596,6 @@ function AiResultPreviewCard({
   );
 }
 
-function AiResultEditPanel({
-  draft,
-  onDraftChange,
-}: {
-  draft: EditableAiDraft;
-  onDraftChange: (patch: Partial<EditableAiDraft>) => void;
-}) {
-  return (
-    <div className="mt-4 space-y-4 rounded-2xl border border-border bg-surface p-4">
-      <label className="block">
-        <span className="text-sm font-semibold tracking-ko text-text-strong">제목</span>
-        <Input
-          value={draft.title}
-          onChange={(e) => onDraftChange({ title: e.target.value })}
-          className="mt-2 h-12 rounded-lg"
-        />
-      </label>
-      <label className="block">
-        <span className="text-sm font-semibold tracking-ko text-text-strong">설명</span>
-        <textarea
-          value={draft.summary}
-          onChange={(e) => onDraftChange({ summary: e.target.value })}
-          rows={3}
-          className="mt-2 block w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko text-text-strong"
-        />
-      </label>
-      <div>
-        <span className="text-sm font-semibold tracking-ko text-text-strong">핵심 포인트</span>
-        <ul className="mt-2 space-y-2">
-          {draft.keyPoints.map((point, i) => (
-            <li key={i} className="flex items-start gap-2">
-              <Check className="mt-3 size-4 shrink-0 text-accent" strokeWidth={2} />
-              <Input
-                value={point}
-                onChange={(e) => {
-                  const next = [...draft.keyPoints];
-                  next[i] = e.target.value;
-                  onDraftChange({ keyPoints: next });
-                }}
-                className="h-10 rounded-lg"
-              />
-            </li>
-          ))}
-        </ul>
-      </div>
-      <label className="block">
-        <span className="text-sm font-semibold tracking-ko text-text-strong">공유 문구</span>
-        <textarea
-          value={draft.suggestedShareText}
-          onChange={(e) => onDraftChange({ suggestedShareText: e.target.value })}
-          rows={2}
-          className="mt-2 block w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko text-text-strong"
-        />
-      </label>
-      <label className="block">
-        <span className="text-sm font-semibold tracking-ko text-text-strong">
-          친구에게 한마디 (선택)
-        </span>
-        <textarea
-          value={draft.makerMessage}
-          onChange={(e) => onDraftChange({ makerMessage: e.target.value.slice(0, 100) })}
-          rows={2}
-          placeholder="예: 여기 진짜 좋더라"
-          className="mt-2 block w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko text-text-strong placeholder:text-text-subtle"
-        />
-      </label>
-      <label className="block">
-        <span className="text-sm font-semibold tracking-ko text-text-strong">버튼 문구</span>
-        <Input
-          value={draft.ctaLabel}
-          onChange={(e) => onDraftChange({ ctaLabel: e.target.value })}
-          className="mt-2 h-12 rounded-lg"
-        />
-      </label>
-    </div>
-  );
-}
-
 function buildWizardShareData(
   videoInfo: VideoInfo,
   purpose: DropPurpose,
@@ -743,10 +628,6 @@ function buildWizardShareData(
         }
       : undefined,
   };
-}
-
-function FastStepBadge({ n }: { n: FastStepNum }) {
-  return <p className="text-xs font-semibold tracking-ko text-text-subtle">Step {n} / 3</p>;
 }
 
 function platformLabel(platform: VideoInfo["platform"]): string {
@@ -3096,238 +2977,6 @@ function Step5PurposeShare({
 // Fast mode — Home 진입 3단계
 // =============================================================================
 
-function FastStep1VideoPurposeConfirm({
-  purpose,
-  videoInfo,
-  urlStatus,
-  suggestedPurpose,
-  suggestionConfidence,
-  onPurposeSelect,
-}: {
-  purpose: DropPurpose;
-  videoInfo: VideoInfo | null;
-  urlStatus: "idle" | "loading" | "success" | "error";
-  suggestedPurpose?: DropPurpose | null;
-  suggestionConfidence?: WizardSuggestionConfidence | null;
-  onPurposeSelect: (p: DropPurpose) => void;
-}) {
-  const [showPurposePicker, setShowPurposePicker] = useState(false);
-  const [thumbBroken, setThumbBroken] = useState(false);
-  const selectedConfig = findPurposeConfig(purpose)!;
-  const suggestedConfig = suggestedPurpose ? findPurposeConfig(suggestedPurpose) : null;
-  const purposeDiffers = suggestedPurpose && suggestedPurpose !== purpose;
-  const SelectedIcon = selectedConfig.icon;
-
-  return (
-    <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
-      <FastStepBadge n={1} />
-      <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">
-        영상과 목적을 확인해 주세요
-      </h1>
-
-      {urlStatus === "loading" && (
-        <div className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-surface p-4">
-          <Loader2 className="size-5 animate-spin text-accent" strokeWidth={2} />
-          <span className="text-sm font-medium tracking-ko text-text-muted">
-            영상 정보를 가져오는 중...
-          </span>
-        </div>
-      )}
-
-      {urlStatus === "success" && videoInfo && (
-        <div className="mt-4 flex gap-3 overflow-hidden rounded-2xl border border-border bg-bg p-3">
-          <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-surface">
-            {videoInfo.thumbnailUrl && !thumbBroken ? (
-              <img
-                src={videoInfo.thumbnailUrl}
-                alt=""
-                className="h-full w-full object-cover"
-                onError={() => setThumbBroken(true)}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-text-subtle">
-                <LinkIcon className="size-6" strokeWidth={2} />
-              </div>
-            )}
-            <span className="absolute left-1 top-1 rounded-lg bg-black/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-              {platformLabel(videoInfo.platform)}
-            </span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="line-clamp-2 text-sm font-bold tracking-ko text-text-strong">
-              {videoInfo.title}
-            </p>
-            {videoInfo.channelName ? (
-              <p className="mt-1 truncate text-xs font-medium text-text-muted">
-                {videoInfo.channelName}
-              </p>
-            ) : null}
-          </div>
-        </div>
-      )}
-
-      <p className="mt-6 text-lg font-bold tracking-ko text-text-strong">
-        {PURPOSE_CONFIRM_HEADLINE[purpose]}
-      </p>
-      <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">
-        홈에서 선택한 목적입니다. 필요하면 아래에서 변경할 수 있어요.
-      </p>
-
-      {suggestedConfig && (
-        <div className="mt-4 space-y-2 rounded-xl border border-border bg-surface p-4">
-          <p className="text-sm font-medium tracking-ko text-text-muted">
-            AI 추천: <span className="font-semibold text-text-strong">{suggestedConfig.label}</span>
-          </p>
-          <p className="text-sm font-medium tracking-ko text-text-muted">
-            내 선택: <span className="font-semibold text-[#2563EB]">{selectedConfig.label}</span>
-          </p>
-          {purposeDiffers && (
-            <p className="text-xs font-medium leading-relaxed tracking-ko text-text-subtle">
-              AI는 {suggestedConfig.label}을 추천했지만, 선택한 {selectedConfig.label} 기준으로
-              Drop을 만듭니다.
-            </p>
-          )}
-        </div>
-      )}
-
-      <div className="mt-4 flex items-center gap-3 rounded-2xl border border-[#2563EB] bg-[#EFF6FF]/40 p-4 ring-1 ring-[#2563EB]/25">
-        <SelectedIcon className="size-6 shrink-0 text-[#2563EB]" strokeWidth={2} />
-        <p className="text-base font-bold tracking-ko text-text-strong">{selectedConfig.label}</p>
-        <Check className="ml-auto size-5 text-[#2563EB]" strokeWidth={2} />
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setShowPurposePicker((v) => !v)}
-        className="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-border bg-white text-sm font-semibold tracking-ko text-text-strong"
-      >
-        {showPurposePicker ? "목적 선택 닫기" : "목적 바꾸기"}
-      </button>
-      {showPurposePicker && (
-        <div className="mt-4">
-          <PurposePickerGrid
-            selected={purpose}
-            onSelect={onPurposeSelect}
-            suggestedPurpose={suggestedPurpose}
-            suggestionConfidence={suggestionConfidence}
-          />
-        </div>
-      )}
-    </main>
-  );
-}
-
-function FastStep2AiEdit({
-  purpose,
-  draft,
-  onDraftChange,
-}: {
-  purpose: DropPurpose;
-  draft: EditableAiDraft;
-  onDraftChange: (patch: Partial<EditableAiDraft>) => void;
-}) {
-  const share = STEP5_SHARE_BY_PURPOSE[purpose];
-
-  return (
-    <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
-      <FastStepBadge n={2} />
-      <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-extrabold tracking-ko text-text-strong">AI 분석 결과 편집</h1>
-        <span className="inline-flex items-center gap-1 rounded-lg bg-surface px-2 py-0.5 text-xs font-semibold text-accent">
-          <Sparkles className="size-3" strokeWidth={2} />
-          AI
-        </span>
-      </div>
-      <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">
-        {share.label} · {purpose} — 내용을 확인하고 수정해 주세요
-      </p>
-
-      <div className="mt-6 space-y-4">
-        <label className="block">
-          <span className="text-sm font-semibold tracking-ko text-text-strong">제목</span>
-          <Input
-            value={draft.title}
-            onChange={(e) => onDraftChange({ title: e.target.value })}
-            className="mt-2 h-12 rounded-lg"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-semibold tracking-ko text-text-strong">설명</span>
-          <textarea
-            value={draft.summary}
-            onChange={(e) => onDraftChange({ summary: e.target.value })}
-            rows={3}
-            className="mt-2 block w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko"
-          />
-        </label>
-
-        <div>
-          <span className="text-sm font-semibold tracking-ko text-text-strong">핵심 포인트</span>
-          <ul className="mt-2 space-y-2">
-            {draft.keyPoints.map((point, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <Check className="mt-1 size-4 shrink-0 text-accent" strokeWidth={2} />
-                <Input
-                  value={point}
-                  onChange={(e) => {
-                    const next = [...draft.keyPoints];
-                    next[i] = e.target.value;
-                    onDraftChange({ keyPoints: next });
-                  }}
-                  className="h-10 rounded-lg"
-                />
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {draft.extraFields.map((field, i) => (
-          <label key={field.label} className="block">
-            <span className="text-sm font-semibold tracking-ko text-text-strong">
-              {field.label}
-            </span>
-            <Input
-              value={field.value}
-              onChange={(e) => {
-                const next = [...draft.extraFields];
-                next[i] = { ...field, value: e.target.value };
-                onDraftChange({ extraFields: next });
-              }}
-              className="mt-2 h-12 rounded-lg"
-            />
-          </label>
-        ))}
-
-        <label className="block">
-          <span className="text-sm font-semibold tracking-ko text-text-strong">공유 문구</span>
-          <textarea
-            value={draft.suggestedShareText}
-            onChange={(e) => onDraftChange({ suggestedShareText: e.target.value })}
-            rows={2}
-            className="mt-2 block w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-semibold tracking-ko text-text-strong">
-            메이커 메시지 (선택)
-          </span>
-          <textarea
-            value={draft.makerMessage}
-            onChange={(e) => onDraftChange({ makerMessage: e.target.value.slice(0, 100) })}
-            rows={2}
-            placeholder="친구에게 전할 한마디"
-            className="mt-2 block w-full resize-none rounded-lg border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko"
-          />
-        </label>
-
-        <p className="text-xs font-medium tracking-ko text-text-subtle">
-          미리보기 버튼: {draft.ctaLabel}
-        </p>
-      </div>
-    </main>
-  );
-}
-
 // =============================================================================
 // Main wizard
 // =============================================================================
@@ -3339,7 +2988,6 @@ export function CreateDropWizard({
   initialSuggestedPurpose,
   initialSuggestionConfidence,
   initialMetadata,
-  fastCreateMode: fastCreateModeProp,
   onClose,
   onComplete,
 }: CreateDropWizardProps) {
@@ -3347,11 +2995,6 @@ export function CreateDropWizard({
   //      거치도록. fast 3단계는 fastCreateMode prop 을 명시할 때만 활성화.
   // WHY: 예약 목적은 장소·예약 가능 날짜·예약 버튼 연결 Step 3 카드가 반드시
   //      필요하다. fast 3단계에는 이 입력 UI 가 없으므로 예약은 항상 5단계로 탄다.
-  const isFastCreateMode = Boolean(fastCreateModeProp) && initialPurpose !== "예약";
-  const [fastStep, setFastStep] = useState<FastStepNum>(1);
-  const [editableAi, setEditableAi] = useState<EditableAiDraft | null>(() =>
-    isFastCreateMode && initialPurpose ? createFastAiDraft(initialPurpose) : null,
-  );
   const [step, setStep] = useState<StepNum>(1);
   const [url, setUrl] = useState(initialUrl ?? "");
   const [urlStatus, setUrlStatus] = useState<"idle" | "loading" | "success" | "error">(() => {
@@ -3391,9 +3034,6 @@ export function CreateDropWizard({
   function handlePurposeSelect(next: DropPurpose) {
     if (purpose !== next) {
       resetStep3ForPurpose();
-      if (isFastCreateMode) {
-        setEditableAi(createFastAiDraft(next));
-      }
     }
     setPurpose(next);
   }
@@ -3502,14 +3142,6 @@ export function CreateDropWizard({
   }
 
   function handleBack() {
-    if (isFastCreateMode) {
-      if (fastStep === 1) {
-        onClose?.();
-        return;
-      }
-      setFastStep((s) => (s - 1) as FastStepNum);
-      return;
-    }
     if (step === 1) {
       onClose?.();
       return;
@@ -3518,19 +3150,6 @@ export function CreateDropWizard({
   }
 
   function handleNext() {
-    if (isFastCreateMode) {
-      if (fastStep === 1 && purpose) {
-        setEditableAi(createFastAiDraft(purpose));
-        setFastStep(2);
-        return;
-      }
-      if (fastStep === 2 && purpose && editableAi) {
-        setAiPreview(draftToAiPreview(editableAi));
-        setFastStep(3);
-        return;
-      }
-      return;
-    }
     if (step === 2 && purpose) {
       setAiPreview(null);
       setStep(3);
@@ -3549,12 +3168,6 @@ export function CreateDropWizard({
   }
 
   function canProceed(): boolean {
-    if (isFastCreateMode) {
-      if (fastStep === 1) {
-        return parseVideoUrl(url.trim()) !== null && urlStatus === "success" && purpose !== null;
-      }
-      return true;
-    }
     if (step === 1) return parseVideoUrl(url.trim()) !== null && urlStatus === "success";
     if (step === 2) return purpose !== null;
     if (step === 3) {
@@ -3571,9 +3184,9 @@ export function CreateDropWizard({
   async function ensureRealShare(): Promise<{ shareUuid: string; shareUrl: string } | null> {
     if (realShare) return realShare;
     if (savingRef.current) return savingRef.current;
-    const ai = isFastCreateMode && editableAi ? draftToAiPreview(editableAi) : aiForPreview;
+    const ai = aiForPreview;
     if (!videoInfo || !ai || !purpose || !onComplete) return null;
-    const message = isFastCreateMode ? (editableAi?.makerMessage ?? "") : step3Fields.shareMessage;
+    const message = step3Fields.shareMessage;
     const promise = onComplete({ video: videoInfo, purpose, ai, makerMessage: message });
     savingRef.current = promise;
     try {
@@ -3608,15 +3221,13 @@ export function CreateDropWizard({
   }
 
   async function handleKakaoShare() {
-    const ai = isFastCreateMode && editableAi ? draftToAiPreview(editableAi) : aiForPreview;
+    const ai = aiForPreview;
     if (!videoInfo || !ai || !purpose) return;
     setShareError(null);
     setShareFeedback(null);
     const real = await ensureRealShare();
     if (!real) return;
-    const makerNote = isFastCreateMode
-      ? (editableAi?.makerMessage.trim() ?? "")
-      : step3Fields.shareMessage.trim();
+    const makerNote = step3Fields.shareMessage.trim();
     const result = await shareToKakao({
       title: ai.title,
       description: [purpose, makerNote].filter(Boolean).join(" · "),
@@ -3624,12 +3235,7 @@ export function CreateDropWizard({
       linkUrl: real.shareUrl,
       buttons: [
         {
-          title:
-            (isFastCreateMode && editableAi
-              ? editableAi.ctaLabel
-              : purpose
-                ? STEP5_SHARE_BY_PURPOSE[purpose].cta
-                : null) ?? "보러 가기",
+          title: (purpose ? STEP5_SHARE_BY_PURPOSE[purpose].cta : null) ?? "보러 가기",
           link: real.shareUrl,
         },
       ],
@@ -3676,87 +3282,9 @@ export function CreateDropWizard({
     );
   }
 
-  const activeStep = isFastCreateMode ? fastStep : step;
-  const totalSteps = isFastCreateMode ? 3 : 5;
+  const activeStep = step;
+  const totalSteps = 5;
   const progressPct = (activeStep / totalSteps) * 100;
-
-  if (isFastCreateMode && purpose && editableAi) {
-    const fastAi = draftToAiPreview(editableAi);
-
-    return (
-      <div className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col bg-white">
-        <header className="flex h-14 shrink-0 items-center border-b border-[#E5E7EB] px-2">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="inline-flex h-11 min-w-11 items-center gap-1 rounded-lg px-3 text-sm font-medium tracking-ko text-[#525252] hover:text-[#111111]"
-          >
-            <ArrowLeft className="size-4" strokeWidth={2} />
-            {fastStep === 1 ? "닫기" : "이전"}
-          </button>
-          <span className="flex-1 text-center text-sm font-bold tracking-ko text-[#111111]">
-            드롭 만들기
-          </span>
-          <span className="w-16 text-right text-xs font-semibold tracking-ko text-[#525252]">
-            Step {fastStep}/3
-          </span>
-        </header>
-        <div className="h-1 w-full bg-[#E2E8F0]" aria-hidden>
-          <div
-            className="h-full bg-[#2563EB] transition-all duration-300 ease-out"
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
-
-        {fastStep === 1 && (
-          <FastStep1VideoPurposeConfirm
-            purpose={purpose}
-            videoInfo={videoInfo}
-            urlStatus={urlStatus}
-            suggestedPurpose={suggestedPurpose}
-            suggestionConfidence={suggestionConfidence}
-            onPurposeSelect={handlePurposeSelect}
-          />
-        )}
-        {fastStep === 2 && (
-          <FastStep2AiEdit
-            purpose={purpose}
-            draft={editableAi}
-            onDraftChange={(patch) =>
-              setEditableAi((prev) => (prev ? { ...prev, ...patch } : prev))
-            }
-          />
-        )}
-        {fastStep === 3 && videoInfo && (
-          <Step5PurposeShare
-            purpose={purpose}
-            videoInfo={videoInfo}
-            ai={fastAi}
-            shareUrl={realShare?.shareUrl ?? mockShareUrl}
-            onKakaoShare={handleKakaoShare}
-            onCopyLink={handleCopyLink}
-            onGoHome={handleGoHome}
-            shareError={shareError}
-            shareFeedback={shareFeedback}
-            makerMessage={editableAi.makerMessage.trim() || undefined}
-          />
-        )}
-
-        {fastStep < 3 && (
-          <div className="sticky bottom-0 border-t border-[#E5E7EB] bg-white px-6 py-4">
-            <ActionButton
-              type="button"
-              disabled={!canProceed()}
-              onClick={handleNext}
-              className={WIZARD_PRIMARY_BUTTON_CLASS}
-            >
-              다음
-            </ActionButton>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div
