@@ -132,7 +132,7 @@ function ProfilePage() {
             className="h-12 rounded-lg border-border bg-bg text-base text-text-strong"
           />
           <p className="text-xs font-medium text-text-subtle">
-            드롭 카드와 카톡 공유에 함께 표시돼요. 비워두면 ‘사용자’로 보여요.
+            카드와 카톡 공유에 함께 표시돼요. 비워두면 ‘사용자’로 보여요.
           </p>
         </div>
 

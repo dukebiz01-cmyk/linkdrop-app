@@ -125,7 +125,7 @@ export const Route = createFileRoute("/d/$shareUuid")({
       const title = srcTitle ? `${srcTitle} | LinkDrop` : BRAND_TITLE;
       const base =
         detail?.curator_message ?? detail?.drop?.ai_summary ?? BRAND_DESCRIPTION;
-      const description = makerName ? `${makerName}님이 보낸 드롭 — ${base}` : base;
+      const description = makerName ? `${makerName}님이 보낸 카드 — ${base}` : base;
 
       const meta: Array<Record<string, string>> = [
         { title },

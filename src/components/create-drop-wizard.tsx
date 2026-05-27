@@ -494,7 +494,7 @@ export function CreateDropWizard({
           {step === 1 ? "닫기" : "이전"}
         </button>
         <span className="flex-1 text-center text-sm font-bold tracking-ko text-[#111111]">
-          드롭 만들기
+          카드 만들기
         </span>
         <span className="w-16 text-right text-xs font-semibold tracking-ko text-[#525252]">
           Step {step}/5

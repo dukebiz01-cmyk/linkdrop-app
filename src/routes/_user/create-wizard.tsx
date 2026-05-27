@@ -3,7 +3,7 @@ import { CreateDropWizard } from "@/components/create-drop-wizard";
 import type { DropPurpose } from "@/lib/types";
 
 /**
- * v3 5단계 드롭 만들기 wizard.
+ * v3 5단계 카드 만들기 wizard.
  * WHY: 기존 /create(BlockEditor·Supabase 분리 INSERT)는 유지하고, 신규 UX는 별도 라우트로 검증한다.
  * WHY: Home 에서 url+purpose 를 search param 으로 넘기면 Step 1·2 를 "확인" 모드로 — 같은 질문 반복 X.
  */
@@ -44,7 +44,7 @@ function toConfidence(
 }
 
 export const Route = createFileRoute("/_user/create-wizard")({
-  head: () => ({ meta: [{ title: "드롭 만들기" }] }),
+  head: () => ({ meta: [{ title: "카드 만들기" }] }),
   validateSearch: (search: Record<string, unknown>): CreateWizardSearch => ({
     url: str(search.url),
     purpose: str(search.purpose),

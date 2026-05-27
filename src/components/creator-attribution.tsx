@@ -77,7 +77,7 @@ export function CreatorAttribution({ creator, variant }: CreatorAttributionProps
           </div>
           <div className="mt-1 truncate text-base font-medium text-[#0A0A0A]">{channelName}</div>
           <div className="mt-2 text-sm leading-relaxed text-[#525252]">
-            이 드롭은 위 채널의 영상에서 시작됐어요
+            이 카드는 위 채널의 영상에서 시작됐어요
           </div>
         </div>
       </div>

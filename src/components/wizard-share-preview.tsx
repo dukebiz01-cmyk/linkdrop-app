@@ -9,7 +9,7 @@ import { ErrorMessage } from "@/components/ErrorMessage";
 import type { DropPurpose } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** Step 5 — 카카오톡 공유 미리보기에 필요한 드롭 요약 데이터. */
+/** Step 5 — 카카오톡 공유 미리보기에 필요한 카드 요약 데이터. */
 export interface WizardSharePreviewData {
   video: {
     thumbnailUrl: string;

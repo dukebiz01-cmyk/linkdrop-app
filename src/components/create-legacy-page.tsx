@@ -787,7 +787,7 @@ function Step3({
       <main className="flex-1 px-6 pb-12 pt-2">
         <StepBadge n={4} />
         <h1 className="mt-3 text-2xl font-extrabold tracking-tighter text-text-strong">
-          드롭이 만들어졌어요! 🎉
+          카드가 만들어졌어요! 🎉
         </h1>
         <p className="mt-3 text-sm font-medium text-text-muted">친구에게 공유해 보세요.</p>
 

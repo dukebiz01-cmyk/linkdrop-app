@@ -41,9 +41,9 @@ const CATEGORIES: { key: Category; label: string }[] = [
 function emptyCopyFor(category: Category): string {
   switch (category) {
     case "discover":
-      return "아직 공개된 드롭이 없어요";
+      return "아직 공개된 카드가 없어요";
     case "sent":
-      return "아직 보낸 드롭이 없어요. 첫 드롭을 만들어 보세요";
+      return "아직 보낸 카드가 없어요. 첫 카드를 만들어 보세요";
     case "saved":
       return "저장 기능은 곧 만나요";
   }
@@ -138,7 +138,7 @@ export function HomePage({
         }}
         className="fixed bottom-20 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-[#2563EB] text-white transition-all duration-150 ease-out hover:scale-105 hover:bg-[#1D4ED8] active:scale-95"
         style={{ boxShadow: "0 8px 24px rgba(37, 99, 235, 0.35)" }}
-        aria-label="드롭 만들기"
+        aria-label="카드 만들기"
       >
         <Plus className="h-6 w-6" strokeWidth={2.5} />
       </button>
