@@ -1703,6 +1703,7 @@ export type Database = {
           id: string
           intent_id: string
           legal_flags: Json | null
+          official_status: string
           owner_user_id: string
           partner_id: string | null
           published_at: string | null
@@ -1730,6 +1731,7 @@ export type Database = {
           id?: string
           intent_id: string
           legal_flags?: Json | null
+          official_status?: string
           owner_user_id: string
           partner_id?: string | null
           published_at?: string | null
@@ -1757,6 +1759,7 @@ export type Database = {
           id?: string
           intent_id?: string
           legal_flags?: Json | null
+          official_status?: string
           owner_user_id?: string
           partner_id?: string | null
           published_at?: string | null
