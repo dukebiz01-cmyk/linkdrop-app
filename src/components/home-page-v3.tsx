@@ -228,7 +228,7 @@ export function HomePageV3({
     if (!hasValidUrl && !selectedPurpose) return "영상 링크와 목적을 선택해 주세요";
     if (hasValidUrl && !selectedPurpose) return "목적을 선택해 주세요";
     if (!hasValidUrl && selectedPurpose) return "영상 링크를 넣어 주세요";
-    return "Drop 만들기";
+    return "만들기 시작";
   })();
 
   useEffect(() => {
@@ -676,7 +676,7 @@ export function HomePageV3({
         {myDrops.length > 0 && (
           <section className="pb-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold tracking-ko text-[#0F172A]">내 Drop</h3>
+              <h3 className="text-lg font-bold tracking-ko text-[#0F172A]">내가 만든 카드</h3>
               <button
                 type="button"
                 className="flex items-center gap-0.5 text-[13px] font-medium text-[#64748B] transition-colors hover:text-[#2563EB]"
@@ -753,7 +753,7 @@ export function HomePageV3({
         />
         <BottomNavTab
           icon={<Inbox className="size-5" strokeWidth={2} />}
-          label="내 Drop"
+          label="내 카드"
           isActive={activeNavTab === "my-drops"}
           onClick={() => onNavTab?.("my-drops")}
         />
