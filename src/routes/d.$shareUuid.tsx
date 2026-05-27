@@ -19,6 +19,30 @@ const PROD_BASE = "https://app.drop.how";
 const BRAND_TITLE = "LinkDrop — 친구가 보내준 카드";
 const BRAND_DESCRIPTION = "영상 속 정보를 친구와 카톡으로 나누는 가장 빠른 방법";
 
+// description fallback chain: ai_summary → curator_message → 정적 기본. 200자 cap.
+function buildDescription(detail: {
+  drop?: { ai_summary?: string | null } | null;
+  curator_message?: string | null;
+} | null): string {
+  const candidates = [
+    detail?.drop?.ai_summary,
+    detail?.curator_message,
+    BRAND_DESCRIPTION,
+  ];
+  const picked = candidates.find(
+    (s): s is string => typeof s === "string" && s.trim().length > 0,
+  );
+  const text = picked ?? BRAND_DESCRIPTION;
+  return text.length > 200 ? text.slice(0, 197) + "..." : text;
+}
+
+// twitter:card 결정 — og:image 있으면 large_image, 없으면 summary.
+function pickTwitterCard(
+  imageUrl: string | null | undefined,
+): "summary_large_image" | "summary" {
+  return imageUrl && imageUrl.trim().length > 0 ? "summary_large_image" : "summary";
+}
+
 // r = 메이커가 공유 URL 에 실어 보낸 예약 가능 날짜(base64url). 수신자 화면 달력용.
 // u = 메이커가 입력한 예약 버튼 연결값(URL/연락처). 미리보기 CTA 클릭 시 연결.
 // parentShareId / shareDepth / ref = 재공유 마커. 하나라도 있으면 read-only 모드.
@@ -103,51 +127,65 @@ export const Route = createFileRoute("/d/$shareUuid")({
     }
   },
   head: ({ loaderData, params }) => {
+    // 세 분기(mock / db / catch fallback) 모두 동일한 메타 키 세트 반환. 분기별로
+    // title / description / imageUrl 만 결정하고 메타 빌드는 공통. twitter:card 는
+    // og:image 유무에 따라 summary_large_image vs summary 자동 선택.
+    let title = BRAND_TITLE;
+    let description = BRAND_DESCRIPTION;
+    let imageUrl: string | null = null;
+    let ogUrl = `${PROD_BASE}/d/${params.shareUuid ?? ""}`;
+
     try {
       if (loaderData?.mode === "mock") {
         const variant = loaderData.variant ?? "info";
         const mock = MOCK_DROP_VIEW_BY_VARIANT[variant] ?? MOCK_DROP_VIEW_BY_VARIANT.info;
-        const ogUrl = `${PROD_BASE}/d/${params.shareUuid}`;
-        return {
-          meta: [
-            { title: mock.title ?? BRAND_TITLE },
-            { property: "og:title", content: mock.title ?? BRAND_TITLE },
-            { property: "og:url", content: ogUrl },
-            { property: "og:image", content: MOCK_VIDEO_INFO.cafeTour.thumbnailUrl },
-          ],
-        };
+        ogUrl = `${PROD_BASE}/d/${params.shareUuid}`;
+        title = mock.title ?? BRAND_TITLE;
+        description = buildDescription({
+          drop: { ai_summary: mock.description },
+          curator_message: mock.makerMessage,
+        });
+        imageUrl = MOCK_VIDEO_INFO.cafeTour.thumbnailUrl ?? null;
+      } else if (loaderData?.mode === "db") {
+        const detail = loaderData.detail;
+        ogUrl = `${PROD_BASE}/d/${loaderData.shareUuid ?? ""}`;
+        const srcTitle = detail?.source?.title ?? null;
+        title = srcTitle ? `${srcTitle} | LinkDrop` : BRAND_TITLE;
+        const baseDesc = buildDescription({
+          drop: { ai_summary: detail?.drop?.ai_summary },
+          curator_message: detail?.curator_message,
+        });
+        const makerName = detail?.maker?.display_name ?? null;
+        const prefixed = makerName ? `${makerName}님이 보낸 카드 — ${baseDesc}` : baseDesc;
+        description = prefixed.length > 200 ? prefixed.slice(0, 197) + "..." : prefixed;
+        imageUrl = detail?.source?.thumbnail_url ?? null;
       }
-
-      const detail = loaderData?.mode === "db" ? loaderData.detail : null;
-      const ogUrl = `${PROD_BASE}/d/${loaderData?.shareUuid ?? ""}`;
-      const srcTitle = detail?.source?.title ?? null;
-      const makerName = detail?.maker?.display_name ?? null;
-      const title = srcTitle ? `${srcTitle} | LinkDrop` : BRAND_TITLE;
-      const base =
-        detail?.curator_message ?? detail?.drop?.ai_summary ?? BRAND_DESCRIPTION;
-      const description = makerName ? `${makerName}님이 보낸 카드 — ${base}` : base;
-
-      const meta: Array<Record<string, string>> = [
-        { title },
-        { name: "description", content: description },
-        { property: "og:title", content: title },
-        { property: "og:description", content: description },
-        { property: "og:url", content: ogUrl },
-        { property: "og:type", content: "website" },
-        { property: "og:site_name", content: "LinkDrop" },
-        { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: title },
-        { name: "twitter:description", content: description },
-      ];
-      const thumb = detail?.source?.thumbnail_url;
-      if (thumb) {
-        meta.push({ property: "og:image", content: thumb });
-        meta.push({ name: "twitter:image", content: thumb });
-      }
-      return { meta };
+      // else: catch fallback 기본값 그대로 유지
     } catch {
-      return { meta: [{ title: BRAND_TITLE }] };
+      // head() 평가 중 throw 시에도 동일 공통 빌드로 안전한 메타 반환.
+      title = BRAND_TITLE;
+      description = BRAND_DESCRIPTION;
+      imageUrl = null;
     }
+
+    const card = pickTwitterCard(imageUrl);
+    const meta: Array<Record<string, string>> = [
+      { title },
+      { name: "description", content: description },
+      { property: "og:title", content: title },
+      { property: "og:description", content: description },
+      { property: "og:url", content: ogUrl },
+      { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "LinkDrop" },
+      { name: "twitter:card", content: card },
+      { name: "twitter:title", content: title },
+      { name: "twitter:description", content: description },
+    ];
+    if (imageUrl) {
+      meta.push({ property: "og:image", content: imageUrl });
+      meta.push({ name: "twitter:image", content: imageUrl });
+    }
+    return { meta };
   },
   errorComponent: ShareUuidRouteErrorFallback,
   component: DropPage,
