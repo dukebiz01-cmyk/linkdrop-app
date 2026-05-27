@@ -130,6 +130,7 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     videoThumbnailUrl: d.source.thumbnail_url ?? "",
     videoDurationSec: d.source.duration_sec ?? 0,
     videoSourceLabel: providerLabel(d.source.provider),
+    officialStatus: "user_shared",
     maker: {
       name: d.maker?.display_name?.trim() || "익명",
       avatarUrl: d.maker?.avatar_url ?? undefined,

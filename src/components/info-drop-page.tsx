@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Play, Copy, MessageCircle, Check, Sparkles } from "lucide-react";
+import { Play, Copy, MessageCircle, Check, Sparkles, ShieldCheck } from "lucide-react";
 import {
   AiPriceComparisonCard,
   type PriceOfferRow,
@@ -28,6 +28,11 @@ import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
+import {
+  getBadgeLabel,
+  getBadgeColor,
+  type OfficialStatus,
+} from "@/lib/helpers/drop-status";
 
 // ============================================================
 // Types
@@ -91,6 +96,7 @@ export interface InfoDropPageProps {
   onBack?: () => void;
   onSave?: () => void;
   onForward?: () => void;
+  officialStatus: OfficialStatus;
 }
 
 const PURPOSE_CHIP_CLASS: Record<DropPurpose, string> = {
@@ -384,6 +390,7 @@ export function InfoDropPage({
   onShare,
   onCopyLink,
   onKakaoShare,
+  officialStatus,
 }: InfoDropPageProps) {
   const [isEmbedOpen, setIsEmbedOpen] = useState(false);
   const parsedVideo = videoSourceUrl ? parseVideoUrl(videoSourceUrl) : null;
@@ -526,6 +533,30 @@ export function InfoDropPage({
               LinkDrop으로 공유된 영상
             </p>
           </div>
+          {(officialStatus === 'official' || officialStatus === 'user_shared') && (
+            <div
+              style={{
+                marginLeft: 'auto',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 8px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 700,
+                backgroundColor: getBadgeColor(officialStatus).bg,
+                color: getBadgeColor(officialStatus).text,
+                border: getBadgeColor(officialStatus).border
+                  ? `0.5px solid ${getBadgeColor(officialStatus).border}`
+                  : undefined,
+              }}
+            >
+              {officialStatus === 'official' && (
+                <ShieldCheck size={12} strokeWidth={2.5} />
+              )}
+              {getBadgeLabel(officialStatus)}
+            </div>
+          )}
         </div>
       </header>
 
@@ -911,6 +942,7 @@ export default function InfoDropPageCoupon() {
       videoThumbnailUrl="https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&h=450&fit=crop"
       videoDurationSec={154}
       videoSourceLabel="YouTube"
+      officialStatus="user_shared"
       maker={{ name: "Duke", droppedAgo: "2시간 전" }}
       makerMessage="여기 진짜 분위기 좋더라. 너 좋아할 것 같아서 보내"
       title="서울숲 근처 숨은 브런치 카페 발견"
@@ -948,6 +980,7 @@ export function InfoDropPageReservation() {
       videoThumbnailUrl="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&h=450&fit=crop"
       videoDurationSec={312}
       videoSourceLabel="YouTube"
+      officialStatus="user_shared"
       maker={{ name: "지영", droppedAgo: "1시간 전" }}
       makerMessage="주말에 시간 되면 같이 가자! 진짜 힐링됨"
       title="주말에 여기 어때? 노을이 정말 예쁜 캠핑장"

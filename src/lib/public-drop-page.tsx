@@ -149,6 +149,7 @@ function buildFallbackMockProps(
     videoThumbnailUrl: video.thumbnailUrl,
     videoDurationSec: 185,
     videoSourceLabel: "YouTube",
+    officialStatus: "user_shared",
     maker: { name: "익명", droppedAgo: "방금 전" },
     makerMessage: "LinkDrop으로 공유된 영상입니다.",
     title: "공유된 영상",
@@ -197,6 +198,7 @@ export function buildMockInfoDropProps(
       videoThumbnailUrl: video.thumbnailUrl ?? "",
       videoDurationSec: 185,
       videoSourceLabel: "YouTube",
+      officialStatus: "user_shared",
       maker: { name: "Duke", droppedAgo: "방금 전" },
       makerMessage: mock.makerMessage ?? "",
       title: mock.title ?? "공유된 영상",
@@ -292,6 +294,7 @@ export function renderMockInfoDropPage(
       reservationDates={reservationDates}
       reservationUrl={safeReservationUrl}
       isReshare={isReshare}
+      officialStatus="user_shared"
       onWatchOriginal={() => {
         if (typeof window !== "undefined") {
           window.open("https://youtu.be/dQw4w9WgXcQ", "_blank", "noopener,noreferrer");
