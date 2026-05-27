@@ -9,7 +9,7 @@ import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "LinkDrop — 영상을 Drop으로" },
+      { title: "LinkDrop — 영상을 카드로" },
       {
         name: "description",
         content:
