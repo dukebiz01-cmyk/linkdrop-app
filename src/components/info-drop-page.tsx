@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Play, Copy, MessageCircle, Check, Sparkles, ShieldCheck } from "lucide-react";
+import { Play, Copy, MessageCircle, Check, Sparkles, ShieldCheck, Flag } from "lucide-react";
 import {
   AiPriceComparisonCard,
   type PriceOfferRow,
@@ -33,6 +33,7 @@ import {
   getBadgeColor,
   type OfficialStatus,
 } from "@/lib/helpers/drop-status";
+import { AbuseReportSheet } from "@/components/abuse-report-sheet";
 
 // ============================================================
 // Types
@@ -97,6 +98,7 @@ export interface InfoDropPageProps {
   onSave?: () => void;
   onForward?: () => void;
   officialStatus: OfficialStatus;
+  dropId: string;
 }
 
 const PURPOSE_CHIP_CLASS: Record<DropPurpose, string> = {
@@ -391,8 +393,10 @@ export function InfoDropPage({
   onCopyLink,
   onKakaoShare,
   officialStatus,
+  dropId,
 }: InfoDropPageProps) {
   const [isEmbedOpen, setIsEmbedOpen] = useState(false);
+  const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   const parsedVideo = videoSourceUrl ? parseVideoUrl(videoSourceUrl) : null;
   const canEmbed = parsedVideo?.platform === "youtube";
 
@@ -830,8 +834,32 @@ export function InfoDropPage({
           <p className="text-center text-xs font-medium leading-relaxed tracking-ko text-text-subtle">
             본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
           </p>
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => setIsReportSheetOpen(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#A3A3A3',
+                fontSize: '11px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <Flag size={11} strokeWidth={2} />
+              문제 신고
+            </button>
+          </div>
         </div>
       </footer>
+      <AbuseReportSheet
+        isOpen={isReportSheetOpen}
+        onClose={() => setIsReportSheetOpen(false)}
+        dropId={dropId}
+      />
       {canEmbed && parsedVideo && (
         <YouTubeEmbedModal
           open={isEmbedOpen}
@@ -943,6 +971,7 @@ export default function InfoDropPageCoupon() {
       videoDurationSec={154}
       videoSourceLabel="YouTube"
       officialStatus="user_shared"
+      dropId="mock-coupon"
       maker={{ name: "Duke", droppedAgo: "2시간 전" }}
       makerMessage="여기 진짜 분위기 좋더라. 너 좋아할 것 같아서 보내"
       title="서울숲 근처 숨은 브런치 카페 발견"
@@ -981,6 +1010,7 @@ export function InfoDropPageReservation() {
       videoDurationSec={312}
       videoSourceLabel="YouTube"
       officialStatus="user_shared"
+      dropId="mock-reservation"
       maker={{ name: "지영", droppedAgo: "1시간 전" }}
       makerMessage="주말에 시간 되면 같이 가자! 진짜 힐링됨"
       title="주말에 여기 어때? 노을이 정말 예쁜 캠핑장"

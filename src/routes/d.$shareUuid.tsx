@@ -235,6 +235,7 @@ function DropPage() {
         isReshare={isReshare}
         videoSourceUrl={detail.source?.source_url ?? undefined}
         officialStatus="user_shared"
+        dropId={detail.drop.id}
         onPrimaryAction={() => {
           if (!reservationUrl || typeof window === "undefined") return;
           const safeRes =

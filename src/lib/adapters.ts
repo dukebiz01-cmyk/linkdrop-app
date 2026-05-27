@@ -131,6 +131,7 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     videoDurationSec: d.source.duration_sec ?? 0,
     videoSourceLabel: providerLabel(d.source.provider),
     officialStatus: "user_shared",
+    dropId: d.drop.id,
     maker: {
       name: d.maker?.display_name?.trim() || "익명",
       avatarUrl: d.maker?.avatar_url ?? undefined,
