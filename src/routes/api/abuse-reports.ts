@@ -49,16 +49,15 @@ export const Route = createFileRoute("/api/abuse-reports")({
           const ipHash = ip ? await sha256Hex(ip) : null;
 
           const supabase = getSupabaseServer();
-          const { data, error } = await supabase
-            .from("abuse_reports")
-            .insert({
-              drop_id: body.drop_id,
-              reason: body.reason,
-              description: body.description?.trim() ? body.description.trim() : null,
-              reporter_ip_hash: ipHash,
-            })
-            .select("id")
-            .single();
+          // WHY: .select() 없이 INSERT — anon role 은 SELECT 정책이 없어
+          //      RETURNING 절을 동반하면 RLS가 거부 (42501). 클라이언트가 report_id 를
+          //      소비하지 않으므로 success 만 반환.
+          const { error } = await supabase.from("abuse_reports").insert({
+            drop_id: body.drop_id,
+            reason: body.reason,
+            description: body.description?.trim() ? body.description.trim() : null,
+            reporter_ip_hash: ipHash,
+          });
 
           if (error) {
             // v4.0.1 트리거가 RAISE EXCEPTION 'duplicate_report_within_24h'.
@@ -72,7 +71,7 @@ export const Route = createFileRoute("/api/abuse-reports")({
             );
           }
 
-          return Response.json({ success: true, report_id: data.id });
+          return Response.json({ success: true });
         } catch (e) {
           console.warn("[/api/abuse-reports] catch:", e);
           return Response.json(
