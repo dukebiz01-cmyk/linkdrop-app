@@ -16,7 +16,7 @@ import { infoDropAdapter, type DropDetailRpc } from "@/lib/adapters";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 
 const PROD_BASE = "https://app.drop.how";
-const BRAND_TITLE = "LinkDrop — 친구가 보내준 드롭";
+const BRAND_TITLE = "LinkDrop — 친구가 보내준 카드";
 const BRAND_DESCRIPTION = "영상 속 정보를 친구와 카톡으로 나누는 가장 빠른 방법";
 
 // r = 메이커가 공유 URL 에 실어 보낸 예약 가능 날짜(base64url). 수신자 화면 달력용.

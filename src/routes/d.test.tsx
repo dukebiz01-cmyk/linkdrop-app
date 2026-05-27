@@ -6,7 +6,7 @@ import {
 } from "@/lib/public-drop-page";
 import { MOCK_DROP_VIEW_BY_VARIANT, MOCK_VIDEO_INFO } from "@/lib/mock-data";
 
-const BRAND_TITLE = "LinkDrop — 친구가 보내준 드롭";
+const BRAND_TITLE = "LinkDrop — 친구가 보내준 카드";
 
 type DropSearch = {
   variant?: DropVariant;
