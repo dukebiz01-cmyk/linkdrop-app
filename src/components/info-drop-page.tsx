@@ -792,15 +792,9 @@ export function InfoDropPage({
                 href={`/create?url=${encodeURIComponent(videoSourceUrl)}`}
                 className="flex items-center justify-center gap-1 w-full py-3 text-sm font-bold text-[#2563EB] border border-[#E5E5E5] rounded-2xl"
               >
-                나도 이 영상 Drop 만들기 →
+                나도 이런 정보 보내고 싶다면 →
               </a>
             )}
-            <a
-              href="/home"
-              className="flex items-center justify-center w-full py-3 text-sm text-[#525252] border border-[#E5E5E5] rounded-2xl"
-            >
-              LinkDrop 더 보기 →
-            </a>
           </div>
           <p className="text-center text-xs font-medium leading-relaxed tracking-ko text-text-subtle">
             본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
