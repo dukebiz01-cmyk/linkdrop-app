@@ -1,0 +1,129 @@
+/**
+ * Cloudflare Worker 단축 링크 핸들러 (B0b Phase 3).
+ *
+ * drop.how/{6자base62} → resolve_short_link RPC → 302 → app.drop.how/d/{share_uuid}.
+ * 비동기로 track_short_link_click 호출 (응답 latency 영향 0, ctx.waitUntil 사용).
+ *
+ * `.server.ts` 접미사 — Vite 가 클라이언트 번들에서 제거.
+ * Cloudflare Worker runtime 전용. env는 build-time inline (VITE_* import.meta.env).
+ */
+
+const SHORT_CODE_RE = /^[0-9A-Za-z]{6}$/;
+const APP_HOST = "app.drop.how";
+
+type WaitUntilCtx = { waitUntil?: (p: Promise<unknown>) => void } | unknown;
+
+type ResolveRow = {
+  share_uuid: string;
+  info_drop_id: string;
+  expires_at: string | null;
+};
+
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function fallbackToApp(): Response {
+  return Response.redirect(`https://${APP_HOST}/`, 302);
+}
+
+export async function handleShortLink(request: Request, ctx: WaitUntilCtx): Promise<Response> {
+  const url = new URL(request.url);
+
+  // 루트 `/` 또는 빈 path → app으로
+  if (url.pathname === "/" || url.pathname === "") {
+    return fallbackToApp();
+  }
+
+  // 첫 segment 만 단축 코드로 처리 — drop.how/abc123 또는 drop.how/abc123/anything
+  const shareCode = url.pathname.slice(1).split("/")[0];
+
+  // 6자 base62 패턴 검증 — 형식 오류는 즉시 홈으로
+  if (!SHORT_CODE_RE.test(shareCode)) {
+    return fallbackToApp();
+  }
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+  if (!supabaseUrl || !supabaseKey) {
+    // 환경 변수 부재 — Worker config 오류. 운영 추적 가능하도록 로그만.
+    console.error("[short-link] missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY");
+    return fallbackToApp();
+  }
+
+  // resolve_short_link RPC
+  let resolveRows: ResolveRow[] = [];
+  try {
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/resolve_short_link`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseKey,
+        authorization: `Bearer ${supabaseKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ p_share_code: shareCode }),
+    });
+    if (!res.ok) {
+      console.warn(`[short-link] resolve_short_link returned ${res.status}`);
+      return fallbackToApp();
+    }
+    resolveRows = (await res.json()) as ResolveRow[];
+  } catch (err) {
+    console.error("[short-link] resolve_short_link fetch failed", err);
+    return fallbackToApp();
+  }
+
+  if (!Array.isArray(resolveRows) || resolveRows.length === 0) {
+    // 미존재 또는 만료된 코드 → 홈
+    return fallbackToApp();
+  }
+
+  const { share_uuid } = resolveRows[0];
+
+  // 비동기 클릭 추적 — 응답 블로킹 없이 fire-and-forget
+  // SHA-256 해시는 응답에 영향 없도록 ctx.waitUntil 내부에서 수행
+  const ip = request.headers.get("cf-connecting-ip") ?? "";
+  const ua = request.headers.get("user-agent") ?? "";
+  const referer = request.headers.get("referer") ?? "";
+
+  const trackPromise = (async () => {
+    try {
+      const ipHash = ip ? await sha256Hex(ip) : null;
+      const uaHash = ua ? await sha256Hex(ua) : null;
+      const metadata: Record<string, unknown> = {};
+      if (referer) metadata.referer = referer.slice(0, 256);
+      await fetch(`${supabaseUrl}/rest/v1/rpc/track_short_link_click`, {
+        method: "POST",
+        headers: {
+          apikey: supabaseKey,
+          authorization: `Bearer ${supabaseKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          p_share_code: shareCode,
+          p_ip_hash: ipHash,
+          p_user_agent_hash: uaHash,
+          p_metadata: metadata,
+        }),
+      });
+    } catch (err) {
+      console.error("[short-link] track_short_link_click failed", err);
+    }
+  })();
+
+  const ctxWithWait = ctx as { waitUntil?: (p: Promise<unknown>) => void };
+  if (typeof ctxWithWait.waitUntil === "function") {
+    ctxWithWait.waitUntil(trackPromise);
+  }
+
+  return Response.redirect(`https://${APP_HOST}/d/${share_uuid}`, 302);
+}
+
+/** drop.how apex 호스트인지 판정. host header 또는 URL hostname 사용. */
+export function isShortLinkHost(request: Request): boolean {
+  const url = new URL(request.url);
+  return url.hostname === "drop.how";
+}

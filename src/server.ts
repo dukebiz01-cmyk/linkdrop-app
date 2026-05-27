@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { handleShortLink, isShortLinkHost } from "./lib/short-link-handler.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -68,6 +69,17 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // B0b Phase 3 — drop.how apex 호스트는 단축 링크 핸들러로 분기.
+    // 같은 Worker 안에서 host 분기 (시나리오 A). DNS/Custom Domain 등록 후 동작.
+    if (isShortLinkHost(request)) {
+      try {
+        return await handleShortLink(request, ctx);
+      } catch (error) {
+        console.error("[short-link] handler error", error);
+        return Response.redirect("https://app.drop.how/", 302);
+      }
+    }
+
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
