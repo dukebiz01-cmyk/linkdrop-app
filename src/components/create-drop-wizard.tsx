@@ -400,7 +400,7 @@ export function CreateDropWizard({
       setRealShare(result);
       return result;
     } catch (e) {
-      setShareError("Drop 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      setShareError("카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
       console.error("[CreateDropWizard] ensureRealShare", e);
       return null;
     } finally {

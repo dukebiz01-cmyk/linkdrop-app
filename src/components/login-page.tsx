@@ -218,7 +218,7 @@ export function LoginPage({
 
   // Title/description based on mode
   const titles = {
-    signin: { title: "로그인", description: "Drop을 만들고 관리하려면 로그인해 주세요." },
+    signin: { title: "로그인", description: "카드를 만들고 관리하려면 로그인해 주세요." },
     signup: { title: "회원가입", description: "정보 드롭을 받고, 보낼 수 있어요" },
     forgot: { title: "비밀번호 재설정", description: "가입하신 이메일로 재설정 링크를 보내드려요" },
   };
