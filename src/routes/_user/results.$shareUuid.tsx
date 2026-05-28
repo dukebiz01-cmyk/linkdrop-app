@@ -7,11 +7,16 @@ export const Route = createFileRoute("/_user/results/$shareUuid")({
   head: () => ({ meta: [{ title: "성과 — LinkDrop" }] }),
   loader: async ({ params }): Promise<DropResultsData> => {
     const supabase = await getAuthClient();
-    if (!supabase) throw redirect({ to: "/login" });
 
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData.session?.user.id;
-    if (!userId) throw redirect({ to: "/login" });
+    // session/supabase 부재 시 /login 으로 throw 하지 않는다 (부모 _user 가드가 인증
+    // 단독 담당). userId null 은 owner 비교 단계에서 /home 으로 자연 흡수된다.
+    // profile.tsx 의 graceful 패턴 준수 — B3-2-fix1 리다이렉트 루프 수정.
+    const { data: sessionData } = supabase
+      ? await supabase.auth.getSession()
+      : { data: { session: null } };
+    const userId = sessionData?.session?.user?.id ?? null;
+
+    if (!supabase) throw redirect({ to: "/home" });
 
     const { data, error } = await supabase.rpc("get_drop_results", {
       p_share_uuid: params.shareUuid,
