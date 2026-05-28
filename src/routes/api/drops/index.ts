@@ -108,13 +108,24 @@ export const Route = createFileRoute("/api/drops/")({
             );
           }
 
-          // 6. create_drop_v2 (트랜잭션 — info_drops + component_blocks + share_events)
+          // 6. share_code 생성 (drop.how/{6자} 단축 URL용)
+          //    실패해도 throw X — fallback 긴 URL 유지로 UX 차단 방지.
+          const { data: shareCodeData, error: shareCodeErr } = await supabase.rpc(
+            "gen_share_code",
+          );
+          if (shareCodeErr) {
+            console.error("gen_share_code failed:", shareCodeErr);
+          }
+          const shareCode = typeof shareCodeData === "string" ? shareCodeData : null;
+
+          // 7. create_drop_v2 (트랜잭션 — info_drops + component_blocks + share_events)
           const { data: dropRes, error: dropErr } = await supabase.rpc("create_drop_v2", {
             p_intent_id: intentId,
             p_source_id: sourceId,
             p_blocks: body.blocks ?? [],
             p_curator_message: body.curator_message ?? null,
             p_campaign_id: body.campaign_id ?? null,
+            p_share_code: shareCode,
           });
           if (dropErr || !dropRes) {
             return Response.json(
@@ -165,7 +176,9 @@ export const Route = createFileRoute("/api/drops/")({
               key_points: summary.data?.ai_key_points ?? [],
               product_detection_id: productDetectionId,
             },
-            shareable_url: `${PROD_BASE}/d/${share_uuid}`,
+            shareable_url: shareCode
+              ? `https://drop.how/${shareCode}`
+              : `${PROD_BASE}/d/${share_uuid}`,
           });
         } catch (e) {
           return Response.json(
