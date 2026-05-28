@@ -76,6 +76,7 @@ function CreatePage() {
         });
         const json = (await res.json()) as {
           drop?: { share_uuid?: string };
+          shareable_url?: string;
           message?: string;
         };
         if (!res.ok || !json.drop?.share_uuid) {
@@ -84,7 +85,9 @@ function CreatePage() {
         const shareUuid = json.drop.share_uuid;
         const origin =
           typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
-        return { shareUuid, shareUrl: `${origin}/d/${shareUuid}` };
+        // 서버가 만든 단축 URL(drop.how/{6자}) 우선, 없으면 긴 URL fallback
+        const shareUrl = json.shareable_url ?? `${origin}/d/${shareUuid}`;
+        return { shareUuid, shareUrl };
       }}
     />
   );

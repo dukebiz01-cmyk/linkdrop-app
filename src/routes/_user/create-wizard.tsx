@@ -90,10 +90,11 @@ function CreateWizardPage() {
           throw new Error(json.message ?? "DROP_CREATE_FAILED");
         }
         const shareUuid = json.drop.share_uuid;
-        // shareable_url 은 prod 도메인 기준 — 로컬·preview 환경에선 현재 origin 으로 다시 만든다.
+        // 서버가 만든 단축 URL(drop.how/{6자}) 우선, 없으면 현재 origin 기준 긴 URL fallback
         const origin =
           typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
-        return { shareUuid, shareUrl: `${origin}/d/${shareUuid}` };
+        const shareUrl = json.shareable_url ?? `${origin}/d/${shareUuid}`;
+        return { shareUuid, shareUrl };
       }}
     />
   );
