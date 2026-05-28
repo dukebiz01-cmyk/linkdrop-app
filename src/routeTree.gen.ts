@@ -33,6 +33,7 @@ import { Route as PartnerPartnerIndexRouteImport } from './routes/_partner/partn
 import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index'
 import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
 import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
+import { Route as UserResultsShareUuidRouteImport } from './routes/_user/results.$shareUuid'
 import { Route as UserCouponClaim_codeRouteImport } from './routes/_user/coupon.$claim_code'
 import { Route as PartnerPartnerRegisterRouteImport } from './routes/_partner/partner.register'
 import { Route as PartnerPartnerRedeemRouteImport } from './routes/_partner/partner.redeem'
@@ -163,6 +164,11 @@ const ApiCouponsClaimRoute = ApiCouponsClaimRouteImport.update({
   path: '/api/coupons/claim',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UserResultsShareUuidRoute = UserResultsShareUuidRouteImport.update({
+  id: '/results/$shareUuid',
+  path: '/results/$shareUuid',
+  getParentRoute: () => UserRoute,
+} as any)
 const UserCouponClaim_codeRoute = UserCouponClaim_codeRouteImport.update({
   id: '/coupon/$claim_code',
   path: '/coupon/$claim_code',
@@ -253,6 +259,7 @@ export interface FileRoutesByFullPath {
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/admin/': typeof AdminAdminIndexRoute
@@ -288,6 +295,7 @@ export interface FileRoutesByTo {
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/admin': typeof AdminAdminIndexRoute
@@ -327,6 +335,7 @@ export interface FileRoutesById {
   '/_partner/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/_partner/partner/register': typeof PartnerPartnerRegisterRoute
   '/_user/coupon/$claim_code': typeof UserCouponClaim_codeRoute
+  '/_user/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/_admin/admin/': typeof AdminAdminIndexRoute
@@ -364,6 +373,7 @@ export interface FileRouteTypes {
     | '/partner/redeem'
     | '/partner/register'
     | '/coupon/$claim_code'
+    | '/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
     | '/admin/'
@@ -399,6 +409,7 @@ export interface FileRouteTypes {
     | '/partner/redeem'
     | '/partner/register'
     | '/coupon/$claim_code'
+    | '/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
     | '/admin'
@@ -437,6 +448,7 @@ export interface FileRouteTypes {
     | '/_partner/partner/redeem'
     | '/_partner/partner/register'
     | '/_user/coupon/$claim_code'
+    | '/_user/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
     | '/_admin/admin/'
@@ -634,6 +646,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCouponsClaimRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_user/results/$shareUuid': {
+      id: '/_user/results/$shareUuid'
+      path: '/results/$shareUuid'
+      fullPath: '/results/$shareUuid'
+      preLoaderRoute: typeof UserResultsShareUuidRouteImport
+      parentRoute: typeof UserRoute
+    }
     '/_user/coupon/$claim_code': {
       id: '/_user/coupon/$claim_code'
       path: '/coupon/$claim_code'
@@ -771,6 +790,7 @@ interface UserRouteChildren {
   UserInboxRoute: typeof UserInboxRoute
   UserProfileRoute: typeof UserProfileRoute
   UserCouponClaim_codeRoute: typeof UserCouponClaim_codeRoute
+  UserResultsShareUuidRoute: typeof UserResultsShareUuidRoute
 }
 
 const UserRouteChildren: UserRouteChildren = {
@@ -780,6 +800,7 @@ const UserRouteChildren: UserRouteChildren = {
   UserInboxRoute: UserInboxRoute,
   UserProfileRoute: UserProfileRoute,
   UserCouponClaim_codeRoute: UserCouponClaim_codeRoute,
+  UserResultsShareUuidRoute: UserResultsShareUuidRoute,
 }
 
 const UserRouteWithChildren = UserRoute._addFileChildren(UserRouteChildren)
