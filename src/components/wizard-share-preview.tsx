@@ -108,7 +108,7 @@ export function WizardSharePreview({
     <div className={cn("flex flex-1 flex-col", className)}>
       <div className="flex-1 overflow-y-auto px-6 pb-8 pt-2">
         <h1 className="mt-2 text-2xl font-extrabold tracking-ko text-text-strong">
-          공유 전에 Drop을 확인하세요
+          공유 전에 카드를 확인하세요
         </h1>
         <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
           받는 사람에게 보일 영상, 설명, 버튼을 확인한 뒤
