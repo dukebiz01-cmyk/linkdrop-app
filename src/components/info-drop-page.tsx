@@ -447,11 +447,11 @@ export function InfoDropPage({
       setCopyFeedback("링크를 복사했어요.");
       return;
     }
-    // 폴백 — 부모가 onCopyLink 를 주지 않으면 현재 페이지의 전체 URL(?r=, ?u= 포함)을
-    // 복사한다. adapter 의 shareUrl 은 hardcoded PROD_BASE 라 dev 환경 + query 누락으로
-    // 재공유 시 화면 일관성이 깨지는 문제를 방지.
+    // 폴백 — 부모가 onCopyLink 를 주지 않으면 props.shareUrl(adapter가 만든 drop.how/{6자}
+    // 단축 URL) 우선 사용. shareUrl 없을 때만 현재 페이지의 전체 URL(?r=, ?u= 포함)로 폴백.
+    // B2-4: 재공유 흐름이 단축 URL을 거치게 하려면 shareUrl을 먼저 본다.
     const fallbackUrl =
-      typeof window !== "undefined" && window.location.href ? window.location.href : shareUrl;
+      shareUrl ?? (typeof window !== "undefined" ? window.location.href : undefined);
     if (!fallbackUrl) return;
     try {
       await navigator.clipboard.writeText(fallbackUrl);

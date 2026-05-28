@@ -9,9 +9,10 @@ import type { DropViewVariant } from "@/lib/mock-data";
 
 const PROD_BASE = "https://app.drop.how";
 
-/** get_drop_detail RPC 출력 형태 (v3.5 — maker/store 포함). */
+/** get_drop_detail RPC 출력 형태 (v3.5 — maker/store 포함, v5.2 — share_code). */
 export type DropDetailRpc = {
   share_uuid: string;
+  share_code: string | null;
   curator_message: string | null;
   created_at: string | null;
   drop: {
@@ -158,6 +159,10 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     },
     aiSummary: d.drop.ai_summary ?? undefined,
     keyPoints: toKeyPoints(d.drop.ai_key_points),
-    shareUrl: `${PROD_BASE}/d/${d.share_uuid}`,
+    // share_code(6자) 있으면 drop.how/{code} 단축 URL, 없으면 긴 URL fallback.
+    // apex(drop.how) 하드코딩 — origin은 app.drop.how가 되어 단축 도메인을 못 거침.
+    shareUrl: d.share_code
+      ? `https://drop.how/${d.share_code}`
+      : `${PROD_BASE}/d/${d.share_uuid}`,
   };
 }

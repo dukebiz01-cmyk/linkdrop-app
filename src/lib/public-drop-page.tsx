@@ -126,10 +126,24 @@ export function resolvePublicDropVariant(
   }
 }
 
-export function buildPublicDropShareUrl(shareCode: string, origin?: string): string {
-  const base =
-    origin ?? (typeof window !== "undefined" ? window.location.origin : "https://app.drop.how");
-  return `${base}/d/${shareCode}`;
+/**
+ * 공유 URL 조립.
+ * - share_code(6자) 있으면 → `https://drop.how/{code}` 단축 URL (apex 하드코딩).
+ * - 없으면 `https://app.drop.how/d/{share_uuid}` 긴 URL fallback.
+ *
+ * apex(drop.how) 하드코딩 이유: origin/window.location.origin은 app.drop.how로
+ * 떨어져 단축 도메인 라우팅을 못 거치게 됨 — B2-1에서 발견된 버그 재발 방지.
+ *
+ * 첫 인자는 share_uuid(또는 mock path "test"/"preview-*"). 두 번째가 실제 6자
+ * base62 share_code. mock 경로는 share_code가 없으므로 두 번째 미전달 → 긴 URL.
+ */
+export function buildPublicDropShareUrl(
+  shareUuid: string,
+  shareCode?: string | null,
+): string {
+  return shareCode
+    ? `https://drop.how/${shareCode}`
+    : `https://app.drop.how/d/${shareUuid}`;
 }
 
 function narrowIntent(variant: DropViewVariant): InfoDropPageProps["intent"] {
@@ -191,7 +205,10 @@ export function buildMockInfoDropProps(
     const mock = MOCK_DROP_VIEW_BY_VARIANT[variant] ?? MOCK_DROP_VIEW_BY_VARIANT.info;
     const ai = MOCK_DROP_AI_BY_VARIANT[variant] ?? MOCK_DROP_AI_BY_VARIANT.info;
     const video = MOCK_VIDEO_INFO.cafeTour;
-    const shareUrl = buildPublicDropShareUrl(shareCode, origin);
+    // mock 경로 — share_code 없음. apex 하드코딩으로 긴 URL fallback.
+    // (origin 인자는 시그니처 분리 후 사용처 없음 — 호출처에서 무시.)
+    void origin;
+    const shareUrl = buildPublicDropShareUrl(shareCode);
     const priceOffers: PriceOfferRow[] =
       variant === "purchase" ? MOCK_PRICE_OFFERS.map((o) => ({ ...o })) : [];
 
