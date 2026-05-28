@@ -30,14 +30,20 @@ const CHANNEL_META: Record<string, { label: string; Icon: typeof MessageCircle }
   other: { label: "기타", Icon: MoreHorizontal },
 };
 
-// conversion_type enum 라벨
+// conversion_type enum + v5.4 lifecycle_events 화이트리스트 라벨 (메모리 #16 — 화면 한글만)
 const CONVERSION_LABELS: Record<string, string> = {
+  // conversion_events.conversion_type (확정성 시그널)
   coupon_use: "쿠폰 사용",
   reservation_confirm: "예약 확정",
   sale_complete: "구매 완료",
   ticket_purchase: "티켓 구매",
   ticket_checkin: "티켓 체크인",
   lead_approved: "상담 승인",
+  // v5.4: lifecycle_events 추정 시그널 (외부 클릭)
+  reservation_click: "예약 클릭 (추정)",
+  phone_click: "전화 문의 클릭 (추정)",
+  directions_click: "길찾기 클릭 (추정)",
+  share_click: "공유 클릭 (추정)",
 };
 
 function num(v: number | null | undefined): number {
