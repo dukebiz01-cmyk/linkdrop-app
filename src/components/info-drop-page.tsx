@@ -28,6 +28,7 @@ import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
+import { trackReceiverEvent } from "@/lib/event-tracking";
 import {
   getBadgeLabel,
   getBadgeColor,
@@ -481,14 +482,18 @@ export function InfoDropPage({
       return;
     }
     if (ctaId === "phone") {
+      trackReceiverEvent("phone_click", dropId);
       window.open("tel:01000000000", "_self");
       return;
     }
     if (ctaId === "sms") {
+      // SMS는 별도 event_type 없음 — phone과 동일 트랙으로 흡수
+      trackReceiverEvent("phone_click", dropId);
       window.open("sms:01000000000", "_self");
       return;
     }
     if (ctaId === "directions") {
+      trackReceiverEvent("directions_click", dropId);
       const q = encodeURIComponent(safeLocal.address || safeLocal.name);
       window.open(`https://map.naver.com/v5/search/${q}`, "_blank", "noopener,noreferrer");
       return;

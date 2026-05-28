@@ -13,6 +13,7 @@ import {
 } from "@/lib/public-drop-page";
 import { MOCK_DROP_VIEW_BY_VARIANT, MOCK_VIDEO_INFO } from "@/lib/mock-data";
 import { infoDropAdapter, type DropDetailRpc } from "@/lib/adapters";
+import { trackReceiverEvent } from "@/lib/event-tracking";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 
 const PROD_BASE = "https://app.drop.how";
@@ -281,6 +282,7 @@ function DropPage() {
             reservationUrl.startsWith("https://naver.me") ||
             reservationUrl.startsWith("tel:");
           if (safeRes) {
+            trackReceiverEvent("reservation_click", detail.drop.id);
             setPendingNaverUrl(reservationUrl);
             setNaverPending(true);
           }
@@ -295,7 +297,7 @@ function DropPage() {
           if (safeVid) window.open(url, "_blank", "noopener,noreferrer");
         }}
         onBack={() => window.history.back()}
-        onShare={() => console.log("[d/$shareUuid] share", shareUuid)}
+        onShare={() => trackReceiverEvent("share_click", detail.drop.id)}
         onSave={() => console.log("[d/$shareUuid] save (Phase 2)")}
         onForward={() => console.log("[d/$shareUuid] forward")}
       />
