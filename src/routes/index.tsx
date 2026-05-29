@@ -4,6 +4,7 @@ import {
   type HomePageV3NavTab,
   type HomeStartCreateParams,
 } from "@/components/home-page-v3";
+import { BottomNav } from "@/components/bottom-nav";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export const Route = createFileRoute("/")({
@@ -53,11 +54,20 @@ function IndexHomePage() {
     return `/create-wizard?${q.toString()}`;
   };
 
+  // N4-fix1: v0 home-page-v3 내부 fixed bottom nav(5탭)는 CSS 셀렉터로 숨기고,
+  // 공통 BottomNav(3탭) 를 형제로 렌더. BottomNav 는 wrapper 밖에 둬야 hidden
+  // 셀렉터에 잡히지 않음 — wrapper 안에 두면 본 3탭까지 사라짐.
+  // pb-16 = _user.tsx UserLayout 과 동일 — 콘텐츠가 BottomNav 에 가림 방지.
   return (
-    <HomePageV3
-      activeNavTab="home"
-      onNavTab={handleNavTab}
-      onStartCreate={(params) => goLogin(buildCreateRedirect(params))}
-    />
+    <>
+      <div className="[&_.fixed.bottom-0]:hidden pb-16">
+        <HomePageV3
+          activeNavTab="home"
+          onNavTab={handleNavTab}
+          onStartCreate={(params) => goLogin(buildCreateRedirect(params))}
+        />
+      </div>
+      <BottomNav />
+    </>
   );
 }

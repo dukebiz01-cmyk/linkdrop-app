@@ -15,7 +15,7 @@ import { Home, PlusCircle, User } from "lucide-react";
  */
 
 type NavTab = {
-  to: "/home" | "/create-wizard" | "/me";
+  to: "/" | "/create-wizard" | "/me";
   Icon: typeof Home;
   label: string;
   match: (pathname: string) => boolean;
@@ -23,10 +23,13 @@ type NavTab = {
 
 const TABS: NavTab[] = [
   {
-    to: "/home",
+    // N4-fix1: 홈 탭은 "/" 로. 무로그인 → "/" 머무름 / 로그인 → "/" beforeLoad 가
+    // /home 으로 redirect 라 양쪽 다 정상. (이전 "/home" 은 무로그인이 홈 누르면
+    // /login 으로 튕기는 회귀였음.)
+    to: "/",
     Icon: Home,
     label: "홈",
-    match: (p) => p === "/" || p === "/home" || p.startsWith("/home"),
+    match: (p) => p === "/" || p.startsWith("/home"),
   },
   {
     to: "/create-wizard",
