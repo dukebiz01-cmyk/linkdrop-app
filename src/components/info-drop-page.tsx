@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Play, Copy, MessageCircle, Check, Sparkles, ShieldCheck, Flag } from "lucide-react";
+import { Play, Copy, MessageCircle, Check, Sparkles, ShieldCheck, Flag, Ticket } from "lucide-react";
 import {
   AiPriceComparisonCard,
   type PriceOfferRow,
@@ -100,8 +100,14 @@ export interface InfoDropPageProps {
   onForward?: () => void;
   officialStatus: OfficialStatus;
   dropId: string;
-  /** H1-d funnel — drop 의 partner active coupon (있으면). null/undefined 면 CTA 미노출. */
-  funnelCoupon?: { id: string; title: string } | null;
+  /** H1-d funnel — drop 의 partner active coupon (있으면). null/undefined 면 CTA 미노출.
+   *  U1: 카드 표시용 conditions/valid_until 추가. id/title 외 옵셔널. */
+  funnelCoupon?: {
+    id: string;
+    title: string;
+    conditions?: { min_amount?: number; [k: string]: unknown } | null;
+    valid_until?: string | null;
+  } | null;
   /** H1-d funnel — [예약 문의하고 쿠폰 받기] CTA 클릭. 부모가 로그인/폼/RPC 핸들 */
   onReserveAndClaim?: () => void;
 }
@@ -741,6 +747,31 @@ export function InfoDropPage({
               </p>
             </div>
           ))}
+
+        {/* U1 — 받을 수 있는 쿠폰 카드. isReservation + funnelCoupon 있을 때만. */}
+        {isReservation && funnelCoupon && (
+          <div className="mt-4 rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+            <div className="mb-3 flex items-center gap-2">
+              <Ticket className="size-5 text-[#2563EB]" strokeWidth={2} />
+              <span className="text-sm font-medium tracking-ko text-[#64748B]">
+                받을 수 있는 쿠폰
+              </span>
+            </div>
+            <p className="text-lg font-bold tracking-ko text-[#0F172A]">
+              {funnelCoupon.title}
+            </p>
+            {typeof funnelCoupon.conditions?.min_amount === "number" && (
+              <p className="mt-2 text-sm font-medium tracking-ko text-[#64748B]">
+                {funnelCoupon.conditions.min_amount.toLocaleString("ko-KR")}원 이상 사용하실 때
+              </p>
+            )}
+            <p className="mt-1 text-sm font-medium tracking-ko text-[#64748B]">
+              {funnelCoupon.valid_until
+                ? `${new Date(funnelCoupon.valid_until).toLocaleDateString("ko-KR")}까지`
+                : "기간 제한 없음"}
+            </p>
+          </div>
+        )}
 
         {resolvedVariant === "purchase" && (
           <section data-testid="variant-purchase">

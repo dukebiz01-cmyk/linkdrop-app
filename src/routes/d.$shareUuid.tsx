@@ -326,7 +326,20 @@ function DropPage() {
         videoSourceUrl={detail.source?.source_url ?? undefined}
         officialStatus="user_shared"
         dropId={detail.drop.id}
-        funnelCoupon={funnelCoupon ? { id: funnelCoupon.id, title: funnelCoupon.title } : null}
+        funnelCoupon={
+          funnelCoupon
+            ? {
+                id: funnelCoupon.id,
+                title: funnelCoupon.title,
+                conditions:
+                  (funnelCoupon.conditions as {
+                    min_amount?: number;
+                    [k: string]: unknown;
+                  } | null | undefined) ?? null,
+                valid_until: funnelCoupon.valid_until ?? null,
+              }
+            : null
+        }
         onReserveAndClaim={handleReserveAndClaim}
         onPrimaryAction={() => {
           if (!reservationUrl || typeof window === "undefined") return;
