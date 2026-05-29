@@ -14,6 +14,7 @@ import {
 import { MOCK_DROP_VIEW_BY_VARIANT, MOCK_VIDEO_INFO } from "@/lib/mock-data";
 import { infoDropAdapter, type DropDetailRpc } from "@/lib/adapters";
 import { trackReceiverEvent } from "@/lib/event-tracking";
+import { shareToKakao } from "@/lib/kakao";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 
 const PROD_BASE = "https://app.drop.how";
@@ -298,6 +299,18 @@ function DropPage() {
         }}
         onBack={() => window.history.back()}
         onShare={() => trackReceiverEvent("share_click", detail.drop.id)}
+        onKakaoShare={async () => {
+          // /d/ 수신자 측 카톡 공유 — wizard 메이커 측과 동일하게 shareToKakao 호출.
+          // linkUrl 은 adapter 가 만든 props.shareUrl (B2-4 단축 URL drop.how/{code}, 없으면
+          // app.drop.how/d/{uuid} 긴 URL fallback) 을 그대로 사용.
+          trackReceiverEvent("share_click", detail.drop.id);
+          await shareToKakao({
+            title: props.title || "LinkDrop",
+            description: props.makerMessage ?? props.description ?? "",
+            imageUrl: props.videoThumbnailUrl ?? "",
+            linkUrl: props.shareUrl ?? `https://app.drop.how/d/${detail.share_uuid}`,
+          });
+        }}
         onSave={() => console.log("[d/$shareUuid] save (Phase 2)")}
         onForward={() => console.log("[d/$shareUuid] forward")}
       />

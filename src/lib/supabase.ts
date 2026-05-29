@@ -27,7 +27,20 @@ export function getSupabase(): SupabaseClient {
     );
   }
   if (!_client) {
-    _client = createBrowserClient(SUPABASE_URL!, SUPABASE_PUBLISHABLE_KEY!);
+    // flowType: "implicit" — F2a-cb-fix5. PKCE grant 엔드포인트가 이 프로젝트에서
+    // 404 거부 (verifier 문제 아님 — ssr:false 후에도 동일). implicit 으로 전환하면
+    // 토큰이 URL hash 로 직접 오고 detectSessionInUrl 이 자동 처리 → token 교환 POST
+    // 자체가 불필요해 404 우회. SPA 안전성은 다소 낮으나 SSR 구성에서 안정적.
+    // persistSession/autoRefreshToken 유지로 F5 세션 유지(메모리 #17) 보존.
+    // ⚠️ 같은 클라이언트를 signInWithPassword(이메일 로그인)도 사용 — 회귀 확인 필수.
+    _client = createBrowserClient(SUPABASE_URL!, SUPABASE_PUBLISHABLE_KEY!, {
+      auth: {
+        flowType: "implicit",
+        detectSessionInUrl: true,
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
   }
   return _client;
 }

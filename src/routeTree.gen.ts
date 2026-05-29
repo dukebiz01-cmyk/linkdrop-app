@@ -17,6 +17,7 @@ import { Route as AdminRouteImport } from './routes/_admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DTestRouteImport } from './routes/d.test'
 import { Route as DShareUuidRouteImport } from './routes/d.$shareUuid'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as ApiSuggestPurposeRouteImport } from './routes/api/suggest-purpose'
 import { Route as ApiPriceCompareRouteImport } from './routes/api/price-compare'
 import { Route as ApiOembedRouteImport } from './routes/api/oembed'
@@ -82,6 +83,11 @@ const DTestRoute = DTestRouteImport.update({
 const DShareUuidRoute = DShareUuidRouteImport.update({
   id: '/d/$shareUuid',
   path: '/d/$shareUuid',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSuggestPurposeRoute = ApiSuggestPurposeRouteImport.update({
@@ -245,6 +251,7 @@ export interface FileRoutesByFullPath {
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
   '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
@@ -281,6 +288,7 @@ export interface FileRoutesByTo {
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
   '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
@@ -321,6 +329,7 @@ export interface FileRoutesById {
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
   '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
   '/_admin/admin/campaigns': typeof AdminAdminCampaignsRoute
@@ -359,6 +368,7 @@ export interface FileRouteTypes {
     | '/api/oembed'
     | '/api/price-compare'
     | '/api/suggest-purpose'
+    | '/auth/callback'
     | '/d/$shareUuid'
     | '/d/test'
     | '/admin/campaigns'
@@ -395,6 +405,7 @@ export interface FileRouteTypes {
     | '/api/oembed'
     | '/api/price-compare'
     | '/api/suggest-purpose'
+    | '/auth/callback'
     | '/d/$shareUuid'
     | '/d/test'
     | '/admin/campaigns'
@@ -434,6 +445,7 @@ export interface FileRouteTypes {
     | '/api/oembed'
     | '/api/price-compare'
     | '/api/suggest-purpose'
+    | '/auth/callback'
     | '/d/$shareUuid'
     | '/d/test'
     | '/_admin/admin/campaigns'
@@ -469,6 +481,7 @@ export interface RootRouteChildren {
   ApiOembedRoute: typeof ApiOembedRoute
   ApiPriceCompareRoute: typeof ApiPriceCompareRoute
   ApiSuggestPurposeRoute: typeof ApiSuggestPurposeRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
   DShareUuidRoute: typeof DShareUuidRoute
   DTestRoute: typeof DTestRoute
   ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
@@ -532,6 +545,13 @@ declare module '@tanstack/react-router' {
       path: '/d/$shareUuid'
       fullPath: '/d/$shareUuid'
       preLoaderRoute: typeof DShareUuidRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/suggest-purpose': {
@@ -818,6 +838,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOembedRoute: ApiOembedRoute,
   ApiPriceCompareRoute: ApiPriceCompareRoute,
   ApiSuggestPurposeRoute: ApiSuggestPurposeRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
   DShareUuidRoute: DShareUuidRoute,
   DTestRoute: DTestRoute,
   ApiCouponsClaimRoute: ApiCouponsClaimRoute,
