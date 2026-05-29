@@ -25,6 +25,7 @@ import { Route as ApiEventsRouteImport } from './routes/api/events'
 import { Route as ApiConsultationsRouteImport } from './routes/api/consultations'
 import { Route as ApiAbuseReportsRouteImport } from './routes/api/abuse-reports'
 import { Route as UserProfileRouteImport } from './routes/_user/profile'
+import { Route as UserMeRouteImport } from './routes/_user/me'
 import { Route as UserInboxRouteImport } from './routes/_user/inbox'
 import { Route as UserHomeRouteImport } from './routes/_user/home'
 import { Route as UserCreateWizardRouteImport } from './routes/_user/create-wizard'
@@ -123,6 +124,11 @@ const ApiAbuseReportsRoute = ApiAbuseReportsRouteImport.update({
 const UserProfileRoute = UserProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserMeRoute = UserMeRouteImport.update({
+  id: '/me',
+  path: '/me',
   getParentRoute: () => UserRoute,
 } as any)
 const UserInboxRoute = UserInboxRouteImport.update({
@@ -244,6 +250,7 @@ export interface FileRoutesByFullPath {
   '/create-wizard': typeof UserCreateWizardRoute
   '/home': typeof UserHomeRoute
   '/inbox': typeof UserInboxRoute
+  '/me': typeof UserMeRoute
   '/profile': typeof UserProfileRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
@@ -281,6 +288,7 @@ export interface FileRoutesByTo {
   '/create-wizard': typeof UserCreateWizardRoute
   '/home': typeof UserHomeRoute
   '/inbox': typeof UserInboxRoute
+  '/me': typeof UserMeRoute
   '/profile': typeof UserProfileRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
@@ -322,6 +330,7 @@ export interface FileRoutesById {
   '/_user/create-wizard': typeof UserCreateWizardRoute
   '/_user/home': typeof UserHomeRoute
   '/_user/inbox': typeof UserInboxRoute
+  '/_user/me': typeof UserMeRoute
   '/_user/profile': typeof UserProfileRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
@@ -361,6 +370,7 @@ export interface FileRouteTypes {
     | '/create-wizard'
     | '/home'
     | '/inbox'
+    | '/me'
     | '/profile'
     | '/api/abuse-reports'
     | '/api/consultations'
@@ -398,6 +408,7 @@ export interface FileRouteTypes {
     | '/create-wizard'
     | '/home'
     | '/inbox'
+    | '/me'
     | '/profile'
     | '/api/abuse-reports'
     | '/api/consultations'
@@ -438,6 +449,7 @@ export interface FileRouteTypes {
     | '/_user/create-wizard'
     | '/_user/home'
     | '/_user/inbox'
+    | '/_user/me'
     | '/_user/profile'
     | '/api/abuse-reports'
     | '/api/consultations'
@@ -601,6 +613,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof UserProfileRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/me': {
+      id: '/_user/me'
+      path: '/me'
+      fullPath: '/me'
+      preLoaderRoute: typeof UserMeRouteImport
       parentRoute: typeof UserRoute
     }
     '/_user/inbox': {
@@ -808,6 +827,7 @@ interface UserRouteChildren {
   UserCreateWizardRoute: typeof UserCreateWizardRoute
   UserHomeRoute: typeof UserHomeRoute
   UserInboxRoute: typeof UserInboxRoute
+  UserMeRoute: typeof UserMeRoute
   UserProfileRoute: typeof UserProfileRoute
   UserCouponClaim_codeRoute: typeof UserCouponClaim_codeRoute
   UserResultsShareUuidRoute: typeof UserResultsShareUuidRoute
@@ -818,6 +838,7 @@ const UserRouteChildren: UserRouteChildren = {
   UserCreateWizardRoute: UserCreateWizardRoute,
   UserHomeRoute: UserHomeRoute,
   UserInboxRoute: UserInboxRoute,
+  UserMeRoute: UserMeRoute,
   UserProfileRoute: UserProfileRoute,
   UserCouponClaim_codeRoute: UserCouponClaim_codeRoute,
   UserResultsShareUuidRoute: UserResultsShareUuidRoute,
