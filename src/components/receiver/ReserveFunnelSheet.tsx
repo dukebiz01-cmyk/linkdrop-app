@@ -102,7 +102,19 @@ export function ReserveFunnelSheet({
       const phoneDigits = normalizePhone(phone);
       const phoneHash = await sha256Hex(phoneDigits);
       const phoneLast4 = phoneDigits.slice(-4);
-      const visitorId = crypto.randomUUID();
+      // RSV-FIX1 — 안정적 anonymous_id (E2 이벤트 추적과 같은 localStorage 키 재사용).
+      // visitors row 사전 생성 없이 random UUID 를 그대로 p_visitor_id 로 보내면
+      // reservations.visitor_id_fkey → visitors(id) FK 위반으로 INSERT 실패.
+      let anonId: string;
+      try {
+        anonId = localStorage.getItem("ld_visitor_id") ?? "";
+        if (!anonId) {
+          anonId = crypto.randomUUID();
+          localStorage.setItem("ld_visitor_id", anonId);
+        }
+      } catch {
+        anonId = crypto.randomUUID(); // 시크릿 모드 등 localStorage 차단 → 메모리 fallback
+      }
       const calendarMode = isMultiNight ? "range" : "single";
 
       // share_uuid → share_events.id (RLS: shares_public_read_by_uuid 로 anon 가능).
@@ -119,10 +131,23 @@ export function ReserveFunnelSheet({
       }
       const shareEventId = se.id;
 
+      // RSV-FIX1 — visitors row 사전 생성 (FK 충족용). upsert_visitor 가 같은
+      // anonymous_id 면 기존 행 반환 + last_seen_at 갱신.
+      const { data: visitorUuid, error: vErr } = await supabase.rpc("upsert_visitor", {
+        p_anonymous_id: anonId,
+        p_metadata: {},
+      });
+      if (vErr || !visitorUuid) {
+        console.error("[ReserveFunnel] upsert_visitor failed:", vErr);
+        setErrorMsg("예약 문의 전송에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        setStep("error");
+        return;
+      }
+
       const { error: resErr } = await supabase.rpc("create_reservation_anon", {
         p_drop_id: dropId,
         p_share_event_id: shareEventId,
-        p_visitor_id: visitorId,
+        p_visitor_id: visitorUuid,
         p_calendar_mode: calendarMode,
         p_reserved_date: isMultiNight ? null : checkIn,
         p_time_slot: null,
