@@ -115,7 +115,11 @@ export function ReserveFunnelSheet({
       } catch {
         anonId = crypto.randomUUID(); // 시크릿 모드 등 localStorage 차단 → 메모리 fallback
       }
-      const calendarMode = isMultiNight ? "range" : "single";
+      // RSV-FIX2 — 캠핑 파일럿: 단일·연박 모두 날짜 범위로 통일.
+      // 제약 reservations_calendar_mode_check = ANY (ARRAY['date_range','date_time_slot']).
+      // 이전엔 짧은 별명 "range"/"single" 을 보내 23514 위반 → INSERT 실패.
+      // date_time_slot 은 시간 슬롯 예약(식당/미용실)용 — 캠핑은 p_time_slot 미사용.
+      const calendarMode = "date_range";
 
       // share_uuid → share_events.id (RLS: shares_public_read_by_uuid 로 anon 가능).
       const { data: se, error: seErr } = await supabase
