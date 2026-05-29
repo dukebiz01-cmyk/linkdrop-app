@@ -45,6 +45,8 @@ type MyDropRow = {
   created_at: string | null;
   published_at: string | null;
   source: { title: string | null; thumbnail_url: string | null; provider: string | null } | null;
+  // v5.5: 첫 share_event 의 share_uuid. 없으면 null (공유 안 된 옛 drop).
+  share_uuid: string | null;
 };
 
 type MePageData = {
@@ -65,8 +67,8 @@ type MePageData = {
  *
  * 6 섹션: 내 정보 · 받은 혜택 · 내 구독 · 내 카드 · 내 매장(조건부) · 설정
  *
- * ⚠️ get_my_drops 가 share_uuid 미반환 → "성과 보기" 링크는 임시 비활성 (옵션 D).
- *    별도 명세에서 get_my_drops 확장 (v5.5) 또는 dropId 기반 새 라우트로 후속.
+ * v5.5 마이그레이션으로 get_my_drops 반환에 share_uuid 추가됨 → ④ 내 카드의
+ * "성과 보기" 링크 활성화 (isBusiness && share_uuid 동시 조건). N1-b.
  */
 export const Route = createFileRoute("/_user/me")({
   head: () => ({ meta: [{ title: "나 — LinkDrop" }] }),
@@ -246,10 +248,20 @@ function MePage() {
                       </p>
                     </div>
                   </div>
-                  {data.isBusiness ? (
-                    <p className="mt-2 text-xs text-[#94A3B8]">
-                      성과 보기는 곧 열려요.
-                    </p>
+                  {data.isBusiness && d.share_uuid ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate({
+                          to: "/results/$shareUuid",
+                          params: { shareUuid: d.share_uuid! },
+                        })
+                      }
+                      className="mt-2 flex min-h-[44px] items-center gap-1 text-sm font-semibold text-[#2563EB] hover:underline"
+                    >
+                      성과 보기
+                      <ChevronRight className="size-4" strokeWidth={2} />
+                    </button>
                   ) : null}
                 </li>
               ))}
