@@ -519,7 +519,12 @@ export function InfoDropPage({
     <div
       className={cn(
         "relative mx-auto min-h-screen w-full max-w-[480px] bg-white",
-        isReservation ? "pb-56" : "pb-48",
+        // F3 — 하단 고정 footer(공유 영역 + create CTA + 광고 고지 + 신고)가 내용 끝을
+        // 덮는 문제. 실측 footer 약 200-240px (예약 variant 가 더 큼). pb 를 늘리고
+        // env(safe-area-inset-bottom) 으로 iPhone 노치/홈 인디케이터 영역까지 확보.
+        isReservation
+          ? "pb-[calc(17rem+env(safe-area-inset-bottom))]"
+          : "pb-[calc(15rem+env(safe-area-inset-bottom))]",
       )}
       data-testid="public-drop-page"
       data-variant={resolvedVariant}
