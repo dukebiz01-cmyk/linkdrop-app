@@ -46,11 +46,17 @@ function HomeRoute() {
     });
   };
 
+  // v0 home-page-v3 (#25) 내부 fixed bottom nav 를 CSS 셀렉터로만 숨김. 파일 미편집.
+  // home-page-v3.tsx L740 에 fixed bottom-0 가 그 nav 단 한 곳뿐임을 grep 으로 확인 —
+  // 이 wrapper 안의 다른 요소를 우발적으로 숨길 위험 없음. N2 공통 nav 가 _user.tsx
+  // 에서 별도로 렌더되어 유일 nav 가 됨.
   return (
-    <HomePageV3
-      activeNavTab="home"
-      onStartCreate={handleStartCreate}
-      onNavTab={handleNavTab}
-    />
+    <div className="[&_.fixed.bottom-0]:hidden">
+      <HomePageV3
+        activeNavTab="home"
+        onStartCreate={handleStartCreate}
+        onNavTab={handleNavTab}
+      />
+    </div>
   );
 }
