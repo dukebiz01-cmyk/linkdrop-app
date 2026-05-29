@@ -9,12 +9,20 @@ import type { DropViewVariant } from "@/lib/mock-data";
 
 const PROD_BASE = "https://app.drop.how";
 
-/** get_drop_detail RPC 출력 형태 (v3.5 — maker/store 포함, v5.2 — share_code). */
+/** get_drop_detail RPC 출력 형태 (v3.5 — maker/store, v5.2 — share_code, v5.6 — coupon). */
 export type DropDetailRpc = {
   share_uuid: string;
   share_code: string | null;
   curator_message: string | null;
   created_at: string | null;
+  /** v5.6 H1-d — drop 의 partner active coupon (없으면 null). */
+  coupon?: {
+    id: string;
+    title: string;
+    conditions?: unknown;
+    valid_from?: string | null;
+    valid_until?: string | null;
+  } | null;
   drop: {
     id: string;
     purpose: string | null;

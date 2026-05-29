@@ -100,6 +100,10 @@ export interface InfoDropPageProps {
   onForward?: () => void;
   officialStatus: OfficialStatus;
   dropId: string;
+  /** H1-d funnel — drop 의 partner active coupon (있으면). null/undefined 면 CTA 미노출. */
+  funnelCoupon?: { id: string; title: string } | null;
+  /** H1-d funnel — [예약 문의하고 쿠폰 받기] CTA 클릭. 부모가 로그인/폼/RPC 핸들 */
+  onReserveAndClaim?: () => void;
 }
 
 const PURPOSE_CHIP_CLASS: Record<DropPurpose, string> = {
@@ -384,6 +388,8 @@ export function InfoDropPage({
   aiSummary,
   keyPoints,
   shareUrl,
+  funnelCoupon,
+  onReserveAndClaim,
   reservationDates,
   reservationUrl,
   isReshare = false,
@@ -797,6 +803,15 @@ export function InfoDropPage({
             </p>
           )}
           <ErrorMessage message={shareError} />
+          {isReservation && funnelCoupon && onReserveAndClaim ? (
+            <button
+              type="button"
+              onClick={onReserveAndClaim}
+              className="flex w-full min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-[#2563EB] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
+            >
+              예약 문의하고 쿠폰 받기
+            </button>
+          ) : null}
           {isReservation ? (
             <div className="space-y-2 pt-1">
               <p className="text-center text-xs font-semibold tracking-ko text-text-subtle">공유하기</p>

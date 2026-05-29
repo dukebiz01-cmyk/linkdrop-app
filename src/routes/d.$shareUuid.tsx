@@ -15,6 +15,9 @@ import { MOCK_DROP_VIEW_BY_VARIANT, MOCK_VIDEO_INFO } from "@/lib/mock-data";
 import { infoDropAdapter, type DropDetailRpc } from "@/lib/adapters";
 import { trackReceiverEvent } from "@/lib/event-tracking";
 import { shareToKakao } from "@/lib/kakao";
+import { startKakaoLogin } from "@/lib/oauth-kakao";
+import { ReserveFunnelSheet } from "@/components/receiver/ReserveFunnelSheet";
+import { getSupabase } from "@/lib/supabase";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 
 const PROD_BASE = "https://app.drop.how";
@@ -55,6 +58,8 @@ type DropSearch = {
   parentShareId?: string;
   shareDepth?: number;
   ref?: string;
+  // H1-d: OAuth 복귀 후 funnel 시트 자동 열기 표식.
+  reserve?: string;
 };
 
 type MockLoaderData = {
@@ -99,6 +104,7 @@ export const Route = createFileRoute("/d/$shareUuid")({
       parentShareId: typeof search.parentShareId === "string" ? search.parentShareId : undefined,
       shareDepth: depth,
       ref: typeof search.ref === "string" ? search.ref : undefined,
+      reserve: typeof search.reserve === "string" ? search.reserve : undefined,
     };
   },
   loader: async ({ params, location }): Promise<LoaderData> => {
@@ -211,6 +217,27 @@ function DropPage() {
   const [naverPending, setNaverPending] = useState(false);
   const [pendingNaverUrl, setPendingNaverUrl] = useState<string | null>(null);
   const [returnPrompt, setReturnPrompt] = useState(false);
+  // H1-d funnel — 로그인 유저 id + 시트 open state. 마운트 시 getSession 으로 확인.
+  const [userId, setUserId] = useState<string | null>(null);
+  const [reserveSheetOpen, setReserveSheetOpen] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await getSupabase().auth.getSession();
+        if (!cancelled) setUserId(data?.session?.user.id ?? null);
+      } catch (e) {
+        console.error("[d.$shareUuid] getSession failed:", e);
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!pendingNaverUrl) return;
@@ -266,6 +293,29 @@ function DropPage() {
   // 예약 가능 날짜 — wizard 의 ?r= 디코드. DB 미저장이라 query param 으로 임시 운반.
   // 빈 배열이면 InfoDropPage 가 캘린더 카드를 자동 숨김.
   const reservationDatesFromQuery = decodeReservationDates(search.r);
+
+  // H1-d: OAuth 복귀 후 ?reserve=1 + 로그인 + coupon 있으면 시트 자동 open (1회).
+  const funnelCoupon = detail.coupon ?? null;
+  useEffect(() => {
+    if (!authChecked) return;
+    if (search.reserve !== "1") return;
+    if (!userId) return;
+    if (!funnelCoupon) return;
+    if (reserveSheetOpen) return;
+    setReserveSheetOpen(true);
+  }, [authChecked, search.reserve, userId, funnelCoupon, reserveSheetOpen]);
+
+  function handleReserveAndClaim() {
+    if (!funnelCoupon) return;
+    if (userId) {
+      setReserveSheetOpen(true);
+      return;
+    }
+    // 미로그인 → 카카오 OAuth, next 로 현 /d/{shareUuid}?reserve=1 복귀.
+    const next = `/d/${shareUuid}?reserve=1`;
+    void startKakaoLogin(next);
+  }
+
   return (
     <>
       <InfoDropPage
@@ -276,6 +326,8 @@ function DropPage() {
         videoSourceUrl={detail.source?.source_url ?? undefined}
         officialStatus="user_shared"
         dropId={detail.drop.id}
+        funnelCoupon={funnelCoupon ? { id: funnelCoupon.id, title: funnelCoupon.title } : null}
+        onReserveAndClaim={handleReserveAndClaim}
         onPrimaryAction={() => {
           if (!reservationUrl || typeof window === "undefined") return;
           const safeRes =
@@ -375,6 +427,18 @@ function DropPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* H1-d funnel — [예약 문의하고 쿠폰 받기] 시트 */}
+      {funnelCoupon && userId ? (
+        <ReserveFunnelSheet
+          open={reserveSheetOpen}
+          onOpenChange={setReserveSheetOpen}
+          shareUuid={shareUuid}
+          dropId={detail.drop.id}
+          coupon={{ id: funnelCoupon.id, title: funnelCoupon.title }}
+          userId={userId}
+        />
+      ) : null}
     </>
   );
 }

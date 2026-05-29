@@ -45,6 +45,12 @@ function AuthCallback() {
     let subscription: { unsubscribe: () => void } | undefined;
     const supabase = getSupabase();
 
+    // H1-d: 로그인 후 복귀 경로 우선순위 — ?next= > /home 기본.
+    // 보안: 같은 origin 내부 경로(/...)만 허용. 절대 URL 또는 // 차단.
+    const nextRaw = new URLSearchParams(window.location.search).get("next");
+    const nextPath =
+      nextRaw && nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/home";
+
     const finish = (path: string) => {
       if (done) return;
       done = true;
@@ -57,14 +63,14 @@ function AuthCallback() {
     (async () => {
       // 1) onAuthStateChange 먼저 구독 — SIGNED_IN 이벤트 놓치지 않게.
       const sub = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session) finish("/home");
+        if (session) finish(nextPath);
       });
       subscription = sub.data.subscription;
 
       // 2) 마운트 시점에 이미 세션 있나.
       const { data: pre } = await supabase.auth.getSession();
       if (pre?.session) {
-        finish("/home");
+        finish(nextPath);
         return;
       }
 
@@ -80,7 +86,7 @@ function AuthCallback() {
             refresh_token,
           });
           if (!error) {
-            finish("/home");
+            finish(nextPath);
             return;
           }
           console.error("[auth.callback] setSession failed:", error);
@@ -93,7 +99,7 @@ function AuthCallback() {
         tries++;
         const { data } = await supabase.auth.getSession();
         if (data?.session) {
-          finish("/home");
+          finish(nextPath);
           return;
         }
         if (tries >= 10 && poll) clearInterval(poll);

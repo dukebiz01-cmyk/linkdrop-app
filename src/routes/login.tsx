@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { LoginPage } from "@/components/login-page";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
+import { startKakaoLogin } from "@/lib/oauth-kakao";
 
 type AuthMode = "signin" | "signup" | "forgot";
 
@@ -74,24 +75,27 @@ function LoginRoute() {
       return;
     }
     if (typeof window === "undefined") return;
+    if (provider === "kakao") {
+      // /login 진입 흐름은 next 미지정 → auth.callback 이 기본 /home 복귀 (회귀 0).
+      const result = await startKakaoLogin();
+      if (!result.ok) {
+        if (result.reason !== "no_config") {
+          setError("카카오 로그인 중 문제가 발생했어요. 다시 시도해 주세요.");
+        }
+      }
+      return;
+    }
+    // google (또는 향후 추가) — 기존 직접 호출 유지 (회귀 0).
     const { error: oauthError } = await getSupabase().auth.signInWithOAuth({
       provider,
       options: {
-        // 동의 후 카카오가 보내는 callback. PKCE 플로우 — @supabase/ssr 가 cookie 에
-        // 세션을 자동 저장. callback 라우트가 /home 으로 라우팅한다.
         redirectTo: `${window.location.origin}/auth/callback`,
-        // 카카오는 닉네임만 요청 (메모리 #20 회원 전환점). account_email·profile_image
-        // 미요청으로 KOE205 회피 + 이메일 검수 영구 회피. google 등 다른 provider 무영향.
-        scopes: provider === "kakao" ? "profile_nickname" : undefined,
       },
     });
     if (oauthError) {
-      const label = provider === "kakao" ? "카카오" : "Google";
       console.error("[login] signInWithOAuth failed:", oauthError);
-      setError(`${label} 로그인 중 문제가 발생했어요. 다시 시도해 주세요.`);
-      return;
+      setError("Google 로그인 중 문제가 발생했어요. 다시 시도해 주세요.");
     }
-    // 성공 시 카카오 동의 화면으로 자동 리다이렉트(이 함수는 반환 안 됨).
   }
 
   return (
