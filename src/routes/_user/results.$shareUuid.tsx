@@ -1,4 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { DropResultsPage, type DropResultsData } from "@/components/drop-results-page";
 
@@ -41,7 +42,22 @@ export const Route = createFileRoute("/_user/results/$shareUuid")({
     return report;
   },
   component: ResultsRoute,
+  pendingComponent: ResultsPending,
 });
+
+function ResultsPending() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-white tracking-ko">
+      <div className="flex flex-col items-center gap-3">
+        <Loader2
+          className="size-6 animate-spin text-[#2563EB]"
+          strokeWidth={2}
+        />
+        <p className="text-sm font-medium text-[#475569]">불러오는 중…</p>
+      </div>
+    </main>
+  );
+}
 
 function ResultsRoute() {
   const report = Route.useLoaderData();
