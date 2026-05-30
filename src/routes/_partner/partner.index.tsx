@@ -10,6 +10,7 @@ import {
   XCircle,
   Ticket,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
@@ -173,6 +174,23 @@ function PartnerHome() {
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">쿠폰 사용 처리</p>
               <p className="mt-0.5 text-xs text-[#64748B]">손님 쿠폰 코드를 입력해 주세요</p>
+            </div>
+          </div>
+          <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
+        </Link>
+
+        {/* 쿠폰 만들기 진입 */}
+        <Link
+          to="/partner/coupons"
+          className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-[#FEF3C7]">
+              <Sparkles className="size-5 text-[#D97706]" strokeWidth={2} />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-[#0F172A]">쿠폰 만들기</p>
+              <p className="mt-0.5 text-xs text-[#64748B]">할인·혜택 쿠폰을 새로 만들어요</p>
             </div>
           </div>
           <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
