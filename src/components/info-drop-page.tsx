@@ -531,13 +531,17 @@ export function InfoDropPage({
     <div
       className={cn(
         "relative mx-auto min-h-screen w-full max-w-[480px] bg-white",
-        // F3 — 하단 고정 footer(공유 영역 + create CTA + 광고 고지 + 신고)가 내용 끝을
-        // 덮는 문제. reservation variant 에선 "예약 문의하고 쿠폰 받기" CTA 추가로
-        // footer 가 더 두꺼움 (실측 ~300px). 마지막 쿠폰 카드가 반쯤 가려져 +64px(4rem)
-        // 여유. env(safe-area-inset-bottom) 으로 iPhone 노치/홈 인디케이터 영역도 확보.
+        // F3 — 하단 고정 footer 가 내용 끝(특히 쿠폰 카드)을 덮는 문제.
+        // 코드 기반 footer 실측: reservation = 32(py) + 48(예약 문의 CTA) + 78(공유 grid)
+        // + 52(나도 이런 정보 링크) + 24(광고 고지) + 17(신고) + ~48(space-y-3 갭) ≈ 299px.
+        // 광고 고지가 좁은 화면에서 2-3줄로 늘어나면 ~330px+. 21rem(336px) 한계선 근처여서
+        // 안전 마진 없음 → 26rem(416px)로 +80px 여유.
+        // info variant 는 CTA 없이 ~285px (링크 복사 + 카톡 + 나도이런 + 고지 + 신고).
+        // 19rem(304px) 마진 ~20px 빠듯 → 23rem(368px)로 +64px 여유.
+        // env(safe-area-inset-bottom) 으로 iPhone 노치/홈 인디케이터 영역까지 확보.
         isReservation
-          ? "pb-[calc(21rem+env(safe-area-inset-bottom))]"
-          : "pb-[calc(19rem+env(safe-area-inset-bottom))]",
+          ? "pb-[calc(26rem+env(safe-area-inset-bottom))]"
+          : "pb-[calc(23rem+env(safe-area-inset-bottom))]",
       )}
       data-testid="public-drop-page"
       data-variant={resolvedVariant}

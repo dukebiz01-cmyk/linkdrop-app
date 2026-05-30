@@ -73,6 +73,13 @@ export function ReserveFunnelSheet({
       setStep("form");
       setErrorMsg(null);
       setClaimCode(null);
+      // RSV-DUP-FIX (A-3): 시트 재오픈 시 form 필드도 초기화 — 같은 입력 재제출(이서화 케이스) 차단
+      setCheckIn("");
+      setCheckOut("");
+      setGuestCount("2");
+      setName("");
+      setPhone("");
+      setMessage("");
     }
   }, [open]);
 
@@ -90,6 +97,8 @@ export function ReserveFunnelSheet({
   }
 
   async function handleSubmit() {
+    // RSV-DUP-FIX (A-2): 이미 제출 중/완료/에러면 무시 — 연속 탭 차단(이서라 케이스)
+    if (step !== "form") return;
     const v = validate();
     if (v) {
       setErrorMsg(v);
@@ -215,6 +224,7 @@ export function ReserveFunnelSheet({
             setMessage={setMessage}
             errorMsg={errorMsg}
             couponTitle={coupon.title}
+            step={step}
             onSubmit={handleSubmit}
           />
         ) : step === "submitting" ? (
@@ -262,6 +272,7 @@ function FormBody(props: {
   setMessage: (v: string) => void;
   errorMsg: string | null;
   couponTitle: string;
+  step: Step;
   onSubmit: () => void;
 }) {
   return (
@@ -381,9 +392,10 @@ function FormBody(props: {
       <button
         type="button"
         onClick={props.onSubmit}
-        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#2563EB] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
+        disabled={props.step !== "form"}
+        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#2563EB] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        예약 문의 보내기
+        {props.step === "submitting" ? "보내는 중…" : "예약 문의 보내기"}
       </button>
     </div>
   );
