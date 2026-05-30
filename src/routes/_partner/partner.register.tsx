@@ -16,8 +16,10 @@ import { Toaster } from "@/components/ui/sonner";
  *   - status === "approved"          → /partner 로 graceful redirect
  *
  * 저장 값:
- *   - business_type = 선택한 대분류 code (12 중 1)
- *   - metadata = 세부 선택 시 { sub_category: 세부code }
+ *   - business_type = 선택한 대분류 code (12 중 1, 단일)
+ *   - metadata = 세부 복수 선택 시 { sub_categories: [세부code, ...] }  (④-1: 단일→배열)
+ *     하위호환: 기존 행의 옛 metadata.sub_category(단일) 도 읽기 측에서 배열로 변환
+ *     (예: subs = sub_categories ?? (sub_category ? [sub_category] : [])). 마이그 불필요.
  *   - partner_kind 생략 → DB DEFAULT 'store'
  *   - verification_status 생략 → DEFAULT 'pending'
  *   - owner_user_id = auth.uid()
@@ -136,7 +138,7 @@ function RegisterForm({
   const [displayName, setDisplayName] = useState("");
   const [selectedMajor, setSelectedMajor] = useState<string>("");
   const [subs, setSubs] = useState<MajorRow[]>([]);
-  const [selectedSub, setSelectedSub] = useState<string>("");
+  const [selectedSubs, setSelectedSubs] = useState<string[]>([]); // ④-1: 복수 선택
   const [contactPhone, setContactPhone] = useState("");
   const [businessNo, setBusinessNo] = useState("");
   const [reservationUrl, setReservationUrl] = useState("");
@@ -166,7 +168,13 @@ function RegisterForm({
   function handleMajorClick(code: string) {
     if (code === selectedMajor) return;
     setSelectedMajor(code);
-    setSelectedSub(""); // 대분류 바뀌면 세부 초기화
+    setSelectedSubs([]); // 대분류 바뀌면 세부 선택 모두 초기화
+  }
+
+  function toggleSub(code: string) {
+    setSelectedSubs((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
+    );
   }
 
   function validate(): string | null {
@@ -220,7 +228,8 @@ function RegisterForm({
         business_no: bnDigits,
         reservation_url: reservationUrl.trim() || null,
         address: address.trim() || null,
-        metadata: selectedSub ? { sub_category: selectedSub } : {},
+        // ④-1: 배열 저장. 빈 배열일 땐 metadata={} (옛 sub_category 키도 안 씀)
+        metadata: selectedSubs.length > 0 ? { sub_categories: selectedSubs } : {},
         // partner_kind 생략 → DEFAULT 'store'
         // verification_status 생략 → DEFAULT 'pending'
       };
@@ -295,31 +304,67 @@ function RegisterForm({
             </div>
           </div>
 
-          {/* 업종 — 세부 (대분류 선택 시) */}
+          {/* 업종 — 세부 (대분류 선택 시, ④-1: 복수 선택 가능) */}
           {selectedMajor && subs.length > 0 ? (
             <div className="space-y-2">
               <span className="block text-xs font-semibold text-[#0F172A]">
                 세부 업종{" "}
-                <span className="font-medium text-[#94A3B8]">(선택)</span>
+                <span className="font-medium text-[#94A3B8]">
+                  (선택 · 여러 개 가능)
+                </span>
               </span>
               <div className="grid grid-cols-2 gap-2">
-                {subs.map((s) => (
-                  <button
-                    key={s.code}
-                    type="button"
-                    onClick={() =>
-                      setSelectedSub(s.code === selectedSub ? "" : s.code)
-                    }
-                    className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
-                      selectedSub === s.code
-                        ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
-                        : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
+                {subs.map((s) => {
+                  const isSelected = selectedSubs.includes(s.code);
+                  return (
+                    <button
+                      key={s.code}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={isSelected}
+                      onClick={() => toggleSub(s.code)}
+                      className={`flex min-h-[44px] items-center gap-2 rounded-xl border px-3 text-sm font-semibold ${
+                        isSelected
+                          ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                          : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+                      }`}
+                    >
+                      <span
+                        className={`flex size-5 shrink-0 items-center justify-center rounded-md border ${
+                          isSelected
+                            ? "border-[#2563EB] bg-[#2563EB] text-white"
+                            : "border-[#CBD5E1] bg-white"
+                        }`}
+                        aria-hidden
+                      >
+                        {isSelected ? (
+                          <svg
+                            viewBox="0 0 20 20"
+                            fill="none"
+                            className="size-3.5"
+                          >
+                            <path
+                              d="M5 10.5l3 3 7-7"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        ) : null}
+                      </span>
+                      <span className="flex-1 truncate text-left">
+                        {s.label}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
+              {selectedSubs.length > 0 ? (
+                <p className="text-[11px] text-[#64748B]">
+                  선택된 세부 {selectedSubs.length}개
+                </p>
+              ) : null}
             </div>
           ) : null}
 
