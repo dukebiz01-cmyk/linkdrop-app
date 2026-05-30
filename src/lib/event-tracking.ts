@@ -13,6 +13,9 @@
  *
  * event_type 내부 키 (메모리 #16 — 화면 노출 X, 한글 라벨은 리포트 컴포넌트에서):
  *   reservation_click · phone_click · directions_click · share_click
+ *   naver_booking_click · naver_booking_returned (EVENTS-FIX — 실제 네이버 이동·복귀)
+ *
+ * ⚠️ 클릭=성과 지표(멱등 아님, 한 사람 N번 가능). reward_ledger 미접촉(#2).
  */
 
 const VISITOR_STORAGE_KEY = "ld_visitor_id";
@@ -40,7 +43,9 @@ export type ReceiverEventType =
   | "reservation_click"
   | "phone_click"
   | "directions_click"
-  | "share_click";
+  | "share_click"
+  | "naver_booking_click"
+  | "naver_booking_returned";
 
 /**
  * 수신자 행동을 lifecycle_events에 비동기 기록한다.

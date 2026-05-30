@@ -393,6 +393,11 @@ function DropPage() {
               type="button"
               onClick={() => {
                 if (pendingNaverUrl) {
+                  // EVENTS-FIX: 실제 네이버 페이지 이동 트래킹 (best-effort, 본동작은 그대로)
+                  trackReceiverEvent("naver_booking_click", detail.drop.id, {
+                    url: pendingNaverUrl,
+                    share_uuid: shareUuid,
+                  });
                   window.open(pendingNaverUrl, "_blank", "noopener,noreferrer");
                 }
               }}
@@ -423,6 +428,11 @@ function DropPage() {
             <button
               type="button"
               onClick={() => {
+                // EVENTS-FIX: 네이버 페이지 복귀 응답 트래킹 (best-effort, state 정리는 그대로)
+                trackReceiverEvent("naver_booking_returned", detail.drop.id, {
+                  url: pendingNaverUrl,
+                  share_uuid: shareUuid,
+                });
                 setReturnPrompt(false);
                 setPendingNaverUrl(null);
               }}
