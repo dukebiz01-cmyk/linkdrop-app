@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   ChevronRight,
+  BarChart3,
 } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
@@ -220,7 +221,7 @@ function MePage() {
           <EmptyText text="구독한 매장이 여기 표시돼요." />
         </SectionCard>
 
-        {/* ④ 내 카드 — 성과 보기 링크는 비지니스만 (단, 현재 share_uuid 미반환으로 임시 비활성) */}
+        {/* ④ 내 카드 — 성과 보기 링크는 비지니스만 (share_uuid 있는 카드만 활성, v5.5 반환). */}
         <SectionCard Icon={FileText} title="내 카드">
           {data.myDrops.length === 0 ? (
             <EmptyText text="아직 만든 카드가 없어요." />
@@ -257,8 +258,9 @@ function MePage() {
                           params: { shareUuid: d.share_uuid! },
                         })
                       }
-                      className="mt-2 flex min-h-[44px] items-center gap-1 text-sm font-semibold text-[#2563EB] hover:underline"
+                      className="mt-2 flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-[#2563EB] hover:underline"
                     >
+                      <BarChart3 className="size-4" strokeWidth={2} />
                       성과 보기
                       <ChevronRight className="size-4" strokeWidth={2} />
                     </button>
