@@ -25,7 +25,7 @@ import type {
   ReservationSelection,
 } from "@/components/reservation-calendar-page";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
-import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
+import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
 import { trackReceiverEvent } from "@/lib/event-tracking";
@@ -408,19 +408,10 @@ export function InfoDropPage({
   officialStatus,
   dropId,
 }: InfoDropPageProps) {
-  const [isEmbedOpen, setIsEmbedOpen] = useState(false);
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   const parsedVideo = videoSourceUrl ? parseVideoUrl(videoSourceUrl) : null;
   const canEmbed = parsedVideo?.platform === "youtube";
-
-  const handleVideoClick = () => {
-    console.log("[analytics] video_card_view", { canEmbed });
-    if (canEmbed) {
-      setIsEmbedOpen(true);
-      return;
-    }
-    onWatchOriginal?.();
-  };
+  const isShorts = /\/shorts\//i.test(videoSourceUrl ?? "");
 
   const safeIntent = intent ?? "info";
   const resolvedVariant: DropViewVariant =
@@ -612,29 +603,40 @@ export function InfoDropPage({
           </section>
         )}
 
-        {/* 2. 영상 카드 */}
+        {/* 2. 영상 카드 — 유튜브: lite embed(facade→iframe), 그 외: 썸네일 + onWatchOriginal */}
         <section className="overflow-hidden rounded-2xl border border-border bg-bg">
-          <div className="relative aspect-video w-full bg-surface">
-            <img src={safeThumb} alt={safeTitle} className="h-full w-full object-cover" />
-            <span className="absolute right-3 top-3 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-semibold text-white">
-          {videoSourceLabel}
-        </span>
-            {safeDuration > 0 && (
-              <span className="absolute bottom-3 left-3 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-medium tabular-nums text-white">
-                {formatDuration(safeDuration)}
-        </span>
-            )}
-        <button
-              type="button"
-          className="absolute inset-0 flex items-center justify-center"
-              onClick={handleVideoClick}
-          aria-label="영상 재생"
-        >
-              <span className="flex size-16 items-center justify-center rounded-full bg-bg/95 shadow-soft">
-                <Play className="ml-0.5 size-6 fill-text-strong text-text-strong" strokeWidth={2} />
+          {canEmbed && parsedVideo ? (
+            <YouTubeLiteEmbed
+              videoId={parsedVideo.videoId}
+              thumbnailUrl={safeThumb}
+              title={safeTitle}
+              isShorts={isShorts}
+              durationLabel={safeDuration > 0 ? formatDuration(safeDuration) : undefined}
+              sourceLabel={videoSourceLabel}
+            />
+          ) : (
+            <div className="relative aspect-video w-full bg-surface">
+              <img src={safeThumb} alt={safeTitle} className="h-full w-full object-cover" />
+              <span className="absolute right-3 top-3 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-semibold text-white">
+                {videoSourceLabel}
               </span>
-            </button>
-          </div>
+              {safeDuration > 0 && (
+                <span className="absolute bottom-3 left-3 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-medium tabular-nums text-white">
+                  {formatDuration(safeDuration)}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => onWatchOriginal?.()}
+                aria-label="영상 재생"
+                className="absolute inset-0 flex items-center justify-center"
+              >
+                <span className="flex size-16 items-center justify-center rounded-full bg-bg/95 shadow-soft">
+                  <Play className="ml-0.5 size-6 fill-text-strong text-text-strong" strokeWidth={2} />
+                </span>
+              </button>
+            </div>
+          )}
           <div className="space-y-2 p-4">
             {!isReservation && (
               <span
@@ -921,20 +923,6 @@ export function InfoDropPage({
         onClose={() => setIsReportSheetOpen(false)}
         dropId={dropId}
       />
-      {canEmbed && parsedVideo && (
-        <YouTubeEmbedModal
-          open={isEmbedOpen}
-          onOpenChange={setIsEmbedOpen}
-          videoId={parsedVideo.videoId}
-          originalUrl={videoSourceUrl!}
-          title={safeTitle}
-          ctaItems={ctas}
-          onCtaClick={handleCtaClick}
-          createDropUrl={
-            videoSourceUrl ? `/create?url=${encodeURIComponent(videoSourceUrl)}` : undefined
-          }
-        />
-      )}
     </div>
   );
 }
