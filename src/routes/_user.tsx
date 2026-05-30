@@ -28,7 +28,11 @@ function UserLayout() {
   const hideNav = shouldHideNav(pathname);
   return (
     <div className="mx-auto min-h-screen max-w-md bg-bg">
-      <div className={hideNav ? undefined : "pb-16"}>
+      <div
+        className={
+          hideNav ? undefined : "pb-[calc(6rem+env(safe-area-inset-bottom))]"
+        }
+      >
         <Outlet />
       </div>
       {hideNav ? null : <BottomNav />}

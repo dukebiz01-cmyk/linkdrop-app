@@ -532,11 +532,12 @@ export function InfoDropPage({
       className={cn(
         "relative mx-auto min-h-screen w-full max-w-[480px] bg-white",
         // F3 — 하단 고정 footer(공유 영역 + create CTA + 광고 고지 + 신고)가 내용 끝을
-        // 덮는 문제. 실측 footer 약 200-240px (예약 variant 가 더 큼). pb 를 늘리고
-        // env(safe-area-inset-bottom) 으로 iPhone 노치/홈 인디케이터 영역까지 확보.
+        // 덮는 문제. reservation variant 에선 "예약 문의하고 쿠폰 받기" CTA 추가로
+        // footer 가 더 두꺼움 (실측 ~300px). 마지막 쿠폰 카드가 반쯤 가려져 +64px(4rem)
+        // 여유. env(safe-area-inset-bottom) 으로 iPhone 노치/홈 인디케이터 영역도 확보.
         isReservation
-          ? "pb-[calc(17rem+env(safe-area-inset-bottom))]"
-          : "pb-[calc(15rem+env(safe-area-inset-bottom))]",
+          ? "pb-[calc(21rem+env(safe-area-inset-bottom))]"
+          : "pb-[calc(19rem+env(safe-area-inset-bottom))]",
       )}
       data-testid="public-drop-page"
       data-variant={resolvedVariant}
