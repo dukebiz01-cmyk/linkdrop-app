@@ -171,6 +171,7 @@ const STEP5_SHARE_BY_PURPOSE: Record<DropPurpose, Step5ShareConfig> = {
 
 export function CreateDropWizard({
   variant = "default",
+  isBusiness = false,
   initialUrl,
   initialPurpose,
   initialSuggestedPurpose,
@@ -526,6 +527,7 @@ export function CreateDropWizard({
             suggestedPurpose={suggestedPurpose}
             suggestionConfidence={suggestionConfidence}
             isPurposePrefilled={isPurposePrefilled}
+            isBusiness={isBusiness}
           />
         </>
       )}

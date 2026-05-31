@@ -1,6 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CreateDropWizard } from "@/components/create-drop-wizard";
+import { getAuthClient } from "@/lib/auth-context";
 import type { DropPurpose } from "@/lib/types";
+
+// phase1 B: 비지니스 게이팅 — me.tsx:117 동일 패턴.
+type CreateWizardLoaderData = { isBusiness: boolean };
 
 /**
  * v3 5단계 카드 만들기 wizard.
@@ -53,17 +57,39 @@ export const Route = createFileRoute("/_user/create-wizard")({
     source_id: str(search.source_id),
     platform: str(search.platform),
   }),
+  loader: async (): Promise<CreateWizardLoaderData> => {
+    const supabase = await getAuthClient();
+    if (!supabase) return { isBusiness: false };
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user.id ?? null;
+    if (!userId) return { isBusiness: false };
+    const { data: isBusiness } = await supabase.rpc("is_active_partner_owner", {
+      _user_id: userId,
+    });
+    return { isBusiness: Boolean(isBusiness) };
+  },
   component: CreateWizardPage,
 });
 
 function CreateWizardPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
+  const { isBusiness } = Route.useLoaderData();
+
+  // phase1 B 방어: 일반 사용자가 prefill purpose="쿠폰" 으로 진입하면 "정보"로 폴백.
+  const initialPurposeRaw = toDropPurpose(search.purpose);
+  const initialPurposeGated =
+    isBusiness || initialPurposeRaw === "정보"
+      ? initialPurposeRaw
+      : initialPurposeRaw
+        ? ("정보" as const)
+        : undefined;
 
   return (
     <CreateDropWizard
+      isBusiness={isBusiness}
       initialUrl={search.url}
-      initialPurpose={toDropPurpose(search.purpose)}
+      initialPurpose={initialPurposeGated}
       initialSuggestedPurpose={toDropPurpose(search.intent_suggested)}
       initialSuggestionConfidence={toConfidence(search.confidence)}
       initialPlatform={search.platform}

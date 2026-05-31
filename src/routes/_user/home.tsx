@@ -1,8 +1,23 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { HomePageV3 } from "@/components/home-page-v3";
+import { getAuthClient } from "@/lib/auth-context";
+
+// phase1 B: 비지니스 게이팅. me.tsx:117 동일 패턴 (is_active_partner_owner RPC).
+type HomeLoaderData = { isBusiness: boolean };
 
 export const Route = createFileRoute("/_user/home")({
   head: () => ({ meta: [{ title: "홈" }] }),
+  loader: async (): Promise<HomeLoaderData> => {
+    const supabase = await getAuthClient();
+    if (!supabase) return { isBusiness: false };
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user.id ?? null;
+    if (!userId) return { isBusiness: false };
+    const { data: isBusiness } = await supabase.rpc("is_active_partner_owner", {
+      _user_id: userId,
+    });
+    return { isBusiness: Boolean(isBusiness) };
+  },
   component: HomeRoute,
 });
 
@@ -18,12 +33,15 @@ const V0_PURPOSE_TO_EN: Record<string, string> = {
 
 function HomeRoute() {
   const navigate = useNavigate();
+  const { isBusiness } = Route.useLoaderData();
 
   // phase1-#1 마무리: home-page-v3 내장 nav 제거됨 → CSS 숨김 셀렉터 불필요.
   // 공통 BottomNav (v0 검정 4탭, URL 파생 active) 가 _user.tsx 에서 별도 렌더.
+  // phase1 B: isBusiness=true 만 [혜택·예약] 카드 노출.
   return (
     <div>
       <HomePageV3
+        isBusiness={isBusiness}
         onCreateDrop={(url, purpose) => {
           const en = purpose ? V0_PURPOSE_TO_EN[purpose] : undefined;
           void navigate({

@@ -30,6 +30,8 @@ export type WizardSuggestionConfidence = "high" | "medium" | "low";
 
 export interface CreateDropWizardProps {
   variant?: "default" | "skeleton";
+  /** phase1 B: 비지니스(approved partner owner). true 만 "쿠폰" 카드 노출. */
+  isBusiness?: boolean;
   initialUrl?: string;
   initialPurpose?: DropPurpose;
   initialSuggestedPurpose?: DropPurpose;

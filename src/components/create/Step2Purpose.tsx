@@ -61,15 +61,22 @@ export function PurposePickerGrid({
   onSelect,
   suggestedPurpose,
   suggestionConfidence,
+  isBusiness = false,
 }: {
   selected: DropPurpose | null;
   onSelect: (p: DropPurpose) => void;
   suggestedPurpose?: DropPurpose | null;
   suggestionConfidence?: WizardSuggestionConfidence | null;
+  /** phase1 B: 비지니스 게이팅 — true 만 "쿠폰" 카드 노출. */
+  isBusiness?: boolean;
 }) {
+  // phase1 B: 일반 = 정보만. 비지니스 = 정보 + 쿠폰.
+  const visiblePurposes = isBusiness
+    ? WIZARD_PURPOSES
+    : WIZARD_PURPOSES.filter((p) => p.purpose === "정보");
   return (
     <div className="grid grid-cols-2 gap-3">
-      {WIZARD_PURPOSES.map((item) => {
+      {visiblePurposes.map((item) => {
         const Icon = item.icon;
         const isSelected = selected === item.purpose;
         const showSuggestedBadge =
@@ -134,12 +141,15 @@ export function Step2PurposeSelect({
   suggestedPurpose,
   suggestionConfidence,
   isPurposePrefilled,
+  isBusiness = false,
 }: {
   selected: DropPurpose | null;
   onSelect: (p: DropPurpose) => void;
   suggestedPurpose?: DropPurpose | null;
   suggestionConfidence?: WizardSuggestionConfidence | null;
   isPurposePrefilled: boolean;
+  /** phase1 B: 비지니스 게이팅 — true 만 "쿠폰" 카드 노출. */
+  isBusiness?: boolean;
 }) {
   const [showPurposePicker, setShowPurposePicker] = useState(!isPurposePrefilled);
   const selectedConfig = selected ? findPurposeConfig(selected) : null;
@@ -231,6 +241,7 @@ export function Step2PurposeSelect({
                 onSelect={onSelect}
                 suggestedPurpose={suggestedPurpose}
                 suggestionConfidence={suggestionConfidence}
+                isBusiness={isBusiness}
               />
             </div>
           )}
@@ -253,6 +264,7 @@ export function Step2PurposeSelect({
             onSelect={onSelect}
             suggestedPurpose={suggestedPurpose}
             suggestionConfidence={suggestionConfidence}
+            isBusiness={isBusiness}
           />
         </div>
 

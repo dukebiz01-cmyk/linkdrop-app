@@ -39,6 +39,8 @@ export interface HomePageV3Props {
   user?: { name: string; avatarUrl?: string };
   unreadCount?: number;
   myDrops?: HomePageV3MyDrop[];
+  /** phase1 B: 비지니스(approved partner owner) 여부. true 만 "혜택·예약" 카드 노출. */
+  isBusiness?: boolean;
   onCreateDrop: (videoUrl: string, purpose?: string) => void;
   onViewDrop: (dropId: string) => void;
   onViewAllDrops: () => void;
@@ -90,6 +92,7 @@ interface VideoPreviewState {
 export function HomePageV3({
   unreadCount = 0,
   myDrops = [],
+  isBusiness = false,
   onCreateDrop,
   onViewDrop,
   onViewAllDrops,
@@ -97,6 +100,10 @@ export function HomePageV3({
   onSearch,
   onNotifications,
 }: HomePageV3Props) {
+  // phase1 B: 일반 사용자 = 정보만. 비지니스 = 정보 + 혜택·예약.
+  const visiblePurposes = isBusiness
+    ? PURPOSES
+    : PURPOSES.filter((p) => p.id === "info");
   const [videoUrl, setVideoUrl] = useState("");
   const [videoPreview, setVideoPreview] = useState<VideoPreviewState | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
@@ -326,7 +333,7 @@ export function HomePageV3({
           </p>
 
           <div className="space-y-3">
-            {PURPOSES.map((purpose) => {
+            {visiblePurposes.map((purpose) => {
               const Icon = purpose.icon;
               const isSelected = selectedPurpose === purpose.id;
               return (
