@@ -723,7 +723,7 @@ export function Step3ReservationCards({
   if (fields.reservationVertical !== "stay") {
     return (
       <main className="min-h-0 flex-1 overflow-y-auto px-6 pb-8 pt-2">
-        <StepBadge n={3} />
+        <StepBadge n={2} />
         <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">
           예약 캘린더를 설정해 주세요
         </h1>
@@ -740,7 +740,7 @@ export function Step3ReservationCards({
     // min-h-0 — flex 자식이 콘텐츠 높이로 커지지 않게 해 본문이 내부 스크롤되도록 한다.
     //          이게 없으면 페이지 전체가 스크롤되고 sticky 하단 CTA 가 본문을 덮는다.
     <main className="min-h-0 flex-1 overflow-y-auto px-6 pb-8 pt-2">
-      <StepBadge n={3} />
+      <StepBadge n={2} />
       <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">
         예약 캘린더를 설정해 주세요
       </h1>

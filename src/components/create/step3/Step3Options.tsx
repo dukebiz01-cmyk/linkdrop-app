@@ -135,7 +135,7 @@ export function Step3Options({
 
   return (
     <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
-      <StepBadge n={3} />
+      <StepBadge n={2} />
       <CardShell config={optionsCardConfig}>
         <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">{copy.title}</h1>
         <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">

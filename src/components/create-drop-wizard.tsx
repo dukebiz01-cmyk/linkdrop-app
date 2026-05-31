@@ -337,34 +337,37 @@ export function CreateDropWizard({
     setStep((s) => (s - 1) as StepNum);
   }
 
+  // phase1 A: 3스텝 흐름 — Step 1(영상+목적) → Step 2(디테일) → Step 3(미리보기+공유).
   function handleNext() {
+    if (step === 1) {
+      setStep(2);
+      return;
+    }
     if (step === 2 && purpose) {
-      setAiPreview(null);
+      // 옛 Step 3→4 전환의 AI preview build 시점 그대로 (Step 2 의 디테일 입력
+      // 완료 후 미리보기 진입 시점).
+      setAiPreview(buildAiPreview(purpose));
       setStep(3);
       return;
     }
-    if (step === 3 && purpose) {
-      setAiPreview(buildAiPreview(purpose));
-      setStep(4);
-      return;
-    }
-    if (step === 4) {
-      setStep(5);
-      return;
-    }
-    setStep((s) => Math.min(5, s + 1) as StepNum);
   }
 
   function canProceed(): boolean {
-    if (step === 1) return parseVideoUrl(url.trim()) !== null && urlStatus === "success";
-    if (step === 2) return purpose !== null;
-    if (step === 3) {
-      // 예약은 캘린더 화면 — 예약 종류·시설·날짜·날짜 상태·예약 버튼 연결을 모두 요구한다.
+    if (step === 1) {
+      // 옛 Step 1 + Step 2 조건 합 — 영상 fetch 성공 + 목적 선택.
+      return (
+        parseVideoUrl(url.trim()) !== null &&
+        urlStatus === "success" &&
+        purpose !== null
+      );
+    }
+    if (step === 2) {
+      // 옛 Step 3 의 목적별 통과 조건 그대로.
       if (purpose === "예약") return canProceedReservationStep3(step3Fields);
       if (purpose === "정보") return true;
       return step3DetailId !== null;
     }
-    return true;
+    return true; // step 3 = 마지막, sticky CTA 없음
   }
 
   // 첫 공유/복사/수신자 화면 보기 시 /api/drops 를 1회만 호출하고 결과를 캐싱한다.
@@ -471,17 +474,17 @@ export function CreateDropWizard({
   }
 
   const activeStep = step;
-  const totalSteps = 5;
+  const totalSteps = 3; // phase1 A: 5 → 3 스텝
   const progressPct = (activeStep / totalSteps) * 100;
 
   return (
     <div
       className={cn(
         "mx-auto flex w-full max-w-[480px] flex-col bg-white",
-        // 예약 Step 3은 캘린더가 길어 본문이 내부 스크롤돼야 한다. h-screen(확정 높이)
-        // 이라야 main(flex-1 min-h-0 overflow-y-auto)이 내부 스크롤하고 하단 CTA가
-        // 본문을 덮지 않는다. 그 외 단계·목적은 기존 min-h-screen 유지.
-        step === 3 && purpose === "예약" ? "h-screen" : "min-h-screen",
+        // 예약 디테일 단계(새 Step 2)는 캘린더가 길어 본문이 내부 스크롤돼야 한다.
+        // h-screen(확정 높이) 이라야 main(flex-1 min-h-0 overflow-y-auto)이 내부
+        // 스크롤하고 하단 CTA가 본문을 덮지 않는다. 그 외는 min-h-screen.
+        step === 2 && purpose === "예약" ? "h-screen" : "min-h-screen",
       )}
     >
       <header className="flex h-14 shrink-0 items-center border-b border-[#E5E7EB] px-2">
@@ -497,7 +500,7 @@ export function CreateDropWizard({
           카드 만들기
         </span>
         <span className="w-16 text-right text-xs font-semibold tracking-ko text-[#525252]">
-          Step {step}/5
+          Step {step}/3
         </span>
       </header>
       <div className="h-1 w-full bg-[#E2E8F0]" aria-hidden>
@@ -507,25 +510,27 @@ export function CreateDropWizard({
         />
       </div>
 
+      {/* phase1 A — 새 Step 1: 영상 입력 + 목적 선택 한 화면. */}
       {step === 1 && (
-        <Step1UrlInput
-          value={url}
-          onChange={setUrl}
-          status={urlStatus}
-          videoInfo={videoInfo}
-          metadataFetchedBy={metadataFetchedBy}
-        />
+        <>
+          <Step1UrlInput
+            value={url}
+            onChange={setUrl}
+            status={urlStatus}
+            videoInfo={videoInfo}
+            metadataFetchedBy={metadataFetchedBy}
+          />
+          <Step2PurposeSelect
+            selected={purpose}
+            onSelect={handlePurposeSelect}
+            suggestedPurpose={suggestedPurpose}
+            suggestionConfidence={suggestionConfidence}
+            isPurposePrefilled={isPurposePrefilled}
+          />
+        </>
       )}
-      {step === 2 && (
-        <Step2PurposeSelect
-          selected={purpose}
-          onSelect={handlePurposeSelect}
-          suggestedPurpose={suggestedPurpose}
-          suggestionConfidence={suggestionConfidence}
-          isPurposePrefilled={isPurposePrefilled}
-        />
-      )}
-      {step === 3 && purpose && (
+      {/* 새 Step 2 = 옛 Step 3 (목적별 디테일, 내용 그대로). */}
+      {step === 2 && purpose && (
         <Step3Options
           purpose={purpose}
           detailId={step3DetailId}
@@ -541,35 +546,37 @@ export function CreateDropWizard({
           onNext={handleNext}
         />
       )}
-      {step === 4 && purpose && videoInfo && aiPreview && (
-        <Step4DropPreview
-          purpose={purpose}
-          ai={aiForPreview!}
-          videoInfo={videoInfo}
-          reservation={purpose === "예약" ? buildReservationSummary(step3Fields) : undefined}
-          labelDate={reservationItemFullLabel}
-        />
-      )}
-      {step === 5 && purpose && videoInfo && aiPreview && (
-        <Step5PurposeShare
-          data={buildWizardShareData(
-            videoInfo,
-            purpose,
-            aiForPreview!.title,
-            step3Fields.shareMessage.trim() || undefined,
-            purpose === "예약" ? buildReservationSummary(step3Fields) : undefined,
-          )}
-          shareUrl={realShare?.shareUrl ?? mockShareUrl}
-          onKakaoShare={handleKakaoShare}
-          onCopyLink={handleCopyLink}
-          onGoHome={handleGoHome}
-          shareError={shareError}
-          shareFeedback={shareFeedback}
-        />
+      {/* 새 Step 3 = 옛 Step 4 + Step 5 병합 (미리보기 위, 공유 아래). */}
+      {step === 3 && purpose && videoInfo && aiPreview && (
+        <>
+          <Step4DropPreview
+            purpose={purpose}
+            ai={aiForPreview!}
+            videoInfo={videoInfo}
+            reservation={purpose === "예약" ? buildReservationSummary(step3Fields) : undefined}
+            labelDate={reservationItemFullLabel}
+          />
+          <Step5PurposeShare
+            data={buildWizardShareData(
+              videoInfo,
+              purpose,
+              aiForPreview!.title,
+              step3Fields.shareMessage.trim() || undefined,
+              purpose === "예약" ? buildReservationSummary(step3Fields) : undefined,
+            )}
+            shareUrl={realShare?.shareUrl ?? mockShareUrl}
+            onKakaoShare={handleKakaoShare}
+            onCopyLink={handleCopyLink}
+            onGoHome={handleGoHome}
+            shareError={shareError}
+            shareFeedback={shareFeedback}
+          />
+        </>
       )}
 
-      {/* 예약 Step 3은 자체 in-flow CTA를 쓰므로 공유 sticky CTA에서 제외한다. */}
-      {step < 5 && !(step === 3 && purpose === "예약") && (
+      {/* sticky CTA — Step 1·2 만. Step 3 은 자체 공유 UI. 예약 Step 2 는 자체
+          in-flow CTA(캘린더) 쓰므로 sticky 제외 (옛 step 3 예약 패턴 그대로). */}
+      {step < 3 && !(step === 2 && purpose === "예약") && (
         <div className="sticky bottom-0 border-t border-[#E5E7EB] bg-white px-6 py-4">
           <ActionButton
             type="button"
@@ -577,7 +584,7 @@ export function CreateDropWizard({
             onClick={handleNext}
             className={WIZARD_PRIMARY_BUTTON_CLASS}
           >
-            {step === 4 ? "공유 미리보기" : "다음"}
+            {step === 2 ? "공유 미리보기" : "다음"}
           </ActionButton>
         </div>
       )}

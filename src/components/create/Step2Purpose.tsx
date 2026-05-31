@@ -162,7 +162,7 @@ export function Step2PurposeSelect({
     const SelectedIcon = selectedConfig.icon;
     return (
       <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
-        <StepBadge n={2} />
+        <StepBadge n={1} />
         <CardShell config={purposeCardConfig}>
           <h1 className="mt-3 text-2xl font-extrabold leading-snug tracking-ko text-text-strong">
             선택한 목적을 확인해 주세요
@@ -241,7 +241,7 @@ export function Step2PurposeSelect({
 
   return (
     <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
-      <StepBadge n={2} />
+      <StepBadge n={1} />
       <CardShell config={purposeCardConfig}>
         <h1 className="mt-3 text-2xl font-extrabold leading-snug tracking-ko text-text-strong">
           이 Drop의 목적을 선택하세요

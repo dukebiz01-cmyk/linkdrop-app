@@ -89,7 +89,7 @@ export function Step4DropPreview({
 
   return (
     <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
-      <StepBadge n={4} />
+      <StepBadge n={3} />
       <div className="flex items-center gap-2">
         <h1 className="text-2xl font-extrabold tracking-ko text-text-strong">
           AI가 받을 사람용 카드로 정리했어요

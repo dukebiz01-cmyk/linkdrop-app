@@ -53,7 +53,11 @@ export interface CreateDropWizardProps {
   }) => Promise<{ shareUuid: string; shareUrl: string }>;
 }
 
-export type StepNum = 1 | 2 | 3 | 4 | 5;
+// phase1 A: 5스텝 → 3스텝 재구성.
+//   Step 1 = URL 입력 + 목적 선택 (옛 Step1 + Step2 병합).
+//   Step 2 = 목적별 디테일 (옛 Step3 그대로).
+//   Step 3 = 미리보기 + 공유 (옛 Step4 + Step5 병합).
+export type StepNum = 1 | 2 | 3;
 
 export type PurposeFlowConfig = {
   badge: string;
