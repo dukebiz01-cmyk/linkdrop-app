@@ -21,6 +21,9 @@ type CreateDropBody = {
   curator_message?: string;
   campaign_id?: string;
   blocks?: unknown[];
+  /** chunk1 1d — 탐색에서 진입 시 본인 매장 자동 연결. RPC 시그니처 무수정,
+   *  RPC 후 owner 매칭 검증 + info_drops.partner_id UPDATE. */
+  partner_id?: string;
 };
 
 export const Route = createFileRoute("/api/drops/")({
@@ -137,6 +140,23 @@ export const Route = createFileRoute("/api/drops/")({
             info_drop_id: string;
             share_uuid: string;
           };
+
+          // chunk1 1d — partner_id 연결 (탐색 진입 시). owner 본인 매장만 허용,
+          //   다른 매장 id 무시. RLS info_drops UPDATE policy = owner_user_id=auth.uid().
+          if (body.partner_id) {
+            const { data: partnerOwn } = await supabase
+              .from("partners")
+              .select("id")
+              .eq("id", body.partner_id)
+              .eq("owner_user_id", user.id)
+              .maybeSingle();
+            if (partnerOwn) {
+              await supabase
+                .from("info_drops")
+                .update({ partner_id: body.partner_id })
+                .eq("id", info_drop_id);
+            }
+          }
 
           // 7. generate-summary (동기 — 결과를 응답에 포함)
           const summary = await invokeEdge<{ ai_summary: string; ai_key_points: string[] }>(

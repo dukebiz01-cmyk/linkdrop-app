@@ -25,6 +25,8 @@ type CreateWizardSearch = {
   confidence?: string;
   source_id?: string;
   platform?: string;
+  /** chunk1 1d — 탐색 카드에서 진입 시 본인 매장 자동 연결 */
+  partner_id?: string;
 };
 
 // Home(purpose-suggestion.ts)은 영문 Purpose, wizard 는 한국어 DropPurpose 사용 → 매핑.
@@ -62,6 +64,7 @@ export const Route = createFileRoute("/_user/create-wizard")({
     confidence: str(search.confidence),
     source_id: str(search.source_id),
     platform: str(search.platform),
+    partner_id: str(search.partner_id),
   }),
   loader: async ({ location }): Promise<CreateWizardLoaderData> => {
     const supabase = await getAuthClient();
@@ -149,6 +152,8 @@ function CreateWizardPage() {
             media_url: data.video.url,
             purpose: data.purpose,
             curator_message: data.makerMessage || null,
+            // chunk1 1d — 탐색 카드에서 진입한 경우 본인 매장 자동 연결.
+            ...(search.partner_id ? { partner_id: search.partner_id } : {}),
           }),
         });
         const json = (await res.json()) as {

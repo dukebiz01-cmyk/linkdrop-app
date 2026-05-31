@@ -21,6 +21,7 @@ type ContentSourceRow = {
 
 type ExploreLoaderData = {
   isBusiness: boolean;
+  partnerId: string | null;
   sources: ContentSourceRow[];
 };
 
@@ -28,15 +29,25 @@ export const Route = createFileRoute("/_user/explore")({
   head: () => ({ meta: [{ title: "탐색" }] }),
   loader: async (): Promise<ExploreLoaderData> => {
     const supabase = await getAuthClient();
-    if (!supabase) return { isBusiness: false, sources: [] };
+    const empty = { isBusiness: false, partnerId: null, sources: [] };
+    if (!supabase) return empty;
     const { data: sess } = await supabase.auth.getSession();
     const uid = sess.session?.user.id ?? null;
-    if (!uid) return { isBusiness: false, sources: [] };
+    if (!uid) return empty;
 
     const { data: isBusiness } = await supabase.rpc("is_active_partner_owner", {
       _user_id: uid,
     });
-    if (!isBusiness) return { isBusiness: false, sources: [] };
+    if (!isBusiness) return empty;
+
+    // chunk1 1d — partner_id 동시 fetch. 카드 만들기 시 자동 연결용.
+    const { data: partner } = await supabase
+      .from("partners")
+      .select("id")
+      .eq("owner_user_id", uid)
+      .eq("verification_status", "approved")
+      .limit(1)
+      .maybeSingle();
 
     const { data: rows } = await supabase
       .from("content_sources")
@@ -47,6 +58,7 @@ export const Route = createFileRoute("/_user/explore")({
 
     return {
       isBusiness: true,
+      partnerId: partner?.id ?? null,
       sources: (rows ?? []) as ContentSourceRow[],
     };
   },
@@ -81,7 +93,7 @@ function NotBusinessNotice() {
 }
 
 function ExplorePage() {
-  const { isBusiness, sources } = Route.useLoaderData();
+  const { isBusiness, partnerId, sources } = Route.useLoaderData();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
 
@@ -102,7 +114,10 @@ function ExplorePage() {
   function handleCreate(sourceId: string) {
     navigate({
       to: "/create-wizard",
-      search: { source_id: sourceId } as never,
+      search: {
+        source_id: sourceId,
+        ...(partnerId ? { partner_id: partnerId } : {}),
+      } as never,
     });
   }
 
