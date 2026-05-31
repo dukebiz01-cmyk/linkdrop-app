@@ -1,7 +1,9 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Lock } from "lucide-react";
+import { toast } from "sonner";
 import { getAuthClient } from "@/lib/auth-context";
+import { getSupabase } from "@/lib/supabase";
 import { ContentSourceCard, type ContentSourceCardData } from "@/components/explore/ContentSourceCard";
 import { ExploreSearchBar } from "@/components/explore/ExploreSearchBar";
 import { DiscoverSection } from "@/components/explore/DiscoverSection";
@@ -18,6 +20,8 @@ type ContentSourceRow = {
   author_name: string | null;
   thumbnail_url: string | null;
   duration_sec: number | null;
+  source_url: string | null;
+  raw_meta: Record<string, unknown> | null;
 };
 
 type ExploreLoaderData = {
@@ -52,7 +56,7 @@ export const Route = createFileRoute("/_user/explore")({
 
     const { data: rows } = await supabase
       .from("content_sources")
-      .select("id, title, caption, author_name, thumbnail_url, duration_sec")
+      .select("id, title, caption, author_name, thumbnail_url, duration_sec, source_url, raw_meta")
       .eq("registered_by_user_id", uid)
       .order("created_at", { ascending: false })
       .limit(100);
@@ -123,6 +127,30 @@ function ExplorePage() {
     });
   }
 
+  async function handleRemove(sourceId: string) {
+    if (typeof window === "undefined") return;
+    const ok = window.confirm("내 콘텐츠에서 뺄까요? 만든 카드는 영향 없어요");
+    if (!ok) return;
+    const supabase = getSupabase();
+    if (!supabase) {
+      toast.error("로그인 정보를 확인하지 못했어요.");
+      return;
+    }
+    // claim 해제 — 하드 DELETE 는 info_drops FK 위반이라 불가.
+    // RLS v5.8: 본인 행 또는 NULL 행만 UPDATE 가능.
+    const { error } = await supabase
+      .from("content_sources")
+      .update({ registered_by_user_id: null })
+      .eq("id", sourceId);
+    if (error) {
+      console.error("[explore] un-claim failed:", error);
+      toast.error(`제거하지 못했어요: ${error.message}`);
+      return;
+    }
+    toast.success("내 콘텐츠에서 뺐어요");
+    void router.invalidate();
+  }
+
   return (
     <div className="mx-auto max-w-md px-6 pt-6">
       <header className="mb-6">
@@ -163,16 +191,26 @@ function ExplorePage() {
         ) : (
           <ul className="space-y-3">
             {filtered.map((r) => {
+              const rawDesc =
+                r.raw_meta && typeof r.raw_meta === "object" && "description" in r.raw_meta
+                  ? String(((r.raw_meta as Record<string, unknown>).description as string) ?? "")
+                  : "";
               const card: ContentSourceCardData = {
                 id: r.id,
                 title: r.title,
                 authorName: r.author_name,
                 thumbnailUrl: r.thumbnail_url,
                 durationSec: r.duration_sec,
+                sourceUrl: r.source_url,
+                description: r.caption?.trim() || rawDesc || null,
               };
               return (
                 <li key={r.id}>
-                  <ContentSourceCard source={card} onCreate={handleCreate} />
+                  <ContentSourceCard
+                    source={card}
+                    onCreate={handleCreate}
+                    onRemove={handleRemove}
+                  />
                 </li>
               );
             })}
