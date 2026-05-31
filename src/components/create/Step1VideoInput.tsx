@@ -64,7 +64,7 @@ export function Step1UrlInput({
         </p>
 
         <div className="mt-6 flex gap-2">
-          <div className="relative flex-1">
+          <div className="relative min-w-0 flex-1">
             <LinkIcon
               className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-text-subtle"
               strokeWidth={2}
@@ -74,7 +74,7 @@ export function Step1UrlInput({
               value={value}
               onChange={(e) => onChange(e.target.value)}
               placeholder="https://youtu.be/..."
-              className="h-14 rounded-lg border-border pl-12 pr-10 font-mono text-sm placeholder:font-sans placeholder:text-text-subtle"
+              className="h-14 min-w-0 rounded-lg border-border pl-12 pr-10 font-mono text-sm placeholder:font-sans placeholder:text-text-subtle"
             />
             {value && (
               <button

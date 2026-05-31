@@ -238,7 +238,7 @@ export function HomePageV3({
           </div>
 
           <div
-            className={`flex h-12 items-center gap-3 rounded-xl border px-4 transition-all duration-200 ${
+            className={`flex h-12 items-center gap-3 overflow-hidden rounded-xl border px-4 transition-all duration-200 ${
               videoUrl
                 ? "border-[#0A0A0A] bg-[#FAFAFA]"
                 : "border-[#E5E5E5] bg-[#FAFAFA] hover:border-[#D4D4D4]"
@@ -255,7 +255,7 @@ export function HomePageV3({
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
               placeholder="링크를 붙여넣으세요"
-              className="h-full flex-1 bg-transparent text-sm text-[#0A0A0A] placeholder:text-[#A3A3A3] focus:outline-none"
+              className="h-full min-w-0 flex-1 bg-transparent text-sm text-[#0A0A0A] placeholder:text-[#A3A3A3] focus:outline-none"
             />
             <button
               type="button"
