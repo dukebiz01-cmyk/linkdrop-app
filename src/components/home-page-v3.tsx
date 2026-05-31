@@ -8,11 +8,13 @@ import {
   ChevronDown,
   ChevronRight,
   Clipboard,
+  FileText,
   Home,
   Inbox,
   Info,
   Link as LinkIcon,
   MessageCircle,
+  Phone,
   Play,
   Plus,
   Search,
@@ -101,45 +103,32 @@ const INTENTS: {
   bgColor: string;
   iconColor: string;
 }[] = [
+  // phase1-1: 5목적(정보·쿠폰·예약·구매·상담) → 3카드로 묶음.
+  //   - reservation/lead id 는 카드에서 빠지지만 위저드 내부는 5개 지원 그대로.
+  //   - 탭 시 purpose 는 카드의 id 가 그대로 wrapper handleStartCreate 로 전달.
   {
     id: "info",
-    label: "정보",
-    description: "영상 핵심 정리",
-    icon: Info,
+    label: "정보 알리기",
+    description: "장소, 상품, 후기, 이용 방법을 보기 쉽게 정리해요.",
+    icon: FileText,
     bgColor: "bg-[#DBEAFE]",
     iconColor: "text-[#2563EB]",
   },
   {
     id: "coupon",
-    label: "쿠폰",
-    description: "혜택으로 손님 모으기",
+    label: "혜택·예약 만들기",
+    description: "할인, 쿠폰, 기간 혜택, 네이버 예약 버튼을 붙여요.",
     icon: Ticket,
     bgColor: "bg-[#FEF3C7]",
     iconColor: "text-[#D97706]",
   },
   {
-    id: "reservation",
-    label: "예약",
-    description: "날짜 선택과 예약 연결",
-    icon: Calendar,
-    bgColor: "bg-[#D1FAE5]",
-    iconColor: "text-[#10B981]",
-  },
-  {
     id: "purchase",
-    label: "구매",
-    description: "AI 상품 찾기·가격비교",
-    icon: ShoppingCart,
+    label: "문의·구매 연결하기",
+    description: "상담, 전화, 구매처, 가격비교로 연결해요.",
+    icon: Phone,
     bgColor: "bg-[#FCE7F3]",
     iconColor: "text-[#DB2777]",
-  },
-  {
-    id: "lead",
-    label: "상담",
-    description: "문의·상담 받기",
-    icon: MessageCircle,
-    bgColor: "bg-[#E0E7FF]",
-    iconColor: "text-[#6366F1]",
   },
 ];
 
