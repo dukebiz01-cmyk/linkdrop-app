@@ -1,9 +1,10 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Lock, Search } from "lucide-react";
+import { Lock } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { ContentSourceCard, type ContentSourceCardData } from "@/components/explore/ContentSourceCard";
 import { ExploreSearchBar } from "@/components/explore/ExploreSearchBar";
+import { DiscoverSection } from "@/components/explore/DiscoverSection";
 
 // chunk1 — 탐색 라우트.
 //   비지니스 인증된 owner 만 본문 노출. 일반 사용자는 안내 카드만.
@@ -95,6 +96,7 @@ function NotBusinessNotice() {
 function ExplorePage() {
   const { isBusiness, partnerId, sources } = Route.useLoaderData();
   const navigate = useNavigate();
+  const router = useRouter();
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -132,22 +134,13 @@ function ExplorePage() {
 
       <ExploreSearchBar value={query} onChange={setQuery} />
 
-      <section className="mt-6">
-        <h2 className="mb-3 text-sm font-bold tracking-ko text-[#0A0A0A]">
-          콘텐츠 자동 찾기
-        </h2>
-        <div className="rounded-2xl border border-dashed border-[#E5E5E5] bg-[#FAFAFA] p-4 text-center">
-          <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-white">
-            <Search className="h-4 w-4 text-[#A3A3A3]" strokeWidth={2} />
-          </div>
-          <p className="text-sm font-medium tracking-ko text-[#737373]">
-            준비 중이에요
-          </p>
-          <p className="mt-1 text-xs font-medium leading-relaxed tracking-ko text-[#A3A3A3]">
-            매장 키워드로 영상을 자동으로 찾아드려요.
-          </p>
-        </div>
-      </section>
+      <DiscoverSection
+        partnerId={partnerId}
+        onRegistered={() => {
+          // 등록 직후 "내가 모은 콘텐츠" 리스트 갱신.
+          void router.invalidate();
+        }}
+      />
 
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">

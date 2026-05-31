@@ -32,6 +32,7 @@ import { Route as UserExploreRouteImport } from './routes/_user/explore'
 import { Route as UserCreateWizardRouteImport } from './routes/_user/create-wizard'
 import { Route as UserCreateRouteImport } from './routes/_user/create'
 import { Route as ApiDropsIndexRouteImport } from './routes/api/drops/index'
+import { Route as ApiDiscoverIndexRouteImport } from './routes/api/discover/index'
 import { Route as PartnerPartnerIndexRouteImport } from './routes/_partner/partner.index'
 import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index'
 import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
@@ -162,6 +163,11 @@ const ApiDropsIndexRoute = ApiDropsIndexRouteImport.update({
   path: '/api/drops/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDiscoverIndexRoute = ApiDiscoverIndexRouteImport.update({
+  id: '/api/discover/',
+  path: '/api/discover/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PartnerPartnerIndexRoute = PartnerPartnerIndexRouteImport.update({
   id: '/partner/',
   path: '/partner/',
@@ -285,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/admin/': typeof AdminAdminIndexRoute
   '/partner/': typeof PartnerPartnerIndexRoute
+  '/api/discover/': typeof ApiDiscoverIndexRoute
   '/api/drops/': typeof ApiDropsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -324,6 +331,7 @@ export interface FileRoutesByTo {
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/admin': typeof AdminAdminIndexRoute
   '/partner': typeof PartnerPartnerIndexRoute
+  '/api/discover': typeof ApiDiscoverIndexRoute
   '/api/drops': typeof ApiDropsIndexRoute
 }
 export interface FileRoutesById {
@@ -367,6 +375,7 @@ export interface FileRoutesById {
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/_admin/admin/': typeof AdminAdminIndexRoute
   '/_partner/partner/': typeof PartnerPartnerIndexRoute
+  '/api/discover/': typeof ApiDiscoverIndexRoute
   '/api/drops/': typeof ApiDropsIndexRoute
 }
 export interface FileRouteTypes {
@@ -408,6 +417,7 @@ export interface FileRouteTypes {
     | '/api/drops/$shareCode'
     | '/admin/'
     | '/partner/'
+    | '/api/discover/'
     | '/api/drops/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -447,6 +457,7 @@ export interface FileRouteTypes {
     | '/api/drops/$shareCode'
     | '/admin'
     | '/partner'
+    | '/api/discover'
     | '/api/drops'
   id:
     | '__root__'
@@ -489,6 +500,7 @@ export interface FileRouteTypes {
     | '/api/drops/$shareCode'
     | '/_admin/admin/'
     | '/_partner/partner/'
+    | '/api/discover/'
     | '/api/drops/'
   fileRoutesById: FileRoutesById
 }
@@ -510,6 +522,7 @@ export interface RootRouteChildren {
   DTestRoute: typeof DTestRoute
   ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
   ApiDropsShareCodeRoute: typeof ApiDropsShareCodeRoute
+  ApiDiscoverIndexRoute: typeof ApiDiscoverIndexRoute
   ApiDropsIndexRoute: typeof ApiDropsIndexRoute
 }
 
@@ -674,6 +687,13 @@ declare module '@tanstack/react-router' {
       path: '/api/drops'
       fullPath: '/api/drops/'
       preLoaderRoute: typeof ApiDropsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/discover/': {
+      id: '/api/discover/'
+      path: '/api/discover'
+      fullPath: '/api/discover/'
+      preLoaderRoute: typeof ApiDiscoverIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_partner/partner/': {
@@ -885,6 +905,7 @@ const rootRouteChildren: RootRouteChildren = {
   DTestRoute: DTestRoute,
   ApiCouponsClaimRoute: ApiCouponsClaimRoute,
   ApiDropsShareCodeRoute: ApiDropsShareCodeRoute,
+  ApiDiscoverIndexRoute: ApiDiscoverIndexRoute,
   ApiDropsIndexRoute: ApiDropsIndexRoute,
 }
 export const routeTree = rootRouteImport
