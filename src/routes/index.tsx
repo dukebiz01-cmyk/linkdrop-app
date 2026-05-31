@@ -1,9 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import {
-  HomePageV3,
-  type HomePageV3NavTab,
-  type HomeStartCreateParams,
-} from "@/components/home-page-v3";
+import { HomePageV3 } from "@/components/home-page-v3";
 import { BottomNav } from "@/components/bottom-nav";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 
@@ -14,13 +10,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "유튜브·인스타 링크를 붙이면 AI가 핵심을 정리하고, 쿠폰·예약·구매·상담 버튼까지 추천해요.",
+          "영상 링크 하나로, 예약·혜택까지. 붙여넣으면 AI가 행동 카드로 만들어드려요.",
       },
       { property: "og:title", content: "LinkDrop" },
       {
         property: "og:description",
         content:
-          "유튜브·인스타 링크를 붙이면 AI가 핵심을 정리하고, 쿠폰·예약·구매·상담 버튼까지 추천해요.",
+          "영상 링크 하나로, 예약·혜택까지. 붙여넣으면 AI가 행동 카드로 만들어드려요.",
       },
     ],
   }),
@@ -37,34 +33,32 @@ export const Route = createFileRoute("/")({
 function IndexHomePage() {
   const navigate = useNavigate();
 
-  const goLogin = (redirect?: string) =>
-    navigate({ to: "/login", search: redirect ? ({ redirect } as never) : undefined });
+  const goLogin = (redirectPath?: string) =>
+    navigate({
+      to: "/login",
+      search: redirectPath ? ({ redirect: redirectPath } as never) : undefined,
+    });
 
-  const handleNavTab = (tab: HomePageV3NavTab) => {
-    if (tab === "home") return;
-    goLogin();
-  };
-
-  const buildCreateRedirect = (params: HomeStartCreateParams) => {
-    const q = new URLSearchParams({ url: params.url, purpose: params.purpose });
-    if (params.intent_suggested) q.set("intent_suggested", params.intent_suggested);
-    if (params.confidence) q.set("confidence", params.confidence);
-    if (params.source_id) q.set("source_id", params.source_id);
-    if (params.platform) q.set("platform", params.platform);
-    return `/create-wizard?${q.toString()}`;
-  };
-
-  // N4-fix1: v0 home-page-v3 내부 fixed bottom nav(5탭)는 CSS 셀렉터로 숨기고,
-  // 공통 BottomNav(3탭) 를 형제로 렌더. BottomNav 는 wrapper 밖에 둬야 hidden
-  // 셀렉터에 잡히지 않음 — wrapper 안에 두면 본 3탭까지 사라짐.
-  // pb-16 = _user.tsx UserLayout 과 동일 — 콘텐츠가 BottomNav 에 가림 방지.
+  // A 단계 임시 stub — B+C 와이어링에서 purpose 매핑·라우트 분기 정식 적용.
+  // 무로그인 사용자는 모든 동작이 /login 으로 유도되고, 카드 생성 의도는
+  // ?redirect= 로 보존되어 로그인 후 /create-wizard 로 복귀.
   return (
     <>
-      <div className="[&_.fixed.bottom-0]:hidden pb-16">
+      <div className="pb-16 [&_.fixed.bottom-0]:hidden">
         <HomePageV3
-          activeNavTab="home"
-          onNavTab={handleNavTab}
-          onStartCreate={(params) => goLogin(buildCreateRedirect(params))}
+          onCreateDrop={(url, purpose) => {
+            const q = new URLSearchParams({ url });
+            if (purpose) q.set("purpose", purpose);
+            goLogin(`/create-wizard?${q.toString()}`);
+          }}
+          onViewDrop={() => goLogin()}
+          onViewAllDrops={() => goLogin()}
+          onTabChange={(tab) => {
+            if (tab === "home") return;
+            goLogin();
+          }}
+          onSearch={() => goLogin()}
+          onNotifications={() => goLogin()}
         />
       </div>
       <BottomNav />
