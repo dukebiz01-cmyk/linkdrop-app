@@ -2,9 +2,15 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CreateDropWizard } from "@/components/create-drop-wizard";
 import { getAuthClient } from "@/lib/auth-context";
 import type { DropPurpose } from "@/lib/types";
+import type { VideoMetadata } from "@/lib/video-metadata";
 
 // phase1 B: 비지니스 게이팅 — me.tsx:117 동일 패턴.
-type CreateWizardLoaderData = { isBusiness: boolean };
+// chunk1 1c: source_id prefill — 탐색에서 진입 시 content_sources 단건 lookup.
+type CreateWizardLoaderData = {
+  isBusiness: boolean;
+  prefillUrl: string | null;
+  prefillMetadata: VideoMetadata | null;
+};
 
 /**
  * v3 5단계 카드 만들기 wizard.
@@ -57,16 +63,49 @@ export const Route = createFileRoute("/_user/create-wizard")({
     source_id: str(search.source_id),
     platform: str(search.platform),
   }),
-  loader: async (): Promise<CreateWizardLoaderData> => {
+  loader: async ({ location }): Promise<CreateWizardLoaderData> => {
     const supabase = await getAuthClient();
-    if (!supabase) return { isBusiness: false };
+    const empty = { isBusiness: false, prefillUrl: null, prefillMetadata: null };
+    if (!supabase) return empty;
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData.session?.user.id ?? null;
-    if (!userId) return { isBusiness: false };
+    if (!userId) return empty;
     const { data: isBusiness } = await supabase.rpc("is_active_partner_owner", {
       _user_id: userId,
     });
-    return { isBusiness: Boolean(isBusiness) };
+
+    // chunk1 1c — source_id prefill: 탐색 카드에서 진입 시 content_sources 단건
+    //   lookup 후 initialUrl + initialMetadata 주입. 행 없으면 graceful (빈 prefill).
+    const rawSearch = location.search as Record<string, unknown> | undefined;
+    const sourceIdRaw = typeof rawSearch?.source_id === "string" ? rawSearch.source_id : null;
+    let prefillUrl: string | null = null;
+    let prefillMetadata: VideoMetadata | null = null;
+    if (sourceIdRaw) {
+      const { data: source } = await supabase
+        .from("content_sources")
+        .select("id, provider, source_url, title, author_name, thumbnail_url")
+        .eq("id", sourceIdRaw)
+        .maybeSingle();
+      if (source?.source_url) {
+        prefillUrl = source.source_url;
+        const platform = source.provider === "instagram" ? "instagram" : "youtube";
+        prefillMetadata = {
+          platform,
+          sourceUrl: source.source_url,
+          sourceId: source.id,
+          title: source.title ?? "",
+          authorName: source.author_name ?? undefined,
+          thumbnailUrl: source.thumbnail_url ?? undefined,
+          fetchedBy: platform === "youtube" ? "youtube_fallback" : "instagram_fallback",
+        };
+      }
+    }
+
+    return {
+      isBusiness: Boolean(isBusiness),
+      prefillUrl,
+      prefillMetadata,
+    };
   },
   component: CreateWizardPage,
 });
@@ -74,7 +113,7 @@ export const Route = createFileRoute("/_user/create-wizard")({
 function CreateWizardPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
-  const { isBusiness } = Route.useLoaderData();
+  const { isBusiness, prefillUrl, prefillMetadata } = Route.useLoaderData();
 
   // phase1 B 방어: 일반 사용자가 prefill purpose="쿠폰" 으로 진입하면 "정보"로 폴백.
   const initialPurposeRaw = toDropPurpose(search.purpose);
@@ -85,10 +124,15 @@ function CreateWizardPage() {
         ? ("정보" as const)
         : undefined;
 
+  // chunk1 1c — search.url(직접 입력) 우선, 없으면 content_sources prefill 사용.
+  const resolvedInitialUrl = search.url ?? prefillUrl ?? undefined;
+  const resolvedInitialMetadata = search.url ? null : prefillMetadata;
+
   return (
     <CreateDropWizard
       isBusiness={isBusiness}
-      initialUrl={search.url}
+      initialUrl={resolvedInitialUrl}
+      initialMetadata={resolvedInitialMetadata}
       initialPurpose={initialPurposeGated}
       initialSuggestedPurpose={toDropPurpose(search.intent_suggested)}
       initialSuggestionConfidence={toConfidence(search.confidence)}
