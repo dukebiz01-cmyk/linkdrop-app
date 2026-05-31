@@ -366,6 +366,9 @@ export function CreateDropWizard({
       // 옛 Step 3 의 목적별 통과 조건 그대로.
       if (purpose === "예약") return canProceedReservationStep3(step3Fields);
       if (purpose === "정보") return true;
+      // phase1 FIX2: 쿠폰 분기는 매장 쿠폰 자동 연결로 dead 입력 UI 제거.
+      //   detailId 게이트도 함께 해제 — 위저드에서 별도 선택 없이 진행.
+      if (purpose === "쿠폰") return true;
       return step3DetailId !== null;
     }
     return true; // step 3 = 마지막, sticky CTA 없음
