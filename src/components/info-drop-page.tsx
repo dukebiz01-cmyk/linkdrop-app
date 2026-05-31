@@ -437,11 +437,16 @@ export function InfoDropPage({
   const summaryLine = aiSummary?.trim() || safeDescription || pageCopy.sectionTitle;
   const points = keyPoints ?? [];
   // phase1-3: 전화번호 없는 매장 → phone/sms CTA 카드 숨김 (빈 tel: 노출 방지).
+  // phase1 FIX: 활성 매장 쿠폰 없는 매장 → coupon/reserve-coupon CTA 카드 숨김
+  //   (둘 다 funnelCoupon 기반 펀넬 시트 트리거이므로 funnelCoupon=null 이면 dead).
   const ctasRaw = PUBLIC_DROP_CTAS[resolvedVariant] ?? PUBLIC_DROP_CTAS.info;
   const hasPhone = Boolean(local?.phone?.trim());
-  const ctas = hasPhone
-    ? ctasRaw
-    : ctasRaw.filter((c) => c.id !== "phone" && c.id !== "sms");
+  const hasFunnelCoupon = Boolean(funnelCoupon);
+  const ctas = ctasRaw.filter((c) => {
+    if ((c.id === "phone" || c.id === "sms") && !hasPhone) return false;
+    if ((c.id === "coupon" || c.id === "reserve-coupon") && !hasFunnelCoupon) return false;
+    return true;
+  });
   const isReservation = resolvedVariant === "reservation";
   const reservationGuide = MOCK_RESERVATION_SECTION_GUIDE;
   const videoHeadline = isReservation ? safeTitle : pageCopy.sectionTitle;
@@ -530,7 +535,10 @@ export function InfoDropPage({
       return;
     }
     if (ctaId === "coupon" || ctaId === "reserve-coupon") {
-      onPrimaryAction?.();
+      // phase1 FIX: 둘 다 funnelCoupon 펀넬 시트(예약 INSERT + claim_coupon) 트리거.
+      // onPrimaryAction(=네이버 reservation_url 핸드오프) 이 아니라 onReserveAndClaim
+      // 으로 부른다. handleReserveAndClaim 이 funnelCoupon/userId 분기 + 로그인 폴백.
+      onReserveAndClaim?.();
       return;
     }
     onPrimaryAction?.();
