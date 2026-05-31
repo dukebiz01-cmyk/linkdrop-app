@@ -22,8 +22,14 @@ export function Step5PurposeShare({
   shareError: string | null;
   shareFeedback: string | null;
 }) {
+  // phase1 FIX1: Step 3 = Step4 (section) + Step5 병합. WizardSharePreview 외부
+  // 컨테이너가 `flex flex-1 flex-col` 라 부모 flex-col 안에서 viewport 점유 →
+  // Step4 와 함께 stack 될 때 두 flex-1 자식이 viewport 분점 → 빈 화면.
+  // className="flex-none" 으로 외부 flex-1 무효화 (twMerge 충돌 해소).
+  // 내부 본문/sticky CTA 는 부모 페이지 스크롤 흐름 안에서 정상 작동.
   return (
     <WizardSharePreview
+      className="flex-none"
       data={data}
       shareUrl={shareUrl}
       onKakaoShare={onKakaoShare}

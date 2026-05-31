@@ -87,8 +87,11 @@ export function Step4DropPreview({
 }) {
   const flow = PURPOSE_FLOW_CONFIG[purpose];
 
+  // phase1 FIX1: 외부 <main> 제거. Step 3 (Step4+Step5 병합) 에서 중복 <main> 발생
+  // → 두 flex-1 컨테이너가 viewport 분점하며 빈 화면. wizard 가 단일 스크롤 컨테이너
+  // (페이지 자체)로 처리하도록 단순 <section> 으로 평탄화.
   return (
-    <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
+    <section className="px-6 pt-2">
       <StepBadge n={3} />
       <div className="flex items-center gap-2">
         <h1 className="text-2xl font-extrabold tracking-ko text-text-strong">
@@ -179,6 +182,6 @@ export function Step4DropPreview({
           &quot;{ai.suggestedShareText}&quot;
         </p>
       </div>
-    </main>
+    </section>
   );
 }
