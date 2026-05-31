@@ -442,11 +442,9 @@ export function HomePageV3({
             으로
           </h2>
           <p className="mt-3 text-center text-[15px] leading-relaxed text-[#64748B]">
-            유튜브·인스타 링크를 붙이면
+            영상 링크 하나로, 예약·혜택까지
             <br />
-            AI가 핵심을 정리하고,
-            <br />
-            쿠폰·예약·구매·상담 버튼까지 추천해요.
+            붙여넣으면 AI가 행동 카드로 만들어드려요
           </p>
         </section>
 
@@ -556,8 +554,8 @@ export function HomePageV3({
                       3
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[15px] font-semibold text-[#0F172A]">행동 버튼 추가</p>
-                      <p className="text-sm text-[#64748B]">쿠폰, 예약, 구매, 상담 버튼을 붙여요</p>
+                      <p className="text-[15px] font-semibold text-[#0F172A]">행동 카드 완성</p>
+                      <p className="text-sm text-[#64748B]">예약·혜택까지 한 번에 이어드려요</p>
                     </div>
                   </li>
                 </ol>
