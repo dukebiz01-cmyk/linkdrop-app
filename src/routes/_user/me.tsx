@@ -356,17 +356,28 @@ function CouponClaimCard({ row }: { row: CouponClaimRow }) {
     }
   }
 
+  function goDetail() {
+    void navigate({
+      to: "/coupon/$claim_code",
+      params: { claim_code: row.claim_code },
+    });
+  }
+
   return (
     <li>
-      <button
-        type="button"
-        onClick={() =>
-          navigate({
-            to: "/coupon/$claim_code",
-            params: { claim_code: row.claim_code },
-          })
-        }
-        className={`w-full rounded-xl bg-[#F8FAFC] px-4 py-3 text-left transition-colors hover:bg-[#F1F5F9] ${
+      {/* phase1 A: 카드 전체 button 안에 복사 button 중첩 → div role=button 으로
+          전환. 키보드 접근성(Enter/Space) 유지. 복사 버튼은 그대로 button. */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={goDetail}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            goDetail();
+          }
+        }}
+        className={`w-full cursor-pointer rounded-xl bg-[#F8FAFC] px-4 py-3 text-left transition-colors hover:bg-[#F1F5F9] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] ${
           dim ? "opacity-60" : ""
         }`}
       >
@@ -398,7 +409,7 @@ function CouponClaimCard({ row }: { row: CouponClaimRow }) {
           {labelCouponStatus(row.status)}
           {row.expires_at ? ` · ${formatDate(row.expires_at)}까지` : null}
         </p>
-      </button>
+      </div>
     </li>
   );
 }
