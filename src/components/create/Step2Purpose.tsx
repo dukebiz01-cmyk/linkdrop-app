@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Calendar, Check, Gift, Phone, ShoppingBag, Sparkles } from "lucide-react";
+import { BookOpen, Check, Gift, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { CardShell } from "@/components/cards/CardShell";
 import type { CardConfig } from "@/components/cards/types";
@@ -8,7 +8,9 @@ import type { WizardSuggestionConfidence } from "@/components/create/types";
 import type { DropPurpose } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// WHY: UX 레이어는 5 목적만 노출. DB intent_types 9행은 Phase 1 UI에서 숨김 (v3 결정 락).
+// phase1 C: UX 레이어 노출 2 목적만 — 정보 + 혜택·예약(쿠폰 enum).
+//   구매·상담·예약 enum 은 보존 (DropPurpose 5개 유지, AI 추천/홈 prefill 대비).
+//   네이버 예약은 매장 reservation_url 로 수신자 카드(/d/) 에 자동 연결.
 const WIZARD_PURPOSES: {
   purpose: DropPurpose;
   label: string;
@@ -27,31 +29,10 @@ const WIZARD_PURPOSES: {
   },
   {
     purpose: "쿠폰",
-    label: "쿠폰",
-    description: "혜택으로 손님 모으기",
+    label: "혜택·예약",
+    description: "할인·쿠폰·기간 혜택, 매장 예약 자동 연결",
     icon: Gift,
     stripClass: "bg-intent-coupon-strip",
-  },
-  {
-    purpose: "예약",
-    label: "예약",
-    description: "날짜 선택과 예약 연결",
-    icon: Calendar,
-    stripClass: "bg-intent-reservation-strip",
-  },
-  {
-    purpose: "구매",
-    label: "구매",
-    description: "AI 상품 찾기·가격비교",
-    icon: ShoppingBag,
-    stripClass: "bg-intent-commerce-strip",
-  },
-  {
-    purpose: "상담",
-    label: "상담",
-    description: "문의·상담 받기",
-    icon: Phone,
-    stripClass: "bg-intent-lead-strip",
   },
 ];
 

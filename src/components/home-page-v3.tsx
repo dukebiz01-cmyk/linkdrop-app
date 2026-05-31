@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Info,
   Calendar,
-  ShoppingBag,
   Check,
   Sparkles,
 } from "lucide-react";
@@ -49,7 +48,9 @@ export interface HomePageV3Props {
 }
 
 // ============================================================
-// Purpose Config - 3 Purpose System
+// Purpose Config - 2 Purpose System (phase1 C: 5→2 노출 정책)
+//   사용자 노출 = 정보 + 혜택·예약 만 두 가지.
+//   구매·상담·예약 enum 은 보존(코드/위저드 내부), 선택 UI 에서만 숨김.
 // ============================================================
 
 const PURPOSES = [
@@ -68,14 +69,6 @@ const PURPOSES = [
     icon: Calendar,
     tag: "예약·쿠폰",
     buttons: ["예약하기", "혜택 받기", "쿠폰 받기"],
-  },
-  {
-    id: "purchase" as const,
-    label: "문의·구매 연결하기",
-    description: "상담, 전화, 구매처, 가격비교로 연결해요",
-    icon: ShoppingBag,
-    tag: "문의·구매",
-    buttons: ["구매하기", "전화 문의", "가격 비교"],
   },
 ];
 
