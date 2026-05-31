@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   User,
   Gift,
@@ -10,7 +11,10 @@ import {
   LogOut,
   ChevronRight,
   BarChart3,
+  Copy,
+  Check,
 } from "lucide-react";
+import { Toaster } from "@/components/ui/sonner";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -33,6 +37,16 @@ type CouponClaimRow = {
   issued_at: string | null;
   used_at: string | null;
   expires_at: string | null;
+  claim_code: string;
+  coupon: {
+    title: string;
+    discount_value: number | string | null;
+    discount_unit: string | null;
+    valid_until: string | null;
+    partner: {
+      display_name: string;
+    } | null;
+  } | null;
 };
 
 type MyDropRow = {
@@ -113,9 +127,16 @@ export const Route = createFileRoute("/_user/me")({
     const myDrops = Array.isArray(dropsJson) ? (dropsJson as MyDropRow[]) : [];
 
     // 받은 혜택 (RLS claims_self_read = catcher_user_id = auth.uid())
+    // coupon5: coupons + partners 중첩 JOIN — 카드에 제목·매장명 표시.
+    //   coupons_public_read(is_active=true) + partners_public_read(verification_status=approved)
+    //   PUBLIC SELECT 정책으로 JOIN 통과.
     const { data: coupons } = await supabase
       .from("coupon_claims")
-      .select("id, coupon_id, status, issued_at, used_at, expires_at")
+      .select(
+        "id, coupon_id, status, issued_at, used_at, expires_at, claim_code, " +
+          "coupon:coupons(title, discount_value, discount_unit, valid_until, " +
+          "partner:partners(display_name))",
+      )
       .eq("catcher_user_id", userId)
       .order("issued_at", { ascending: false })
       .limit(10);
@@ -190,27 +211,14 @@ function MePage() {
           </div>
         </SectionCard>
 
-        {/* ② 받은 혜택 */}
+        {/* ② 받은 혜택 — 카드 탭 = 상세, "코드 복사" = clipboard. 60대 친화 라벨(#16). */}
         <SectionCard Icon={Gift} title="받은 혜택">
           {data.coupons.length === 0 ? (
             <EmptyText text="받은 혜택이 여기 모여요." />
           ) : (
             <ul className="space-y-2">
               {data.coupons.map((c) => (
-                <li
-                  key={c.id}
-                  className="flex items-center justify-between rounded-xl bg-[#F8FAFC] px-3 py-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[#0F172A]">
-                      쿠폰 {c.id.slice(0, 6)}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[#64748B]">
-                      {labelCouponStatus(c.status)}
-                      {c.expires_at ? ` · ${formatDate(c.expires_at)}까지` : null}
-                    </p>
-                  </div>
-                </li>
+                <CouponClaimCard key={c.id} row={c} />
               ))}
             </ul>
           )}
@@ -321,7 +329,77 @@ function MePage() {
           </AlertDialog>
         </SectionCard>
       </div>
+      <Toaster richColors position="top-center" />
     </main>
+  );
+}
+
+function CouponClaimCard({ row }: { row: CouponClaimRow }) {
+  const navigate = useNavigate();
+  const [copied, setCopied] = useState(false);
+
+  const couponTitle = row.coupon?.title?.trim() || "쿠폰";
+  const storeName = row.coupon?.partner?.display_name?.trim() || "";
+  const isUsed = row.status === "used";
+  const isExpired = row.status === "expired" || row.status === "cancelled";
+  const dim = isUsed || isExpired;
+
+  async function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(row.claim_code);
+      setCopied(true);
+      toast.success("쿠폰 번호를 복사했어요.");
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("복사에 실패했어요.");
+    }
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() =>
+          navigate({
+            to: "/coupon/$claim_code",
+            params: { claim_code: row.claim_code },
+          })
+        }
+        className={`w-full rounded-xl bg-[#F8FAFC] px-4 py-3 text-left transition-colors hover:bg-[#F1F5F9] ${
+          dim ? "opacity-60" : ""
+        }`}
+      >
+        <p className="truncate text-sm font-bold text-[#0F172A]">
+          {couponTitle}
+        </p>
+        {storeName ? (
+          <p className="mt-0.5 truncate text-xs text-[#64748B]">{storeName}</p>
+        ) : null}
+        <div className="mt-2 flex items-center gap-2">
+          <span className="font-mono text-base font-bold tracking-wide text-[#0F172A]">
+            {row.claim_code}
+          </span>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2 text-xs font-semibold text-[#2563EB] hover:bg-[#EFF6FF]"
+            aria-label="쿠폰 번호 복사"
+          >
+            {copied ? (
+              <Check className="size-3" strokeWidth={2.4} />
+            ) : (
+              <Copy className="size-3" strokeWidth={2} />
+            )}
+            {copied ? "복사됨" : "코드 복사"}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-[#64748B]">
+          {labelCouponStatus(row.status)}
+          {row.expires_at ? ` · ${formatDate(row.expires_at)}까지` : null}
+        </p>
+      </button>
+    </li>
   );
 }
 

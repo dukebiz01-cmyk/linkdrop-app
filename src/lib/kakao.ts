@@ -95,6 +95,18 @@ export interface ShareToKakaoResult {
 const SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.7.1/kakao.min.js";
 const PLACEHOLDER_KEY = "PLACEHOLDER";
 
+/**
+ * Kakao feed 템플릿은 유효한 imageUrl 필수 — 빈/누락 시 sendDefault 가 silent fail.
+ * 이미지가 없을 때 LinkDrop 공식 OG 이미지로 폴백한다.
+ */
+const DEFAULT_OG_IMAGE_URL = "https://app.drop.how/og-default.png";
+
+function sanitizeImageUrl(input: string | null | undefined): string {
+  const trimmed = typeof input === "string" ? input.trim() : "";
+  if (!trimmed) return DEFAULT_OG_IMAGE_URL;
+  return trimmed;
+}
+
 let sdkPromise: Promise<KakaoSDK> | null = null;
 
 function getKakaoKey(): string | null {
@@ -192,23 +204,37 @@ export function initKakao(): Promise<KakaoSDK> {
  * (per spec: 사용자 취소는 정상 흐름).
  */
 export async function shareToKakao(options: ShareToKakaoOptions): Promise<ShareToKakaoResult> {
+  // 1. imageUrl 폴백 (kakao feed 템플릿이 빈 이미지에서 silent fail)
+  const safeImageUrl = sanitizeImageUrl(options.imageUrl);
+
+  // 2. 실제 payload 가시화 — 운영에서 'dialog 안 뜸' 디버깅용
+  // buttons 가 없거나 빈 배열이면 payload 에서 키 자체 제외.
+  // kakao SDK 는 `buttons: undefined` 도 'Illegal argument' 로 거부하므로
+  // 옵셔널 키는 스프레드로 조건부 포함.
+  const payload = {
+    objectType: "feed" as const,
+    content: {
+      title: options.title,
+      description: options.description,
+      imageUrl: safeImageUrl,
+      link: { mobileWebUrl: options.linkUrl, webUrl: options.linkUrl },
+    },
+    ...(options.buttons?.length
+      ? {
+          buttons: options.buttons.map((b) => ({
+            title: b.title,
+            link: { mobileWebUrl: b.link, webUrl: b.link },
+          })),
+        }
+      : {}),
+  };
   try {
     const sdk = await initKakao();
-    sdk.Share.sendDefault({
-      objectType: "feed",
-      content: {
-        title: options.title,
-        description: options.description,
-        imageUrl: options.imageUrl,
-        link: { mobileWebUrl: options.linkUrl, webUrl: options.linkUrl },
-      },
-      buttons: options.buttons?.map((b) => ({
-        title: b.title,
-        link: { mobileWebUrl: b.link, webUrl: b.link },
-      })),
-    });
+    sdk.Share.sendDefault(payload);
     return { ok: true };
   } catch (err) {
+    // 3. 진짜 에러 표면화 — 절대 조용히 넘기지 말 것
+    console.error("[kakao] sendDefault failed:", err);
     const error =
       err instanceof KakaoError
         ? err

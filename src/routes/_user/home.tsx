@@ -19,11 +19,10 @@ const V0_PURPOSE_TO_EN: Record<string, string> = {
 function HomeRoute() {
   const navigate = useNavigate();
 
-  // v0 home-page-v3 (v0.26) 내부 fixed bottom 4탭 nav 를 CSS 셀렉터로 숨김.
-  // repo BottomNav 3탭 (홈·만들기·나) 가 _user.tsx 에서 별도 렌더 — 4탭 노출은
-  // 별도 유닛 (_user.tsx 의 hideNav 분기 + max-w-md 너비 조정 필요).
+  // phase1-#1 마무리: home-page-v3 내장 nav 제거됨 → CSS 숨김 셀렉터 불필요.
+  // 공통 BottomNav (v0 검정 4탭, URL 파생 active) 가 _user.tsx 에서 별도 렌더.
   return (
-    <div className="[&_.fixed.bottom-0]:hidden">
+    <div>
       <HomePageV3
         onCreateDrop={(url, purpose) => {
           const en = purpose ? V0_PURPOSE_TO_EN[purpose] : undefined;

@@ -39,12 +39,12 @@ function IndexHomePage() {
       search: redirectPath ? ({ redirect: redirectPath } as never) : undefined,
     });
 
-  // A 단계 임시 stub — B+C 와이어링에서 purpose 매핑·라우트 분기 정식 적용.
-  // 무로그인 사용자는 모든 동작이 /login 으로 유도되고, 카드 생성 의도는
-  // ?redirect= 로 보존되어 로그인 후 /create-wizard 로 복귀.
+  // phase1-#1 마무리: home-page-v3 내장 nav 제거됨 → CSS 숨김 셀렉터 불필요.
+  // 공통 BottomNav (v0 검정 4탭) 는 무로그인 진입점에서도 렌더 — 탭 클릭 시
+  // goLogin() 또는 placeholder 로 유도.
   return (
     <>
-      <div className="pb-16 [&_.fixed.bottom-0]:hidden">
+      <div className="pb-[calc(6rem+env(safe-area-inset-bottom))]">
         <HomePageV3
           onCreateDrop={(url, purpose) => {
             const q = new URLSearchParams({ url });

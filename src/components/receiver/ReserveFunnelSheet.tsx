@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Calendar, Users, Phone, User, MessageSquare, CheckCircle2 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getSupabase } from "@/lib/supabase";
@@ -410,6 +411,20 @@ function DoneBody({
   claimCode: string | null;
   onClose: () => void;
 }) {
+  const navigate = useNavigate();
+
+  function goToMyCoupon() {
+    onClose();
+    if (claimCode) {
+      void navigate({
+        to: "/coupon/$claim_code",
+        params: { claim_code: claimCode },
+      });
+    } else {
+      void navigate({ to: "/me" });
+    }
+  }
+
   return (
     <div className="space-y-5 pt-2">
       <div className="flex justify-center">
@@ -426,20 +441,27 @@ function DoneBody({
         <p className="mt-1 text-base font-bold text-[#0F172A]">{couponTitle}</p>
         {claimCode ? (
           <p className="mt-2 text-xs text-[#64748B]">
-            쿠폰 코드 <span className="font-mono font-bold text-[#0F172A]">{claimCode}</span>
+            쿠폰 번호 <span className="font-mono font-bold text-[#0F172A]">{claimCode}</span>
             <br />
             방문 시 사장님께 보여주세요.
           </p>
         ) : (
-          <p className="mt-2 text-xs text-[#64748B]">받은 혜택은 마이페이지에서 확인할 수 있어요.</p>
+          <p className="mt-2 text-xs text-[#64748B]">받은 혜택은 내 페이지에서 확인할 수 있어요.</p>
         )}
       </div>
       <button
         type="button"
-        onClick={onClose}
-        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#2563EB] px-6 py-3 text-base font-bold text-white"
+        onClick={goToMyCoupon}
+        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#2563EB] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
       >
-        확인
+        내 쿠폰 보기
+      </button>
+      <button
+        type="button"
+        onClick={onClose}
+        className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-6 py-3 text-sm font-semibold text-[#475569]"
+      >
+        닫기
       </button>
     </div>
   );

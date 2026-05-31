@@ -5,9 +5,6 @@ import {
   Link as LinkIcon,
   Clipboard,
   ArrowRight,
-  Home,
-  PlusCircle,
-  User,
   Info,
   Calendar,
   ShoppingBag,
@@ -530,69 +527,8 @@ export function HomePageV3({
         )}
       </main>
 
-      {/* ─────────────────────────────────────────────────────────────
-          Bottom Navigation (4 Tabs) — wrapper 가 [&_.fixed.bottom-0]:hidden 으로
-          숨김. repo BottomNav(3탭) 가 _user.tsx 에서 별도 렌더.
-      ───────────────────────────────────────────────────────────── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/98 backdrop-blur-lg pb-[env(safe-area-inset-bottom)]">
-        <div className="absolute inset-x-0 top-0 h-px bg-[#E5E5E5]" />
-        <div className="mx-auto grid h-[60px] max-w-md grid-cols-4">
-          <button
-            type="button"
-            onClick={() => onTabChange("home")}
-            className="group relative flex flex-col items-center justify-center gap-1"
-          >
-            <span className="absolute top-0 h-[3px] w-8 rounded-full bg-[#0A0A0A]" />
-            <Home
-              className="h-[22px] w-[22px] text-[#0A0A0A] transition-transform duration-150 group-active:scale-90"
-              strokeWidth={2.25}
-            />
-            <span className="text-[11px] font-bold text-[#0A0A0A]">홈</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onTabChange("explore")}
-            className="group relative flex flex-col items-center justify-center gap-1"
-          >
-            <Search
-              className="h-[22px] w-[22px] text-[#A3A3A3] transition-all duration-150 group-hover:text-[#525252] group-active:scale-90"
-              strokeWidth={1.75}
-            />
-            <span className="text-[11px] font-medium text-[#A3A3A3] transition-colors group-hover:text-[#525252]">
-              탐색
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onTabChange("create")}
-            className="group relative flex flex-col items-center justify-center gap-1"
-          >
-            <PlusCircle
-              className="h-[22px] w-[22px] text-[#A3A3A3] transition-all duration-150 group-hover:text-[#525252] group-active:scale-90"
-              strokeWidth={1.75}
-            />
-            <span className="text-[11px] font-medium text-[#A3A3A3] transition-colors group-hover:text-[#525252]">
-              만들기
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onTabChange("me")}
-            className="group relative flex flex-col items-center justify-center gap-1"
-          >
-            <User
-              className="h-[22px] w-[22px] text-[#A3A3A3] transition-all duration-150 group-hover:text-[#525252] group-active:scale-90"
-              strokeWidth={1.75}
-            />
-            <span className="text-[11px] font-medium text-[#A3A3A3] transition-colors group-hover:text-[#525252]">
-              나
-            </span>
-          </button>
-        </div>
-      </nav>
+      {/* phase1-#1 마무리: 내장 4탭 nav 제거. 공통 BottomNav 가 _user.tsx /
+          index.tsx 에서 별도 렌더 (단일 nav, URL 파생 active). 충돌 원천 제거. */}
     </div>
   );
 }

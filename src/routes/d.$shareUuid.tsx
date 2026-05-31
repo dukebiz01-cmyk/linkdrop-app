@@ -365,15 +365,80 @@ function DropPage() {
         onBack={() => window.history.back()}
         onShare={() => trackReceiverEvent("share_click", detail.drop.id)}
         onKakaoShare={async () => {
-          // /d/ 수신자 측 카톡 공유 — wizard 메이커 측과 동일하게 shareToKakao 호출.
-          // linkUrl 은 adapter 가 만든 props.shareUrl (B2-4 단축 URL drop.how/{code}, 없으면
-          // app.drop.how/d/{uuid} 긴 URL fallback) 을 그대로 사용.
+          // BOOST1-RESHARE 와이어링 — 수신자 카톡 공유 = 진짜 재공유 (parent 연결).
+          //   1. parent share_event_id 확보 (현재 share_uuid → id, ReserveFunnelSheet 패턴)
+          //   2. ld_create_share_edge_v3 호출 (sender=userId 또는 NULL 무로그인, parent 연결)
+          //   3. 반환 share_code → https://drop.how/{code} 새 단축링크
+          //   4. 그 새 링크로 shareToKakao (title/desc/image 그대로)
+          //   실패 시 폴백 — props.shareUrl (메이커 원본) 또는 긴 URL.
+          //   공유 자체가 죽으면 안 됨 (RPC best-effort).
           trackReceiverEvent("share_click", detail.drop.id);
+
+          let reshareLink: string | null = null;
+          try {
+            const supabase = getSupabase();
+            const { data: parentEvent } = await supabase
+              .from("share_events")
+              .select("id")
+              .eq("share_uuid", shareUuid)
+              .maybeSingle();
+            const parentId = parentEvent?.id ?? null;
+            if (parentId) {
+              const { data: edgeRows, error: edgeErr } = await supabase.rpc(
+                "ld_create_share_edge_v3",
+                {
+                  p_info_drop_id: detail.drop.id,
+                  p_sender_user_id: userId, // null = 무로그인 → 'anonymous'
+                  p_channel: "kakao",
+                  p_parent_share_event_id: parentId,
+                },
+              );
+              if (!edgeErr) {
+                const row = Array.isArray(edgeRows) ? edgeRows[0] : edgeRows;
+                const newCode =
+                  row && typeof row === "object" && "share_code" in row
+                    ? String((row as { share_code: unknown }).share_code ?? "")
+                    : "";
+                if (newCode) {
+                  // #27: drop.how 하드코딩 (window.location 금지)
+                  reshareLink = `https://drop.how/${newCode}`;
+                }
+              } else {
+                console.warn("[d/$shareUuid] reshare RPC failed:", edgeErr);
+              }
+            }
+          } catch (e) {
+            console.warn("[d/$shareUuid] reshare unexpected:", e);
+          }
+
+          const linkUrl =
+            reshareLink ??
+            props.shareUrl ??
+            `https://app.drop.how/d/${detail.share_uuid}`;
+
+          // BOOST2 — intent 별 CTA 버튼 1개. 라벨은 60대 친화 (#16).
+          // 버튼 link = 본문 링크와 동일(=/d/ 새 단축링크 또는 폴백).
+          const purposeRaw = String(detail.drop?.purpose ?? "").toLowerCase();
+          let ctaTitle: string;
+          if (
+            purposeRaw === "reservation" ||
+            purposeRaw === "예약" ||
+            purposeRaw === "coupon" ||
+            purposeRaw === "쿠폰"
+          ) {
+            ctaTitle = "예약하고 혜택 받기";
+          } else if (purposeRaw === "purchase" || purposeRaw === "구매") {
+            ctaTitle = "상품 보러 가기";
+          } else {
+            ctaTitle = "자세히 보기";
+          }
+
           await shareToKakao({
             title: props.title || "LinkDrop",
             description: props.makerMessage ?? props.description ?? "",
             imageUrl: props.videoThumbnailUrl ?? "",
-            linkUrl: props.shareUrl ?? `https://app.drop.how/d/${detail.share_uuid}`,
+            linkUrl,
+            buttons: [{ title: ctaTitle, link: linkUrl }],
           });
         }}
         onSave={() => console.log("[d/$shareUuid] save (Phase 2)")}
