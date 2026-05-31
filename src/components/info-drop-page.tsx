@@ -151,7 +151,7 @@ const SHARE_ACTION_BUTTON_CLASS = cn(
   "inline-flex h-12 min-h-[48px] w-full min-w-0 items-center justify-center gap-1.5 rounded-xl",
   "border border-[#E5E7EB] bg-white px-2 text-sm font-semibold tracking-ko text-[#374151]",
   "transition-colors duration-150 hover:border-[#D4D4D4] hover:bg-[#FAFAFA]",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] focus-visible:ring-offset-2",
 );
 
 const VARIANT_PAGE_COPY: Record<
@@ -782,7 +782,7 @@ export function InfoDropPage({
         {isReservation && funnelCoupon && (
           <div className="mt-4 rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
             <div className="mb-3 flex items-center gap-2">
-              <Ticket className="size-5 text-[#2563EB]" strokeWidth={2} />
+              <Ticket className="size-5 text-[#0A0A0A]" strokeWidth={2} />
               <span className="text-sm font-medium tracking-ko text-[#64748B]">
                 받을 수 있는 쿠폰
               </span>
@@ -867,7 +867,7 @@ export function InfoDropPage({
             <button
               type="button"
               onClick={onReserveAndClaim}
-              className="flex w-full min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-[#2563EB] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
+              className="flex w-full min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
             >
               예약 문의하고 쿠폰 받기
             </button>
@@ -910,7 +910,7 @@ export function InfoDropPage({
             {videoSourceUrl && (
               <a
                 href={`/create?url=${encodeURIComponent(videoSourceUrl)}`}
-                className="flex items-center justify-center gap-1 w-full py-3 text-sm font-bold text-[#2563EB] border border-[#E5E5E5] rounded-2xl"
+                className="flex items-center justify-center gap-1 w-full py-3 text-sm font-bold text-[#0A0A0A] border border-[#E5E5E5] rounded-2xl"
               >
                 나도 이런 정보 보내고 싶다면 →
               </a>

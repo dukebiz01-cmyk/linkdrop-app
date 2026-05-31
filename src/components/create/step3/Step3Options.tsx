@@ -63,7 +63,7 @@ export function DetailCategoryGrid({
               className={cn(
                 "flex min-h-[44px] w-full items-center justify-center rounded-2xl border px-3 py-3 text-center text-sm font-semibold tracking-ko transition-colors",
                 active
-                  ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] ring-1 ring-[#2563EB]/25"
+                  ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A] ring-1 ring-[#0A0A0A]/25"
                   : "border-border bg-bg text-text-strong hover:border-text-muted",
               )}
             >

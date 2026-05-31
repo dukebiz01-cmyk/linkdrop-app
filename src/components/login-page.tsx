@@ -17,9 +17,9 @@ import { cn } from "@/lib/utils";
 const LOGIN_INPUT_ICON =
   "pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-[#94A3B8]";
 const LOGIN_INPUT_CLASS =
-  "h-14 w-full rounded-2xl border border-[#E2E8F0] bg-white pl-11 text-[15px] text-[#0F172A] placeholder:text-[#94A3B8] transition-colors duration-150 hover:border-[#CBD5E1] focus:border-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 disabled:opacity-50";
+  "h-14 w-full rounded-2xl border border-[#E2E8F0] bg-white pl-11 text-[15px] text-[#0F172A] placeholder:text-[#94A3B8] transition-colors duration-150 hover:border-[#CBD5E1] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20 disabled:opacity-50";
 const LOGIN_PRIMARY_BUTTON_CLASS =
-  "flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#2563EB] text-base font-bold tracking-ko text-white transition-colors duration-150 hover:bg-[#1D4ED8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] text-base font-bold tracking-ko text-white transition-colors duration-150 hover:bg-[#171717] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 const LOGIN_SECONDARY_BUTTON_CLASS =
   "flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-[#E2E8F0] bg-white text-sm font-semibold tracking-ko text-[#0F172A] transition-colors duration-150 hover:border-[#CBD5E1] hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-50";
 const LOGIN_CARD_CLASS = "rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.04)]";
@@ -78,7 +78,7 @@ function ThesisAnimation() {
 
       {/* Phase 2: Line collapses to blue dot (0.3-0.5s) */}
       <motion.div
-        className="absolute rounded-full bg-[#2563EB]"
+        className="absolute rounded-full bg-[#0A0A0A]"
         style={{
           height: 2,
           boxShadow: "0 0 12px rgba(37,99,235,0.7)",
@@ -99,7 +99,7 @@ function ThesisAnimation() {
 
       {/* Blue dot pulse before text */}
       <motion.div
-        className="absolute h-2 w-2 rounded-full bg-[#2563EB]"
+        className="absolute h-2 w-2 rounded-full bg-[#0A0A0A]"
         style={{ boxShadow: "0 0 12px rgba(37,99,235,0.7)" }}
         initial={{ opacity: 0, scale: 0 }}
         animate={{
@@ -240,7 +240,7 @@ export function LoginPage({
       className="flex min-h-screen flex-col"
       style={{
         background:
-          "radial-gradient(circle at top right, #EFF6FF 0%, transparent 55%), #FFFFFF",
+          "radial-gradient(circle at top right, #FAFAFA 0%, transparent 55%), #FFFFFF",
       }}
     >
       <div className="mx-auto flex w-full max-w-[480px] flex-1 flex-col px-5">
@@ -251,7 +251,7 @@ export function LoginPage({
             style={{ letterSpacing: "-0.02em" }}
           >
             LinkDrop
-            <span className="inline-block size-1.5 rounded-full bg-[#2563EB]" aria-hidden />
+            <span className="inline-block size-1.5 rounded-full bg-[#0A0A0A]" aria-hidden />
           </h1>
           <ThesisAnimation />
         </div>
@@ -409,7 +409,7 @@ export function LoginPage({
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="size-4 rounded border-[#E2E8F0] text-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/30"
+                  className="size-4 rounded border-[#E2E8F0] text-[#0A0A0A] focus:ring-2 focus:ring-[#0A0A0A]/30"
                   disabled={loading}
                 />
                 로그인 상태 유지
@@ -420,7 +420,7 @@ export function LoginPage({
                 className={cn(
                   "shrink-0 text-sm font-medium leading-none underline-offset-2 transition-colors hover:underline",
                   failedAttempts >= 3
-                    ? "font-semibold text-[#2563EB] hover:text-[#1D4ED8]"
+                    ? "font-semibold text-[#0A0A0A] hover:text-[#171717]"
                     : "text-[#64748B] hover:text-[#0F172A]",
                 )}
               >
@@ -492,7 +492,7 @@ export function LoginPage({
                 <button
                   type="button"
                   onClick={() => handleModeChange("signup")}
-                  className="font-medium text-[#2563EB] underline-offset-2 transition-colors hover:text-[#1D4ED8] hover:underline"
+                  className="font-medium text-[#0A0A0A] underline-offset-2 transition-colors hover:text-[#171717] hover:underline"
                 >
                   회원가입
                 </button>
@@ -503,7 +503,7 @@ export function LoginPage({
                 <button
                   type="button"
                   onClick={() => handleModeChange("signin")}
-                  className="font-medium text-[#2563EB] underline-offset-2 transition-colors hover:text-[#1D4ED8] hover:underline"
+                  className="font-medium text-[#0A0A0A] underline-offset-2 transition-colors hover:text-[#171717] hover:underline"
                 >
                   로그인
                 </button>
@@ -545,7 +545,7 @@ export function LoginPageSkeleton() {
       className="flex min-h-screen flex-col"
       style={{
         background:
-          "radial-gradient(circle at top right, #EFF6FF 0%, transparent 55%), #FFFFFF",
+          "radial-gradient(circle at top right, #FAFAFA 0%, transparent 55%), #FFFFFF",
       }}
     >
       <div className="mx-auto flex w-full max-w-[480px] flex-1 flex-col px-5">

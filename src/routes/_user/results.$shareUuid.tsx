@@ -50,7 +50,7 @@ function ResultsPending() {
     <main className="flex min-h-screen items-center justify-center bg-white tracking-ko">
       <div className="flex flex-col items-center gap-3">
         <Loader2
-          className="size-6 animate-spin text-[#2563EB]"
+          className="size-6 animate-spin text-[#0A0A0A]"
           strokeWidth={2}
         />
         <p className="text-sm font-medium text-[#475569]">불러오는 중…</p>

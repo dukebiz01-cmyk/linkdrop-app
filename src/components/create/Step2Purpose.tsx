@@ -91,7 +91,7 @@ export function PurposePickerGrid({
             className={cn(
               "group relative flex min-h-[112px] flex-col items-start justify-between gap-2 overflow-hidden rounded-2xl border border-border p-4 text-left transition-all duration-150 ease-out",
               "hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
-              isSelected && "border-[#2563EB] bg-[#EFF6FF]/40 ring-1 ring-[#2563EB]/25",
+              isSelected && "border-[#0A0A0A] bg-[#FAFAFA]/40 ring-1 ring-[#0A0A0A]/25",
             )}
           >
             {showSuggestedBadge && (
@@ -99,8 +99,8 @@ export function PurposePickerGrid({
                 className={cn(
                   "absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-semibold tracking-ko",
                   suggestionConfidence === "high"
-                    ? "bg-[#2563EB] text-white"
-                    : "border border-[#2563EB] bg-white text-[#2563EB]",
+                    ? "bg-[#0A0A0A] text-white"
+                    : "border border-[#0A0A0A] bg-white text-[#0A0A0A]",
                 )}
               >
                 <Sparkles className="size-3" strokeWidth={2} />
@@ -196,7 +196,7 @@ export function Step2PurposeSelect({
               </p>
               <p className="text-sm font-medium tracking-ko text-text-muted">
                 내 선택:{" "}
-                <span className="font-semibold text-[#2563EB]">{selectedConfig.label}</span>
+                <span className="font-semibold text-[#0A0A0A]">{selectedConfig.label}</span>
               </p>
               {purposeDiffers && (
                 <p className="text-xs font-medium leading-relaxed tracking-ko text-text-subtle">
@@ -207,13 +207,13 @@ export function Step2PurposeSelect({
             </div>
           )}
 
-          <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[#2563EB] bg-[#EFF6FF]/40 p-4 ring-1 ring-[#2563EB]/25">
+          <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[#0A0A0A] bg-[#FAFAFA]/40 p-4 ring-1 ring-[#0A0A0A]/25">
             <span className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-surface">
               <span
                 aria-hidden
                 className={cn("absolute inset-y-0 left-0 w-1", selectedConfig.stripClass)}
               />
-              <SelectedIcon className="size-6 text-[#2563EB]" strokeWidth={2} />
+              <SelectedIcon className="size-6 text-[#0A0A0A]" strokeWidth={2} />
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-base font-bold tracking-ko text-text-strong">
@@ -223,7 +223,7 @@ export function Step2PurposeSelect({
                 {selectedConfig.description}
               </p>
             </div>
-            <Check className="size-6 shrink-0 text-[#2563EB]" strokeWidth={2} />
+            <Check className="size-6 shrink-0 text-[#0A0A0A]" strokeWidth={2} />
           </div>
 
           <button

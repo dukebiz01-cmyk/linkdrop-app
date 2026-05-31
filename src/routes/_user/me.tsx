@@ -266,7 +266,7 @@ function MePage() {
                           params: { shareUuid: d.share_uuid! },
                         })
                       }
-                      className="mt-2 flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-[#2563EB] hover:underline"
+                      className="mt-2 flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-[#0A0A0A] hover:underline"
                     >
                       <BarChart3 className="size-4" strokeWidth={2} />
                       성과 보기
@@ -377,7 +377,7 @@ function CouponClaimCard({ row }: { row: CouponClaimRow }) {
             goDetail();
           }
         }}
-        className={`w-full cursor-pointer rounded-xl bg-[#F8FAFC] px-4 py-3 text-left transition-colors hover:bg-[#F1F5F9] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] ${
+        className={`w-full cursor-pointer rounded-xl bg-[#F8FAFC] px-4 py-3 text-left transition-colors hover:bg-[#F1F5F9] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] ${
           dim ? "opacity-60" : ""
         }`}
       >
@@ -394,7 +394,7 @@ function CouponClaimCard({ row }: { row: CouponClaimRow }) {
           <button
             type="button"
             onClick={handleCopy}
-            className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2 text-xs font-semibold text-[#2563EB] hover:bg-[#EFF6FF]"
+            className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2 text-xs font-semibold text-[#0A0A0A] hover:bg-[#FAFAFA]"
             aria-label="쿠폰 번호 복사"
           >
             {copied ? (
@@ -426,7 +426,7 @@ function SectionCard({
   return (
     <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
       <div className="mb-4 flex items-center gap-2">
-        <Icon className="size-4 text-[#2563EB]" strokeWidth={2} />
+        <Icon className="size-4 text-[#0A0A0A]" strokeWidth={2} />
         <h3 className="text-sm font-semibold text-[#0A0A0A]">{title}</h3>
       </div>
       {children}

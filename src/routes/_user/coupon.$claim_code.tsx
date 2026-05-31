@@ -24,7 +24,7 @@ import { Toaster } from "@/components/ui/sonner";
  *   - expired → "기간 만료" + 흐리게
  *   - cancelled → "취소" + 흐리게
  *
- * 색 정책 (phase1-2 line 6-8): v0.26 검정 미니멀 그대로. #2563EB 파랑 X.
+ * 색 정책 (phase1-2 line 6-8): v0.26 검정 미니멀 그대로. #0A0A0A 파랑 X.
  * 시안의 파랑 무시, v0 my-coupons-page 의 검정 색감 따름.
  */
 

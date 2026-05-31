@@ -59,8 +59,8 @@ export function ReservationPreviewCard({ fields }: { fields: Step3FieldState }) 
     : "예약하기";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#2563EB] bg-[#EFF6FF]/40 p-4 ring-1 ring-[#2563EB]/25">
-      <span className="inline-flex items-center gap-1 rounded-lg bg-[#2563EB] px-2 py-0.5 text-[10px] font-semibold tracking-ko text-white">
+    <div className="overflow-hidden rounded-2xl border border-[#0A0A0A] bg-[#FAFAFA]/40 p-4 ring-1 ring-[#0A0A0A]/25">
+      <span className="inline-flex items-center gap-1 rounded-lg bg-[#0A0A0A] px-2 py-0.5 text-[10px] font-semibold tracking-ko text-white">
         <Calendar className="size-3" strokeWidth={2} />
         공식 예약 안내
       </span>
@@ -69,14 +69,14 @@ export function ReservationPreviewCard({ fields }: { fields: Step3FieldState }) 
         {headline}
       </p>
       {benefit ? (
-        <p className="mt-1 text-sm font-medium tracking-ko text-[#2563EB]">{benefit}</p>
+        <p className="mt-1 text-sm font-medium tracking-ko text-[#0A0A0A]">{benefit}</p>
       ) : (
         <p className="mt-1 text-sm font-medium tracking-ko text-text-subtle">
           혜택·강조 문구를 더하면 더 눈에 띄어요
         </p>
       )}
       <div className="mt-4 grid grid-cols-3 gap-2">
-        <span className="flex min-h-[44px] items-center justify-center rounded-lg bg-[#2563EB] px-2 text-xs font-bold tracking-ko text-white">
+        <span className="flex min-h-[44px] items-center justify-center rounded-lg bg-[#0A0A0A] px-2 text-xs font-bold tracking-ko text-white">
           {buttonName}
         </span>
         <span className="flex min-h-[44px] items-center justify-center gap-1 rounded-lg border border-border bg-white px-2 text-xs font-semibold tracking-ko text-text-strong">
@@ -115,7 +115,7 @@ export function ReservationChipGrid({
             className={cn(
               "flex min-h-[44px] items-center justify-center gap-1 rounded-lg px-2 text-center text-xs font-semibold tracking-ko transition-colors",
               active
-                ? "border-2 border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                ? "border-2 border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                 : "border border-border bg-bg text-text-strong hover:border-text-muted",
             )}
           >
@@ -206,16 +206,16 @@ export function ReservationCalendar({
               className={cn(
                 "flex min-h-[56px] flex-col items-center justify-start gap-0.5 rounded-lg border p-1 text-center transition-colors",
                 item
-                  ? "border-[#2563EB] bg-[#EFF6FF]"
+                  ? "border-[#0A0A0A] bg-[#FAFAFA]"
                   : "border-border bg-bg hover:border-text-muted",
-                isSelected && "ring-2 ring-[#2563EB] ring-offset-1",
+                isSelected && "ring-2 ring-[#0A0A0A] ring-offset-1",
                 isDisabled && "cursor-not-allowed opacity-45 hover:border-border",
               )}
             >
               <span
                 className={cn(
                   "text-xs font-bold tracking-ko",
-                  item ? "text-[#2563EB]" : "text-text-strong",
+                  item ? "text-[#0A0A0A]" : "text-text-strong",
                 )}
               >
                 {day}
@@ -295,7 +295,7 @@ export function ReservationDateSheet({
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border border-[#2563EB] bg-bg p-4 ring-1 ring-[#2563EB]/25">
+    <div className="space-y-4 rounded-2xl border border-[#0A0A0A] bg-bg p-4 ring-1 ring-[#0A0A0A]/25">
       <div className="flex items-start justify-between gap-2">
         <p className="text-base font-bold tracking-ko text-text-strong">
           {formatReservationDate(iso)} 설정
@@ -321,7 +321,7 @@ export function ReservationDateSheet({
               className={cn(
                 "min-h-[44px] rounded-lg border px-3 text-xs font-semibold tracking-ko transition-colors",
                 status === s
-                  ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                  ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                   : "border-border bg-bg text-text-strong hover:border-text-muted",
               )}
             >
@@ -386,7 +386,7 @@ export function ReservationDateSheet({
               className={cn(
                 "min-h-[44px] rounded-lg border px-2 text-center text-[11px] font-semibold leading-tight tracking-ko transition-colors disabled:opacity-40",
                 scope === id
-                  ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                  ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                   : "border-border bg-bg text-text-strong hover:border-text-muted",
               )}
             >
@@ -409,7 +409,7 @@ export function ReservationDateSheet({
         <button
           type="button"
           onClick={handleApply}
-          className="min-h-[44px] flex-1 rounded-lg bg-[#2563EB] text-sm font-semibold tracking-ko text-white"
+          className="min-h-[44px] flex-1 rounded-lg bg-[#0A0A0A] text-sm font-semibold tracking-ko text-white"
         >
           적용하기
         </button>
@@ -792,7 +792,7 @@ export function Step3ReservationCards({
           <button
             type="button"
             onClick={() => setPlaceInfoOpen((v) => !v)}
-            className="mt-3 text-xs font-semibold tracking-ko text-[#2563EB]"
+            className="mt-3 text-xs font-semibold tracking-ko text-[#0A0A0A]"
           >
             {placeInfoOpen ? "시설 정보 닫기" : "시설 정보 수정"}
           </button>
@@ -898,7 +898,7 @@ export function Step3ReservationCards({
                           className="flex min-w-0 flex-1 items-center justify-between gap-2 px-1 py-2 text-left text-xs font-medium tracking-ko text-text-strong"
                         >
                           <span className="min-w-0 truncate">{reservationSummaryLine(item)}</span>
-                          <span className="shrink-0 text-[11px] font-semibold text-[#2563EB]">
+                          <span className="shrink-0 text-[11px] font-semibold text-[#0A0A0A]">
                             수정
                           </span>
                         </button>
@@ -967,7 +967,7 @@ export function Step3ReservationCards({
                     className={cn(
                       "flex min-h-[44px] w-full items-center justify-center rounded-lg border px-2 py-2 text-center text-xs font-semibold tracking-ko transition-colors",
                       active
-                        ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] ring-1 ring-[#2563EB]/25"
+                        ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A] ring-1 ring-[#0A0A0A]/25"
                         : "border-border bg-bg text-text-strong hover:border-text-muted",
                     )}
                   >
@@ -1005,7 +1005,7 @@ export function Step3ReservationCards({
           <button
             type="button"
             onClick={() => setPerDateLinkOpen((v) => !v)}
-            className="mt-3 text-xs font-semibold tracking-ko text-[#2563EB]"
+            className="mt-3 text-xs font-semibold tracking-ko text-[#0A0A0A]"
           >
             {perDateLinkOpen ? "날짜별 링크 닫기" : "날짜별 예약 링크 다르게 설정하기"}
           </button>
@@ -1141,7 +1141,7 @@ export function Step3ReservationCards({
                       className={cn(
                         "min-h-[44px] flex-1 rounded-lg border text-xs font-semibold tracking-ko transition-colors",
                         fields.petAllowed === val
-                          ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                          ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                           : "border-border bg-bg text-text-strong hover:border-text-muted",
                       )}
                     >

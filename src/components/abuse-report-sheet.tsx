@@ -113,7 +113,7 @@ export function AbuseReportSheet({ isOpen, onClose, dropId }: AbuseReportSheetPr
                     className={cn(
                       "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
                       selected === opt.value
-                        ? "border-[#2563EB] bg-[#EFF6FF]"
+                        ? "border-[#0A0A0A] bg-[#FAFAFA]"
                         : "border-[#E5E5E5] bg-white hover:border-text-muted",
                     )}
                   >
@@ -123,7 +123,7 @@ export function AbuseReportSheet({ isOpen, onClose, dropId }: AbuseReportSheetPr
                       value={opt.value}
                       checked={selected === opt.value}
                       onChange={() => setSelected(opt.value)}
-                      className="mt-0.5 size-4 shrink-0 accent-[#2563EB]"
+                      className="mt-0.5 size-4 shrink-0 accent-[#0A0A0A]"
                     />
                     <div className="flex flex-col">
                       <span className="text-sm font-bold tracking-ko text-text-strong">
@@ -143,7 +143,7 @@ export function AbuseReportSheet({ isOpen, onClose, dropId }: AbuseReportSheetPr
                 placeholder="추가 설명 (선택)"
                 rows={3}
                 maxLength={500}
-                className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-sm tracking-ko text-text-strong focus:border-[#2563EB] focus:outline-none focus:ring-1 focus:ring-[#2563EB]/25"
+                className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2 text-sm tracking-ko text-text-strong focus:border-[#0A0A0A] focus:outline-none focus:ring-1 focus:ring-[#0A0A0A]/25"
               />
 
               {state === "error_duplicate" && (
@@ -167,7 +167,7 @@ export function AbuseReportSheet({ isOpen, onClose, dropId }: AbuseReportSheetPr
                 type="button"
                 disabled={submitDisabled}
                 onClick={handleSubmit}
-                className="w-full min-h-[44px] rounded-2xl bg-[#2563EB] py-4 font-bold text-white disabled:bg-[#A3A3A3] disabled:cursor-not-allowed"
+                className="w-full min-h-[44px] rounded-2xl bg-[#0A0A0A] py-4 font-bold text-white disabled:bg-[#A3A3A3] disabled:cursor-not-allowed"
               >
                 {state === "submitting" ? "제출 중..." : "신고하기"}
               </button>

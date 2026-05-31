@@ -92,26 +92,26 @@ export function IndustrySelector({
                 onClick={() => handleIndustrySelect(item.id)}
                 className={`group relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all duration-200 ${
                   isSelected
-                    ? "border-[#2563EB] bg-[#EFF6FF]"
+                    ? "border-[#0A0A0A] bg-[#FAFAFA]"
                     : "border-transparent bg-[#FAFAFA] hover:bg-[#F5F5F5]"
                 }`}
               >
                 <div className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
-                  isSelected ? "bg-[#2563EB]" : "bg-white"
+                  isSelected ? "bg-[#0A0A0A]" : "bg-white"
                 }`}>
                   <IndustryIcon
                     icon={item.icon}
                     className={`h-5 w-5 ${isSelected ? "text-white" : "text-[#525252]"}`}
                   />
                 </div>
-                <span className={`text-sm font-medium ${isSelected ? "text-[#2563EB]" : "text-[#0A0A0A]"}`}>
+                <span className={`text-sm font-medium ${isSelected ? "text-[#0A0A0A]" : "text-[#0A0A0A]"}`}>
                   {item.label}
                 </span>
                 {"hasSpecialty" in item && item.hasSpecialty && (
                   <ChevronRight className="absolute right-2 top-2 h-4 w-4 text-[#A3A3A3]" />
                 )}
                 {isSelected && (
-                  <div className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#2563EB]">
+                  <div className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#0A0A0A]">
                     <Check className="h-3 w-3 text-white" strokeWidth={3} />
                   </div>
                 )}
@@ -126,14 +126,14 @@ export function IndustrySelector({
         <div className="animate-slide-up">
           <button
             onClick={() => setShowSpecialty(false)}
-            className="mb-4 flex items-center gap-2 text-sm font-medium text-[#2563EB] hover:underline"
+            className="mb-4 flex items-center gap-2 text-sm font-medium text-[#0A0A0A] hover:underline"
           >
             <ChevronRight className="h-4 w-4 rotate-180" />
             업종 다시 선택
           </button>
 
-          <div className="mb-3 rounded-lg bg-[#EFF6FF] p-3">
-            <p className="text-sm font-medium text-[#2563EB]">병원 / 의료 선택됨</p>
+          <div className="mb-3 rounded-lg bg-[#FAFAFA] p-3">
+            <p className="text-sm font-medium text-[#0A0A0A]">병원 / 의료 선택됨</p>
             <p className="mt-1 text-xs text-[#525252]">진료과를 선택해 주세요</p>
           </div>
 
@@ -146,18 +146,18 @@ export function IndustrySelector({
                   onClick={() => handleSpecialtySelect(item.id)}
                   className={`relative flex items-center gap-3 rounded-xl border-2 p-3 transition-all duration-200 ${
                     isSelected
-                      ? "border-[#2563EB] bg-[#EFF6FF]"
+                      ? "border-[#0A0A0A] bg-[#FAFAFA]"
                       : "border-transparent bg-[#FAFAFA] hover:bg-[#F5F5F5]"
                   }`}
                 >
                   <div className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all ${
                     isSelected
-                      ? "border-[#2563EB] bg-[#2563EB]"
+                      ? "border-[#0A0A0A] bg-[#0A0A0A]"
                       : "border-[#E5E5E5]"
                   }`}>
                     {isSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
                   </div>
-                  <span className={`text-sm font-medium ${isSelected ? "text-[#2563EB]" : "text-[#0A0A0A]"}`}>
+                  <span className={`text-sm font-medium ${isSelected ? "text-[#0A0A0A]" : "text-[#0A0A0A]"}`}>
                     {item.label}
                   </span>
                 </button>

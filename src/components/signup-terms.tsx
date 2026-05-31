@@ -28,7 +28,7 @@ function CircleCheck({ on }: { on: boolean }) {
   return (
     <div style={{
       width: 22, height: 22, borderRadius: "50%",
-      background: on ? "#2563EB" : "transparent",
+      background: on ? "#0A0A0A" : "transparent",
       border: on ? "none" : "1.5px solid #D4D4D4",
       display: "flex", alignItems: "center", justifyContent: "center",
       flexShrink: 0, transition: "all .15s",
@@ -42,7 +42,7 @@ function Toggle({ on }: { on: boolean }) {
   return (
     <div style={{
       width: 50, height: 28, borderRadius: 14,
-      background: on ? "#2563EB" : "#E5E5E5",
+      background: on ? "#0A0A0A" : "#E5E5E5",
       position: "relative", transition: "background .2s", flexShrink: 0,
     }}>
       <div style={{
@@ -83,8 +83,8 @@ function ItemRow({ id, label, tag, checked, onToggle, showDetail, detailKey, det
         {label}
         <span style={{
           fontSize: 10, fontWeight: 800, padding: "2px 5px", borderRadius: 4,
-          background: tag === "필수" ? "#FEF2F2" : "#EFF6FF",
-          color: tag === "필수" ? "#DC2626" : "#2563EB",
+          background: tag === "필수" ? "#FEF2F2" : "#FAFAFA",
+          color: tag === "필수" ? "#DC2626" : "#0A0A0A",
         }}>
           {tag}
         </span>
@@ -155,7 +155,7 @@ export function SignupTerms({
     <div style={WRAP}>
       {/* Header */}
       <div style={{ padding: "32px 20px 8px" }}>
-        <div style={{ fontSize: 12, color: "#2563EB", fontWeight: 700, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: "#0A0A0A", fontWeight: 700, marginBottom: 8 }}>
           회원가입
         </div>
         <div style={{ fontSize: 24, fontWeight: 800, color: "#0A0A0A", letterSpacing: "-0.04em", lineHeight: 1.3, marginBottom: 6 }}>
@@ -202,7 +202,7 @@ export function SignupTerms({
           <CircleCheck on={!!checked.ad} />
           <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#0A0A0A", display: "flex", alignItems: "center", gap: 6 }}>
             광고성 정보 수신 동의
-            <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 5px", borderRadius: 4, background: "#EFF6FF", color: "#2563EB" }}>선택</span>
+            <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 5px", borderRadius: 4, background: "#FAFAFA", color: "#0A0A0A" }}>선택</span>
           </div>
           {adOpen ? <ChevronUp size={16} color="#A3A3A3" /> : <ChevronDown size={16} color="#A3A3A3" />}
         </div>
@@ -215,7 +215,7 @@ export function SignupTerms({
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "0.5px solid #F5F5F5", cursor: "pointer" }}
                 onClick={(e) => { e.stopPropagation(); setAdChannels((p) => ({ ...p, [ch]: !p[ch] })); setChecked((p) => ({ ...p, ad: true })); }}
               >
-                <div style={{ width: 18, height: 18, borderRadius: 4, background: adChannels[ch] ? "#2563EB" : "transparent", border: adChannels[ch] ? "none" : "1.5px solid #D4D4D4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <div style={{ width: 18, height: 18, borderRadius: 4, background: adChannels[ch] ? "#0A0A0A" : "transparent", border: adChannels[ch] ? "none" : "1.5px solid #D4D4D4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   {adChannels[ch] && <Check size={10} color="#fff" strokeWidth={3} />}
                 </div>
                 <span style={{ fontSize: 13, color: "#525252" }}>
@@ -245,7 +245,7 @@ export function SignupTerms({
           onClick={() => onComplete?.(checked)}
           style={{
             width: "100%",
-            background: allReqDone ? "#2563EB" : "#E5E5E5",
+            background: allReqDone ? "#0A0A0A" : "#E5E5E5",
             color: allReqDone ? "#fff" : "#A3A3A3",
             border: "none", borderRadius: 16, padding: 17,
             fontSize: 17, fontWeight: 800, cursor: allReqDone ? "pointer" : "not-allowed",
@@ -256,7 +256,7 @@ export function SignupTerms({
         </button>
         <div style={{ textAlign: "center", marginTop: 14, fontSize: 13, color: "#525252" }}>
           이미 계정이 있으신가요?{" "}
-          <a href="/login" style={{ color: "#2563EB", textDecoration: "none", fontWeight: 500 }}>
+          <a href="/login" style={{ color: "#0A0A0A", textDecoration: "none", fontWeight: 500 }}>
             로그인
           </a>
         </div>

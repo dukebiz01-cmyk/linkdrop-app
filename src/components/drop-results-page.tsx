@@ -39,7 +39,7 @@ import {
  *   - 공유 채널 = channels
  *
  * 표현(#16): 클릭=회, 전환=건. 'Drop' 단어 화면 노출 X.
- * 색 토큰(#15): primary #2563EB, success #10B981, 흰 배경, Lucide.
+ * 색 토큰(#15): primary #0A0A0A, success #10B981, 흰 배경, Lucide.
  */
 export type DropResultsData = {
   share_uuid: string;
@@ -199,9 +199,9 @@ export function DropResultsPage({
 
       <div className="space-y-4 px-5 pt-5">
         {/* 2. 헤드라인 — 전환율 */}
-        <section className="rounded-2xl bg-gradient-to-br from-[#EFF6FF] to-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-[#E5E7EB]">
+        <section className="rounded-2xl bg-gradient-to-br from-[#FAFAFA] to-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-[#E5E7EB]">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#2563EB]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0A0A0A]">
               <TrendingUp className="size-4 text-white" strokeWidth={2} />
             </span>
             <span className="text-sm text-[#475569]">전환율</span>
@@ -235,8 +235,8 @@ export function DropResultsPage({
           />
           <BigStat
             Icon={Share2}
-            iconBg="#EFF6FF"
-            iconColor="#2563EB"
+            iconBg="#FAFAFA"
+            iconColor="#0A0A0A"
             label="재공유"
             value={reshares}
             unit="회"
@@ -245,7 +245,7 @@ export function DropResultsPage({
 
         {/* 4. 확정 카드 */}
         <section className="rounded-2xl bg-[#F1F5F9] p-5">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#2563EB] px-2.5 py-1 text-[11px] font-semibold text-white">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#0A0A0A] px-2.5 py-1 text-[11px] font-semibold text-white">
             확정
           </span>
           <div className="mt-4 space-y-3">
@@ -255,9 +255,9 @@ export function DropResultsPage({
                 className="flex items-center justify-between rounded-xl bg-white px-4 py-3"
               >
                 <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#EFF6FF]">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#FAFAFA]">
                     <row.Icon
-                      className="size-4 text-[#2563EB]"
+                      className="size-4 text-[#0A0A0A]"
                       strokeWidth={2}
                     />
                   </span>
@@ -376,10 +376,10 @@ export function DropResultsPage({
                   <Line
                     type="monotone"
                     dataKey="views"
-                    stroke="#2563EB"
+                    stroke="#0A0A0A"
                     strokeWidth={2}
                     dot={false}
-                    activeDot={{ r: 4, fill: "#2563EB" }}
+                    activeDot={{ r: 4, fill: "#0A0A0A" }}
                   />
                 </LineChart>
               </ResponsiveContainer>

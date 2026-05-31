@@ -53,7 +53,7 @@ function getIntentLabel(intent: DropFeedCardProps["intent"]): string {
 
 function getIntentStyle(intent: DropFeedCardProps["intent"]): string {
   // info / discussion / meme: bg-[#F5F5F5] text-[#525252]
-  // coupon / reservation / commerce / ticket: bg-[#EFF6FF] text-[#2563EB]
+  // coupon / reservation / commerce / ticket: bg-[#FAFAFA] text-[#0A0A0A]
   // lead / campaign: bg-[#ECFDF5] text-[#10B981]
   // custom: bg-white border border-[#E5E5E5] text-[#525252]
   switch (intent) {
@@ -65,7 +65,7 @@ function getIntentStyle(intent: DropFeedCardProps["intent"]): string {
     case "reservation":
     case "commerce":
     case "ticket":
-      return "bg-[#EFF6FF] text-[#2563EB]";
+      return "bg-[#FAFAFA] text-[#0A0A0A]";
     case "lead":
     case "campaign":
       return "bg-[#ECFDF5] text-[#10B981]";
@@ -212,7 +212,7 @@ export function DropFeedCard({
         <div className="flex items-center justify-between border-t border-[#F5F5F5] px-4 py-2.5 mt-3">
           {metaText ? <span className="text-xs text-[#A3A3A3]">{metaText}</span> : <span />}
           <button
-            className="rounded-full bg-[#2563EB] px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#1D4ED8]"
+            className="rounded-full bg-[#0A0A0A] px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#171717]"
             onClick={(e) => {
               e.stopPropagation();
               console.log("[DropFeedCard] CTA clicked:", intent, shareUuid);

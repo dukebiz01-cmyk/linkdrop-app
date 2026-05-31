@@ -21,7 +21,7 @@ export function CardShell({
 }: CardShellProps) {
   const baseClass = 'rounded-2xl border bg-white p-4 mb-3 shadow-sm transition'
   const borderClass = selected
-    ? 'border-blue-500 ring-1 ring-blue-100'
+    ? 'border-[#0A0A0A] ring-1 ring-[#F5F5F5]'
     : 'border-slate-200'
   const opacityClass = config.status === 'hidden' ? 'opacity-70' : ''
 
@@ -54,7 +54,7 @@ export function CardShell({
             <button
               type="button"
               onClick={onAccept}
-              className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white"
+              className="flex-1 rounded-lg bg-[#0A0A0A] px-3 py-2 text-sm font-medium text-white"
             >
               그대로 사용
             </button>

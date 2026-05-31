@@ -1,7 +1,7 @@
 import type { CardStatus } from "./types";
 
 const STATUS_LABEL: Record<CardStatus, { label: string; className: string }> = {
-  ai_suggested: { label: "추천", className: "bg-blue-50 text-blue-600" },
+  ai_suggested: { label: "추천", className: "bg-[#FAFAFA] text-[#0A0A0A]" },
   completed: { label: "완료", className: "bg-slate-100 text-slate-600" },
   needs_confirmation: { label: "연결 필요", className: "bg-amber-50 text-amber-700" },
   hidden: { label: "수신자 숨김", className: "bg-slate-100 text-slate-500" },

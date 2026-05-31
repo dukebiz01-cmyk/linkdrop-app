@@ -81,7 +81,7 @@ export function HomePage({
           >
             <Bell className="h-5 w-5" />
             {unreadCount > 0 && (
-              <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#2563EB]" />
+              <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#0A0A0A]" />
             )}
           </button>
         </div>
@@ -99,7 +99,7 @@ export function HomePage({
               }}
               className={`flex h-full shrink-0 snap-start items-center px-4 text-sm transition-colors duration-150 ${
                 category === cat.key
-                  ? "border-b-2 border-[#2563EB] font-semibold text-[#0A0A0A]"
+                  ? "border-b-2 border-[#0A0A0A] font-semibold text-[#0A0A0A]"
                   : "text-[#525252] hover:text-[#0A0A0A]"
               }`}
             >
@@ -136,7 +136,7 @@ export function HomePage({
           console.log("[HomePage] Create drop clicked");
           onCreateDrop();
         }}
-        className="fixed bottom-20 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-[#2563EB] text-white transition-all duration-150 ease-out hover:scale-105 hover:bg-[#1D4ED8] active:scale-95"
+        className="fixed bottom-20 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-[#0A0A0A] text-white transition-all duration-150 ease-out hover:scale-105 hover:bg-[#171717] active:scale-95"
         style={{ boxShadow: "0 8px 24px rgba(37, 99, 235, 0.35)" }}
         aria-label="카드 만들기"
       >
@@ -202,13 +202,13 @@ function TabButton({
         onClick();
       }}
       className={`relative flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-150 ${
-        isActive ? "text-[#2563EB]" : "text-[#A3A3A3]"
+        isActive ? "text-[#0A0A0A]" : "text-[#A3A3A3]"
       }`}
     >
       <div className="relative">
         {icon}
         {hasNotification && (
-          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#2563EB]" />
+          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#0A0A0A]" />
         )}
       </div>
       <span className="text-[10px]">{label}</span>

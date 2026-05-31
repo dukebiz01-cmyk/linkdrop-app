@@ -126,8 +126,8 @@
   --accent-foreground: #ffffff;
 
   /* Intent — strip/chip only */
-  --intent-info: #1d4ed8;
-  --intent-info-bg: #eff6ff;
+  --intent-info: #171717;
+  --intent-info-bg: #FAFAFA;
   --intent-success: #15803d;
   --intent-success-bg: #f0fdf4;
   --intent-warning: #b45309;
@@ -136,7 +136,7 @@
   --intent-danger-bg: #fef2f2;
 
   /* 9 LinkDrop intent strip colors (4px left strip only) */
-  --intent-info-strip: #2563eb;        /* 정보 공유 */
+  --intent-info-strip: #0A0A0A;        /* 정보 공유 */
   --intent-discussion-strip: #7c3aed;  /* 친구와 의논 */
   --intent-coupon-strip: #db2777;      /* 쿠폰 */
   --intent-reservation-strip: #0891b2; /* 예약 유도 */

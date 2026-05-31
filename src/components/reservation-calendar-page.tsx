@@ -106,7 +106,7 @@ const GUEST_MAX = 10;
 const GUEST_STEPPER_BUTTON_CLASS = cn(
   "inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-[#E5E7EB] bg-white",
   "text-text-strong transition-colors hover:border-[#D4D4D4] hover:bg-[#FAFAFA]",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] focus-visible:ring-offset-2",
   "disabled:cursor-not-allowed disabled:border-[#E5E7EB] disabled:bg-[#F5F5F5] disabled:text-[#A3A3A3]",
 );
 
@@ -174,8 +174,8 @@ export interface ReservationCalendarPageProps {
 const RESERVATION_PRIMARY_ENABLED = cn(
   "inline-flex h-14 min-h-[56px] w-full max-w-full items-center justify-center rounded-2xl border-0 px-6",
   "text-base font-bold tracking-ko text-white",
-  "bg-[var(--ld-primary,#2563EB)] hover:bg-[#1D4ED8]",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2",
+  "bg-[var(--ld-primary,#0A0A0A)] hover:bg-[#171717]",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] focus-visible:ring-offset-2",
 );
 
 const RESERVATION_PRIMARY_DISABLED = cn(
@@ -202,7 +202,7 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
   range_start: "rounded-l-lg",
   range_end: "rounded-r-lg",
   range_middle: "rounded-none",
-  today: "font-bold text-[#2563EB]",
+  today: "font-bold text-[#0A0A0A]",
   outside: "text-text-subtle opacity-40",
   disabled: "text-[#A3A3A3]",
 };
@@ -212,16 +212,16 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
 // 않으므로 모두 연한 파란색 + 테두리로 통일한다. 메이커가 보낸 가능 날짜와는 시각
 // 언어를 분리 — 가능 날짜는 modifier 의 얇은 ring 으로만, 선택은 채움 + ring 으로.
 const CALENDAR_BUTTON_OVERRIDE = cn(
-  "[&_button[data-selected-single=true]]:!bg-[#2563EB]/15",
-  "[&_button[data-selected-single=true]]:!text-[#2563EB]",
+  "[&_button[data-selected-single=true]]:!bg-[#0A0A0A]/15",
+  "[&_button[data-selected-single=true]]:!text-[#0A0A0A]",
   "[&_button[data-selected-single=true]]:!ring-2",
   "[&_button[data-selected-single=true]]:!ring-inset",
-  "[&_button[data-selected-single=true]]:!ring-[#2563EB]",
-  "[&_button[data-range-start=true]]:!bg-[#2563EB]",
+  "[&_button[data-selected-single=true]]:!ring-[#0A0A0A]",
+  "[&_button[data-range-start=true]]:!bg-[#0A0A0A]",
   "[&_button[data-range-start=true]]:!text-white",
-  "[&_button[data-range-end=true]]:!bg-[#2563EB]",
+  "[&_button[data-range-end=true]]:!bg-[#0A0A0A]",
   "[&_button[data-range-end=true]]:!text-white",
-  "[&_button[data-range-middle=true]]:!bg-[#2563EB]/5",
+  "[&_button[data-range-middle=true]]:!bg-[#0A0A0A]/5",
   "[&_button[data-range-middle=true]]:!text-text-strong",
 );
 
@@ -596,14 +596,14 @@ function EditableReservationCard({
             type="checkbox"
             checked={pets}
             onChange={(e) => setPets(e.target.checked)}
-            className="size-4 shrink-0 rounded border-border accent-[#2563EB]"
+            className="size-4 shrink-0 rounded border-border accent-[#0A0A0A]"
           />
           반려견 동반
         </label>
       </div>
 
-      <div className="rounded-2xl border border-[#2563EB]/30 bg-[#EFF6FF]/50 px-4 py-4">
-        <p className="text-xs font-bold tracking-ko text-[#2563EB]">선택한 예약</p>
+      <div className="rounded-2xl border border-[#0A0A0A]/30 bg-[#FAFAFA]/50 px-4 py-4">
+        <p className="text-xs font-bold tracking-ko text-[#0A0A0A]">선택한 예약</p>
         <p className="mt-2 text-base font-bold leading-snug tracking-ko text-text-strong">{dateLine}</p>
         {stayLine && (
           <p className="mt-1 text-sm font-semibold tracking-ko text-text-strong">{stayLine}</p>

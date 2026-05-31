@@ -466,7 +466,7 @@ function DropPage() {
                   window.open(pendingNaverUrl, "_blank", "noopener,noreferrer");
                 }
               }}
-              className="w-full min-h-[44px] rounded-2xl bg-[#2563EB] py-4 font-bold text-white"
+              className="w-full min-h-[44px] rounded-2xl bg-[#0A0A0A] py-4 font-bold text-white"
             >
               예약 페이지 열기
             </button>
@@ -501,7 +501,7 @@ function DropPage() {
                 setReturnPrompt(false);
                 setPendingNaverUrl(null);
               }}
-              className="w-full min-h-[44px] rounded-2xl bg-[#2563EB] py-4 font-bold text-white"
+              className="w-full min-h-[44px] rounded-2xl bg-[#0A0A0A] py-4 font-bold text-white"
             >
               예약했어요
             </button>

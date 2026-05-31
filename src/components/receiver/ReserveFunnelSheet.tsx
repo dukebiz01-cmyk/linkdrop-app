@@ -231,7 +231,7 @@ export function ReserveFunnelSheet({
         ) : step === "submitting" ? (
           <div className="flex flex-col items-center gap-3 py-10">
             <span
-              className="size-8 animate-spin rounded-full border-2 border-[#E5E7EB] border-t-[#2563EB]"
+              className="size-8 animate-spin rounded-full border-2 border-[#E5E7EB] border-t-[#0A0A0A]"
               aria-hidden
             />
             <p className="text-sm font-semibold text-[#0F172A]">예약 문의를 보내고 있어요…</p>
@@ -283,7 +283,7 @@ function FormBody(props: {
         <p className="mt-1 text-sm text-[#64748B]">
           보내드리면 사장님이 확인 후 카톡으로 연락드려요.
           <br />
-          제출과 함께 <strong className="text-[#2563EB]">{props.couponTitle}</strong> 쿠폰이 발급돼요.
+          제출과 함께 <strong className="text-[#0A0A0A]">{props.couponTitle}</strong> 쿠폰이 발급돼요.
         </p>
       </header>
 
@@ -300,7 +300,7 @@ function FormBody(props: {
             type="date"
             value={props.checkIn}
             onChange={(e) => props.setCheckIn(e.target.value)}
-            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
           />
         </div>
 
@@ -311,7 +311,7 @@ function FormBody(props: {
             type="date"
             value={props.checkOut}
             onChange={(e) => props.setCheckOut(e.target.value)}
-            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
           />
         </div>
 
@@ -329,7 +329,7 @@ function FormBody(props: {
             min={1}
             value={props.guestCount}
             onChange={(e) => props.setGuestCount(e.target.value)}
-            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
           />
         </div>
 
@@ -346,7 +346,7 @@ function FormBody(props: {
             value={props.name}
             onChange={(e) => props.setName(e.target.value)}
             placeholder="예: 홍길동"
-            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
           />
         </div>
 
@@ -364,7 +364,7 @@ function FormBody(props: {
             value={props.phone}
             onChange={(e) => props.setPhone(e.target.value)}
             placeholder="예: 010-1234-5678"
-            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
           />
         </div>
 
@@ -381,7 +381,7 @@ function FormBody(props: {
             onChange={(e) => props.setMessage(e.target.value)}
             rows={3}
             placeholder="문의사항을 남겨주세요"
-            className="mt-1 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-base text-[#0F172A] focus:border-[#2563EB] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+            className="mt-1 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-base text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
           />
         </div>
       </div>
@@ -394,7 +394,7 @@ function FormBody(props: {
         type="button"
         onClick={props.onSubmit}
         disabled={props.step !== "form"}
-        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#2563EB] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {props.step === "submitting" ? "보내는 중…" : "예약 문의 보내기"}
       </button>
@@ -452,7 +452,7 @@ function DoneBody({
       <button
         type="button"
         onClick={goToMyCoupon}
-        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#2563EB] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
+        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
       >
         내 쿠폰 보기
       </button>
@@ -477,7 +477,7 @@ function ErrorBody({ errorMsg, onRetry }: { errorMsg: string | null; onRetry: ()
       <button
         type="button"
         onClick={onRetry}
-        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#2563EB] px-6 py-3 text-base font-bold text-white"
+        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white"
       >
         다시 시도
       </button>

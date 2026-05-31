@@ -276,7 +276,7 @@ function RegisterForm({
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="예: 노을재 캠핑장"
               maxLength={80}
-              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#2563EB] focus:outline-none"
+              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
               required
             />
           </div>
@@ -294,7 +294,7 @@ function RegisterForm({
                   onClick={() => handleMajorClick(m.code)}
                   className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
                     selectedMajor === m.code
-                      ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                      ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                       : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                   }`}
                 >
@@ -325,14 +325,14 @@ function RegisterForm({
                       onClick={() => toggleSub(s.code)}
                       className={`flex min-h-[44px] items-center gap-2 rounded-xl border px-3 text-sm font-semibold ${
                         isSelected
-                          ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                          ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                           : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                       }`}
                     >
                       <span
                         className={`flex size-5 shrink-0 items-center justify-center rounded-md border ${
                           isSelected
-                            ? "border-[#2563EB] bg-[#2563EB] text-white"
+                            ? "border-[#0A0A0A] bg-[#0A0A0A] text-white"
                             : "border-[#CBD5E1] bg-white"
                         }`}
                         aria-hidden
@@ -383,7 +383,7 @@ function RegisterForm({
               value={contactPhone}
               onChange={(e) => setContactPhone(e.target.value)}
               placeholder="예: 010-1234-5678"
-              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#2563EB] focus:outline-none"
+              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
               required
             />
           </div>
@@ -403,7 +403,7 @@ function RegisterForm({
               value={businessNo}
               onChange={(e) => setBusinessNo(e.target.value)}
               placeholder="예: 123-45-67890"
-              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#2563EB] focus:outline-none"
+              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
               required
             />
           </div>
@@ -423,7 +423,7 @@ function RegisterForm({
               value={reservationUrl}
               onChange={(e) => setReservationUrl(e.target.value)}
               placeholder="https://camfit.co.kr/..."
-              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#2563EB] focus:outline-none"
+              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
             />
             <p className="text-[11px] text-[#94A3B8]">
               캠핏·야놀자·네이버 등 외부 예약 페이지 주소
@@ -444,14 +444,14 @@ function RegisterForm({
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="예: 강원도 양양군 …"
-              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#2563EB] focus:outline-none"
+              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
             />
           </div>
 
           <button
             type="submit"
             disabled={submitting}
-            className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#2563EB] px-4 py-2 text-sm font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Store className="size-4" strokeWidth={2} />
             {submitting ? "등록 중…" : "매장 등록 신청"}
@@ -475,8 +475,8 @@ function PendingView({ name }: { name: string }) {
       </header>
       <div className="px-5 pt-8">
         <section className="rounded-2xl bg-white p-6 text-center shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-4">
-          <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-[#EFF6FF]">
-            <CheckCircle2 className="size-7 text-[#2563EB]" strokeWidth={2} />
+          <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-[#FAFAFA]">
+            <CheckCircle2 className="size-7 text-[#0A0A0A]" strokeWidth={2} />
           </span>
           <h2 className="text-base font-bold text-[#0F172A]">
             매장 등록 신청이 완료됐어요

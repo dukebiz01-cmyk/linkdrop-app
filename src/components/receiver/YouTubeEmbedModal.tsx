@@ -90,7 +90,7 @@ export function YouTubeEmbedModal({
                     className={`flex-1 rounded-2xl py-3 text-sm font-semibold tracking-ko
                       ${
                         c.primary
-                          ? "bg-[#2563EB] text-white"
+                          ? "bg-[#0A0A0A] text-white"
                           : "border border-[#E5E5E5] text-text-strong"
                       }`}
                   >
@@ -102,7 +102,7 @@ export function YouTubeEmbedModal({
             {createDropUrl && (
               <a
                 href={createDropUrl}
-                className="block text-center text-xs tracking-ko text-[#A3A3A3] hover:text-[#2563EB]"
+                className="block text-center text-xs tracking-ko text-[#A3A3A3] hover:text-[#0A0A0A]"
               >
                 나도 이 영상 Drop 만들기 →
               </a>

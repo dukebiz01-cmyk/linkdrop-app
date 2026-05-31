@@ -3,7 +3,7 @@
  *
  * WHY: 수신자 카드에 "공식 매장" / "사용자 공유" 배지를 일관되게 표시
  * - 메모리 #21 UI Copy Standard 준수 (한글만, 영어 X)
- * - 메모리 #20 디자인 시스템 준수 (#2563EB 계열)
+ * - 메모리 #20 디자인 시스템 준수 (#0A0A0A 계열)
  */
 
 export type OfficialStatus =
@@ -38,7 +38,7 @@ export interface BadgeColor {
 export function getBadgeColor(status: OfficialStatus): BadgeColor {
   switch (status) {
     case 'official':
-      return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' };
+      return { bg: '#FAFAFA', text: '#171717', border: '#BFDBFE' };
     case 'user_shared':
       return { bg: '#F5F5F5', text: '#525252' };
     case 'pending':

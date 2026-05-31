@@ -168,8 +168,8 @@ function PartnerHome() {
           className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
         >
           <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-[#EFF6FF]">
-              <Ticket className="size-5 text-[#2563EB]" strokeWidth={2} />
+            <span className="flex size-10 items-center justify-center rounded-xl bg-[#FAFAFA]">
+              <Ticket className="size-5 text-[#0A0A0A]" strokeWidth={2} />
             </span>
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">쿠폰 사용 처리</p>
@@ -227,7 +227,7 @@ function PartnerHome() {
                       type="button"
                       onClick={() => handleConfirm(r.reservation_id)}
                       disabled={actingId === r.reservation_id}
-                      className="flex flex-1 min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-[#2563EB] px-4 py-2 text-sm font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:opacity-50"
+                      className="flex flex-1 min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:opacity-50"
                     >
                       <CheckCircle2 className="size-4" strokeWidth={2} />
                       확정
@@ -271,7 +271,7 @@ function ReservationBody({ row }: { row: ReservationRow }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm font-semibold text-[#0F172A]">
-        <Calendar className="size-4 text-[#2563EB]" strokeWidth={2} />
+        <Calendar className="size-4 text-[#0A0A0A]" strokeWidth={2} />
         {formatDateRange(row)}
       </div>
       <div className="flex items-center gap-2 text-sm text-[#475569]">

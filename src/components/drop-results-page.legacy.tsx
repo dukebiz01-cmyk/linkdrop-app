@@ -124,7 +124,7 @@ function CardShell({
   return (
     <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
       <div className="flex items-center gap-2 mb-4">
-        <Icon className="size-4 text-[#2563EB]" strokeWidth={2} />
+        <Icon className="size-4 text-[#0A0A0A]" strokeWidth={2} />
         <h3 className="text-sm font-semibold text-[#0A0A0A]">{title}</h3>
       </div>
       {children}
@@ -166,7 +166,7 @@ function ChannelsCard({ channels }: { channels: Record<string, number> }) {
                   </div>
                   <div className="mt-1.5 h-1.5 w-full rounded-full bg-[#F1F5F9]">
                     <div
-                      className="h-full rounded-full bg-[#2563EB]"
+                      className="h-full rounded-full bg-[#0A0A0A]"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -290,7 +290,7 @@ function HoursCard({ buckets }: { buckets: Array<{ hour: string; views: number }
                 {data.map((entry, idx) => (
                   <Cell
                     key={idx}
-                    fill={entry.views === maxViews && maxViews > 0 ? "#2563EB" : "#93C5FD"}
+                    fill={entry.views === maxViews && maxViews > 0 ? "#0A0A0A" : "#93C5FD"}
                   />
                 ))}
               </Bar>

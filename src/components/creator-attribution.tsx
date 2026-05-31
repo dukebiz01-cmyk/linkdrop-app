@@ -51,7 +51,7 @@ export function CreatorAttribution({ creator, variant }: CreatorAttributionProps
           href={channelUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
+          className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-[#0A0A0A] hover:text-[#171717]"
         >
           {platform === "youtube" ? "YouTube" : "Instagram"}에서 보기
           <ArrowRight className="h-3 w-3" />

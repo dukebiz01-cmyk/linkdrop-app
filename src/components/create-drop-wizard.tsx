@@ -495,7 +495,7 @@ export function CreateDropWizard({
         <button
           type="button"
           onClick={handleBack}
-          className="inline-flex h-11 min-w-11 items-center gap-1 rounded-lg px-3 text-sm font-medium tracking-ko text-[#525252] transition-colors hover:text-[#111111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2"
+          className="inline-flex h-11 min-w-11 items-center gap-1 rounded-lg px-3 text-sm font-medium tracking-ko text-[#525252] transition-colors hover:text-[#111111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] focus-visible:ring-offset-2"
         >
           <ArrowLeft className="size-4" strokeWidth={2} />
           {step === 1 ? "닫기" : "이전"}
@@ -509,7 +509,7 @@ export function CreateDropWizard({
       </header>
       <div className="h-1 w-full bg-[#E2E8F0]" aria-hidden>
         <div
-          className="h-full bg-[#2563EB] transition-all duration-300 ease-out"
+          className="h-full bg-[#0A0A0A] transition-all duration-300 ease-out"
           style={{ width: `${progressPct}%` }}
         />
       </div>

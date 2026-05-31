@@ -131,7 +131,7 @@ function AuthCallback() {
     <main className="flex min-h-screen items-center justify-center bg-white px-6 tracking-ko">
       <div className="flex flex-col items-center gap-4">
         <span
-          className="size-8 animate-spin rounded-full border-2 border-[#E5E7EB] border-t-[#2563EB]"
+          className="size-8 animate-spin rounded-full border-2 border-[#E5E7EB] border-t-[#0A0A0A]"
           aria-hidden
         />
         <p className="text-sm font-semibold text-[#0F172A]">

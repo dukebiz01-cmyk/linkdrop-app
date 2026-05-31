@@ -22,8 +22,8 @@ const PURPOSES = [
     label: "정보",
     description: "영상 / 매장 정보를 보기 좋게 정리",
     icon: Info,
-    bgColor: "bg-[#EFF6FF]",
-    iconColor: "text-[#2563EB]",
+    bgColor: "bg-[#FAFAFA]",
+    iconColor: "text-[#0A0A0A]",
     borderColor: "border-[#BFDBFE]",
     buttons: ["자세히 보기", "상담 신청"],
   },
@@ -85,7 +85,7 @@ export function PurposeSelector({
                   <p className="text-base font-bold text-[#0A0A0A]">{item.label}</p>
                   <div className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all duration-200 ${
                     isSelected
-                      ? "border-[#2563EB] bg-[#2563EB]"
+                      ? "border-[#0A0A0A] bg-[#0A0A0A]"
                       : "border-[#E5E5E5] group-hover:border-[#A3A3A3]"
                   }`}>
                     {isSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
@@ -106,7 +106,7 @@ export function PurposeSelector({
                     key={btn}
                     className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
                       idx === 0
-                        ? "bg-[#2563EB] text-white"
+                        ? "bg-[#0A0A0A] text-white"
                         : "bg-white text-[#525252] shadow-sm"
                     }`}
                   >

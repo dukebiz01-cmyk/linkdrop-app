@@ -169,8 +169,8 @@ function CouponsPage() {
           className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-4"
         >
           <div className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-xl bg-[#EFF6FF]">
-              <Sparkles className="size-4 text-[#2563EB]" strokeWidth={2} />
+            <span className="flex size-8 items-center justify-center rounded-xl bg-[#FAFAFA]">
+              <Sparkles className="size-4 text-[#0A0A0A]" strokeWidth={2} />
             </span>
             <h2 className="text-sm font-bold text-[#0F172A]">새 쿠폰 만들기</h2>
           </div>
@@ -190,7 +190,7 @@ function CouponsPage() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="예: 첫 방문 환영 10% 할인"
               maxLength={80}
-              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#2563EB] focus:outline-none"
+              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
               required
             />
           </div>
@@ -206,7 +206,7 @@ function CouponsPage() {
                 onClick={() => setCouponType("percent")}
                 className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
                   couponType === "percent"
-                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                    ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                 }`}
               >
@@ -217,7 +217,7 @@ function CouponsPage() {
                 onClick={() => setCouponType("amount")}
                 className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
                   couponType === "amount"
-                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                    ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                 }`}
               >
@@ -244,7 +244,7 @@ function CouponsPage() {
                 value={discountValue}
                 onChange={(e) => setDiscountValue(e.target.value)}
                 placeholder={couponType === "percent" ? "10" : "3000"}
-                className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#2563EB] focus:outline-none"
+                className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
                 required
               />
               <span className="text-sm font-semibold text-[#64748B]">
@@ -271,7 +271,7 @@ function CouponsPage() {
                 value={minAmount}
                 onChange={(e) => setMinAmount(e.target.value)}
                 placeholder="예: 30000"
-                className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#2563EB] focus:outline-none"
+                className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
               />
               <span className="text-sm font-semibold text-[#64748B]">원</span>
             </div>
@@ -291,7 +291,7 @@ function CouponsPage() {
                 onClick={() => setNoExpiry(true)}
                 className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
                   noExpiry
-                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                    ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                 }`}
               >
@@ -302,7 +302,7 @@ function CouponsPage() {
                 onClick={() => setNoExpiry(false)}
                 className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
                   !noExpiry
-                    ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]"
+                    ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                 }`}
               >
@@ -314,7 +314,7 @@ function CouponsPage() {
                 type="date"
                 value={validUntil}
                 onChange={(e) => setValidUntil(e.target.value)}
-                className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] focus:border-[#2563EB] focus:outline-none"
+                className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none"
                 required
               />
             ) : null}
@@ -340,7 +340,7 @@ function CouponsPage() {
                 value={totalCount}
                 onChange={(e) => setTotalCount(e.target.value)}
                 placeholder="예: 100"
-                className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#2563EB] focus:outline-none"
+                className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
               />
               <span className="text-sm font-semibold text-[#64748B]">장</span>
             </div>
@@ -349,7 +349,7 @@ function CouponsPage() {
           <button
             type="submit"
             disabled={submitting || !partnerId}
-            className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#2563EB] px-4 py-2 text-sm font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:opacity-50"
+            className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:opacity-50"
           >
             <Ticket className="size-4" strokeWidth={2} />
             {submitting ? "만드는 중…" : "쿠폰 만들기"}

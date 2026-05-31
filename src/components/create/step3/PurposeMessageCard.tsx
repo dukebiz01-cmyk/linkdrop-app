@@ -47,7 +47,7 @@ function PurposeMessageCard({
         <button
           type="button"
           onClick={() => onFieldsChange({ shareMessage: "", shareMessageUserAction: null })}
-          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[#2563EB]"
+          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[#0A0A0A]"
         >
           다시 넣기
         </button>
@@ -69,12 +69,12 @@ function PurposeMessageCard({
           rows={3}
           autoFocus
           onBlur={() => setIsEditing(false)}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm tracking-ko text-text-strong focus:border-[#2563EB] focus:outline-none focus:ring-1 focus:ring-[#2563EB]/25"
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm tracking-ko text-text-strong focus:border-[#0A0A0A] focus:outline-none focus:ring-1 focus:ring-[#0A0A0A]/25"
         />
         <button
           type="button"
           onClick={() => setIsEditing(false)}
-          className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-[#2563EB]"
+          className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-[#0A0A0A]"
         >
           완료
         </button>
@@ -95,7 +95,7 @@ function PurposeMessageCard({
                 shareMessageUserAction: "accepted",
               })
             }
-            className="rounded-lg bg-[#2563EB] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1D4ED8]"
+            className="rounded-lg bg-[#0A0A0A] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#171717]"
           >
             그대로 사용
           </button>
