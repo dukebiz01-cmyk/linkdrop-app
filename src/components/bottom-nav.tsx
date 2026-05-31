@@ -19,7 +19,7 @@ type NavTab = {
   id: NavId;
   label: string;
   Icon: typeof Home;
-  to?: "/" | "/create-wizard" | "/me";
+  to?: "/" | "/explore" | "/create-wizard" | "/me";
   match: (pathname: string) => boolean;
   placeholder?: string; // 라우트 미존재 시 toast 메시지
 };
@@ -36,9 +36,8 @@ const TABS: NavTab[] = [
     id: "explore",
     label: "탐색",
     Icon: Search,
-    // 라우트 미존재 — placeholder. 별도 유닛에서 신설 시 to 추가.
+    to: "/explore",
     match: (p) => p.startsWith("/explore"),
-    placeholder: "탐색은 준비 중이에요.",
   },
   {
     id: "create",
