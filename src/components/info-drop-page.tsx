@@ -298,7 +298,6 @@ function ConsultationLeadForm({ partnerName }: { partnerName: string }) {
       return;
     }
     // TODO: Step 5 완료 후 submitConsultationLead({ dropId, name, phone, ... }) RPC로 교체
-    console.log("[ConsultationLeadForm] mock submit", { partnerName, name, phone, message });
     setSubmitted(true);
   }
 
@@ -487,7 +486,6 @@ export function InfoDropPage({
   }
 
   function handleCtaClick(ctaId: string) {
-    console.log("[InfoDropPage] CTA", ctaId, resolvedVariant);
     if (ctaId === "copy-link") {
       void handleCopy();
       return;
@@ -739,8 +737,7 @@ export function InfoDropPage({
             campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
             makerAvailableDates={reservationDates}
             readOnly={isReshare}
-            onCheckAvailability={(selection) => {
-              console.log("[InfoDropPage] reservation check", selection);
+            onCheckAvailability={(_selection) => {
               if (!reservationUrl) return;
               const safe =
                 reservationUrl.startsWith("https://booking.naver.com") ||
@@ -813,8 +810,7 @@ export function InfoDropPage({
               brandGuess={brandGuess}
               offers={priceOffers ?? []}
               className="mx-0 mt-0"
-              onOfferClick={(id) => {
-                console.log("[InfoDropPage] offer", id);
+              onOfferClick={(_id) => {
                 handleCtaClick("seller");
               }}
             />
