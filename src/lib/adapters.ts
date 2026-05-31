@@ -160,6 +160,8 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
       distance: "",
       address: d.store?.address ?? "",
       statusLabel: "",
+      // phase1-3: store.contact_phone → local.phone (CTA tel:/sms: 연결)
+      phone: d.store?.phone ?? "",
     },
     creator: {
       channelName: d.source.author_name ?? "원본 영상",

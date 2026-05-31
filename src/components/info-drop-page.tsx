@@ -63,6 +63,7 @@ export interface InfoDropPageProps {
     distance: string;
     address: string;
     statusLabel: string;
+    phone?: string; // phase1-3: partners.contact_phone 연결
     hoursLabel?: string;
     rating?: number;
     reviewCount?: number;
@@ -224,6 +225,7 @@ const DEFAULT_LOCAL: InfoDropPageProps["local"] = {
   distance: "",
   address: "",
   statusLabel: "영업중",
+  phone: "",
 };
 
 const DEFAULT_CREATOR: InfoDropPageProps["creator"] = {
@@ -434,7 +436,12 @@ export function InfoDropPage({
   const safeDescription = description?.trim() || "";
   const summaryLine = aiSummary?.trim() || safeDescription || pageCopy.sectionTitle;
   const points = keyPoints ?? [];
-  const ctas = PUBLIC_DROP_CTAS[resolvedVariant] ?? PUBLIC_DROP_CTAS.info;
+  // phase1-3: 전화번호 없는 매장 → phone/sms CTA 카드 숨김 (빈 tel: 노출 방지).
+  const ctasRaw = PUBLIC_DROP_CTAS[resolvedVariant] ?? PUBLIC_DROP_CTAS.info;
+  const hasPhone = Boolean(local?.phone?.trim());
+  const ctas = hasPhone
+    ? ctasRaw
+    : ctasRaw.filter((c) => c.id !== "phone" && c.id !== "sms");
   const isReservation = resolvedVariant === "reservation";
   const reservationGuide = MOCK_RESERVATION_SECTION_GUIDE;
   const videoHeadline = isReservation ? safeTitle : pageCopy.sectionTitle;
@@ -485,14 +492,25 @@ export function InfoDropPage({
       return;
     }
     if (ctaId === "phone") {
+      // phase1-3: mock 하드코딩 → 실제 partners.contact_phone. 번호 없으면 noop (빈 tel: 금지).
+      const phoneRaw = safeLocal.phone?.replace(/[^0-9+]/g, "") ?? "";
+      if (!phoneRaw) {
+        console.warn("[InfoDropPage] phone CTA — partners.contact_phone 없음, noop");
+        return;
+      }
       trackReceiverEvent("phone_click", dropId);
-      window.open("tel:01000000000", "_self");
+      window.open(`tel:${phoneRaw}`, "_self");
       return;
     }
     if (ctaId === "sms") {
       // SMS는 별도 event_type 없음 — phone과 동일 트랙으로 흡수
+      const phoneRaw = safeLocal.phone?.replace(/[^0-9+]/g, "") ?? "";
+      if (!phoneRaw) {
+        console.warn("[InfoDropPage] sms CTA — partners.contact_phone 없음, noop");
+        return;
+      }
       trackReceiverEvent("phone_click", dropId);
-      window.open("sms:01000000000", "_self");
+      window.open(`sms:${phoneRaw}`, "_self");
       return;
     }
     if (ctaId === "directions") {
