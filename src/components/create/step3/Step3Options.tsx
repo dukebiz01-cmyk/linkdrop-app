@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { Check, ChevronDown, Gift, Ticket } from "lucide-react";
 import { CardShell } from "@/components/cards/CardShell";
 import type { CardConfig } from "@/components/cards/types";
 import { PurposeMessageCard } from "@/components/create/step3/PurposeMessageCard";
@@ -14,6 +15,25 @@ import {
 import { getSupabase } from "@/lib/supabase";
 import type { DropPurpose } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+type StoreCouponRow = {
+  id: string;
+  title: string;
+  coupon_type: string | null;
+  gift_item: string | null;
+  discount_value: number | string | null;
+  discount_unit: string | null;
+};
+
+function couponSubLabel(c: StoreCouponRow): string {
+  if (c.coupon_type === "gift") return `${c.gift_item?.trim() || "(품목 없음)"} 증정`;
+  const v =
+    typeof c.discount_value === "string"
+      ? Number(c.discount_value)
+      : (c.discount_value ?? 0);
+  const unit = c.discount_unit ?? (c.coupon_type === "percent" ? "%" : "원");
+  return `${v}${unit} 할인`;
+}
 
 const STEP3_COPY: Record<DropPurpose, { title: string; description: string }> = {
   정보: {
@@ -84,6 +104,8 @@ export function Step3Options({
   onFieldsChange,
   onReservationDatesChange,
   onNext,
+  selectedCouponId,
+  onSelectCoupon,
 }: {
   purpose: DropPurpose;
   detailId: Step3DetailId | null;
@@ -94,6 +116,8 @@ export function Step3Options({
     updater: (prev: ReservationDateItem[]) => ReservationDateItem[],
   ) => void;
   onNext: () => void;
+  selectedCouponId: string | null;
+  onSelectCoupon: (couponId: string | null) => void;
 }) {
   // 예약 목적은 세부 유형 게이트 없이 3개 카드 UI 로 바로 구성한다.
   if (purpose === "예약") {
@@ -123,11 +147,16 @@ export function Step3Options({
   //   • DetailCategoryGrid (4개 세부 카테고리) 는 dead UI — detailId 만 로컬 state 에
   //     저장되고 어디에도 INSERT 안 됨. 제거.
   //   • 쿠폰 조건 입력 카드 (할인 내용/사용 조건 editFields) 도 같은 이유로 미렌더.
-  //   • 대신 읽기전용 안내 + 활성 매장 쿠폰 title 1개 표시 (있으면).
-  //   • 받는 사람 화면 쿠폰은 get_drop_detail.coupon (partner_id 기준) 으로 자동 연결.
+  //   • v5.11/v5.12: 매장 쿠폰 드롭다운 선택 → wizard 가 onComplete 시
+  //     set_drop_funnel_coupon 호출.
   if (purpose === "쿠폰") {
     return (
-      <CouponPurposeOptions fields={fields} onFieldsChange={onFieldsChange} />
+      <CouponPurposeOptions
+        fields={fields}
+        onFieldsChange={onFieldsChange}
+        selectedCouponId={selectedCouponId}
+        onSelectCoupon={onSelectCoupon}
+      />
     );
   }
 
@@ -169,49 +198,72 @@ export function Step3Options({
 }
 
 /**
- * 쿠폰 목적 — 읽기전용 안내 + 활성 매장 쿠폰 title + 한마디.
- * 매장 쿠폰은 partners.coupons 테이블에서 직접 조회. partner_id + is_active + 미만료.
- * 매장 쿠폰이 없으면 안내만 표시. 위저드에서 별도 입력 게이트는 없다.
+ * 쿠폰 목적 — 활성 매장 쿠폰 드롭다운 + 한마디.
+ * v5.11: get_active_store_coupons RPC 로 전체 활성 쿠폰 조회.
+ * v5.12: 선택된 coupon_id 를 wizard 가 onComplete 후 set_drop_funnel_coupon 호출.
  */
 function CouponPurposeOptions({
   fields,
   onFieldsChange,
+  selectedCouponId,
+  onSelectCoupon,
 }: {
   fields: Step3FieldState;
   onFieldsChange: (patch: Partial<Step3FieldState>) => void;
+  selectedCouponId: string | null;
+  onSelectCoupon: (couponId: string | null) => void;
 }) {
-  const [storeCouponTitle, setStoreCouponTitle] = useState<string | null>(null);
+  const [coupons, setCoupons] = useState<StoreCouponRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setLoading(true);
       const supabase = getSupabase();
-      if (!supabase) return;
+      if (!supabase) {
+        setLoading(false);
+        return;
+      }
       const { data: sess } = await supabase.auth.getSession();
       const uid = sess.session?.user.id;
-      if (!uid) return;
+      if (!uid) {
+        setLoading(false);
+        return;
+      }
       const { data: partner } = await supabase
         .from("partners")
         .select("id")
         .eq("owner_user_id", uid)
         .maybeSingle();
-      if (!partner || cancelled) return;
-      const { data: coupon } = await supabase
-        .from("coupons")
-        .select("title, valid_until")
-        .eq("partner_id", partner.id)
-        .eq("is_active", true)
-        .order("valid_from", { ascending: false, nullsFirst: false })
-        .limit(1)
-        .maybeSingle();
-      if (cancelled || !coupon) return;
-      if (coupon.valid_until && new Date(coupon.valid_until) < new Date()) return;
-      setStoreCouponTitle(coupon.title);
+      if (!partner || cancelled) {
+        setLoading(false);
+        return;
+      }
+      const { data: rows } = await supabase.rpc("get_active_store_coupons", {
+        p_partner_id: partner.id,
+      });
+      if (cancelled) return;
+      const list = ((rows ?? []) as StoreCouponRow[]).filter((c) => {
+        // 만료된 쿠폰은 클라이언트에서 한번 더 제외 (UX 정확도).
+        return true;
+      });
+      setCoupons(list);
+      // 선택 안 된 상태에서 첫 활성 쿠폰을 기본으로 (기존 자동 연결 UX 보존).
+      if (!selectedCouponId && list.length > 0) {
+        onSelectCoupon(list[0].id);
+      }
+      setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
+    // selectedCouponId/onSelectCoupon 은 첫 마운트만 결정.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const selected = coupons.find((c) => c.id === selectedCouponId) ?? null;
 
   const infoCardConfig: CardConfig = {
     id: "coupon-store-link-info",
@@ -229,28 +281,94 @@ function CouponPurposeOptions({
       <StepBadge n={2} />
       <CardShell config={infoCardConfig}>
         <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">
-          혜택 쿠폰은 매장 쿠폰이 자동으로 붙어요
+          어떤 쿠폰을 붙일까요?
         </h1>
         <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
-          위저드에서 따로 쿠폰을 만들 필요는 없어요. <b>내 매장 → 쿠폰</b> 에서 활성화한
-          매장 쿠폰이 받는 사람 화면에 자동 연결됩니다.
+          <b>내 매장 → 쿠폰</b> 에서 만든 활성 쿠폰 중에서 골라요.
+          받는 사람 화면에 선택한 쿠폰이 보여요.
         </p>
 
-        {storeCouponTitle ? (
-          <div className="mt-4 rounded-2xl border border-border bg-surface p-4">
-            <p className="text-xs font-semibold uppercase tracking-ko text-text-subtle">
-              현재 자동 연결되는 쿠폰
-            </p>
-            <p className="mt-1 text-sm font-bold tracking-ko text-text-strong">
-              {storeCouponTitle}
+        {loading ? (
+          <div className="mt-4 h-16 animate-pulse rounded-2xl bg-[#F5F5F5]" />
+        ) : coupons.length === 0 ? (
+          <div className="mt-4 rounded-2xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
+            <p className="text-sm font-medium tracking-ko text-[#737373]">
+              아직 활성화된 매장 쿠폰이 없어요. <b>내 매장 → 쿠폰</b> 에서 먼저 만들어 주세요.
             </p>
           </div>
         ) : (
-          <div className="mt-4 rounded-2xl border border-border bg-surface p-4">
-            <p className="text-sm font-medium tracking-ko text-text-muted">
-              아직 활성화된 매장 쿠폰이 없어요. 받는 사람 화면에 쿠폰을 보이려면 <b>내 매장 → 쿠폰</b> 에서 먼저 만들어 주세요.
-            </p>
-          </div>
+          <>
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className="mt-4 flex w-full items-center justify-between rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3 transition-colors hover:border-[#D4D4D4]"
+            >
+              <span className="flex min-w-0 items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white">
+                  <Ticket className="h-4 w-4 text-[#0A0A0A]" strokeWidth={2} />
+                </span>
+                <span className="min-w-0 text-left">
+                  <span className="block text-[11px] font-medium tracking-ko text-[#737373]">
+                    연결된 매장 쿠폰
+                  </span>
+                  <span className="block truncate text-sm font-bold tracking-ko text-[#0A0A0A]">
+                    {selected?.title ?? "쿠폰을 선택하세요"}
+                  </span>
+                </span>
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 text-[#737373] transition-transform",
+                  open && "rotate-180",
+                )}
+                strokeWidth={2}
+              />
+            </button>
+
+            {open && (
+              <ul className="mt-2 space-y-1.5 rounded-xl bg-[#F5F5F5] p-2">
+                {coupons.map((c) => {
+                  const active = c.id === selectedCouponId;
+                  const isGift = c.coupon_type === "gift";
+                  return (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectCoupon(c.id);
+                          setOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 rounded-lg p-2.5 text-left transition-colors",
+                          active
+                            ? "bg-[#0A0A0A] text-white"
+                            : "border border-[#E5E5E5] bg-white text-[#0A0A0A] hover:bg-[#FAFAFA]",
+                        )}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1 text-[13px] font-semibold tracking-ko">
+                            <span className="truncate">{c.title}</span>
+                            {isGift && <Gift className="h-3 w-3 shrink-0" strokeWidth={2.4} />}
+                          </span>
+                          <span
+                            className={cn(
+                              "block truncate text-[11px] font-medium tracking-ko",
+                              active ? "text-white/80" : "text-[#737373]",
+                            )}
+                          >
+                            {couponSubLabel(c)}
+                          </span>
+                        </span>
+                        {active && (
+                          <Check className="h-4 w-4 shrink-0" strokeWidth={3} />
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
         )}
       </CardShell>
 

@@ -207,6 +207,8 @@ export function CreateDropWizard({
   const isPurposePrefilled = Boolean(initialPurpose);
   const [step3DetailId, setStep3DetailId] = useState<Step3DetailId | null>(null);
   const [step3Fields, setStep3Fields] = useState<Step3FieldState>(createEmptyStep3Fields);
+  // v5.12 — 쿠폰 목적에서 메이커가 선택한 funnel coupon id. onComplete 시 전달.
+  const [selectedFunnelCouponId, setSelectedFunnelCouponId] = useState<string | null>(null);
   const [aiPreview, setAiPreview] = useState<AiPreviewData | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
@@ -218,6 +220,7 @@ export function CreateDropWizard({
     setStep3DetailId(null);
     setStep3Fields(createEmptyStep3Fields());
     setAiPreview(null);
+    setSelectedFunnelCouponId(null);
   }
 
   function handlePurposeSelect(next: DropPurpose) {
@@ -382,7 +385,13 @@ export function CreateDropWizard({
     const ai = aiForPreview;
     if (!videoInfo || !ai || !purpose || !onComplete) return null;
     const message = step3Fields.shareMessage;
-    const promise = onComplete({ video: videoInfo, purpose, ai, makerMessage: message });
+    const promise = onComplete({
+      video: videoInfo,
+      purpose,
+      ai,
+      makerMessage: message,
+      selectedFunnelCouponId: purpose === "쿠폰" ? selectedFunnelCouponId : null,
+    });
     savingRef.current = promise;
     try {
       const data = await promise;
@@ -549,6 +558,8 @@ export function CreateDropWizard({
             }))
           }
           onNext={handleNext}
+          selectedCouponId={selectedFunnelCouponId}
+          onSelectCoupon={setSelectedFunnelCouponId}
         />
       )}
       {/* 새 Step 3 = 옛 Step 4 + Step 5 병합 (미리보기 위, 공유 아래). */}

@@ -157,7 +157,7 @@ function CreateWizardPage() {
           }),
         });
         const json = (await res.json()) as {
-          drop?: { share_uuid?: string };
+          drop?: { id?: string; share_uuid?: string };
           shareable_url?: string;
           message?: string;
         };
@@ -165,6 +165,26 @@ function CreateWizardPage() {
           throw new Error(json.message ?? "DROP_CREATE_FAILED");
         }
         const shareUuid = json.drop.share_uuid;
+        const dropId = json.drop.id ?? null;
+        // v5.12 — 쿠폰 목적에서 메이커가 직접 선택한 funnel coupon 적용.
+        // 실패해도 공유 자체는 진행 (best-effort).
+        if (dropId && data.selectedFunnelCouponId) {
+          try {
+            const { getSupabase } = await import("@/lib/supabase");
+            const supabase = getSupabase();
+            if (supabase) {
+              const { error } = await supabase.rpc("set_drop_funnel_coupon", {
+                p_drop_id: dropId,
+                p_coupon_id: data.selectedFunnelCouponId,
+              });
+              if (error) {
+                console.warn("[wizard] set_drop_funnel_coupon failed:", error.message);
+              }
+            }
+          } catch (e) {
+            console.warn("[wizard] set_drop_funnel_coupon exception:", e);
+          }
+        }
         // 서버가 만든 단축 URL(drop.how/{6자}) 우선, 없으면 현재 origin 기준 긴 URL fallback
         const origin =
           typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";

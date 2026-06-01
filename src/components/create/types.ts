@@ -52,6 +52,8 @@ export interface CreateDropWizardProps {
     local?: LocalPartner;
     ai: AiPreviewData;
     makerMessage: string;
+    /** v5.12 — 메이커가 위저드에서 선택한 funnel coupon id (쿠폰 목적만). */
+    selectedFunnelCouponId?: string | null;
   }) => Promise<{ shareUuid: string; shareUrl: string }>;
 }
 
