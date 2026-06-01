@@ -356,7 +356,7 @@ function CouponsPage() {
             </div>
           )}
 
-          {/* 사용 기한 */}
+          {/* 사용 기한 — Bug B: 선택 상태 검정 솔리드로 강화 */}
           <div className="space-y-2">
             <span className="block text-xs font-semibold text-[#0F172A]">
               사용 기한
@@ -365,9 +365,10 @@ function CouponsPage() {
               <button
                 type="button"
                 onClick={() => setNoExpiry(true)}
-                className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
+                aria-pressed={noExpiry}
+                className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition-colors ${
                   noExpiry
-                    ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
+                    ? "border-[#0A0A0A] bg-[#0A0A0A] text-white"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                 }`}
               >
@@ -376,9 +377,10 @@ function CouponsPage() {
               <button
                 type="button"
                 onClick={() => setNoExpiry(false)}
-                className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
+                aria-pressed={!noExpiry}
+                className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition-colors ${
                   !noExpiry
-                    ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
+                    ? "border-[#0A0A0A] bg-[#0A0A0A] text-white"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                 }`}
               >
@@ -390,7 +392,7 @@ function CouponsPage() {
                 type="date"
                 value={validUntil}
                 onChange={(e) => setValidUntil(e.target.value)}
-                className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none"
+                className="mt-2 w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none"
                 required
               />
             ) : null}
