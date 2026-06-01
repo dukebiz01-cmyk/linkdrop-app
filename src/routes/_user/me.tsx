@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+// Gift 는 받은 혜택 카드 + 증정 쿠폰 표시에서 재사용. 별도 import X.
 import { Toaster } from "@/components/ui/sonner";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
@@ -45,6 +46,8 @@ type CouponClaimRow = {
     discount_value: number | string | null;
     discount_unit: string | null;
     valid_until: string | null;
+    coupon_type: string | null;
+    gift_item: string | null;
     partner: {
       display_name: string;
     } | null;
@@ -150,7 +153,7 @@ export const Route = createFileRoute("/_user/me")({
       .from("coupon_claims")
       .select(
         "id, coupon_id, status, issued_at, used_at, expires_at, claim_code, " +
-          "coupon:coupons(title, discount_value, discount_unit, valid_until, " +
+          "coupon:coupons(title, discount_value, discount_unit, valid_until, coupon_type, gift_item, " +
           "partner:partners(display_name))",
       )
       .eq("catcher_user_id", userId)
@@ -423,6 +426,8 @@ function CouponClaimCard({ row }: { row: CouponClaimRow }) {
 
   const couponTitle = row.coupon?.title?.trim() || "쿠폰";
   const storeName = row.coupon?.partner?.display_name?.trim() || "";
+  const isGift = row.coupon?.coupon_type === "gift";
+  const giftItem = row.coupon?.gift_item?.trim() || "";
   const isUsed = row.status === "used";
   const isExpired = row.status === "expired" || row.status === "cancelled";
   const dim = isUsed || isExpired;
@@ -469,6 +474,12 @@ function CouponClaimCard({ row }: { row: CouponClaimRow }) {
         </p>
         {storeName ? (
           <p className="mt-0.5 truncate text-xs text-[#64748B]">{storeName}</p>
+        ) : null}
+        {isGift && giftItem ? (
+          <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-[#0A0A0A]">
+            <Gift className="size-3" strokeWidth={2.4} />
+            {giftItem} 증정
+          </p>
         ) : null}
         <div className="mt-2 flex items-center gap-2">
           <span className="font-mono text-base font-bold tracking-wide text-[#0F172A]">

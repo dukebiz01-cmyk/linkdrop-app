@@ -337,6 +337,8 @@ function DropPage() {
                     [k: string]: unknown;
                   } | null | undefined) ?? null,
                 valid_until: funnelCoupon.valid_until ?? null,
+                coupon_type: funnelCoupon.coupon_type ?? null,
+                gift_item: funnelCoupon.gift_item ?? null,
               }
             : null
         }

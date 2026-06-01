@@ -22,6 +22,8 @@ export type DropDetailRpc = {
     conditions?: unknown;
     valid_from?: string | null;
     valid_until?: string | null;
+    coupon_type?: string | null;
+    gift_item?: string | null;
   } | null;
   drop: {
     id: string;

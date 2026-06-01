@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Ticket, CheckCircle2, Sparkles } from "lucide-react";
+import { ArrowLeft, Ticket, CheckCircle2, Sparkles, Gift } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
 import { Toaster } from "@/components/ui/sonner";
@@ -20,6 +20,7 @@ type CouponRow = {
   total_count: number | null;
   is_active: boolean | null;
   created_at: string | null;
+  gift_item: string | null;
 };
 
 type LoaderData = {
@@ -50,7 +51,7 @@ export const Route = createFileRoute("/_partner/partner/coupons")({
     const { data: coupons } = await supabase
       .from("coupons")
       .select(
-        "id, title, coupon_type, discount_value, discount_unit, conditions, valid_until, total_count, is_active, created_at",
+        "id, title, coupon_type, discount_value, discount_unit, conditions, valid_until, total_count, is_active, created_at, gift_item",
       )
       .eq("partner_id", partner.id)
       .order("created_at", { ascending: false });
@@ -69,8 +70,11 @@ function CouponsPage() {
   const router = useRouter();
 
   const [title, setTitle] = useState("");
+  // 혜택 종류: 'discount' (할인) | 'gift' (증정). 할인이면 percent/amount 서브 선택.
+  const [benefitKind, setBenefitKind] = useState<"discount" | "gift">("discount");
   const [couponType, setCouponType] = useState<"percent" | "amount">("percent");
   const [discountValue, setDiscountValue] = useState("");
+  const [giftItem, setGiftItem] = useState("");
   const [minAmount, setMinAmount] = useState("");
   const [noExpiry, setNoExpiry] = useState(true);
   const [validUntil, setValidUntil] = useState("");
@@ -90,14 +94,24 @@ function CouponsPage() {
       toast.error("쿠폰 이름을 입력해 주세요.");
       return;
     }
-    const dv = Number(discountValue);
-    if (!Number.isFinite(dv) || dv <= 0) {
-      toast.error("할인 값을 올바르게 입력해 주세요.");
-      return;
-    }
-    if (couponType === "percent" && dv > 100) {
-      toast.error("퍼센트 할인은 100 이하여야 해요.");
-      return;
+    const isGift = benefitKind === "gift";
+    const giftItemTrim = giftItem.trim();
+    let dv = 0;
+    if (isGift) {
+      if (!giftItemTrim) {
+        toast.error("무엇을 드릴지 입력해 주세요.");
+        return;
+      }
+    } else {
+      dv = Number(discountValue);
+      if (!Number.isFinite(dv) || dv <= 0) {
+        toast.error("할인 값을 올바르게 입력해 주세요.");
+        return;
+      }
+      if (couponType === "percent" && dv > 100) {
+        toast.error("퍼센트 할인은 100 이하여야 해요.");
+        return;
+      }
     }
     if (!noExpiry && !validUntil) {
       toast.error("사용 기한 날짜를 선택해 주세요.");
@@ -111,11 +125,15 @@ function CouponsPage() {
       const payload: Record<string, unknown> = {
         partner_id: partnerId,
         title: titleTrim,
-        coupon_type: couponType,
-        discount_value: dv,
-        discount_unit: couponType === "percent" ? "%" : "원",
+        coupon_type: isGift ? "gift" : couponType,
+        discount_value: isGift ? null : dv,
+        discount_unit: isGift ? null : couponType === "percent" ? "%" : "원",
+        gift_item: isGift ? giftItemTrim : null,
+        // 증정은 최소 사용 금액 개념 없음 — conditions 비움.
         conditions:
-          Number.isFinite(minNum) && minNum > 0 ? { min_amount: minNum } : {},
+          !isGift && Number.isFinite(minNum) && minNum > 0
+            ? { min_amount: minNum }
+            : {},
         valid_from: new Date().toISOString(),
         valid_until: noExpiry ? null : new Date(validUntil).toISOString(),
         is_active: true,
@@ -133,10 +151,12 @@ function CouponsPage() {
       toast.success("쿠폰을 만들었어요.");
       setTitle("");
       setDiscountValue("");
+      setGiftItem("");
       setMinAmount("");
       setTotalCount("");
       setNoExpiry(true);
       setValidUntil("");
+      setBenefitKind("discount");
       await router.invalidate();
     } catch (err) {
       console.error("[partner.coupons] unexpected:", err);
@@ -195,90 +215,146 @@ function CouponsPage() {
             />
           </div>
 
-          {/* 할인 종류 */}
+          {/* 혜택 종류 — 할인 / 증정 */}
           <div className="space-y-2">
             <span className="block text-xs font-semibold text-[#0F172A]">
-              할인 종류
+              혜택 종류
             </span>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setCouponType("percent")}
+                onClick={() => setBenefitKind("discount")}
                 className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
-                  couponType === "percent"
+                  benefitKind === "discount"
                     ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                 }`}
               >
-                퍼센트 (%)
+                할인
               </button>
               <button
                 type="button"
-                onClick={() => setCouponType("amount")}
-                className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
-                  couponType === "amount"
+                onClick={() => setBenefitKind("gift")}
+                className={`min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 text-sm font-semibold ${
+                  benefitKind === "gift"
                     ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
                     : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                 }`}
               >
-                금액 (원)
+                <Gift className="size-4" strokeWidth={2} />
+                증정
               </button>
             </div>
           </div>
 
-          {/* 할인 값 */}
-          <div className="space-y-2">
-            <label
-              htmlFor="cp-value"
-              className="block text-xs font-semibold text-[#0F172A]"
-            >
-              할인 값
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                id="cp-value"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={couponType === "percent" ? 100 : undefined}
-                value={discountValue}
-                onChange={(e) => setDiscountValue(e.target.value)}
-                placeholder={couponType === "percent" ? "10" : "3000"}
-                className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
-                required
-              />
-              <span className="text-sm font-semibold text-[#64748B]">
-                {couponType === "percent" ? "%" : "원"}
-              </span>
-            </div>
-          </div>
+          {benefitKind === "discount" ? (
+            <>
+              {/* 할인 종류 — 퍼센트 / 금액 */}
+              <div className="space-y-2">
+                <span className="block text-xs font-semibold text-[#0F172A]">
+                  할인 종류
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCouponType("percent")}
+                    className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
+                      couponType === "percent"
+                        ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
+                        : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+                    }`}
+                  >
+                    퍼센트 (%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCouponType("amount")}
+                    className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
+                      couponType === "amount"
+                        ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
+                        : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+                    }`}
+                  >
+                    금액 (원)
+                  </button>
+                </div>
+              </div>
 
-          {/* 최소 사용 금액 */}
-          <div className="space-y-2">
-            <label
-              htmlFor="cp-min"
-              className="block text-xs font-semibold text-[#0F172A]"
-            >
-              최소 사용 금액{" "}
-              <span className="font-medium text-[#94A3B8]">(선택)</span>
-            </label>
-            <div className="flex items-center gap-2">
+              {/* 할인 값 */}
+              <div className="space-y-2">
+                <label
+                  htmlFor="cp-value"
+                  className="block text-xs font-semibold text-[#0F172A]"
+                >
+                  할인 값
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="cp-value"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={couponType === "percent" ? 100 : undefined}
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
+                    placeholder={couponType === "percent" ? "10" : "3000"}
+                    className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+                  />
+                  <span className="text-sm font-semibold text-[#64748B]">
+                    {couponType === "percent" ? "%" : "원"}
+                  </span>
+                </div>
+              </div>
+
+              {/* 최소 사용 금액 */}
+              <div className="space-y-2">
+                <label
+                  htmlFor="cp-min"
+                  className="block text-xs font-semibold text-[#0F172A]"
+                >
+                  최소 사용 금액{" "}
+                  <span className="font-medium text-[#94A3B8]">(선택)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="cp-min"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={minAmount}
+                    onChange={(e) => setMinAmount(e.target.value)}
+                    placeholder="예: 30000"
+                    className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+                  />
+                  <span className="text-sm font-semibold text-[#64748B]">원</span>
+                </div>
+                <p className="text-[11px] text-[#94A3B8]">
+                  이 금액 이상 결제할 때만 쿠폰을 쓸 수 있어요
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <label
+                htmlFor="cp-gift"
+                className="block text-xs font-semibold text-[#0F172A]"
+              >
+                무엇을 드릴까요?
+              </label>
               <input
-                id="cp-min"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                value={minAmount}
-                onChange={(e) => setMinAmount(e.target.value)}
-                placeholder="예: 30000"
-                className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+                id="cp-gift"
+                type="text"
+                value={giftItem}
+                onChange={(e) => setGiftItem(e.target.value)}
+                placeholder="예: 장작 1박스"
+                maxLength={60}
+                className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
               />
-              <span className="text-sm font-semibold text-[#64748B]">원</span>
+              <p className="text-[11px] text-[#94A3B8]">
+                매장에서 직접 드릴 물건이에요. 손님은 코드로 받아가요.
+              </p>
             </div>
-            <p className="text-[11px] text-[#94A3B8]">
-              이 금액 이상 결제할 때만 쿠폰을 쓸 수 있어요
-            </p>
-          </div>
+          )}
 
           {/* 사용 기한 */}
           <div className="space-y-2">
@@ -393,6 +469,7 @@ function CouponsPage() {
 }
 
 function CouponItem({ row }: { row: CouponRow }) {
+  const isGift = row.coupon_type === "gift";
   const minAmount = row.conditions?.min_amount;
   const dv =
     typeof row.discount_value === "string"
@@ -417,13 +494,20 @@ function CouponItem({ row }: { row: CouponRow }) {
           </span>
         )}
       </div>
-      <p className="text-sm text-[#475569]">
-        {dv}
-        {unit} 할인
-        {minAmount
-          ? ` · ${Number(minAmount).toLocaleString()}원 이상 결제 시`
-          : ""}
-      </p>
+      {isGift ? (
+        <p className="inline-flex items-center gap-1.5 text-sm font-bold text-[#0F172A]">
+          <Gift className="size-4 text-[#0A0A0A]" strokeWidth={2} />
+          {row.gift_item?.trim() || "(품목 없음)"} 증정
+        </p>
+      ) : (
+        <p className="text-sm text-[#475569]">
+          {dv}
+          {unit} 할인
+          {minAmount
+            ? ` · ${Number(minAmount).toLocaleString()}원 이상 결제 시`
+            : ""}
+        </p>
+      )}
       <p className="text-xs text-[#64748B]">
         {row.valid_until ? `${formatDate(row.valid_until)} 까지` : "기한 없음"}
         {row.total_count ? ` · ${row.total_count}장 한정` : ""}

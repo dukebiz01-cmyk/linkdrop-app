@@ -6,6 +6,7 @@ import {
   Calendar as CalendarIcon,
   Check,
   Copy,
+  Gift as GiftIcon,
   Home as HomeIcon,
   MapPin,
 } from "lucide-react";
@@ -40,6 +41,8 @@ type CouponDetailData = {
     discount_unit: string | null;
     valid_until: string | null;
     conditions: { min_amount?: number; [k: string]: unknown } | null;
+    coupon_type: string | null;
+    gift_item: string | null;
     partner: { display_name: string } | null;
   } | null;
 };
@@ -57,7 +60,7 @@ export const Route = createFileRoute("/_user/coupon/$claim_code")({
       .from("coupon_claims")
       .select(
         "id, status, used_at, expires_at, claim_code, " +
-          "coupon:coupons(title, discount_value, discount_unit, valid_until, conditions, " +
+          "coupon:coupons(title, discount_value, discount_unit, valid_until, conditions, coupon_type, gift_item, " +
           "partner:partners(display_name))",
       )
       .eq("claim_code", params.claim_code)
@@ -125,8 +128,10 @@ function CouponDetailView({
 
   const couponTitle = data.coupon?.title?.trim() || "쿠폰";
   const storeName = data.coupon?.partner?.display_name?.trim() || "";
+  const isGift = data.coupon?.coupon_type === "gift";
+  const giftItem = data.coupon?.gift_item?.trim() || "";
   const minAmount =
-    typeof data.coupon?.conditions?.min_amount === "number"
+    !isGift && typeof data.coupon?.conditions?.min_amount === "number"
       ? data.coupon.conditions.min_amount
       : null;
   const expiresAt = data.expires_at ?? data.coupon?.valid_until ?? null;
@@ -174,7 +179,12 @@ function CouponDetailView({
               {couponTitle}
             </p>
 
-            {minAmount !== null ? (
+            {isGift && giftItem ? (
+              <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#FAFAFA] px-3 py-1.5 text-base font-bold text-[#0A0A0A]">
+                <GiftIcon className="h-4 w-4" strokeWidth={2.4} />
+                {giftItem} 증정
+              </p>
+            ) : minAmount !== null ? (
               <p className="mt-2.5 text-base font-medium text-[#334155]">
                 {minAmount.toLocaleString("ko-KR")}원 이상 사용하실 때
               </p>
