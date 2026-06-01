@@ -61,7 +61,7 @@ const PURPOSES = [
     label: "정보 알리기",
     description: "장소, 상품, 후기, 이용 방법을 보기 쉽게 정리해요",
     icon: Info,
-    tag: "정보·정리",
+    tag: "정보 · 정리",
     buttons: ["자세히 보기", "위치 보기", "후기 보기"],
   },
   {
@@ -69,7 +69,7 @@ const PURPOSES = [
     label: "혜택·예약 만들기",
     description: "할인, 쿠폰, 기간 혜택, 네이버 예약 버튼을 붙여요",
     icon: Calendar,
-    tag: "예약·쿠폰",
+    tag: "예약 · 쿠폰",
     buttons: ["예약하기", "혜택 받기", "쿠폰 받기"],
   },
 ];
@@ -363,21 +363,10 @@ export function HomePageV3({
                       />
                     </div>
                     <div className="min-w-0 flex-1 pt-0.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <p className="text-[15px] font-bold text-[#0A0A0A]">
-                            {purpose.label}
-                          </p>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${
-                              isSelected
-                                ? "bg-[#0A0A0A] text-white"
-                                : "bg-[#F5F5F5] text-[#737373]"
-                            }`}
-                          >
-                            {purpose.tag}
-                          </span>
-                        </div>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-[15px] font-bold leading-snug text-[#0A0A0A]">
+                          {purpose.label}
+                        </p>
                         <div
                           className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
                             isSelected
@@ -390,7 +379,18 @@ export function HomePageV3({
                           )}
                         </div>
                       </div>
-                      <p className="mt-1 text-[13px] leading-relaxed text-[#737373]">
+                      <div className="mt-1">
+                        <span
+                          className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                            isSelected
+                              ? "bg-[#0A0A0A] text-white"
+                              : "bg-[#F5F5F5] text-[#737373]"
+                          }`}
+                        >
+                          {purpose.tag}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-[#737373]">
                         {purpose.description}
                       </p>
                     </div>
