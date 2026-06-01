@@ -85,8 +85,19 @@ function CouponsPage() {
   const partnerId = data.partnerId;
 
   // Bug C — v5.13 toggle_coupon_active 호출 + 갱신.
+  // FIX (인증 누락): DiscoverSection.handleRegister 와 동일 패턴 — RPC 호출 직전
+  // auth.getSession() 으로 세션 명시 hydrate. 세션 없으면 anon 으로 안 나가게
+  // early return. (이전엔 lazy init/race 로 첫 클릭 시 anon 으로 나가 auth.uid()
+  // =NULL → RPC 내부 UNAUTHORIZED RAISE → DB 미변경, toast.error 만 노출됨.)
   async function handleToggleActive(id: string, nextActive: boolean) {
-    const { error } = await getSupabase().rpc("toggle_coupon_active", {
+    const supabase = getSupabase();
+    const { data: sess } = await supabase.auth.getSession();
+    const uid = sess.session?.user.id;
+    if (!uid) {
+      toast.error("로그인이 필요해요.");
+      return;
+    }
+    const { error } = await supabase.rpc("toggle_coupon_active", {
       p_coupon_id: id,
       p_active: nextActive,
     });
