@@ -39,6 +39,7 @@ import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$share
 import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
 import { Route as UserResultsShareUuidRouteImport } from './routes/_user/results.$shareUuid'
 import { Route as UserCouponClaim_codeRouteImport } from './routes/_user/coupon.$claim_code'
+import { Route as PartnerPartnerResultsRouteImport } from './routes/_partner/partner.results'
 import { Route as PartnerPartnerRegisterRouteImport } from './routes/_partner/partner.register'
 import { Route as PartnerPartnerRedeemRouteImport } from './routes/_partner/partner.redeem'
 import { Route as PartnerPartnerCouponsRouteImport } from './routes/_partner/partner.coupons'
@@ -198,6 +199,11 @@ const UserCouponClaim_codeRoute = UserCouponClaim_codeRouteImport.update({
   path: '/coupon/$claim_code',
   getParentRoute: () => UserRoute,
 } as any)
+const PartnerPartnerResultsRoute = PartnerPartnerResultsRouteImport.update({
+  id: '/partner/results',
+  path: '/partner/results',
+  getParentRoute: () => PartnerRoute,
+} as any)
 const PartnerPartnerRegisterRoute = PartnerPartnerRegisterRouteImport.update({
   id: '/partner/register',
   path: '/partner/register',
@@ -285,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
+  '/partner/results': typeof PartnerPartnerResultsRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
@@ -325,6 +332,7 @@ export interface FileRoutesByTo {
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
+  '/partner/results': typeof PartnerPartnerResultsRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
@@ -369,6 +377,7 @@ export interface FileRoutesById {
   '/_partner/partner/coupons': typeof PartnerPartnerCouponsRoute
   '/_partner/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/_partner/partner/register': typeof PartnerPartnerRegisterRoute
+  '/_partner/partner/results': typeof PartnerPartnerResultsRoute
   '/_user/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/_user/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
@@ -411,6 +420,7 @@ export interface FileRouteTypes {
     | '/partner/coupons'
     | '/partner/redeem'
     | '/partner/register'
+    | '/partner/results'
     | '/coupon/$claim_code'
     | '/results/$shareUuid'
     | '/api/coupons/claim'
@@ -451,6 +461,7 @@ export interface FileRouteTypes {
     | '/partner/coupons'
     | '/partner/redeem'
     | '/partner/register'
+    | '/partner/results'
     | '/coupon/$claim_code'
     | '/results/$shareUuid'
     | '/api/coupons/claim'
@@ -494,6 +505,7 @@ export interface FileRouteTypes {
     | '/_partner/partner/coupons'
     | '/_partner/partner/redeem'
     | '/_partner/partner/register'
+    | '/_partner/partner/results'
     | '/_user/coupon/$claim_code'
     | '/_user/results/$shareUuid'
     | '/api/coupons/claim'
@@ -738,6 +750,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UserCouponClaim_codeRouteImport
       parentRoute: typeof UserRoute
     }
+    '/_partner/partner/results': {
+      id: '/_partner/partner/results'
+      path: '/partner/results'
+      fullPath: '/partner/results'
+      preLoaderRoute: typeof PartnerPartnerResultsRouteImport
+      parentRoute: typeof PartnerRoute
+    }
     '/_partner/partner/register': {
       id: '/_partner/partner/register'
       path: '/partner/register'
@@ -846,6 +865,7 @@ interface PartnerRouteChildren {
   PartnerPartnerCouponsRoute: typeof PartnerPartnerCouponsRoute
   PartnerPartnerRedeemRoute: typeof PartnerPartnerRedeemRoute
   PartnerPartnerRegisterRoute: typeof PartnerPartnerRegisterRoute
+  PartnerPartnerResultsRoute: typeof PartnerPartnerResultsRoute
   PartnerPartnerIndexRoute: typeof PartnerPartnerIndexRoute
 }
 
@@ -855,6 +875,7 @@ const PartnerRouteChildren: PartnerRouteChildren = {
   PartnerPartnerCouponsRoute: PartnerPartnerCouponsRoute,
   PartnerPartnerRedeemRoute: PartnerPartnerRedeemRoute,
   PartnerPartnerRegisterRoute: PartnerPartnerRegisterRoute,
+  PartnerPartnerResultsRoute: PartnerPartnerResultsRoute,
   PartnerPartnerIndexRoute: PartnerPartnerIndexRoute,
 }
 
