@@ -172,6 +172,9 @@ export function ReserveFunnelSheet({
         p_phone_hash: phoneHash,
         p_phone_last4: phoneLast4,
         p_customer_message: message.trim() || null,
+        // A4 (v6.7/6.8): 카카오 로그인 후 funnel 시점 userId 저장 → abuse 1차 방어.
+        //   claim_coupon 에 이미 같은 userId 를 전달 중. RPC 가 DEFAULT NULL 이라 안전.
+        p_catcher_user_id: userId ?? null,
       });
       if (resErr) {
         console.error("[ReserveFunnel] create_reservation_anon failed:", resErr);
