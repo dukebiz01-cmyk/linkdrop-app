@@ -7,6 +7,14 @@ import { getSupabase } from "@/lib/supabase";
 import { ContentSourceCard, type ContentSourceCardData } from "@/components/explore/ContentSourceCard";
 import { ExploreSearchBar } from "@/components/explore/ExploreSearchBar";
 import { DiscoverSection } from "@/components/explore/DiscoverSection";
+import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
+import { parseVideoUrl } from "@/lib/video-metadata";
+
+function extractYouTubeVideoIdFromThumb(thumb: string | null | undefined): string | null {
+  if (!thumb) return null;
+  const m = thumb.match(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi\/([A-Za-z0-9_-]+)/);
+  return m?.[1] ?? null;
+}
 
 // chunk1 — 탐색 라우트.
 //   비지니스 인증된 owner 만 본문 노출. 일반 사용자는 안내 카드만.
@@ -102,6 +110,28 @@ function ExplorePage() {
   const navigate = useNavigate();
   const router = useRouter();
   const [query, setQuery] = useState("");
+  // 작업 B: 내 콘텐츠 카드 썸네일/제목 탭 → 인앱 임베드 모달.
+  const [embedState, setEmbedState] = useState<{
+    open: boolean;
+    videoId: string;
+    originalUrl: string;
+    title: string;
+  } | null>(null);
+
+  function handlePlay(card: ContentSourceCardData) {
+    const fromUrl = card.sourceUrl ? parseVideoUrl(card.sourceUrl) : null;
+    const videoId = fromUrl?.videoId ?? extractYouTubeVideoIdFromThumb(card.thumbnailUrl);
+    if (!videoId) {
+      toast.info("이 영상은 인앱 재생을 지원하지 않아요.");
+      return;
+    }
+    setEmbedState({
+      open: true,
+      videoId,
+      originalUrl: card.sourceUrl ?? `https://www.youtube.com/watch?v=${videoId}`,
+      title: card.title?.trim() || "영상 재생",
+    });
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -210,6 +240,7 @@ function ExplorePage() {
                     source={card}
                     onCreate={handleCreate}
                     onRemove={handleRemove}
+                    onPlay={handlePlay}
                   />
                 </li>
               );
@@ -217,6 +248,18 @@ function ExplorePage() {
           </ul>
         )}
       </section>
+
+      {embedState ? (
+        <YouTubeEmbedModal
+          open={embedState.open}
+          onOpenChange={(open) => {
+            if (!open) setEmbedState(null);
+          }}
+          videoId={embedState.videoId}
+          originalUrl={embedState.originalUrl}
+          title={embedState.title}
+        />
+      ) : null}
     </div>
   );
 }

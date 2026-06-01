@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Search, Sparkles, Check, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
+import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 
 type DiscoverCandidate = {
   provider: "youtube";
@@ -23,12 +24,6 @@ type DiscoverResponse = {
   error?: string;
   message?: string;
 };
-
-function openExternal(url: string | null | undefined) {
-  if (!url) return;
-  if (typeof window === "undefined") return;
-  window.open(url, "_blank", "noopener,noreferrer");
-}
 
 function extractDescription(raw: Record<string, unknown>): string {
   const d = raw.description;
@@ -52,6 +47,26 @@ export function DiscoverSection({
   const [registeringId, setRegisteringId] = useState<string | null>(null);
   // 현재 uid 가 claim 한 source_id 집합. 검색 결과 받은 직후 한 번에 조회.
   const [claimedIds, setClaimedIds] = useState<Set<string>>(new Set());
+  // 작업 B: 인앱 임베드 모달 — discover 후보의 source_id 는 youtube videoId 자체.
+  const [embedState, setEmbedState] = useState<{
+    open: boolean;
+    videoId: string;
+    originalUrl: string;
+    title: string;
+  } | null>(null);
+
+  function openEmbed(c: DiscoverCandidate) {
+    if (c.provider !== "youtube" || !c.source_id) {
+      toast.info("이 영상은 인앱 재생을 지원하지 않아요.");
+      return;
+    }
+    setEmbedState({
+      open: true,
+      videoId: c.source_id,
+      originalUrl: c.source_url,
+      title: c.title?.trim() || "영상 재생",
+    });
+  }
 
   async function handleSearch() {
     const k = query.trim();
@@ -238,8 +253,8 @@ export function DiscoverSection({
                 <article className="flex w-full items-center gap-3 rounded-2xl border border-[#E5E5E5] bg-white p-3">
                   <button
                     type="button"
-                    onClick={() => openExternal(c.source_url)}
-                    aria-label="유튜브에서 영상 보기"
+                    onClick={() => openEmbed(c)}
+                    aria-label="영상 재생"
                     className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-[#F5F5F5] transition-opacity hover:opacity-90"
                   >
                     {c.thumbnail_url ? (
@@ -256,7 +271,7 @@ export function DiscoverSection({
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <button
                       type="button"
-                      onClick={() => openExternal(c.source_url)}
+                      onClick={() => openEmbed(c)}
                       className="text-left"
                     >
                       <p className="line-clamp-2 text-sm font-bold tracking-ko text-[#0A0A0A] hover:underline">
@@ -297,6 +312,18 @@ export function DiscoverSection({
           })}
         </ul>
       )}
+
+      {embedState ? (
+        <YouTubeEmbedModal
+          open={embedState.open}
+          onOpenChange={(open) => {
+            if (!open) setEmbedState(null);
+          }}
+          videoId={embedState.videoId}
+          originalUrl={embedState.originalUrl}
+          title={embedState.title}
+        />
+      ) : null}
     </section>
   );
 }

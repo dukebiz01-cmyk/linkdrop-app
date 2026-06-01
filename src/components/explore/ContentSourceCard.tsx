@@ -17,20 +17,17 @@ function formatDuration(sec: number | null): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function openExternal(url: string | null) {
-  if (!url) return;
-  if (typeof window === "undefined") return;
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
 export function ContentSourceCard({
   source,
   onCreate,
   onRemove,
+  onPlay,
 }: {
   source: ContentSourceCardData;
   onCreate: (sourceId: string) => void;
   onRemove: (sourceId: string) => void;
+  // 작업 B: 썸네일/제목 탭 → 인앱 임베드 모달. 부모(explore.tsx) 에서 단일 모달 관리.
+  onPlay: (source: ContentSourceCardData) => void;
 }) {
   const title = source.title?.trim() || "제목 없음";
   const author = source.authorName?.trim() || "";
@@ -42,8 +39,8 @@ export function ContentSourceCard({
     <article className="flex w-full items-center gap-3 rounded-2xl border border-[#E5E5E5] bg-white p-3 transition-colors hover:border-[#D4D4D4]">
       <button
         type="button"
-        onClick={() => openExternal(source.sourceUrl)}
-        aria-label="유튜브에서 영상 보기"
+        onClick={() => onPlay(source)}
+        aria-label="영상 재생"
         className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-[#F5F5F5] transition-opacity hover:opacity-90"
       >
         {hasThumb ? (
@@ -60,7 +57,7 @@ export function ContentSourceCard({
         )}
       </button>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <button type="button" onClick={() => openExternal(source.sourceUrl)} className="text-left">
+        <button type="button" onClick={() => onPlay(source)} className="text-left">
           <p className="line-clamp-2 text-sm font-bold tracking-ko text-[#0A0A0A] hover:underline">
             {title}
           </p>

@@ -18,6 +18,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
+import { parseVideoUrl } from "@/lib/video-metadata";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,10 +61,24 @@ type MyDropRow = {
   conversion_count: number | null;
   created_at: string | null;
   published_at: string | null;
-  source: { title: string | null; thumbnail_url: string | null; provider: string | null } | null;
+  source: {
+    title: string | null;
+    thumbnail_url: string | null;
+    provider: string | null;
+    source_url?: string | null;
+  } | null;
   // v5.5: 첫 share_event 의 share_uuid. 없으면 null (공유 안 된 옛 drop).
   share_uuid: string | null;
 };
+
+// 유튜브 썸네일 URL 또는 source_url 에서 videoId 추출.
+// thumbnail 패턴: https://i.ytimg.com/vi/{id}/... · https://img.youtube.com/vi/{id}/...
+// source_url 은 parseVideoUrl 헬퍼 사용.
+function extractYouTubeVideoIdFromThumb(thumb: string | null | undefined): string | null {
+  if (!thumb) return null;
+  const m = thumb.match(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi\/([A-Za-z0-9_-]+)/);
+  return m?.[1] ?? null;
+}
 
 type MePageData = {
   userId: string | null;
@@ -163,6 +179,33 @@ function MePage() {
   const data = Route.useLoaderData();
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
+  // 작업 C: 내 카드 접기/펼치기 (상위 2개 + 더보기/접기 토글)
+  const [dropsExpanded, setDropsExpanded] = useState(false);
+  // 작업 B: 내 카드 썸네일 탭 → 인앱 임베드 재생 (단일 모달 인스턴스)
+  const [embedState, setEmbedState] = useState<{
+    open: boolean;
+    videoId: string;
+    originalUrl: string;
+    title: string;
+  } | null>(null);
+
+  function openEmbedFromDrop(d: MyDropRow) {
+    const url = d.source?.source_url ?? "";
+    const fromUrl = url ? parseVideoUrl(url) : null;
+    const videoId =
+      fromUrl?.videoId ?? extractYouTubeVideoIdFromThumb(d.source?.thumbnail_url);
+    if (!videoId) {
+      // 안전 fallback: videoId 없으면 모달 안 띄움. 빈 모달 금지.
+      toast.info("이 영상은 인앱 재생을 지원하지 않아요.");
+      return;
+    }
+    setEmbedState({
+      open: true,
+      videoId,
+      originalUrl: url || `https://www.youtube.com/watch?v=${videoId}`,
+      title: d.source?.title?.trim() || "영상 재생",
+    });
+  }
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -211,6 +254,21 @@ function MePage() {
           </div>
         </SectionCard>
 
+        {/* 작업 A — 내 매장: 비지니스에게 1순위. 프로필 바로 아래로 이동.
+            비업주(팬)는 미표시. */}
+        {data.isBusiness ? (
+          <SectionCard Icon={Store} title="내 매장">
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/partner" })}
+              className="flex w-full min-h-[44px] items-center justify-between rounded-xl bg-[#F8FAFC] px-4 py-3 text-sm font-semibold text-[#0F172A] hover:bg-[#F1F5F9]"
+            >
+              <span>매장 관리</span>
+              <ChevronRight className="size-4 text-[#64748B]" strokeWidth={2} />
+            </button>
+          </SectionCard>
+        ) : null}
+
         {/* ② 받은 혜택 — 카드 탭 = 상세, "코드 복사" = clipboard. 60대 친화 라벨(#16). */}
         <SectionCard Icon={Gift} title="받은 혜택">
           {data.coupons.length === 0 ? (
@@ -229,69 +287,83 @@ function MePage() {
           <EmptyText text="구독한 매장이 여기 표시돼요." />
         </SectionCard>
 
-        {/* ④ 내 카드 — 성과 보기 링크는 비지니스만 (share_uuid 있는 카드만 활성, v5.5 반환). */}
+        {/* ④ 내 카드 — 성과 보기 링크는 비지니스만 (share_uuid 있는 카드만 활성, v5.5 반환).
+            작업 C: 기본 상위 2개만 노출 + 더보기/접기 토글. 개수 증가 대비.
+            작업 B: 썸네일/제목 탭 → 인앱 임베드 모달 재생. */}
         <SectionCard Icon={FileText} title="내 카드">
           {data.myDrops.length === 0 ? (
             <EmptyText text="아직 만든 카드가 없어요." />
           ) : (
-            <ul className="space-y-2">
-              {data.myDrops.slice(0, 10).map((d) => (
-                <li key={d.id} className="rounded-xl bg-[#F8FAFC] px-3 py-3">
-                  <div className="flex items-center gap-3">
-                    {d.source?.thumbnail_url ? (
-                      <img
-                        src={d.source.thumbnail_url}
-                        alt=""
-                        className="size-12 shrink-0 rounded-lg object-cover"
-                      />
-                    ) : (
-                      <div className="size-12 shrink-0 rounded-lg bg-[#E2E8F0]" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-[#0F172A]">
-                        {d.source?.title?.trim() || "(제목 없음)"}
-                      </p>
-                      <p className="mt-0.5 text-xs text-[#64748B]">
-                        조회 {numFmt(d.view_count)} · 공유 {numFmt(d.share_count)} · 전환{" "}
-                        {numFmt(d.conversion_count)}
-                      </p>
-                    </div>
-                  </div>
-                  {data.isBusiness && d.share_uuid ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigate({
-                          to: "/results/$shareUuid",
-                          params: { shareUuid: d.share_uuid! },
-                        })
-                      }
-                      className="mt-2 flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-[#0A0A0A] hover:underline"
-                    >
-                      <BarChart3 className="size-4" strokeWidth={2} />
-                      성과 보기
-                      <ChevronRight className="size-4" strokeWidth={2} />
-                    </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="space-y-2">
+                {data.myDrops
+                  .slice(0, dropsExpanded ? data.myDrops.length : 2)
+                  .map((d) => (
+                    <li key={d.id} className="rounded-xl bg-[#F8FAFC] px-3 py-3">
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => openEmbedFromDrop(d)}
+                          aria-label="영상 재생"
+                          className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-[#E2E8F0] transition-opacity hover:opacity-90"
+                        >
+                          {d.source?.thumbnail_url ? (
+                            <img
+                              src={d.source.thumbnail_url}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : null}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={() => openEmbedFromDrop(d)}
+                            className="text-left"
+                          >
+                            <p className="truncate text-sm font-semibold text-[#0F172A] hover:underline">
+                              {d.source?.title?.trim() || "(제목 없음)"}
+                            </p>
+                          </button>
+                          <p className="mt-0.5 text-xs text-[#64748B]">
+                            조회 {numFmt(d.view_count)} · 공유 {numFmt(d.share_count)} · 전환{" "}
+                            {numFmt(d.conversion_count)}
+                          </p>
+                        </div>
+                      </div>
+                      {data.isBusiness && d.share_uuid ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate({
+                              to: "/results/$shareUuid",
+                              params: { shareUuid: d.share_uuid! },
+                            })
+                          }
+                          className="mt-2 flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-[#0A0A0A] hover:underline"
+                        >
+                          <BarChart3 className="size-4" strokeWidth={2} />
+                          성과 보기
+                          <ChevronRight className="size-4" strokeWidth={2} />
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+              </ul>
+              {data.myDrops.length > 2 ? (
+                <button
+                  type="button"
+                  onClick={() => setDropsExpanded((v) => !v)}
+                  className="mt-3 flex w-full min-h-[44px] items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm font-semibold tracking-ko text-[#0A0A0A] transition-colors hover:bg-[#FAFAFA]"
+                >
+                  {dropsExpanded
+                    ? "접기"
+                    : `더보기 (${data.myDrops.length - 2})`}
+                </button>
+              ) : null}
+            </>
           )}
         </SectionCard>
-
-        {/* ⑤ 내 매장 — 비지니스만 노출 */}
-        {data.isBusiness ? (
-          <SectionCard Icon={Store} title="내 매장">
-            <button
-              type="button"
-              onClick={() => navigate({ to: "/partner" })}
-              className="flex w-full min-h-[44px] items-center justify-between rounded-xl bg-[#F8FAFC] px-4 py-3 text-sm font-semibold text-[#0F172A] hover:bg-[#F1F5F9]"
-            >
-              <span>매장 관리</span>
-              <ChevronRight className="size-4 text-[#64748B]" strokeWidth={2} />
-            </button>
-          </SectionCard>
-        ) : null}
 
         {/* ⑥ 설정 — 로그아웃 */}
         <SectionCard Icon={Settings} title="설정">
@@ -329,6 +401,17 @@ function MePage() {
           </AlertDialog>
         </SectionCard>
       </div>
+      {embedState ? (
+        <YouTubeEmbedModal
+          open={embedState.open}
+          onOpenChange={(open) => {
+            if (!open) setEmbedState(null);
+          }}
+          videoId={embedState.videoId}
+          originalUrl={embedState.originalUrl}
+          title={embedState.title}
+        />
+      ) : null}
       <Toaster richColors position="top-center" />
     </main>
   );
