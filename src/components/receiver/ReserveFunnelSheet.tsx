@@ -178,7 +178,18 @@ export function ReserveFunnelSheet({
       });
       if (resErr) {
         console.error("[ReserveFunnel] create_reservation_anon failed:", resErr);
-        setErrorMsg("예약 문의 전송에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        // A4-2 — partial UNIQUE(uq_reservations_active_catcher) 위반 시 정직 안내.
+        // 같은 catcher 가 같은 drop 에 활성(pending/confirmed) 예약을 이미 가짐 →
+        // "실패" 가 아니라 "이미 진행 중" 으로 사실대로.
+        const errCode = (resErr as { code?: string } | null)?.code;
+        const errMsg = (resErr as { message?: string } | null)?.message ?? "";
+        const isCatcherDup =
+          errCode === "23505" || errMsg.includes("uq_reservations_active_catcher");
+        setErrorMsg(
+          isCatcherDup
+            ? "이미 진행 중인 예약이 있어요. 예약 내역을 확인해 주세요."
+            : "예약 문의 전송에 실패했어요. 잠시 후 다시 시도해 주세요.",
+        );
         setStep("error");
         return;
       }

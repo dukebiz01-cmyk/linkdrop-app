@@ -44,6 +44,7 @@ import { Route as PartnerPartnerRegisterRouteImport } from './routes/_partner/pa
 import { Route as PartnerPartnerRedeemRouteImport } from './routes/_partner/partner.redeem'
 import { Route as PartnerPartnerCouponsRouteImport } from './routes/_partner/partner.coupons'
 import { Route as PartnerPartnerCampaignsRouteImport } from './routes/_partner/partner.campaigns'
+import { Route as PartnerPartnerCalendarRouteImport } from './routes/_partner/partner.calendar'
 import { Route as PartnerPartnerBillingRouteImport } from './routes/_partner/partner.billing'
 import { Route as AdminAdminTrendsRouteImport } from './routes/_admin/admin.trends'
 import { Route as AdminAdminSourcesRouteImport } from './routes/_admin/admin.sources'
@@ -51,6 +52,7 @@ import { Route as AdminAdminRulesRouteImport } from './routes/_admin/admin.rules
 import { Route as AdminAdminExtractRouteImport } from './routes/_admin/admin.extract'
 import { Route as AdminAdminDefamationRouteImport } from './routes/_admin/admin.defamation'
 import { Route as AdminAdminCampaignsRouteImport } from './routes/_admin/admin.campaigns'
+import { Route as PartnerPartnerCalendarDropIdRouteImport } from './routes/_partner/partner.calendar.$dropId'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -224,6 +226,11 @@ const PartnerPartnerCampaignsRoute = PartnerPartnerCampaignsRouteImport.update({
   path: '/partner/campaigns',
   getParentRoute: () => PartnerRoute,
 } as any)
+const PartnerPartnerCalendarRoute = PartnerPartnerCalendarRouteImport.update({
+  id: '/partner/calendar',
+  path: '/partner/calendar',
+  getParentRoute: () => PartnerRoute,
+} as any)
 const PartnerPartnerBillingRoute = PartnerPartnerBillingRouteImport.update({
   id: '/partner/billing',
   path: '/partner/billing',
@@ -259,6 +266,12 @@ const AdminAdminCampaignsRoute = AdminAdminCampaignsRouteImport.update({
   path: '/admin/campaigns',
   getParentRoute: () => AdminRoute,
 } as any)
+const PartnerPartnerCalendarDropIdRoute =
+  PartnerPartnerCalendarDropIdRouteImport.update({
+    id: '/$dropId',
+    path: '/$dropId',
+    getParentRoute: () => PartnerPartnerCalendarRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -287,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/admin/sources': typeof AdminAdminSourcesRoute
   '/admin/trends': typeof AdminAdminTrendsRoute
   '/partner/billing': typeof PartnerPartnerBillingRoute
+  '/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
   '/partner/campaigns': typeof PartnerPartnerCampaignsRoute
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
@@ -300,6 +314,7 @@ export interface FileRoutesByFullPath {
   '/partner/': typeof PartnerPartnerIndexRoute
   '/api/discover/': typeof ApiDiscoverIndexRoute
   '/api/drops/': typeof ApiDropsIndexRoute
+  '/partner/calendar/$dropId': typeof PartnerPartnerCalendarDropIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -328,6 +343,7 @@ export interface FileRoutesByTo {
   '/admin/sources': typeof AdminAdminSourcesRoute
   '/admin/trends': typeof AdminAdminTrendsRoute
   '/partner/billing': typeof PartnerPartnerBillingRoute
+  '/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
   '/partner/campaigns': typeof PartnerPartnerCampaignsRoute
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
@@ -341,6 +357,7 @@ export interface FileRoutesByTo {
   '/partner': typeof PartnerPartnerIndexRoute
   '/api/discover': typeof ApiDiscoverIndexRoute
   '/api/drops': typeof ApiDropsIndexRoute
+  '/partner/calendar/$dropId': typeof PartnerPartnerCalendarDropIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -373,6 +390,7 @@ export interface FileRoutesById {
   '/_admin/admin/sources': typeof AdminAdminSourcesRoute
   '/_admin/admin/trends': typeof AdminAdminTrendsRoute
   '/_partner/partner/billing': typeof PartnerPartnerBillingRoute
+  '/_partner/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
   '/_partner/partner/campaigns': typeof PartnerPartnerCampaignsRoute
   '/_partner/partner/coupons': typeof PartnerPartnerCouponsRoute
   '/_partner/partner/redeem': typeof PartnerPartnerRedeemRoute
@@ -386,6 +404,7 @@ export interface FileRoutesById {
   '/_partner/partner/': typeof PartnerPartnerIndexRoute
   '/api/discover/': typeof ApiDiscoverIndexRoute
   '/api/drops/': typeof ApiDropsIndexRoute
+  '/_partner/partner/calendar/$dropId': typeof PartnerPartnerCalendarDropIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -416,6 +435,7 @@ export interface FileRouteTypes {
     | '/admin/sources'
     | '/admin/trends'
     | '/partner/billing'
+    | '/partner/calendar'
     | '/partner/campaigns'
     | '/partner/coupons'
     | '/partner/redeem'
@@ -429,6 +449,7 @@ export interface FileRouteTypes {
     | '/partner/'
     | '/api/discover/'
     | '/api/drops/'
+    | '/partner/calendar/$dropId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -457,6 +478,7 @@ export interface FileRouteTypes {
     | '/admin/sources'
     | '/admin/trends'
     | '/partner/billing'
+    | '/partner/calendar'
     | '/partner/campaigns'
     | '/partner/coupons'
     | '/partner/redeem'
@@ -470,6 +492,7 @@ export interface FileRouteTypes {
     | '/partner'
     | '/api/discover'
     | '/api/drops'
+    | '/partner/calendar/$dropId'
   id:
     | '__root__'
     | '/'
@@ -501,6 +524,7 @@ export interface FileRouteTypes {
     | '/_admin/admin/sources'
     | '/_admin/admin/trends'
     | '/_partner/partner/billing'
+    | '/_partner/partner/calendar'
     | '/_partner/partner/campaigns'
     | '/_partner/partner/coupons'
     | '/_partner/partner/redeem'
@@ -514,6 +538,7 @@ export interface FileRouteTypes {
     | '/_partner/partner/'
     | '/api/discover/'
     | '/api/drops/'
+    | '/_partner/partner/calendar/$dropId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -785,6 +810,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PartnerPartnerCampaignsRouteImport
       parentRoute: typeof PartnerRoute
     }
+    '/_partner/partner/calendar': {
+      id: '/_partner/partner/calendar'
+      path: '/partner/calendar'
+      fullPath: '/partner/calendar'
+      preLoaderRoute: typeof PartnerPartnerCalendarRouteImport
+      parentRoute: typeof PartnerRoute
+    }
     '/_partner/partner/billing': {
       id: '/_partner/partner/billing'
       path: '/partner/billing'
@@ -834,6 +866,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAdminCampaignsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/_partner/partner/calendar/$dropId': {
+      id: '/_partner/partner/calendar/$dropId'
+      path: '/$dropId'
+      fullPath: '/partner/calendar/$dropId'
+      preLoaderRoute: typeof PartnerPartnerCalendarDropIdRouteImport
+      parentRoute: typeof PartnerPartnerCalendarRoute
+    }
   }
 }
 
@@ -859,8 +898,23 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface PartnerPartnerCalendarRouteChildren {
+  PartnerPartnerCalendarDropIdRoute: typeof PartnerPartnerCalendarDropIdRoute
+}
+
+const PartnerPartnerCalendarRouteChildren: PartnerPartnerCalendarRouteChildren =
+  {
+    PartnerPartnerCalendarDropIdRoute: PartnerPartnerCalendarDropIdRoute,
+  }
+
+const PartnerPartnerCalendarRouteWithChildren =
+  PartnerPartnerCalendarRoute._addFileChildren(
+    PartnerPartnerCalendarRouteChildren,
+  )
+
 interface PartnerRouteChildren {
   PartnerPartnerBillingRoute: typeof PartnerPartnerBillingRoute
+  PartnerPartnerCalendarRoute: typeof PartnerPartnerCalendarRouteWithChildren
   PartnerPartnerCampaignsRoute: typeof PartnerPartnerCampaignsRoute
   PartnerPartnerCouponsRoute: typeof PartnerPartnerCouponsRoute
   PartnerPartnerRedeemRoute: typeof PartnerPartnerRedeemRoute
@@ -871,6 +925,7 @@ interface PartnerRouteChildren {
 
 const PartnerRouteChildren: PartnerRouteChildren = {
   PartnerPartnerBillingRoute: PartnerPartnerBillingRoute,
+  PartnerPartnerCalendarRoute: PartnerPartnerCalendarRouteWithChildren,
   PartnerPartnerCampaignsRoute: PartnerPartnerCampaignsRoute,
   PartnerPartnerCouponsRoute: PartnerPartnerCouponsRoute,
   PartnerPartnerRedeemRoute: PartnerPartnerRedeemRoute,

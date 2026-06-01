@@ -283,6 +283,76 @@ function ReservationCalendarClient(props: {
   );
 }
 
+// 예약 드롭 카드 탭 — [예약가능 캘린더 | 예약하기 | 쿠폰]. 정보 드롭은 기존 세로
+// 구조 유지(이 컴포넌트 미사용). 빌링·자동차감 X 고지 = "예약하기" 탭에 1줄.
+type ReservationTabKey = "calendar" | "reserve" | "coupon";
+
+function ReservationCardTabs({
+  hasCoupon,
+  calendarPanel,
+  reservePanel,
+  couponPanel,
+}: {
+  hasCoupon: boolean;
+  calendarPanel: React.ReactNode;
+  reservePanel: React.ReactNode;
+  couponPanel: React.ReactNode | null;
+}) {
+  const [tab, setTab] = useState<ReservationTabKey>("calendar");
+  const tabs: { key: ReservationTabKey; label: string }[] = [
+    { key: "calendar", label: "예약가능 캘린더" },
+    { key: "reserve", label: "예약하기" },
+  ];
+  if (hasCoupon) tabs.push({ key: "coupon", label: "쿠폰" });
+
+  // hasCoupon 이 false 가 되면 coupon 탭 선택을 calendar 로 되돌림.
+  useEffect(() => {
+    if (!hasCoupon && tab === "coupon") setTab("calendar");
+  }, [hasCoupon, tab]);
+
+  return (
+    <section data-testid="reservation-tabs" className="space-y-4">
+      <div
+        role="tablist"
+        aria-label="예약 카드 탭"
+        className="flex gap-2 rounded-2xl border border-border bg-surface p-1"
+      >
+        {tabs.map((t) => {
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              data-testid={`reservation-tab-${t.key}`}
+              onClick={() => setTab(t.key)}
+              className={cn(
+                "flex-1 min-h-[44px] rounded-xl px-3 py-2 text-sm font-bold tracking-ko transition-colors",
+                active
+                  ? "bg-[#0A0A0A] text-white"
+                  : "bg-transparent text-text-muted hover:text-text-strong",
+              )}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        role="tabpanel"
+        data-testid={`reservation-tabpanel-${tab}`}
+        className="space-y-4"
+      >
+        {tab === "calendar" && calendarPanel}
+        {tab === "reserve" && reservePanel}
+        {tab === "coupon" && couponPanel}
+      </div>
+    </section>
+  );
+}
+
 // WHY: 무로그인 lead 수집 — submitConsultationLead RPC는 Step 5 이후 연동.
 function ConsultationLeadForm({ partnerName }: { partnerName: string }) {
   const [name, setName] = useState("");
@@ -720,104 +790,127 @@ export function InfoDropPage({
           </section>
         )}
 
-        {/* 예약 섹션 헤더 — reservationDates 길이에 따라 title/description 분기. */}
-        {isReservation && (
-          <section className="rounded-2xl border border-border bg-surface p-4">
-            <h2 className="text-base font-bold tracking-ko text-text-strong">
-              {Array.isArray(reservationDates) && reservationDates.length > 0
-                ? "날짜 선택과 예약 연결"
-                : "예약하기"}
-            </h2>
-            <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
-              {Array.isArray(reservationDates) && reservationDates.length > 0
-                ? "예약 가능한 날짜를 확인하고 버튼으로 예약을 진행할 수 있어요."
-                : "아래 버튼을 눌러 예약 페이지로 이동할 수 있어요."}
-            </p>
-          </section>
-        )}
+        {/* 예약 드롭 카드 탭 — [예약가능 캘린더 | 예약하기 | 쿠폰]. 정보 드롭은 진입 X. */}
+        {isReservation && (() => {
+          const hasReservationDates =
+            Array.isArray(reservationDates) && reservationDates.length > 0;
+          const isGift = funnelCoupon?.coupon_type === "gift";
+          const giftItem = funnelCoupon?.gift_item?.trim() || "";
 
-        {/* reservationDates 가 비어 있으면 캘린더 카드를 숨긴다 — 예약 버튼은 하단 CTA 영역에 그대로 남는다. */}
-        {isReservation && Array.isArray(reservationDates) && reservationDates.length > 0 && (
-          <ReservationCalendarClient
-            partnerName={safeLocal.name}
-            campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
-            makerAvailableDates={reservationDates}
-            readOnly={isReshare}
-            onCheckAvailability={(_selection) => {
-              if (!reservationUrl) return;
-              const safe =
-                reservationUrl.startsWith("https://booking.naver.com") ||
-                reservationUrl.startsWith("https://naver.me") ||
-                reservationUrl.startsWith("tel:");
-              if (safe) window.open(reservationUrl, "_blank", "noopener");
-            }}
-            onSecondaryAction={(action) => handleCtaClick(action)}
-          />
-        )}
-
-        {/* 캘린더 카드가 숨겨질 때 fallback 예약 CTA. reservationUrl 이 없으면 비활성 + 안내. */}
-        {isReservation &&
-          (!Array.isArray(reservationDates) || reservationDates.length === 0) &&
-          (reservationUrl ? (
-            <ActionButton
-              type="button"
-              data-testid="cta-reservation-fallback"
-              onClick={() => onPrimaryAction?.()}
-              className={WIZARD_PRIMARY_BUTTON_CLASS}
-            >
-              예약하기
-            </ActionButton>
+          const calendarPanel = hasReservationDates ? (
+            <ReservationCalendarClient
+              partnerName={safeLocal.name}
+              campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
+              makerAvailableDates={reservationDates}
+              readOnly={isReshare}
+              onCheckAvailability={(_selection) => {
+                if (!reservationUrl) return;
+                const safe =
+                  reservationUrl.startsWith("https://booking.naver.com") ||
+                  reservationUrl.startsWith("https://naver.me") ||
+                  reservationUrl.startsWith("tel:");
+                if (safe) window.open(reservationUrl, "_blank", "noopener");
+              }}
+              onSecondaryAction={(action) => handleCtaClick(action)}
+            />
           ) : (
-            <div className="space-y-2">
-              <ActionButton
-                type="button"
-                data-testid="cta-reservation-fallback-disabled"
-                disabled
-                aria-disabled
-                className={WIZARD_PRIMARY_BUTTON_CLASS}
-              >
-                예약하기
-              </ActionButton>
-              <p className="text-xs font-medium tracking-ko text-text-muted">
-                예약 링크가 설정되지 않았습니다.
+            <section className="rounded-2xl border border-border bg-surface p-4">
+              <p className="text-sm font-medium tracking-ko text-text-muted">
+                업주가 아직 가능한 날짜를 마킹하지 않았어요. 아래 [예약하기] 탭으로 예약 문의를 보낼 수 있어요.
               </p>
-            </div>
-          ))}
+            </section>
+          );
 
-        {/* U1 — 받을 수 있는 쿠폰 카드. isReservation + funnelCoupon 있을 때만.
-            v5.9: 증정(gift) 분기 — 할인 문구 대신 "[gift_item] 증정". */}
-        {isReservation && funnelCoupon && (() => {
-          const isGift = funnelCoupon.coupon_type === "gift";
-          const giftItem = funnelCoupon.gift_item?.trim() || "";
-          return (
-            <div className="mt-4 rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-              <div className="mb-3 flex items-center gap-2">
-                <Ticket className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-                <span className="text-sm font-medium tracking-ko text-[#64748B]">
-                  받을 수 있는 쿠폰
-                </span>
-              </div>
-              <p className="text-lg font-bold tracking-ko text-[#0F172A]">
-                {funnelCoupon.title}
-              </p>
-              {isGift && giftItem ? (
-                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#FAFAFA] px-3 py-1 text-sm font-bold tracking-ko text-[#0A0A0A]">
-                  <Gift className="size-4" strokeWidth={2.2} />
-                  {giftItem} 증정
+          const reservePanel = (
+            <div className="space-y-3">
+              <section className="rounded-2xl border border-border bg-surface p-4">
+                <h2 className="text-base font-bold tracking-ko text-text-strong">예약하기</h2>
+                <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
+                  {hasReservationDates
+                    ? "원하는 날짜를 골라 예약을 진행할 수 있어요."
+                    : "아래 버튼을 눌러 예약 문의를 보낼 수 있어요."}
                 </p>
+              </section>
+
+              {reservationUrl || onPrimaryAction ? (
+                <ActionButton
+                  type="button"
+                  data-testid="cta-reservation-tab"
+                  onClick={() => onPrimaryAction?.()}
+                  className={WIZARD_PRIMARY_BUTTON_CLASS}
+                >
+                  예약하기
+                </ActionButton>
               ) : (
-                typeof funnelCoupon.conditions?.min_amount === "number" && (
-                  <p className="mt-2 text-sm font-medium tracking-ko text-[#64748B]">
-                    {funnelCoupon.conditions.min_amount.toLocaleString("ko-KR")}원 이상 사용하실 때
+                <div className="space-y-2">
+                  <ActionButton
+                    type="button"
+                    data-testid="cta-reservation-tab-disabled"
+                    disabled
+                    aria-disabled
+                    className={WIZARD_PRIMARY_BUTTON_CLASS}
+                  >
+                    예약하기
+                  </ActionButton>
+                  <p className="text-xs font-medium tracking-ko text-text-muted">
+                    예약 링크가 설정되지 않았습니다.
                   </p>
-                )
+                </div>
               )}
-              <p className="mt-1 text-sm font-medium tracking-ko text-[#64748B]">
-                {funnelCoupon.valid_until
-                  ? `${new Date(funnelCoupon.valid_until).toLocaleDateString("ko-KR")}까지`
-                  : "기간 제한 없음"}
+
+              {/* 빌링 X 고지 — Duke 요구. 결제는 매장에서. */}
+              <p
+                data-testid="billing-notice"
+                className="text-[11px] leading-relaxed tracking-ko text-text-subtle"
+              >
+                결제는 매장에서 직접 진행돼요. 자세한 내용은 매장에 문의해 주세요.
               </p>
             </div>
+          );
+
+          const couponPanel = funnelCoupon ? (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+                <div className="mb-3 flex items-center gap-2">
+                  <Ticket className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+                  <span className="text-sm font-medium tracking-ko text-[#64748B]">
+                    받을 수 있는 쿠폰
+                  </span>
+                </div>
+                <p className="text-lg font-bold tracking-ko text-[#0F172A]">
+                  {funnelCoupon.title}
+                </p>
+                {isGift && giftItem ? (
+                  <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#FAFAFA] px-3 py-1 text-sm font-bold tracking-ko text-[#0A0A0A]">
+                    <Gift className="size-4" strokeWidth={2.2} />
+                    {giftItem} 증정
+                  </p>
+                ) : (
+                  typeof funnelCoupon.conditions?.min_amount === "number" && (
+                    <p className="mt-2 text-sm font-medium tracking-ko text-[#64748B]">
+                      {funnelCoupon.conditions.min_amount.toLocaleString("ko-KR")}원 이상 사용하실 때
+                    </p>
+                  )
+                )}
+                <p className="mt-1 text-sm font-medium tracking-ko text-[#64748B]">
+                  {funnelCoupon.valid_until
+                    ? `${new Date(funnelCoupon.valid_until).toLocaleDateString("ko-KR")}까지`
+                    : "기간 제한 없음"}
+                </p>
+              </div>
+              <p className="text-xs font-medium tracking-ko text-text-muted">
+                예약 확정 시 쿠폰을 받을 수 있어요.
+              </p>
+            </div>
+          ) : null;
+
+          return (
+            <ReservationCardTabs
+              hasCoupon={Boolean(funnelCoupon)}
+              calendarPanel={calendarPanel}
+              reservePanel={reservePanel}
+              couponPanel={couponPanel}
+            />
           );
         })()}
 
