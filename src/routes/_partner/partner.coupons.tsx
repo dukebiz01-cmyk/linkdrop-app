@@ -298,9 +298,9 @@ function CouponsPage() {
                     value={discountValue}
                     onChange={(e) => setDiscountValue(e.target.value)}
                     placeholder={couponType === "percent" ? "10" : "3000"}
-                    className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+                    className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
                   />
-                  <span className="text-sm font-semibold text-[#64748B]">
+                  <span className="shrink-0 text-sm font-semibold text-[#64748B]">
                     {couponType === "percent" ? "%" : "원"}
                   </span>
                 </div>
@@ -324,9 +324,9 @@ function CouponsPage() {
                     value={minAmount}
                     onChange={(e) => setMinAmount(e.target.value)}
                     placeholder="예: 30000"
-                    className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+                    className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
                   />
-                  <span className="text-sm font-semibold text-[#64748B]">원</span>
+                  <span className="shrink-0 text-sm font-semibold text-[#64748B]">원</span>
                 </div>
                 <p className="text-[11px] text-[#94A3B8]">
                   이 금액 이상 결제할 때만 쿠폰을 쓸 수 있어요
@@ -416,9 +416,9 @@ function CouponsPage() {
                 value={totalCount}
                 onChange={(e) => setTotalCount(e.target.value)}
                 placeholder="예: 100"
-                className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+                className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
               />
-              <span className="text-sm font-semibold text-[#64748B]">장</span>
+              <span className="shrink-0 text-sm font-semibold text-[#64748B]">장</span>
             </div>
           </div>
 
