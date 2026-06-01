@@ -221,7 +221,7 @@ function MePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC] tracking-ko pb-12">
+    <main className="min-h-screen overflow-x-hidden bg-[#F8FAFC] tracking-ko pb-12">
       <header className="bg-white px-5 py-4 border-b border-[#F1F5F9]">
         <h1 className="text-lg font-bold text-[#0F172A]">나</h1>
       </header>
@@ -319,7 +319,7 @@ function MePage() {
                           <button
                             type="button"
                             onClick={() => openEmbedFromDrop(d)}
-                            className="text-left"
+                            className="block w-full min-w-0 text-left"
                           >
                             <p className="truncate text-sm font-semibold text-[#0F172A] hover:underline">
                               {d.source?.title?.trim() || "(제목 없음)"}

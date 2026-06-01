@@ -272,7 +272,7 @@ export function DiscoverSection({
                     <button
                       type="button"
                       onClick={() => openEmbed(c)}
-                      className="text-left"
+                      className="block w-full min-w-0 text-left"
                     >
                       <p className="line-clamp-2 text-sm font-bold tracking-ko text-[#0A0A0A] hover:underline">
                         {c.title ?? "제목 없음"}

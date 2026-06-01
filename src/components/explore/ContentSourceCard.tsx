@@ -57,7 +57,11 @@ export function ContentSourceCard({
         )}
       </button>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <button type="button" onClick={() => onPlay(source)} className="text-left">
+        <button
+          type="button"
+          onClick={() => onPlay(source)}
+          className="block w-full min-w-0 text-left"
+        >
           <p className="line-clamp-2 text-sm font-bold tracking-ko text-[#0A0A0A] hover:underline">
             {title}
           </p>
