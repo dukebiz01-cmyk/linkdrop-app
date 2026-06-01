@@ -1,7 +1,8 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
+// CouponItem 의 토글 상태 처리는 부모(CouponsPage) 의 handleToggleActive 콜백 사용.
 import { toast } from "sonner";
-import { ArrowLeft, Ticket, CheckCircle2, Sparkles, Gift } from "lucide-react";
+import { ArrowLeft, Ticket, Sparkles, Gift } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
 import { Toaster } from "@/components/ui/sonner";
@@ -82,6 +83,25 @@ function CouponsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const partnerId = data.partnerId;
+
+  // Bug C — v5.13 toggle_coupon_active 호출 + 갱신.
+  async function handleToggleActive(id: string, nextActive: boolean) {
+    const { error } = await getSupabase().rpc("toggle_coupon_active", {
+      p_coupon_id: id,
+      p_active: nextActive,
+    });
+    if (error) {
+      console.error("[partner.coupons] toggle failed:", error);
+      toast.error(
+        nextActive ? "활성으로 바꾸지 못했어요." : "비활성으로 바꾸지 못했어요.",
+      );
+      return;
+    }
+    toast.success(
+      nextActive ? "쿠폰을 활성으로 바꿨어요." : "쿠폰을 비활성으로 바꿨어요.",
+    );
+    await router.invalidate();
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -457,7 +477,7 @@ function CouponsPage() {
                   key={c.id}
                   className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
                 >
-                  <CouponItem row={c} />
+                  <CouponItem row={c} onToggle={handleToggleActive} />
                 </li>
               ))}
             </ul>
@@ -470,7 +490,13 @@ function CouponsPage() {
   );
 }
 
-function CouponItem({ row }: { row: CouponRow }) {
+function CouponItem({
+  row,
+  onToggle,
+}: {
+  row: CouponRow;
+  onToggle: (id: string, nextActive: boolean) => Promise<void>;
+}) {
   const isGift = row.coupon_type === "gift";
   const minAmount = row.conditions?.min_amount;
   const dv =
@@ -479,22 +505,53 @@ function CouponItem({ row }: { row: CouponRow }) {
       : (row.discount_value ?? 0);
   const unit =
     row.discount_unit ?? (row.coupon_type === "percent" ? "%" : "원");
+  const isActive = !!row.is_active;
+  const [pending, setPending] = useState(false);
+
+  async function handleToggle() {
+    if (pending) return;
+    setPending(true);
+    try {
+      await onToggle(row.id, !isActive);
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-bold text-[#0F172A] line-clamp-1">
+        <p className="line-clamp-1 min-w-0 flex-1 text-sm font-bold text-[#0F172A]">
           {row.title}
         </p>
-        {row.is_active ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[11px] font-semibold text-[#059669]">
-            <CheckCircle2 className="size-3" strokeWidth={2} />
-            활성
+        {/* Bug C: 활성/비활성 토글 스위치 — 클릭 시 toggle_coupon_active RPC. */}
+        <button
+          type="button"
+          onClick={handleToggle}
+          disabled={pending}
+          aria-pressed={isActive}
+          aria-label={isActive ? "쿠폰 비활성으로 바꾸기" : "쿠폰 활성으로 바꾸기"}
+          className="inline-flex shrink-0 items-center gap-1.5 disabled:opacity-60"
+        >
+          <span
+            className={`text-[11.5px] font-semibold ${
+              isActive ? "text-[#15803D]" : "text-[#A3A3A3]"
+            }`}
+          >
+            {isActive ? "활성" : "비활성"}
           </span>
-        ) : (
-          <span className="inline-flex items-center rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[11px] font-semibold text-[#64748B]">
-            비활성
+          <span
+            className={`relative inline-block h-5 w-9 rounded-full transition-colors ${
+              isActive ? "bg-[#22C55E]" : "bg-[#D4D4D4]"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${
+                isActive ? "left-[18px]" : "left-0.5"
+              }`}
+            />
           </span>
-        )}
+        </button>
       </div>
       {isGift ? (
         <p className="inline-flex items-center gap-1.5 text-sm font-bold text-[#0F172A]">
