@@ -548,17 +548,18 @@ export function InfoDropPage({
     <div
       className={cn(
         "relative mx-auto min-h-screen w-full max-w-[480px] bg-white",
-        // F3 — 하단 고정 footer 가 내용 끝(특히 쿠폰 카드)을 덮는 문제.
-        // 코드 기반 footer 실측: reservation = 32(py) + 48(예약 문의 CTA) + 78(공유 grid)
-        // + 52(나도 이런 정보 링크) + 24(광고 고지) + 17(신고) + ~48(space-y-3 갭) ≈ 299px.
-        // 광고 고지가 좁은 화면에서 2-3줄로 늘어나면 ~330px+. 21rem(336px) 한계선 근처여서
-        // 안전 마진 없음 → 26rem(416px)로 +80px 여유.
-        // info variant 는 CTA 없이 ~285px (링크 복사 + 카톡 + 나도이런 + 고지 + 신고).
-        // 19rem(304px) 마진 ~20px 빠듯 → 23rem(368px)로 +64px 여유.
-        // env(safe-area-inset-bottom) 으로 iPhone 노치/홈 인디케이터 영역까지 확보.
+        // /d/ 페이지 하단 개선: footer 가 영상을 밀어내는 문제 해결.
+        // 새 footer 실측 (primary 1개 + 링크 아이콘 한 줄):
+        //   reservation = 12(pt) + 52(primary+copy line) + 8(gap) + 36(카톡 secondary)
+        //     + 8(gap) + 16(유입 텍스트) + 8(gap) + 12(FTC 한 줄) + 12(pb) ≈ 164px
+        //   info        = 12(pt) + 52(primary+copy line) + 8(gap) + 16(유입 텍스트)
+        //     + 8(gap) + 12(FTC 한 줄) + 12(pb) ≈ 120px
+        //   문제신고는 absolute 위치라 footer 높이 영향 X.
+        // 양쪽 모두 안전 마진 포함 11rem(176px)/9rem(144px)로 cap.
+        // env(safe-area-inset-bottom) 으로 iPhone 노치 영역 확보.
         isReservation
-          ? "pb-[calc(26rem+env(safe-area-inset-bottom))]"
-          : "pb-[calc(23rem+env(safe-area-inset-bottom))]",
+          ? "pb-[calc(11rem+env(safe-area-inset-bottom))]"
+          : "pb-[calc(9rem+env(safe-area-inset-bottom))]",
       )}
       data-testid="public-drop-page"
       data-variant={resolvedVariant}
@@ -629,8 +630,17 @@ export function InfoDropPage({
           </section>
         )}
 
-        {/* 2. 영상 카드 — 유튜브: lite embed(facade→iframe), 그 외: 썸네일 + onWatchOriginal */}
-        <section className="overflow-hidden rounded-2xl border border-border bg-bg">
+        {/* 2. 영상 카드 — 유튜브: lite embed(facade→iframe), 그 외: 썸네일 + onWatchOriginal.
+            세로(쇼츠) 영상은 max-h cap 으로 화면을 다 먹지 않게 (히어로 유지 + 하단
+            CTA 도달성). 가로(16:9) 는 자연 비율이라 cap 영향 거의 없음. */}
+        <section
+          className={cn(
+            "overflow-hidden rounded-2xl border border-border bg-bg",
+            // 쇼츠(9:16) 만 width cap → 자식 aspect-[9/16] w-full 이 부모 width 따라
+            // height 결정. 55vh × (9/16) ≈ 309px 폭이 viewport 높이 기준 cap.
+            isShorts && "mx-auto w-full max-w-[calc(55vh*9/16)]",
+          )}
+        >
           {canEmbed && parsedVideo ? (
             <YouTubeLiteEmbed
               videoId={parsedVideo.videoId}
@@ -867,9 +877,10 @@ export function InfoDropPage({
         )}
         </div>
 
-      {/* 5. 하단 고정 — 링크·카톡·고지 */}
+      {/* 5. 하단 고정 — primary 1개 + 링크복사 아이콘 + 메이커 유입 텍스트 + 고지 한 줄
+            (영상이 히어로가 되도록 footer 높이 대폭 축소) */}
       <footer className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#E5E7EB] bg-white">
-        <div className="mx-auto w-full max-w-[480px] space-y-3 px-6 py-4">
+        <div className="mx-auto w-full max-w-[480px] space-y-2 px-6 pb-3 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
           {copyFeedback && (
             <p className="flex items-center gap-2 text-sm font-medium text-text-strong">
               <Check className="size-4 text-intent-success" strokeWidth={2} />
@@ -877,60 +888,62 @@ export function InfoDropPage({
             </p>
           )}
           <ErrorMessage message={shareError} />
+
+          {/* primary 1개 + 링크복사 아이콘 — 같은 라인. 쿠폰드롭은 "예약 문의하고 쿠폰
+              받기" (claim 진입), 정보드롭은 "카카오톡 공유". */}
+          <div className="flex items-stretch gap-2">
+            {isReservation && funnelCoupon && onReserveAndClaim ? (
+              <button
+                type="button"
+                onClick={onReserveAndClaim}
+                className="flex min-w-0 flex-1 min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white"
+              >
+                <span className="truncate">예약 문의하고 쿠폰 받기</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleKakao}
+                className="flex min-w-0 flex-1 min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white"
+              >
+                <MessageCircle className="size-5 shrink-0" strokeWidth={2} />
+                <span className="truncate">카카오톡 공유</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleCopy}
+              aria-label="링크 복사"
+              className="inline-flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl border border-[#E5E5E5] bg-white text-[#525252] transition-colors hover:bg-[#FAFAFA]"
+            >
+              <Copy className="size-5" strokeWidth={2} />
+            </button>
+          </div>
+
+          {/* 쿠폰드롭만: 카카오톡 공유 secondary (claim 흐름 유지하면서 공유 동선 보존). */}
           {isReservation && funnelCoupon && onReserveAndClaim ? (
             <button
               type="button"
-              onClick={onReserveAndClaim}
-              className="flex w-full min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
+              onClick={handleKakao}
+              className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl text-xs font-semibold tracking-ko text-[#525252] transition-colors hover:bg-[#FAFAFA]"
             >
-              예약 문의하고 쿠폰 받기
+              <MessageCircle className="size-3.5 shrink-0" strokeWidth={2} />
+              카카오톡으로 공유
             </button>
           ) : null}
-          {isReservation ? (
-            <div className="space-y-2 pt-1">
-              <p className="text-center text-xs font-semibold tracking-ko text-text-subtle">공유하기</p>
-              <div className="grid min-w-0 grid-cols-2 gap-2">
-                <button type="button" onClick={handleCopy} className={SHARE_ACTION_BUTTON_CLASS}>
-                  <Copy className="size-4 shrink-0" strokeWidth={2} />
-                  <span className="truncate">링크 복사하기</span>
-                </button>
-                <button type="button" onClick={handleKakao} className={SHARE_ACTION_BUTTON_CLASS}>
-                  <MessageCircle className="size-4 shrink-0" strokeWidth={2} />
-                  <span className="truncate">카카오톡 공유</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className={cn(WIZARD_SECONDARY_BUTTON_CLASS, "gap-2")}
-              >
-                <Copy className="size-4 shrink-0" strokeWidth={2} />
-                링크 복사하기
-              </button>
-              <ActionButton
-                type="button"
-                onClick={handleKakao}
-                className={cn(WIZARD_PRIMARY_BUTTON_CLASS, "gap-2")}
-              >
-                <MessageCircle className="size-5 shrink-0" strokeWidth={2} />
-                카카오톡 공유
-              </ActionButton>
-            </>
+
+          {/* 메이커 유입 — 작은 텍스트 링크로 강등 (풀폭 버튼 제거) */}
+          {videoSourceUrl && (
+            <a
+              href={`/create?url=${encodeURIComponent(videoSourceUrl)}`}
+              className="block text-center text-xs font-medium tracking-ko text-[#737373] underline-offset-2 hover:text-[#0A0A0A] hover:underline"
+            >
+              나도 이런 정보 보내고 싶다면 →
+            </a>
           )}
-          <div className="flex flex-col gap-2 px-4 pb-2">
-            {videoSourceUrl && (
-              <a
-                href={`/create?url=${encodeURIComponent(videoSourceUrl)}`}
-                className="flex items-center justify-center gap-1 w-full py-3 text-sm font-bold text-[#0A0A0A] border border-[#E5E5E5] rounded-2xl"
-              >
-                나도 이런 정보 보내고 싶다면 →
-              </a>
-            )}
-          </div>
-          <p className="text-center text-xs font-medium leading-relaxed tracking-ko text-text-subtle">
+
+          {/* 법적 고지 — 한 줄 muted (문구 보존). */}
+          <p className="text-center text-[10px] leading-tight tracking-ko text-[#A3A3A3]">
             본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
           </p>
           <div className="text-center">
