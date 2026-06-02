@@ -15,15 +15,16 @@ type SlotRow = {
   calendar_mode: string;
 };
 
+// v7.1 — 매장별 캘린더. dropId 제거. calendar_mode 는 매장 단일이라
+// 'date_range' 고정 (시간형은 Phase 2 — 메모리 #28).
 type Props = {
-  dropId: string;
-  dropLabel: string;
-  calendarMode: string;
+  partnerId: string;
   partnerName: string | null;
 };
 
 const MIN_CAPACITY = 1;
 const MAX_CAPACITY = 100;
+const CALENDAR_MODE = "date_range" as const;
 
 function toIsoDate(date: Date): string {
   const y = date.getFullYear();
@@ -43,37 +44,30 @@ function monthRange(month: Date): { from: string; to: string } {
   return { from: toIsoDate(from), to: toIsoDate(to) };
 }
 
-export function PartnerCalendarPage({
-  dropId,
-  dropLabel,
-  calendarMode,
-  partnerName,
-}: Props) {
+export function PartnerCalendarPage({ partnerId, partnerName }: Props) {
   const router = useRouter();
   const supabase = getSupabase();
 
-  const isTimeMode = calendarMode === "date_time_slot";
   // SSR ↔ 클라 hydration mismatch 차단: Calendar(react-day-picker) 는
   // 내부에서 toLocaleDateString() 등 시스템 locale 의존 출력을 data-* 에
   // 박는다 (ui/calendar.tsx L157). Cloudflare Workers SSR(UTC/en-US) 과
   // 브라우저(KST/ko-KR) 가 달라 React #418 발생 → 달력이 클라이언트 렌더
   // 직후 폐기되어 빈 카드로 보임. mounted 플래그로 클라 마운트 후에만
-  // 렌더해 SSR 출력과 분리한다. 동일 이유로 monthCursor 의 new Date() 도
-  // mounted 이후에만 의미 있음.
+  // 렌더해 SSR 출력과 분리한다. ※ Phase B 에서 절대 제거 금지.
   const [mounted, setMounted] = useState(false);
   const [monthCursor, setMonthCursor] = useState(() => new Date());
   const [slots, setSlots] = useState<SlotRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   const [capacity, setCapacity] = useState<number>(1);
   const [isBlocked, setIsBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const slotsByDate = useMemo(() => {
     const map = new Map<string, SlotRow>();
@@ -91,7 +85,7 @@ export function PartnerCalendarPage({
       // #17 — auth.getSession hydrate 후 RPC.
       await supabase.auth.getSession();
       const { data, error } = await supabase.rpc("get_partner_slots", {
-        p_drop_id: dropId,
+        p_partner_id: partnerId,
         p_from: from,
         p_to: to,
       });
@@ -106,7 +100,7 @@ export function PartnerCalendarPage({
     } finally {
       setLoading(false);
     }
-  }, [dropId, monthCursor, supabase]);
+  }, [partnerId, monthCursor, supabase]);
 
   useEffect(() => {
     void loadSlots();
@@ -140,10 +134,6 @@ export function PartnerCalendarPage({
 
   async function handleSave() {
     if (!selectedDate) return;
-    if (isTimeMode) {
-      toast.info("시간형 예약 캘린더는 준비 중이에요.");
-      return;
-    }
     if (capacity < MIN_CAPACITY || capacity > MAX_CAPACITY) {
       toast.error(`자리수는 ${MIN_CAPACITY}~${MAX_CAPACITY} 사이여야 해요.`);
       return;
@@ -153,9 +143,9 @@ export function PartnerCalendarPage({
     try {
       await supabase.auth.getSession();
       const { error } = await supabase.rpc("upsert_reservation_slot", {
-        p_drop_id: dropId,
+        p_partner_id: partnerId,
         p_slot_date: toIsoDate(selectedDate),
-        p_calendar_mode: "date_range",
+        p_calendar_mode: CALENDAR_MODE,
         p_slot_time: null,
         p_max_capacity: capacity,
         p_is_blocked: isBlocked,
@@ -187,7 +177,7 @@ export function PartnerCalendarPage({
     try {
       await supabase.auth.getSession();
       const { error } = await supabase.rpc("delete_reservation_slot", {
-        p_drop_id: dropId,
+        p_partner_id: partnerId,
         p_slot_date: iso,
         p_slot_time: null,
       });
@@ -213,193 +203,176 @@ export function PartnerCalendarPage({
     <main className="min-h-screen bg-[#F8FAFC] tracking-ko pb-12">
       <header className="bg-white px-5 py-4 border-b border-[#F1F5F9] flex items-center gap-3">
         <Link
-          to="/partner/calendar"
+          to="/partner"
           className="flex size-10 min-h-[44px] min-w-[44px] items-center justify-center -ml-2"
         >
           <ArrowLeft className="size-5 text-[#0A0A0A]" strokeWidth={2} />
         </Link>
         <div className="min-w-0">
-          <h1 className="text-lg font-bold text-[#0F172A] truncate">{dropLabel}</h1>
+          <h1 className="text-lg font-bold text-[#0F172A] truncate">예약 캘린더</h1>
           {partnerName ? (
-            <p className="mt-0.5 text-xs text-[#64748B] truncate">
-              {partnerName} · 예약 캘린더
-            </p>
-          ) : (
-            <p className="mt-0.5 text-xs text-[#64748B]">예약 캘린더</p>
-          )}
+            <p className="mt-0.5 text-xs text-[#64748B] truncate">{partnerName}</p>
+          ) : null}
         </div>
       </header>
 
-      {isTimeMode ? (
-        <div className="px-5 pt-6">
-          <div className="rounded-2xl bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.06)] text-center">
-            <p className="text-sm font-semibold text-[#0F172A]">
-              시간형 예약 캘린더는 준비 중이에요.
-            </p>
-            <p className="mt-2 text-xs text-[#64748B]">
-              지금은 숙박형(날짜 범위) 예약만 지원해요. 곧 시간형도 열릴 예정이에요.
-            </p>
+      <div className="px-5 pt-4 space-y-4">
+        <section className="rounded-2xl bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+          {mounted ? (
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              month={monthCursor}
+              onMonthChange={setMonthCursor}
+              modifiers={{
+                marked: markedDates,
+                blocked: blockedDates,
+              }}
+              modifiersClassNames={{
+                marked:
+                  "[&_button]:!bg-[#0A0A0A] [&_button]:!text-white [&_button]:!font-bold",
+                blocked:
+                  "[&_button]:!bg-[#F1F5F9] [&_button]:!text-[#A3A3A3] [&_button]:!font-medium",
+              }}
+              className="w-full"
+              disabled={loading}
+            />
+          ) : (
+            // SSR placeholder — hydration 까지 동일 height 유지 (layout 쉬프트 차단)
+            <div
+              aria-hidden
+              className="h-[296px] w-full rounded-xl bg-[#F8FAFC]"
+            />
+          )}
+          <div className="mt-3 flex items-center gap-3 text-[11px] text-[#64748B]">
+            <span className="inline-flex items-center gap-1">
+              <span className="size-3 rounded-md bg-[#0A0A0A]" />
+              가능
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="size-3 rounded-md bg-[#F1F5F9] ring-1 ring-inset ring-[#E5E7EB]" />
+              차단
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="size-3 rounded-md border border-[#E5E7EB]" />
+              미설정
+            </span>
           </div>
-        </div>
-      ) : (
-        <div className="px-5 pt-4 space-y-4">
-          <section className="rounded-2xl bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-            {mounted ? (
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={setSelectedDate}
-                month={monthCursor}
-                onMonthChange={setMonthCursor}
-                modifiers={{
-                  marked: markedDates,
-                  blocked: blockedDates,
-                }}
-                modifiersClassNames={{
-                  marked:
-                    "[&_button]:!bg-[#0A0A0A] [&_button]:!text-white [&_button]:!font-bold",
-                  blocked:
-                    "[&_button]:!bg-[#F1F5F9] [&_button]:!text-[#A3A3A3] [&_button]:!font-medium",
-                }}
-                className="w-full"
-                disabled={loading}
-              />
-            ) : (
-              // SSR placeholder — hydration 까지 동일 height 유지 (layout 쉬프트 차단)
-              <div
-                aria-hidden
-                className="h-[296px] w-full rounded-xl bg-[#F8FAFC]"
-              />
-            )}
-            <div className="mt-3 flex items-center gap-3 text-[11px] text-[#64748B]">
-              <span className="inline-flex items-center gap-1">
-                <span className="size-3 rounded-md bg-[#0A0A0A]" />
+        </section>
+
+        {selectedDate ? (
+          <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-4">
+            <div>
+              <p className="text-sm font-bold text-[#0F172A]">
+                {selectedDate.toLocaleDateString("ko-KR", {
+                  month: "long",
+                  day: "numeric",
+                  weekday: "short",
+                })}{" "}
+                설정
+              </p>
+              {existingSlot ? (
+                <p className="mt-1 text-xs text-[#64748B]">
+                  현재 {existingSlot.current_bookings}/{existingSlot.max_capacity}팀 예약됨
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-[#64748B]">아직 마킹되지 않았어요.</p>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-[#475569] mb-2">자리수 (1~100)</p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCapacity((n) => Math.max(MIN_CAPACITY, n - 1))}
+                  disabled={capacity <= MIN_CAPACITY || isBlocked}
+                  className="flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-[#E5E7EB] bg-white hover:bg-[#F8FAFC] disabled:opacity-40"
+                >
+                  <Minus className="size-4 text-[#0A0A0A]" strokeWidth={2} />
+                </button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={MIN_CAPACITY}
+                  max={MAX_CAPACITY}
+                  value={capacity}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (Number.isFinite(n)) {
+                      setCapacity(Math.min(MAX_CAPACITY, Math.max(MIN_CAPACITY, Math.floor(n))));
+                    }
+                  }}
+                  disabled={isBlocked}
+                  className="w-20 h-11 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white text-center text-lg font-bold text-[#0F172A] disabled:opacity-40"
+                />
+                <button
+                  type="button"
+                  onClick={() => setCapacity((n) => Math.min(MAX_CAPACITY, n + 1))}
+                  disabled={capacity >= MAX_CAPACITY || isBlocked}
+                  className="flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-[#E5E7EB] bg-white hover:bg-[#F8FAFC] disabled:opacity-40"
+                >
+                  <Plus className="size-4 text-[#0A0A0A]" strokeWidth={2} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsBlocked(false)}
+                className={
+                  !isBlocked
+                    ? "flex-1 min-h-[44px] rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white"
+                    : "flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC]"
+                }
+              >
                 가능
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="size-3 rounded-md bg-[#F1F5F9] ring-1 ring-inset ring-[#E5E7EB]" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBlocked(true)}
+                className={
+                  isBlocked
+                    ? "flex-1 min-h-[44px] rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white"
+                    : "flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC]"
+                }
+              >
                 차단
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="size-3 rounded-md border border-[#E5E7EB]" />
-                미설정
-              </span>
+              </button>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              {existingSlot ? (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting || saving || hasBookings}
+                  title={hasBookings ? "이미 예약이 들어온 날은 해제할 수 없어요." : undefined}
+                  className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC] disabled:opacity-50"
+                >
+                  마킹 해제
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || deleting}
+                className="flex-1 min-h-[44px] rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {saving ? "저장 중…" : "저장"}
+              </button>
             </div>
           </section>
-
-          {selectedDate ? (
-            <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-4">
-              <div>
-                <p className="text-sm font-bold text-[#0F172A]">
-                  {selectedDate.toLocaleDateString("ko-KR", {
-                    month: "long",
-                    day: "numeric",
-                    weekday: "short",
-                  })}{" "}
-                  설정
-                </p>
-                {existingSlot ? (
-                  <p className="mt-1 text-xs text-[#64748B]">
-                    현재 {existingSlot.current_bookings}/{existingSlot.max_capacity}팀 예약됨
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-[#64748B]">아직 마킹되지 않았어요.</p>
-                )}
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold text-[#475569] mb-2">자리수 (1~100)</p>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setCapacity((n) => Math.max(MIN_CAPACITY, n - 1))}
-                    disabled={capacity <= MIN_CAPACITY || isBlocked}
-                    className="flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-[#E5E7EB] bg-white hover:bg-[#F8FAFC] disabled:opacity-40"
-                  >
-                    <Minus className="size-4 text-[#0A0A0A]" strokeWidth={2} />
-                  </button>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={MIN_CAPACITY}
-                    max={MAX_CAPACITY}
-                    value={capacity}
-                    onChange={(e) => {
-                      const n = Number(e.target.value);
-                      if (Number.isFinite(n)) {
-                        setCapacity(Math.min(MAX_CAPACITY, Math.max(MIN_CAPACITY, Math.floor(n))));
-                      }
-                    }}
-                    disabled={isBlocked}
-                    className="w-20 h-11 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white text-center text-lg font-bold text-[#0F172A] disabled:opacity-40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setCapacity((n) => Math.min(MAX_CAPACITY, n + 1))}
-                    disabled={capacity >= MAX_CAPACITY || isBlocked}
-                    className="flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-[#E5E7EB] bg-white hover:bg-[#F8FAFC] disabled:opacity-40"
-                  >
-                    <Plus className="size-4 text-[#0A0A0A]" strokeWidth={2} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsBlocked(false)}
-                  className={
-                    !isBlocked
-                      ? "flex-1 min-h-[44px] rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white"
-                      : "flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC]"
-                  }
-                >
-                  가능
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsBlocked(true)}
-                  className={
-                    isBlocked
-                      ? "flex-1 min-h-[44px] rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white"
-                      : "flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC]"
-                  }
-                >
-                  차단
-                </button>
-              </div>
-
-              <div className="flex gap-2 pt-1">
-                {existingSlot ? (
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={deleting || saving || hasBookings}
-                    title={hasBookings ? "이미 예약이 들어온 날은 해제할 수 없어요." : undefined}
-                    className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC] disabled:opacity-50"
-                  >
-                    마킹 해제
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={saving || deleting}
-                  className="flex-1 min-h-[44px] rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-                >
-                  {saving ? "저장 중…" : "저장"}
-                </button>
-              </div>
-            </section>
-          ) : (
-            <section className="rounded-2xl bg-white p-6 text-center shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-              <p className="text-sm text-[#64748B]">
-                날짜를 선택하면 자리수를 설정할 수 있어요.
-              </p>
-            </section>
-          )}
-        </div>
-      )}
+        ) : (
+          <section className="rounded-2xl bg-white p-6 text-center shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+            <p className="text-sm text-[#64748B]">
+              날짜를 선택하면 자리수를 설정할 수 있어요.
+            </p>
+          </section>
+        )}
+      </div>
 
       <Toaster richColors position="top-center" />
     </main>
