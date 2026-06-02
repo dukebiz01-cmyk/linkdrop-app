@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getSupabase } from "@/lib/supabase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Play, Copy, MessageCircle, Check, Sparkles, ShieldCheck, Flag, Ticket, Gift } from "lucide-react";
@@ -101,6 +102,8 @@ export interface InfoDropPageProps {
   onForward?: () => void;
   officialStatus: OfficialStatus;
   dropId: string;
+  /** v7.1c — 매장별 예약 캘린더 연동용. 예약 드롭에서만 의미 있음 (정보 드롭 무관). */
+  partnerId?: string | null;
   /** H1-d funnel — drop 의 partner active coupon (있으면). null/undefined 면 CTA 미노출.
    *  U1: 카드 표시용 conditions/valid_until 추가. id/title 외 옵셔널. */
   funnelCoupon?: {
@@ -237,12 +240,20 @@ const DEFAULT_CREATOR: InfoDropPageProps["creator"] = {
 
 type ReservationCalendarProps = import("@/components/reservation-calendar-page").ReservationCalendarPageProps;
 
+type SlotAvailableRow = {
+  slot_date: string;
+  slot_time: string | null;
+  available: number;
+};
+
 /** react-day-picker — SSR 번들 로드 방지, 클라이언트에서만 동적 import */
 function ReservationCalendarClient(props: {
   partnerName: string;
   campgroundInfo?: ReservationCampgroundInfo;
   makerAvailableDates?: ReservationDateItem[];
   readOnly?: boolean;
+  /** v7.1 — 매장별 슬롯 가용일. partnerId 있으면 get_available_slots 호출해 modifier 로 표시. */
+  partnerId?: string | null;
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
 }) {
@@ -250,6 +261,7 @@ function ReservationCalendarClient(props: {
   const [Calendar, setCalendar] = useState<((p: ReservationCalendarProps) => React.JSX.Element) | null>(
     null,
   );
+  const [partnerSlots, setPartnerSlots] = useState<SlotAvailableRow[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -257,6 +269,43 @@ function ReservationCalendarClient(props: {
       .then((m) => setCalendar(() => m.ReservationCalendarPage))
       .catch((err) => console.error("[ReservationCalendarClient]", err));
   }, []);
+
+  // v7.1 — partnerId 있을 때만 매장 슬롯 가용일 fetch (정보 드롭 회귀 0:
+  // partnerId 가 undefined/null 이면 호출 자체 없음). 오늘 이후 행만 반환.
+  useEffect(() => {
+    if (!props.partnerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const today = new Date();
+        const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        const { data, error } = await getSupabase().rpc("get_available_slots", {
+          p_partner_id: props.partnerId,
+          p_date: iso,
+        });
+        if (error) {
+          console.error("[ReservationCalendarClient] get_available_slots failed:", error);
+          return;
+        }
+        if (cancelled) return;
+        const rows = (Array.isArray(data) ? data : []) as SlotAvailableRow[];
+        // 자리 남은 슬롯만 표시 (available > 0). slot_time NULL = date_range 모드.
+        setPartnerSlots(rows.filter((r) => r.available > 0));
+      } catch (e) {
+        console.error("[ReservationCalendarClient] fetch unexpected:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.partnerId]);
+
+  const partnerSlotDates = useMemo(() => {
+    return partnerSlots.map((r) => {
+      const [y, m, d] = r.slot_date.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    });
+  }, [partnerSlots]);
 
   if (!mounted || !Calendar) {
     return (
@@ -274,6 +323,7 @@ function ReservationCalendarClient(props: {
       <Calendar
         partnerName={props.partnerName}
         makerAvailableDates={props.makerAvailableDates}
+        partnerSlotDates={partnerSlotDates}
         readOnly={props.readOnly}
         className="mx-0 mt-0 w-full max-w-full"
         onCheckAvailability={props.onCheckAvailability}
@@ -480,6 +530,7 @@ export function InfoDropPage({
   onKakaoShare,
   officialStatus,
   dropId,
+  partnerId,
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   const parsedVideo = videoSourceUrl ? parseVideoUrl(videoSourceUrl) : null;
@@ -797,11 +848,16 @@ export function InfoDropPage({
           const isGift = funnelCoupon?.coupon_type === "gift";
           const giftItem = funnelCoupon?.gift_item?.trim() || "";
 
-          const calendarPanel = hasReservationDates ? (
+          // v7.1 — partnerId 가 있으면 매장 슬롯 가용일도 표시(makerAvailableDates 와 공존).
+          // makerAvailableDates 비어도 partnerId 있으면 캘린더 카드를 보여주어
+          // 업주가 마킹한 날을 확인 가능.
+          const showCalendar = hasReservationDates || Boolean(partnerId);
+          const calendarPanel = showCalendar ? (
             <ReservationCalendarClient
               partnerName={safeLocal.name}
               campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
               makerAvailableDates={reservationDates}
+              partnerId={partnerId}
               readOnly={isReshare}
               onCheckAvailability={(_selection) => {
                 if (!reservationUrl) return;

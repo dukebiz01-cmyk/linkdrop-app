@@ -160,6 +160,12 @@ export interface ReservationCalendarPageProps {
   campgroundInfo?: ReservationCampgroundInfo;
   /** 메이커가 Create Wizard 에서 보낸 예약 가능 날짜 — 달력 마킹·상세 목록용. */
   makerAvailableDates?: ReservationDateItem[];
+  /**
+   * v7.1 — 업주가 reservation_slots 에 마킹한 실제 가용일.
+   * makerAvailableDates(?r= 운반) 와 별도 modifier 로 표시(둘 다 보임).
+   * 없으면 무시 (정보 드롭/매장별 미연동 회귀 0).
+   */
+  partnerSlotDates?: Date[];
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
   /**
@@ -229,6 +235,10 @@ const CALENDAR_BUTTON_OVERRIDE = cn(
 // 얇은 ring 만 — 수신자 선택의 채움과 시각 분리.
 const MAKER_OPEN_CLASS = "rounded-md ring-1 ring-inset ring-[#15803D]/40";
 const MAKER_WARN_CLASS = "rounded-md ring-1 ring-inset ring-[#B45309]/40";
+
+// v7.1 — 매장 슬롯 가용일 ("업주가 실제로 마킹한 날"). 메이커 후보보다 강한
+// 표시 = 검정 2px ring + 굵은 글자. makerOpen(연한 초록 ring) 과 시각 분리.
+const PARTNER_SLOT_CLASS = "rounded-md ring-2 ring-inset ring-[#0A0A0A] font-bold";
 
 function parseLocalDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
@@ -394,6 +404,7 @@ export function ReservationCalendarPage(props: ReservationCalendarPageProps) {
       <ReadOnlyReservationCard
         campgroundInfo={props.campgroundInfo ?? MOCK_RESERVATION_CAMPGROUND_INFO}
         makerAvailableDates={props.makerAvailableDates ?? []}
+        partnerSlotDates={props.partnerSlotDates}
         onCheckAvailability={props.onCheckAvailability}
         onSecondaryAction={props.onSecondaryAction}
         className={props.className}
@@ -406,6 +417,7 @@ export function ReservationCalendarPage(props: ReservationCalendarPageProps) {
 function EditableReservationCard({
   campgroundInfo = MOCK_RESERVATION_CAMPGROUND_INFO,
   makerAvailableDates = [],
+  partnerSlotDates,
   onCheckAvailability,
   onSecondaryAction,
   className,
@@ -513,10 +525,15 @@ function EditableReservationCard({
             }
             return false;
           }}
-          modifiers={{ makerOpen: makerOpenDates, makerWarn: makerWarnDates }}
+          modifiers={{
+            makerOpen: makerOpenDates,
+            makerWarn: makerWarnDates,
+            partnerSlot: partnerSlotDates ?? [],
+          }}
           modifiersClassNames={{
             makerOpen: MAKER_OPEN_CLASS,
             makerWarn: MAKER_WARN_CLASS,
+            partnerSlot: PARTNER_SLOT_CLASS,
           }}
           className={cn("w-full max-w-full p-0 [--cell-size:2.25rem]", CALENDAR_BUTTON_OVERRIDE)}
           classNames={RESERVATION_CALENDAR_CLASS_NAMES}
@@ -660,11 +677,13 @@ function EditableReservationCard({
 function ReadOnlyReservationCard({
   campgroundInfo,
   makerAvailableDates,
+  partnerSlotDates,
   onCheckAvailability,
   onSecondaryAction,
   className,
 }: {
   campgroundInfo: ReservationCampgroundInfo;
+  partnerSlotDates?: Date[];
   makerAvailableDates: ReservationDateItem[];
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
@@ -723,10 +742,15 @@ function ReadOnlyReservationCard({
             numberOfMonths={1}
             showOutsideDays
             disabled={hasMakerDates ? makerClosedDates : undefined}
-            modifiers={{ makerOpen: makerOpenDates, makerWarn: makerWarnDates }}
+            modifiers={{
+              makerOpen: makerOpenDates,
+              makerWarn: makerWarnDates,
+              partnerSlot: partnerSlotDates ?? [],
+            }}
             modifiersClassNames={{
               makerOpen: MAKER_OPEN_CLASS,
               makerWarn: MAKER_WARN_CLASS,
+              partnerSlot: PARTNER_SLOT_CLASS,
             }}
             className={cn("w-full max-w-full p-0 [--cell-size:2.25rem]", CALENDAR_BUTTON_OVERRIDE)}
             classNames={RESERVATION_CALENDAR_CLASS_NAMES}

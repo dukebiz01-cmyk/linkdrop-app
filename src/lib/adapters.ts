@@ -31,6 +31,8 @@ export type DropDetailRpc = {
     ai_summary: string | null;
     ai_key_points: unknown;
     reservation_data: unknown;
+    /** v7.1c — 매장별 캘린더 연동. 손님 화면이 partner_id 로 슬롯 조회. */
+    partner_id?: string | null;
   };
   intent: { key: string | null; name: string | null; purpose: string | null };
   source: {
@@ -143,6 +145,8 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     videoSourceLabel: providerLabel(d.source.provider),
     officialStatus: "user_shared",
     dropId: d.drop.id,
+    // v7.1c — 손님 캘린더 → reservation_slots 연동. 예약 드롭에서만 사용.
+    partnerId: d.drop.partner_id ?? null,
     maker: {
       name: d.maker?.display_name?.trim() || "익명",
       avatarUrl: d.maker?.avatar_url ?? undefined,
