@@ -236,9 +236,10 @@ const CALENDAR_BUTTON_OVERRIDE = cn(
 const MAKER_OPEN_CLASS = "rounded-md ring-1 ring-inset ring-[#15803D]/40";
 const MAKER_WARN_CLASS = "rounded-md ring-1 ring-inset ring-[#B45309]/40";
 
-// v7.1 — 매장 슬롯 가용일 ("업주가 실제로 마킹한 날"). 메이커 후보보다 강한
-// 표시 = 검정 2px ring + 굵은 글자. makerOpen(연한 초록 ring) 과 시각 분리.
-const PARTNER_SLOT_CLASS = "rounded-md ring-2 ring-inset ring-[#0A0A0A] font-bold";
+// v7.1 — 매장 슬롯 가용일 ("업주가 실제로 마킹한 날"). 카카오식 가독성 패스 —
+// 검정 ring-2 (들쭉날쭉 + 강한 회색감) 폐기, 연한 초록 배경 + 진한 초록 글자 +
+// 얇은 초록 ring 으로 통일. 날짜 숫자가 항상 읽히고 셀 정렬 균일.
+const PARTNER_SLOT_CLASS = "rounded-md bg-[#f0fdf4] text-[#15803d] font-bold ring-1 ring-inset ring-[#15803d]/40";
 
 function parseLocalDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);

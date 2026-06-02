@@ -230,12 +230,17 @@ export function PartnerCalendarPage({ partnerId, partnerName }: Props) {
                 blocked: blockedDates,
               }}
               modifiersClassNames={{
+                // 카카오식 — 연한 초록 배경 + 진한 초록 글자 + 얇은 초록 ring.
+                // 검정 채움(가독성 최악) 제거. 날짜 숫자 잘 읽힘.
                 marked:
-                  "[&_button]:!bg-[#0A0A0A] [&_button]:!text-white [&_button]:!font-bold",
+                  "[&_button]:!bg-[#f0fdf4] [&_button]:!text-[#15803d] [&_button]:!font-bold [&_button]:!ring-1 [&_button]:!ring-inset [&_button]:!ring-[#15803d]/40",
                 blocked:
                   "[&_button]:!bg-[#F1F5F9] [&_button]:!text-[#A3A3A3] [&_button]:!font-medium",
               }}
-              className="w-full"
+              // shadcn 기본 bg-accent/bg-primary(보라/슬레이트) 가 today/range
+              // 셀에서 보라처럼 나타남. CALENDAR_BUTTON_OVERRIDE 패턴 차용해
+              // 셀렉트/오늘 색을 검정 톤으로 통일 (#15 디자인).
+              className="w-full [&_button[data-selected-single=true]]:!bg-[#0A0A0A]/10 [&_button[data-selected-single=true]]:!text-[#0A0A0A] [&_button[data-selected-single=true]]:!ring-2 [&_button[data-selected-single=true]]:!ring-inset [&_button[data-selected-single=true]]:!ring-[#0A0A0A] [&_button[data-today=true]]:!bg-transparent [&_button[data-today=true]]:!text-[#0A0A0A] [&_button[data-today=true]]:!font-bold"
               disabled={loading}
             />
           ) : (
@@ -247,7 +252,7 @@ export function PartnerCalendarPage({ partnerId, partnerName }: Props) {
           )}
           <div className="mt-3 flex items-center gap-3 text-[11px] text-[#64748B]">
             <span className="inline-flex items-center gap-1">
-              <span className="size-3 rounded-md bg-[#0A0A0A]" />
+              <span className="size-3 rounded-md bg-[#f0fdf4] ring-1 ring-inset ring-[#15803d]/40" />
               가능
             </span>
             <span className="inline-flex items-center gap-1">
