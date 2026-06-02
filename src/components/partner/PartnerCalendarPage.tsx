@@ -242,6 +242,12 @@ export function PartnerCalendarPage({ partnerId, partnerName }: Props) {
                 today:
                   "[&_button]:!bg-transparent [&_button]:!text-[#0A0A0A] [&_button]:!font-bold [&_button]:!ring-2 [&_button]:!ring-inset [&_button]:!ring-[#22c55e] [&_button]:!rounded-lg",
               }}
+              // v7.2 — ui/calendar.tsx 에 selected 키 명시 X → react-day-picker
+              // default 가 td 에 보라 입힘. user classNames.selected 명시로
+              // 차단 (range_start/end/middle 잡은 것과 같은 원리).
+              classNames={{
+                selected: "!bg-transparent rounded-lg",
+              }}
               // v7.2 — 선택 셀(data-selected-single) = 진한 초록 채움 + 흰 글자
               // + rounded-lg. 검정 ring 폐기 (셀 모양/색 통일).
               className="w-full [&_button[data-selected-single=true]]:!bg-[#22c55e] [&_button[data-selected-single=true]]:!text-white [&_button[data-selected-single=true]]:!rounded-lg"

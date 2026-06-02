@@ -206,6 +206,9 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
   day: "relative aspect-square p-0 text-center",
   // v7.2 셀 통일 — 모든 상태 rounded-lg + bg 는 button 레벨에서만.
   // shadcn 기본 td 의 bg-accent(보라) 를 !bg-transparent 로 차단.
+  // selected = ui/calendar.tsx 에 명시 안 됨 → react-day-picker default
+  // 가 보라 입힘 → 명시 차단 (단일 선택 보라 회귀의 정체).
+  selected: "!bg-transparent rounded-lg",
   range_start: "!bg-transparent rounded-lg",
   range_end: "!bg-transparent rounded-lg",
   range_middle: "!bg-transparent rounded-lg",
