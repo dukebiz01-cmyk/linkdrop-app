@@ -34,9 +34,11 @@ export const Route = createFileRoute("/_partner/partner/calendar/$dropId")({
     if (!partner?.id) return fallback;
 
     // owner 의 드롭인지 검증 + calendar_mode SELECT.
+    // intent_types(label) 조인 제거 — partner.calendar.tsx 와 동일 400 원인.
+    // 드롭 제목은 ai_summary 로.
     const { data: drop } = await supabase
       .from("info_drops")
-      .select("id, calendar_mode, intent_types(label)")
+      .select("id, calendar_mode, ai_summary")
       .eq("id", params.dropId)
       .eq("partner_id", partner.id)
       .maybeSingle();
@@ -45,11 +47,9 @@ export const Route = createFileRoute("/_partner/partner/calendar/$dropId")({
       throw notFound();
     }
 
-    const intent = (drop as { intent_types?: { label?: string | null } | null }).intent_types;
-
     return {
       dropId: drop.id,
-      dropLabel: intent?.label ?? "예약 드롭",
+      dropLabel: drop.ai_summary?.trim() || "예약 드롭",
       calendarMode: drop.calendar_mode ?? "date_range",
       partnerName: partner.display_name ?? null,
     };
