@@ -348,30 +348,46 @@ function ReservationCalendarClient(props: {
 
 // 예약 드롭 카드 탭 — [예약가능 캘린더 | 예약하기 | 쿠폰]. 정보 드롭은 기존 세로
 // 구조 유지(이 컴포넌트 미사용). 빌링·자동차감 X 고지 = "예약하기" 탭에 1줄.
+// v7.2 — 쿠폰 드롭 진입 (variant="coupon") 시 [쿠폰 | 예약가능 캘린더] 2탭.
+//        예약하기 탭 제외, 기본 선택 = 쿠폰. 주 액션은 sticky "예약하고 쿠폰
+//        받기" 가 가져감 (탭 안 별도 액션 없음).
 type ReservationTabKey = "calendar" | "reserve" | "coupon";
 
 function ReservationCardTabs({
+  variant,
   hasCoupon,
   calendarPanel,
   reservePanel,
   couponPanel,
 }: {
+  variant: "reservation" | "coupon";
   hasCoupon: boolean;
   calendarPanel: React.ReactNode;
   reservePanel: React.ReactNode;
   couponPanel: React.ReactNode | null;
 }) {
-  const [tab, setTab] = useState<ReservationTabKey>("calendar");
-  const tabs: { key: ReservationTabKey; label: string }[] = [
-    { key: "calendar", label: "예약가능 캘린더" },
-    { key: "reserve", label: "예약하기" },
-  ];
-  if (hasCoupon) tabs.push({ key: "coupon", label: "쿠폰" });
+  // variant 별 탭 구성. coupon 은 [쿠폰][캘린더] 2탭 + 기본 쿠폰.
+  // reservation 은 [캘린더][예약하기] + hasCoupon ? 쿠폰 (기존 동작 유지).
+  const tabs: { key: ReservationTabKey; label: string }[] =
+    variant === "coupon"
+      ? [
+          { key: "coupon", label: "쿠폰" },
+          { key: "calendar", label: "예약가능 캘린더" },
+        ]
+      : [
+          { key: "calendar", label: "예약가능 캘린더" },
+          { key: "reserve", label: "예약하기" },
+          ...(hasCoupon ? [{ key: "coupon" as const, label: "쿠폰" }] : []),
+        ];
 
-  // hasCoupon 이 false 가 되면 coupon 탭 선택을 calendar 로 되돌림.
+  const initialTab: ReservationTabKey = variant === "coupon" ? "coupon" : "calendar";
+  const [tab, setTab] = useState<ReservationTabKey>(initialTab);
+
+  // reservation 변형에서 hasCoupon 이 false 가 되면 coupon 탭을 calendar 로
+  // 되돌림. coupon 변형은 쿠폰 탭이 기본이라 영향 없음.
   useEffect(() => {
-    if (!hasCoupon && tab === "coupon") setTab("calendar");
-  }, [hasCoupon, tab]);
+    if (variant === "reservation" && !hasCoupon && tab === "coupon") setTab("calendar");
+  }, [hasCoupon, tab, variant]);
 
   return (
     <section data-testid="reservation-tabs" className="space-y-4">
@@ -583,6 +599,8 @@ export function InfoDropPage({
     return true;
   });
   const isReservation = resolvedVariant === "reservation";
+  // v7.2 — 쿠폰 드롭에도 매장 캘린더 탭 [쿠폰][예약가능 캘린더]. partnerId 있을 때만.
+  const isCoupon = resolvedVariant === "coupon";
   const reservationGuide = MOCK_RESERVATION_SECTION_GUIDE;
   const videoHeadline = isReservation ? safeTitle : pageCopy.sectionTitle;
   const safeThumb = videoThumbnailUrl?.trim() || "";
@@ -858,8 +876,9 @@ export function InfoDropPage({
           </section>
         )}
 
-        {/* 예약 드롭 카드 탭 — [예약가능 캘린더 | 예약하기 | 쿠폰]. 정보 드롭은 진입 X. */}
-        {isReservation && (() => {
+        {/* 예약 드롭 = [예약가능 캘린더 | 예약하기 | 쿠폰] 3탭 (기존).
+            v7.2 쿠폰 드롭 = [쿠폰 | 예약가능 캘린더] 2탭. 정보/구매/상담 진입 X. */}
+        {(isReservation || (isCoupon && Boolean(partnerId))) && (() => {
           const hasReservationDates =
             Array.isArray(reservationDates) && reservationDates.length > 0;
           const isGift = funnelCoupon?.coupon_type === "gift";
@@ -868,7 +887,10 @@ export function InfoDropPage({
           // v7.1 — partnerId 가 있으면 매장 슬롯 가용일도 표시(makerAvailableDates 와 공존).
           // makerAvailableDates 비어도 partnerId 있으면 캘린더 카드를 보여주어
           // 업주가 마킹한 날을 확인 가능.
-          const showCalendar = hasReservationDates || Boolean(partnerId);
+          // 쿠폰 변형은 partnerId 만 신호 (위 게이트에서 이미 보장).
+          const showCalendar = isCoupon
+            ? Boolean(partnerId)
+            : hasReservationDates || Boolean(partnerId);
           const calendarPanel = showCalendar ? (
             <ReservationCalendarClient
               partnerName={safeLocal.name}
@@ -979,6 +1001,7 @@ export function InfoDropPage({
 
           return (
             <ReservationCardTabs
+              variant={isCoupon ? "coupon" : "reservation"}
               hasCoupon={Boolean(funnelCoupon)}
               calendarPanel={calendarPanel}
               reservePanel={reservePanel}
