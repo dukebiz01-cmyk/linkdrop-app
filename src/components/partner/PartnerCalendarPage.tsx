@@ -53,10 +53,22 @@ export function PartnerCalendarPage({
   const supabase = getSupabase();
 
   const isTimeMode = calendarMode === "date_time_slot";
+  // SSR ↔ 클라 hydration mismatch 차단: Calendar(react-day-picker) 는
+  // 내부에서 toLocaleDateString() 등 시스템 locale 의존 출력을 data-* 에
+  // 박는다 (ui/calendar.tsx L157). Cloudflare Workers SSR(UTC/en-US) 과
+  // 브라우저(KST/ko-KR) 가 달라 React #418 발생 → 달력이 클라이언트 렌더
+  // 직후 폐기되어 빈 카드로 보임. mounted 플래그로 클라 마운트 후에만
+  // 렌더해 SSR 출력과 분리한다. 동일 이유로 monthCursor 의 new Date() 도
+  // mounted 이후에만 의미 있음.
+  const [mounted, setMounted] = useState(false);
   const [monthCursor, setMonthCursor] = useState(() => new Date());
   const [slots, setSlots] = useState<SlotRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const [capacity, setCapacity] = useState<number>(1);
   const [isBlocked, setIsBlocked] = useState(false);
@@ -232,25 +244,33 @@ export function PartnerCalendarPage({
       ) : (
         <div className="px-5 pt-4 space-y-4">
           <section className="rounded-2xl bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={setSelectedDate}
-              month={monthCursor}
-              onMonthChange={setMonthCursor}
-              modifiers={{
-                marked: markedDates,
-                blocked: blockedDates,
-              }}
-              modifiersClassNames={{
-                marked:
-                  "[&_button]:!bg-[#0A0A0A] [&_button]:!text-white [&_button]:!font-bold",
-                blocked:
-                  "[&_button]:!bg-[#F1F5F9] [&_button]:!text-[#A3A3A3] [&_button]:!font-medium",
-              }}
-              className="w-full"
-              disabled={loading}
-            />
+            {mounted ? (
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={setSelectedDate}
+                month={monthCursor}
+                onMonthChange={setMonthCursor}
+                modifiers={{
+                  marked: markedDates,
+                  blocked: blockedDates,
+                }}
+                modifiersClassNames={{
+                  marked:
+                    "[&_button]:!bg-[#0A0A0A] [&_button]:!text-white [&_button]:!font-bold",
+                  blocked:
+                    "[&_button]:!bg-[#F1F5F9] [&_button]:!text-[#A3A3A3] [&_button]:!font-medium",
+                }}
+                className="w-full"
+                disabled={loading}
+              />
+            ) : (
+              // SSR placeholder — hydration 까지 동일 height 유지 (layout 쉬프트 차단)
+              <div
+                aria-hidden
+                className="h-[296px] w-full rounded-xl bg-[#F8FAFC]"
+              />
+            )}
             <div className="mt-3 flex items-center gap-3 text-[11px] text-[#64748B]">
               <span className="inline-flex items-center gap-1">
                 <span className="size-3 rounded-md bg-[#0A0A0A]" />
