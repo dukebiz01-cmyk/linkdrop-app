@@ -204,14 +204,13 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
     "flex aspect-square items-center justify-center text-center text-[0.7rem] font-semibold text-text-muted",
   week: "mt-1 grid w-full grid-cols-7",
   day: "relative aspect-square p-0 text-center",
-  // 셀 레벨 배경 색칠은 제거 — 강한 색은 버튼 레벨 data-attr 셀렉터로 통일 관리.
-  range_start: "rounded-l-lg",
-  range_end: "rounded-r-lg",
-  range_middle: "rounded-none",
-  // v7.2 — 보라(bg-accent) 잔여 제거 + 초록 ring-2 통일. shadcn 기본
-  //        cn("bg-accent text-accent-foreground rounded-md", default) 와
-  //        결합 시 !bg-transparent 가 twmerge 우선 → 보라 사라짐.
-  today: "font-bold text-[#0A0A0A] !bg-transparent ring-2 ring-inset ring-[#22c55e] rounded-full",
+  // v7.2 셀 통일 — 모든 상태 rounded-lg + bg 는 button 레벨에서만.
+  // shadcn 기본 td 의 bg-accent(보라) 를 !bg-transparent 로 차단.
+  range_start: "!bg-transparent rounded-lg",
+  range_end: "!bg-transparent rounded-lg",
+  range_middle: "!bg-transparent rounded-lg",
+  // v7.2 — 보라(bg-accent) 잔여 제거 + 초록 ring-2 통일 + 모든 셀 rounded-lg.
+  today: "font-bold text-[#0A0A0A] !bg-transparent ring-2 ring-inset ring-[#22c55e] rounded-lg",
   outside: "text-text-subtle opacity-40",
   disabled: "text-[#A3A3A3]",
 };
@@ -224,34 +223,38 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
 // (#dcfce7) 띠. 선택 단일/range 양끝은 둥근 원, range middle 은 직각 띠.
 // today(초록 ring, 직전 fix) / marked(연한 초록 채움) / makerOpen(연한 초록
 // ring) 모두 초록 계열로 일관.
+// v7.2 셀 통일 — 모든 상태 rounded-lg 동일 (반쪽 라운드/원/직각 혼재 폐기).
+// 색만 상태별로 다르게. 진한 초록(#22c55e) = 선택/range 양끝, 연한 초록
+// (#dcfce7) = range middle 띠. 셀 간 간격 균일.
 const CALENDAR_BUTTON_OVERRIDE = cn(
   // 단일 선택 (mode=single)
   "[&_button[data-selected-single=true]]:!bg-[#22c55e]",
   "[&_button[data-selected-single=true]]:!text-white",
-  "[&_button[data-selected-single=true]]:!rounded-full",
+  "[&_button[data-selected-single=true]]:!rounded-lg",
   // range 시작점
   "[&_button[data-range-start=true]]:!bg-[#22c55e]",
   "[&_button[data-range-start=true]]:!text-white",
-  "[&_button[data-range-start=true]]:!rounded-l-full",
+  "[&_button[data-range-start=true]]:!rounded-lg",
   // range 끝점
   "[&_button[data-range-end=true]]:!bg-[#22c55e]",
   "[&_button[data-range-end=true]]:!text-white",
-  "[&_button[data-range-end=true]]:!rounded-r-full",
+  "[&_button[data-range-end=true]]:!rounded-lg",
   // range 중간 (체크인~체크아웃 사이 띠)
   "[&_button[data-range-middle=true]]:!bg-[#dcfce7]",
   "[&_button[data-range-middle=true]]:!text-[#16a34a]",
-  "[&_button[data-range-middle=true]]:!rounded-none",
+  "[&_button[data-range-middle=true]]:!rounded-lg",
 );
 
 // 메이커 가능 날짜 — "선택 가능한 후보"임을 약하게 표시. 채움/긴 바 금지.
 // 얇은 ring 만 — 수신자 선택의 채움과 시각 분리.
-const MAKER_OPEN_CLASS = "rounded-md ring-1 ring-inset ring-[#15803D]/40";
-const MAKER_WARN_CLASS = "rounded-md ring-1 ring-inset ring-[#B45309]/40";
+// v7.2 — rounded-md → rounded-lg (셀 모양 통일)
+const MAKER_OPEN_CLASS = "rounded-lg ring-1 ring-inset ring-[#15803D]/40";
+const MAKER_WARN_CLASS = "rounded-lg ring-1 ring-inset ring-[#B45309]/40";
 
 // v7.1 — 매장 슬롯 가용일 ("업주가 실제로 마킹한 날"). 카카오식 가독성 패스 —
 // 검정 ring-2 (들쭉날쭉 + 강한 회색감) 폐기, 연한 초록 배경 + 진한 초록 글자 +
 // 얇은 초록 ring 으로 통일. 날짜 숫자가 항상 읽히고 셀 정렬 균일.
-const PARTNER_SLOT_CLASS = "rounded-md bg-[#f0fdf4] text-[#15803d] font-bold ring-1 ring-inset ring-[#15803d]/40";
+const PARTNER_SLOT_CLASS = "rounded-lg bg-[#f0fdf4] text-[#16a34a] font-bold ring-1 ring-inset ring-[#15803d]/40";
 
 function parseLocalDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);

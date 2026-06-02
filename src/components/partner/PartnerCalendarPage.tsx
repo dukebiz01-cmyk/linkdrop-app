@@ -231,20 +231,20 @@ export function PartnerCalendarPage({ partnerId, partnerName }: Props) {
               }}
               modifiersClassNames={{
                 // 카카오식 — 연한 초록 배경 + 진한 초록 글자 + 얇은 초록 ring.
+                // v7.2 셀 통일: 모든 modifier rounded-lg.
                 marked:
-                  "[&_button]:!bg-[#f0fdf4] [&_button]:!text-[#15803d] [&_button]:!font-bold [&_button]:!ring-1 [&_button]:!ring-inset [&_button]:!ring-[#15803d]/40",
+                  "[&_button]:!bg-[#f0fdf4] [&_button]:!text-[#16a34a] [&_button]:!font-bold [&_button]:!ring-1 [&_button]:!ring-inset [&_button]:!ring-[#15803d]/40 [&_button]:!rounded-lg",
                 blocked:
-                  "[&_button]:!bg-[#F1F5F9] [&_button]:!text-[#A3A3A3] [&_button]:!font-medium",
-                // 오늘 = 연한 초록 ring-2 + 배경 없음. modifier(today)는
-                // react-day-picker 가 자동 적용. shadcn 기본 bg-accent(보라)
+                  "[&_button]:!bg-[#F1F5F9] [&_button]:!text-[#A3A3A3] [&_button]:!font-medium [&_button]:!rounded-lg",
+                // 오늘 = 연한 초록 ring-2 + 배경 없음. shadcn bg-accent(보라)
                 // 를 !important 로 덮음. data-today 셀렉터는 DayButton 에
-                // 출력 안 되므로 [&_button] 직접 적용.
+                // 출력 안 되므로 [&_button] 직접 적용. v7.2 — rounded-lg 통일.
                 today:
-                  "[&_button]:!bg-transparent [&_button]:!text-[#0A0A0A] [&_button]:!font-bold [&_button]:!ring-2 [&_button]:!ring-inset [&_button]:!ring-[#22c55e] [&_button]:!rounded-full",
+                  "[&_button]:!bg-transparent [&_button]:!text-[#0A0A0A] [&_button]:!font-bold [&_button]:!ring-2 [&_button]:!ring-inset [&_button]:!ring-[#22c55e] [&_button]:!rounded-lg",
               }}
-              // 선택 셀 = 검정 ring (가독성). 보라 override 는 today modifier
-              // 로 이동했으므로 selected-single 만 className 에 유지.
-              className="w-full [&_button[data-selected-single=true]]:!bg-[#0A0A0A]/10 [&_button[data-selected-single=true]]:!text-[#0A0A0A] [&_button[data-selected-single=true]]:!ring-2 [&_button[data-selected-single=true]]:!ring-inset [&_button[data-selected-single=true]]:!ring-[#0A0A0A]"
+              // v7.2 — 선택 셀(data-selected-single) = 진한 초록 채움 + 흰 글자
+              // + rounded-lg. 검정 ring 폐기 (셀 모양/색 통일).
+              className="w-full [&_button[data-selected-single=true]]:!bg-[#22c55e] [&_button[data-selected-single=true]]:!text-white [&_button[data-selected-single=true]]:!rounded-lg"
               disabled={loading}
             />
           ) : (
