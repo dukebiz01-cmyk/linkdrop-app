@@ -538,11 +538,11 @@ function EditableReservationCard({
             const t = startOfDay(date).getTime();
             const today = startOfDay(new Date()).getTime();
             if (t < today) return true;
-            // 체크아웃 선택 중 (체크인 선택 완료 상태)
-            if (checkIn && !checkOut) {
-              return t <= startOfDay(checkIn).getTime();
-            }
-            // 체크인 선택 중: 메이커 whitelist
+            // v7.2 — "체크인 이하 비활성" 분기 제거. 체크인만 선택한 상태
+            // 에서 더 이른 날 클릭 시 click 자체가 무시되어 체크인 변경이
+            // 막혔음. applyRangeSelection L407-409 의 swap 로직이 새 from
+            // 으로 정상 처리하도록 위임. 사용자 자유 선택 가능.
+            // 메이커 whitelist (매장 가능일 통제) 는 유지.
             if (hasMakerDates) {
               return !openSet.has(isoFromDate(date)) && !warnSet.has(isoFromDate(date));
             }
