@@ -220,18 +220,27 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
 // bg-accent(INDIGO PURPLE) 라 강한 색이 떠 보인다. 받는 사람 화면의 시각 언어와 맞지
 // 않으므로 모두 연한 파란색 + 테두리로 통일한다. 메이커가 보낸 가능 날짜와는 시각
 // 언어를 분리 — 가능 날짜는 modifier 의 얇은 ring 으로만, 선택은 채움 + ring 으로.
+// v7.2 카카오식 — 검정 채움 폐기, 진한 초록(#22c55e) 둥근 원 + 연한 초록
+// (#dcfce7) 띠. 선택 단일/range 양끝은 둥근 원, range middle 은 직각 띠.
+// today(초록 ring, 직전 fix) / marked(연한 초록 채움) / makerOpen(연한 초록
+// ring) 모두 초록 계열로 일관.
 const CALENDAR_BUTTON_OVERRIDE = cn(
-  "[&_button[data-selected-single=true]]:!bg-[#0A0A0A]/15",
-  "[&_button[data-selected-single=true]]:!text-[#0A0A0A]",
-  "[&_button[data-selected-single=true]]:!ring-2",
-  "[&_button[data-selected-single=true]]:!ring-inset",
-  "[&_button[data-selected-single=true]]:!ring-[#0A0A0A]",
-  "[&_button[data-range-start=true]]:!bg-[#0A0A0A]",
+  // 단일 선택 (mode=single)
+  "[&_button[data-selected-single=true]]:!bg-[#22c55e]",
+  "[&_button[data-selected-single=true]]:!text-white",
+  "[&_button[data-selected-single=true]]:!rounded-full",
+  // range 시작점
+  "[&_button[data-range-start=true]]:!bg-[#22c55e]",
   "[&_button[data-range-start=true]]:!text-white",
-  "[&_button[data-range-end=true]]:!bg-[#0A0A0A]",
+  "[&_button[data-range-start=true]]:!rounded-l-full",
+  // range 끝점
+  "[&_button[data-range-end=true]]:!bg-[#22c55e]",
   "[&_button[data-range-end=true]]:!text-white",
-  "[&_button[data-range-middle=true]]:!bg-[#0A0A0A]/5",
-  "[&_button[data-range-middle=true]]:!text-text-strong",
+  "[&_button[data-range-end=true]]:!rounded-r-full",
+  // range 중간 (체크인~체크아웃 사이 띠)
+  "[&_button[data-range-middle=true]]:!bg-[#dcfce7]",
+  "[&_button[data-range-middle=true]]:!text-[#16a34a]",
+  "[&_button[data-range-middle=true]]:!rounded-none",
 );
 
 // 메이커 가능 날짜 — "선택 가능한 후보"임을 약하게 표시. 채움/긴 바 금지.
@@ -486,8 +495,9 @@ function EditableReservationCard({
     };
   }, [makerAvailableDates]);
 
-  const defaultMonth =
-    checkIn ?? earliestMakerDate ?? parseLocalDate(MOCK_RESERVATION_DEFAULTS.checkIn);
+  // v7.2 — mock 5/18 fallback 제거. checkIn 선택 → 그 달, 메이커 가용일
+  //        있으면 첫 가용일, 없으면 현재월(오늘). 이전 달 진입 차단.
+  const defaultMonth = checkIn ?? earliestMakerDate ?? new Date();
 
   function handleRangeSelect(next: DateRange | undefined) {
     const applied = applyRangeSelection(next);
@@ -717,7 +727,8 @@ function ReadOnlyReservationCard({
     };
   }, [makerAvailableDates]);
 
-  const defaultMonth = earliestMakerDate ?? parseLocalDate(MOCK_RESERVATION_DEFAULTS.checkIn);
+  // v7.2 — mock 5/18 fallback 제거 (ReadOnly 도 동일 정책)
+  const defaultMonth = earliestMakerDate ?? new Date();
 
   // 시그니처 유지를 위한 stub — 수신자 선택값 없음 → 메이커 기본값으로 채워서 전달.
   const readonlySelection: ReservationSelection = {
