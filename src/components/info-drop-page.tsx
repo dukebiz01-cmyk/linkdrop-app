@@ -34,9 +34,10 @@ import {
   type DropViewVariant,
   type ReservationCampgroundInfo,
 } from "@/lib/mock-data";
-import type {
-  ReservationSecondaryAction,
-  ReservationSelection,
+import {
+  ReservationCalendarPage,
+  type ReservationSecondaryAction,
+  type ReservationSelection,
 } from "@/components/reservation-calendar-page";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
@@ -251,15 +252,19 @@ const DEFAULT_CREATOR: InfoDropPageProps["creator"] = {
   channelUrl: "#",
 };
 
-type ReservationCalendarProps = import("@/components/reservation-calendar-page").ReservationCalendarPageProps;
-
 type SlotAvailableRow = {
   slot_date: string;
   slot_time: string | null;
   available: number;
 };
 
-/** react-day-picker — SSR 번들 로드 방지, 클라이언트에서만 동적 import */
+/**
+ * v7.2 — ReservationCalendarPage 정적 import 로 전환. 기존 dynamic import 가
+ * CDN chunk 캐시 불일치 등으로 영구 로딩(setCalendar 미실행) 위험이 있었음
+ * (쿠폰 드롭은 뜨는데 예약 드롭은 안 뜨는 케이스 발생). mounted gate 는
+ * 유지 → SSR 첫 렌더 placeholder, 클라 마운트 후 실 캘린더 렌더 → React
+ * #418 hydration mismatch 차단도 그대로.
+ */
 function ReservationCalendarClient(props: {
   partnerName: string;
   campgroundInfo?: ReservationCampgroundInfo;
@@ -271,16 +276,10 @@ function ReservationCalendarClient(props: {
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
 }) {
   const [mounted, setMounted] = useState(false);
-  const [Calendar, setCalendar] = useState<((p: ReservationCalendarProps) => React.JSX.Element) | null>(
-    null,
-  );
   const [partnerSlots, setPartnerSlots] = useState<SlotAvailableRow[]>([]);
 
   useEffect(() => {
     setMounted(true);
-    import("@/components/reservation-calendar-page")
-      .then((m) => setCalendar(() => m.ReservationCalendarPage))
-      .catch((err) => console.error("[ReservationCalendarClient]", err));
   }, []);
 
   // v7.1 — partnerId 있을 때만 매장 슬롯 가용일 fetch (정보 드롭 회귀 0:
@@ -320,7 +319,7 @@ function ReservationCalendarClient(props: {
     });
   }, [partnerSlots]);
 
-  if (!mounted || !Calendar) {
+  if (!mounted) {
     return (
       <section
         data-testid="variant-reservation"
@@ -333,7 +332,7 @@ function ReservationCalendarClient(props: {
 
   return (
     <section data-testid="variant-reservation" className="w-full max-w-full">
-      <Calendar
+      <ReservationCalendarPage
         partnerName={props.partnerName}
         makerAvailableDates={props.makerAvailableDates}
         partnerSlotDates={partnerSlotDates}

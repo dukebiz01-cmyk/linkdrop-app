@@ -208,7 +208,10 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
   range_start: "rounded-l-lg",
   range_end: "rounded-r-lg",
   range_middle: "rounded-none",
-  today: "font-bold text-[#0A0A0A]",
+  // v7.2 — 보라(bg-accent) 잔여 제거 + 초록 ring-2 통일. shadcn 기본
+  //        cn("bg-accent text-accent-foreground rounded-md", default) 와
+  //        결합 시 !bg-transparent 가 twmerge 우선 → 보라 사라짐.
+  today: "font-bold text-[#0A0A0A] !bg-transparent ring-2 ring-inset ring-[#22c55e] rounded-full",
   outside: "text-text-subtle opacity-40",
   disabled: "text-[#A3A3A3]",
 };
