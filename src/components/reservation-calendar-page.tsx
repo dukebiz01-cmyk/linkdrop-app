@@ -212,6 +212,9 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
   range_start: "!bg-transparent rounded-lg",
   range_end: "!bg-transparent rounded-lg",
   range_middle: "!bg-transparent rounded-lg",
+  // v7.2 hover — Button(ghost variant) 의 hover:bg-accent(보라) 차단.
+  // 셀 hover 시 연한 초록(#f0fdf4) + 초록 글자(#16a34a) 로 톤 일관.
+  day_button: "hover:!bg-[#f0fdf4] hover:!text-[#16a34a]",
   // v7.2 — 보라(bg-accent) 잔여 제거 + 초록 ring-2 통일 + 모든 셀 rounded-lg.
   today: "font-bold text-[#0A0A0A] !bg-transparent ring-2 ring-inset ring-[#22c55e] rounded-lg",
   outside: "text-text-subtle opacity-40",
