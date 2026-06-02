@@ -93,36 +93,47 @@ function PartnerCalendarSelectPage() {
             <p className="mb-3 px-1 text-xs font-medium text-[#64748B]">
               캘린더를 설정할 드롭을 선택해 주세요.
             </p>
-            <ul className="space-y-3">
-              {drops.map((d) => (
-                <li key={d.id}>
-                  <Link
-                    to="/partner/calendar/$dropId"
-                    params={{ dropId: d.id }}
-                    className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="flex size-10 items-center justify-center rounded-xl bg-[#FAFAFA]">
-                        <CalendarIcon
-                          className="size-5 text-[#0A0A0A]"
-                          strokeWidth={2}
-                        />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[#0F172A] truncate">
-                          {d.ai_summary?.trim() || "예약 드롭"}
-                        </p>
-                        <p className="mt-0.5 text-xs text-[#64748B]">
-                          {d.calendar_mode === "date_time_slot"
-                            ? "시간형 (준비 중)"
-                            : "숙박형 (날짜 범위)"}
-                        </p>
+            {/* 목록 컴팩트 — ai_summary 가 multi-line 이면 truncate 가 안 먹어
+                카드가 늘어남. \s+ 압축 후 한 줄로. 숙박형 부제는 전부 동일이라
+                생략, 시간형(Phase 2)만 안내. 데이터·SQL 무수정. */}
+            <ul className="space-y-2">
+              {drops.map((d) => {
+                const summary =
+                  d.ai_summary?.replace(/\s+/g, " ").trim() || "예약 드롭";
+                const isTimeMode = d.calendar_mode === "date_time_slot";
+                return (
+                  <li key={d.id}>
+                    <Link
+                      to="/partner/calendar/$dropId"
+                      params={{ dropId: d.id }}
+                      className="flex w-full min-h-[44px] items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
+                    >
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#FAFAFA]">
+                          <CalendarIcon
+                            className="size-4 text-[#0A0A0A]"
+                            strokeWidth={2}
+                          />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-[#0F172A]">
+                            {summary}
+                          </p>
+                          {isTimeMode ? (
+                            <p className="mt-0.5 text-xs text-[#64748B]">
+                              시간형 (준비 중)
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                    <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
-                  </Link>
-                </li>
-              ))}
+                      <ChevronRight
+                        className="size-5 shrink-0 text-[#94A3B8]"
+                        strokeWidth={2}
+                      />
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </>
         )}
