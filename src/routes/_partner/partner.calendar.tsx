@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 type ReservationDropRow = {
   id: string;
   calendar_mode: string;
-  intent_label: string | null;
+  ai_summary: string | null;
 };
 
 type LoaderData = {
@@ -35,22 +35,21 @@ export const Route = createFileRoute("/_partner/partner/calendar")({
     if (!partner?.id) return empty;
 
     // 예약 드롭만 (purpose='예약') — published.
+    // intent_types(label) 조인 제거 — label 컬럼 미존재로 400 발생 + 예약 라벨이
+    // 다 '예약' 이라 무의미. 드롭 구분은 ai_summary 로.
     const { data: drops } = await supabase
       .from("info_drops")
-      .select("id, calendar_mode, intent_types(label)")
+      .select("id, calendar_mode, ai_summary")
       .eq("partner_id", partner.id)
       .eq("purpose", "예약")
       .eq("status", "published")
       .order("created_at", { ascending: false });
 
-    const mapped: ReservationDropRow[] = (drops ?? []).map((d) => {
-      const intent = (d as { intent_types?: { label?: string | null } | null }).intent_types;
-      return {
-        id: d.id,
-        calendar_mode: d.calendar_mode ?? "date_range",
-        intent_label: intent?.label ?? null,
-      };
-    });
+    const mapped: ReservationDropRow[] = (drops ?? []).map((d) => ({
+      id: d.id,
+      calendar_mode: d.calendar_mode ?? "date_range",
+      ai_summary: d.ai_summary ?? null,
+    }));
 
     // 드롭 1개면 바로 해당 달력으로.
     if (mapped.length === 1) {
@@ -111,7 +110,7 @@ function PartnerCalendarSelectPage() {
                       </span>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-[#0F172A] truncate">
-                          {d.intent_label ?? "예약 드롭"}
+                          {d.ai_summary?.trim() || "예약 드롭"}
                         </p>
                         <p className="mt-0.5 text-xs text-[#64748B]">
                           {d.calendar_mode === "date_time_slot"
