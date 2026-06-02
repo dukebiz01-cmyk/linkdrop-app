@@ -2,7 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Play, Copy, MessageCircle, Check, Sparkles, ShieldCheck, Flag, Ticket, Gift } from "lucide-react";
+import {
+  Play,
+  Copy,
+  MessageCircle,
+  Check,
+  Sparkles,
+  ShieldCheck,
+  Flag,
+  Ticket,
+  Gift,
+  Phone,
+  MessageSquare,
+  MapPin,
+} from "lucide-react";
 import {
   AiPriceComparisonCard,
   type PriceOfferRow,
@@ -665,15 +678,19 @@ export function InfoDropPage({
     onPrimaryAction?.();
   }
 
+  // v7.2 — sticky 바는 funnelCoupon 있을 때만 표시. 없으면 본문 pb 축소.
+  const hasStickyBar = Boolean(funnelCoupon && onReserveAndClaim);
+
   return (
     <div
       className={cn(
         "relative mx-auto min-h-screen w-full max-w-[480px] bg-white",
-        // sticky 바 분리: 본문 inline footer 는 자연 스크롤, sticky 바 만 fixed.
         // sticky 바 = 12(pt) + 52(primary) + 12(pb) + safe-area ≈ 76px + safe-area.
         // 본문 마지막 ~ sticky 바 사이 안 겹치게 pb-[calc(5.5rem+safe-area)] (88px).
-        // 정보/쿠폰 동일 (sticky 바 단일 버튼 1개).
-        "pb-[calc(5.5rem+env(safe-area-inset-bottom))]",
+        // sticky 없는 드롭(정보/구매/상담) = pb-8 만으로 충분.
+        hasStickyBar
+          ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
+          : "pb-8",
       )}
       data-testid="public-drop-page"
       data-variant={resolvedVariant}
@@ -986,7 +1003,8 @@ export function InfoDropPage({
 
         {resolvedVariant === "lead" && <ConsultationLeadForm partnerName={safeLocal.name} />}
 
-        {/* 4. 목적별 CTA — info는 하단 푸터(링크·카톡)만 */}
+        {/* 4. 목적별 CTA — info는 하단 푸터(링크·카톡)만. v7.2: 쿠폰은 본문 CTAS
+            비우고 sticky 단일 액션 으로. purchase/lead 만 본문 CTAS 사용. */}
         {ctas.length > 0 && (
           <section>
             <h2 className="text-sm font-bold tracking-ko text-text-strong">{pageCopy.ctaHeading}</h2>
@@ -1018,11 +1036,57 @@ export function InfoDropPage({
             </div>
           </section>
         )}
+
+        {/* v7.2 — 보조 연락 row. 쿠폰/예약 드롭에만, 매장 정보 있을 때만.
+            전화/문자/길찾기 가로 아이콘. 60대 친화 큰 터치. */}
+        {(resolvedVariant === "coupon" || isReservation) &&
+          (hasPhone || Boolean(safeLocal.address?.trim() || safeLocal.name?.trim())) && (
+            <section
+              data-testid="secondary-contact-row"
+              className="flex items-stretch gap-2"
+            >
+              {hasPhone ? (
+                <button
+                  type="button"
+                  onClick={() => handleCtaClick("phone")}
+                  className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
+                  aria-label="전화 문의"
+                >
+                  <Phone className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+                  전화
+                </button>
+              ) : null}
+              {hasPhone ? (
+                <button
+                  type="button"
+                  onClick={() => handleCtaClick("sms")}
+                  className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
+                  aria-label="문자 문의"
+                >
+                  <MessageSquare className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+                  문자
+                </button>
+              ) : null}
+              {Boolean(safeLocal.address?.trim() || safeLocal.name?.trim()) ? (
+                <button
+                  type="button"
+                  onClick={() => handleCtaClick("directions")}
+                  className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
+                  aria-label="길찾기"
+                >
+                  <MapPin className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+                  길찾기
+                </button>
+              ) : null}
+            </section>
+          )}
         </div>
 
-      {/* 5a. 본문 inline footer — 링크복사 / 쿠폰드롭 카톡 secondary / 메이커유입 /
-            FTC / 신고. sticky 아님 — 영상 다음 자연 스크롤 흐름. */}
-      <section className="mx-auto w-full max-w-[480px] space-y-2 px-6 pt-4">
+      {/* v7.2 5a — 하단 공유 블록 (모든 드롭 공통).
+            [LinkDrop][링크 복사][카카오톡 공유] 균일 가로 3 버튼.
+            본문 small 카톡·"나도 이런 정보..." 텍스트 링크·sticky 카톡 분기
+            전부 통합. 60대 친화 큰 터치, #15 검정 미니멀, 이모지 X. */}
+      <section className="mx-auto w-full max-w-[480px] space-y-3 px-6 pt-4">
         {copyFeedback && (
           <p className="flex items-center gap-2 text-sm font-medium text-text-strong">
             <Check className="size-4 text-intent-success" strokeWidth={2} />
@@ -1031,37 +1095,36 @@ export function InfoDropPage({
         )}
         <ErrorMessage message={shareError} />
 
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex items-stretch gap-2" data-testid="share-block">
+          {videoSourceUrl ? (
+            <a
+              href={`/create?url=${encodeURIComponent(videoSourceUrl)}`}
+              className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
+              aria-label="LinkDrop"
+            >
+              <Sparkles className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+              LinkDrop
+            </a>
+          ) : null}
           <button
             type="button"
             onClick={handleCopy}
-            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#E5E5E5] bg-white px-3 text-xs font-semibold tracking-ko text-[#525252] transition-colors hover:bg-[#FAFAFA]"
+            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
             aria-label="링크 복사"
           >
-            <Copy className="size-3.5" strokeWidth={2} />
+            <Copy className="size-5 text-[#0A0A0A]" strokeWidth={2} />
             링크 복사
           </button>
-          {/* 쿠폰드롭만: 카톡 공유 secondary (claim 흐름 유지 + 공유 동선 보존) */}
-          {isReservation && funnelCoupon && onReserveAndClaim ? (
-            <button
-              type="button"
-              onClick={handleKakao}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#E5E5E5] bg-white px-3 text-xs font-semibold tracking-ko text-[#525252] transition-colors hover:bg-[#FAFAFA]"
-            >
-              <MessageCircle className="size-3.5" strokeWidth={2} />
-              카카오톡 공유
-            </button>
-          ) : null}
-        </div>
-
-        {videoSourceUrl && (
-          <a
-            href={`/create?url=${encodeURIComponent(videoSourceUrl)}`}
-            className="block text-center text-xs font-medium tracking-ko text-[#737373] underline-offset-2 hover:text-[#0A0A0A] hover:underline"
+          <button
+            type="button"
+            onClick={handleKakao}
+            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
+            aria-label="카카오톡 공유"
           >
-            나도 이런 정보 보내고 싶다면 →
-          </a>
-        )}
+            <MessageCircle className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+            카카오톡 공유
+          </button>
+        </div>
 
         <p className="text-center text-[10px] leading-tight tracking-ko text-[#A3A3A3]">
           본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
@@ -1079,29 +1142,25 @@ export function InfoDropPage({
         </div>
       </section>
 
-      {/* 5b. sticky 하단 바 — primary 1개만. safe-area 패딩. 스크롤해도 항상 닿게. */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#E5E7EB] bg-white">
-        <div className="mx-auto w-full max-w-[480px] px-6 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
-          {isReservation && funnelCoupon && onReserveAndClaim ? (
+      {/* v7.2 5b — sticky 하단 바: funnelCoupon + onReserveAndClaim 있을
+            때만 단일 액션. 카카오톡 공유는 위 공유 블록으로 이전 (sticky 미사용).
+            정보/구매/상담 드롭 = sticky 없음. */}
+      {funnelCoupon && onReserveAndClaim ? (
+        <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#E5E7EB] bg-white">
+          <div className="mx-auto w-full max-w-[480px] px-6 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
             <button
               type="button"
               onClick={onReserveAndClaim}
+              data-testid="cta-sticky-primary"
               className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white"
             >
-              <span className="truncate">예약 문의하고 쿠폰 받기</span>
+              <span className="truncate">
+                {isReservation ? "예약 문의하기" : "예약하고 쿠폰 받기"}
+              </span>
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleKakao}
-              className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white"
-            >
-              <MessageCircle className="size-5 shrink-0" strokeWidth={2} />
-              <span className="truncate">카카오톡 공유</span>
-            </button>
-          )}
+          </div>
         </div>
-      </div>
+      ) : null}
       <AbuseReportSheet
         isOpen={isReportSheetOpen}
         onClose={() => setIsReportSheetOpen(false)}

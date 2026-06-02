@@ -10,11 +10,12 @@ export interface PublicDropCta {
 export const PUBLIC_DROP_CTAS: Record<DropViewVariant, PublicDropCta[]> = {
   /** 링크 복사·카카오톡 공유는 하단 고정 푸터에서 처리 */
   info: [],
-  coupon: [
-    { id: "coupon", label: "쿠폰 받기", primary: true },
-    { id: "reserve-coupon", label: "예약하고 쿠폰 쓰기" },
-    { id: "phone", label: "전화 문의" },
-  ],
+  /**
+   * v7.2 — 쿠폰 드롭 본문 CTAS 제거. 주 액션 = sticky "예약하고 쿠폰 받기"
+   * 1개. 보조 연락(전화/문자/길찾기)은 별도 row 로 본문에서 처리.
+   * 라벨만 3개·동작 1개 의 중복 제거.
+   */
+  coupon: [],
   /** 예약 CTA는 reservation-calendar-page 블록에서 처리 (중복 방지) */
   reservation: [],
   purchase: [
