@@ -95,7 +95,7 @@ export function Step4DropPreview({
       <StepBadge n={3} />
       <div className="flex items-center gap-2">
         <h1 className="text-2xl font-extrabold tracking-ko text-text-strong">
-          AI가 받을 사람용 카드로 정리했어요
+          AI가 받는 분 입장에서 정리했어요
         </h1>
         <span className="inline-flex items-center gap-1 rounded-lg bg-surface px-2 py-0.5 text-xs font-semibold text-accent">
           <Sparkles className="size-3" strokeWidth={2} />

@@ -95,7 +95,9 @@ export const PURPOSE_FLOW_CONFIG: Record<DropPurpose, PurposeFlowConfig> = {
   },
   쿠폰: {
     badge: "쿠폰",
-    title: "혜택으로 손님 모으기",
+    // v7.2 — 손님 관점 통일. info-drop-page L185-189 sectionTitle 과 동일
+    // ("받을 수 있는 혜택"). 위저드 미리보기 헤더에서도 손님 시점 적용.
+    title: "받을 수 있는 혜택",
     description: "친구가 바로 사용할 수 있는 쿠폰형 Drop을 만들었어요.",
     points: ["쿠폰명 생성", "사용 조건 정리", "쿠폰 받기 버튼 구성"],
     cta: "쿠폰 받기",
