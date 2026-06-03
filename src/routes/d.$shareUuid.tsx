@@ -333,9 +333,18 @@ function DropPage() {
       return null;
     }
   })();
-  // 쿠폰 게이팅 — 예약 흐름(reservationUrl) 있을 때만 잠그고, 네이버 예약 시작 후 해제.
-  // reservationUrl 없는 순수 쿠폰 드롭은 항상 false(=활성).
-  const couponLocked = Boolean(reservationUrl) && !reservationStarted;
+  // 네이버/tel 예약 URL 여부 — onPrimaryAction 의 시트 경로(=잠금 해제 경로)가 작동하는 URL.
+  // 비-네이버(캠핏/야놀자/자체) 는 시트가 안 열려 reservationStarted 가 켜질 길이 없으므로
+  // 게이팅 대상에서 제외(아니면 쿠폰 영구 잠김).
+  const isNaverReservation =
+    !!reservationUrl &&
+    (reservationUrl.startsWith("https://booking.naver.com") ||
+      reservationUrl.startsWith("https://naver.me") ||
+      reservationUrl.startsWith("https://map.naver.com") ||
+      reservationUrl.startsWith("tel:"));
+  // 쿠폰 게이팅 — 해제 경로 있는 네이버/tel 예약일 때만 잠그고, 예약 시작 후 해제.
+  // 비-네이버 예약 / 순수 쿠폰 드롭은 항상 false(=활성).
+  const couponLocked = isNaverReservation && !reservationStarted;
   // 예약 가능 날짜 — wizard 의 ?r= 디코드. DB 미저장이라 query param 으로 임시 운반.
   // 빈 배열이면 InfoDropPage 가 캘린더 카드를 자동 숨김.
   const reservationDatesFromQuery = decodeReservationDates(search.r);
@@ -454,12 +463,7 @@ function DropPage() {
         onReserveAndClaim={handleReserveAndClaim}
         onPrimaryAction={() => {
           if (!reservationUrl || typeof window === "undefined") return;
-          const safeRes =
-            reservationUrl.startsWith("https://booking.naver.com") ||
-            reservationUrl.startsWith("https://naver.me") ||
-            reservationUrl.startsWith("https://map.naver.com") ||
-            reservationUrl.startsWith("tel:");
-          if (safeRes) {
+          if (isNaverReservation) {
             trackReceiverEvent("reservation_click", detail.drop.id);
             setPendingNaverUrl(reservationUrl);
             setNaverPending(true);
