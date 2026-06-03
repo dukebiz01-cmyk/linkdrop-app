@@ -907,7 +907,13 @@ export function InfoDropPage({
                   reservationUrl.startsWith("https://naver.me") ||
                   reservationUrl.startsWith("https://map.naver.com") ||
                   reservationUrl.startsWith("tel:");
-                if (safe) window.open(reservationUrl, "_blank", "noopener");
+                if (safe) {
+                  // 캘린더 [예약하기] 클릭 추적 — onPrimaryAction L353 의
+                  // reservation_click 과 동일 이벤트. 손님 깔때기 노출→
+                  // 클릭→네이버이동→복귀 4 단계 중 2번째 채움.
+                  trackReceiverEvent("reservation_click", dropId);
+                  window.open(reservationUrl, "_blank", "noopener");
+                }
               }}
               onSecondaryAction={(action) => handleCtaClick(action)}
             />
