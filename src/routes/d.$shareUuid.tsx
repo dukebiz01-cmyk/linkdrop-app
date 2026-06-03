@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { useState, useEffect, useRef } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { InfoDropPage } from "@/components/info-drop-page";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getAuthClient } from "@/lib/auth-context";
@@ -16,8 +16,8 @@ import { infoDropAdapter, type DropDetailRpc } from "@/lib/adapters";
 import { trackReceiverEvent } from "@/lib/event-tracking";
 import { shareToKakao } from "@/lib/kakao";
 import { startKakaoLogin } from "@/lib/oauth-kakao";
-import { ReserveFunnelSheet } from "@/components/receiver/ReserveFunnelSheet";
 import { getSupabase } from "@/lib/supabase";
+import { toast } from "sonner";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 
 const PROD_BASE = "https://app.drop.how";
@@ -58,8 +58,8 @@ type DropSearch = {
   parentShareId?: string;
   shareDepth?: number;
   ref?: string;
-  // H1-d: OAuth 복귀 후 funnel 시트 자동 열기 표식.
-  reserve?: string;
+  // B3: OAuth 복귀 후 쿠폰 자동 발급 표식.
+  coupon?: string;
 };
 
 type MockLoaderData = {
@@ -104,7 +104,7 @@ export const Route = createFileRoute("/d/$shareUuid")({
       parentShareId: typeof search.parentShareId === "string" ? search.parentShareId : undefined,
       shareDepth: depth,
       ref: typeof search.ref === "string" ? search.ref : undefined,
-      reserve: typeof search.reserve === "string" ? search.reserve : undefined,
+      coupon: typeof search.coupon === "string" ? search.coupon : undefined,
     };
   },
   loader: async ({ params, location }): Promise<LoaderData> => {
@@ -217,10 +217,10 @@ function DropPage() {
   const [naverPending, setNaverPending] = useState(false);
   const [pendingNaverUrl, setPendingNaverUrl] = useState<string | null>(null);
   const [returnPrompt, setReturnPrompt] = useState(false);
-  // H1-d funnel — 로그인 유저 id + 시트 open state. 마운트 시 getSession 으로 확인.
+  // B3 — 로그인 유저 id + 쿠폰 발급 가드(중복 호출 차단). 마운트 시 getSession 으로 확인.
   const [userId, setUserId] = useState<string | null>(null);
-  const [reserveSheetOpen, setReserveSheetOpen] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const [claimInFlight, setClaimInFlight] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -294,25 +294,86 @@ function DropPage() {
   // 빈 배열이면 InfoDropPage 가 캘린더 카드를 자동 숨김.
   const reservationDatesFromQuery = decodeReservationDates(search.r);
 
-  // H1-d: OAuth 복귀 후 ?reserve=1 + 로그인 + coupon 있으면 시트 자동 open (1회).
+  // B3 — 쿠폰만 발급. ReserveFunnelSheet 예약 폼 미사용. claim_coupon RPC 만 호출.
+  //   · userId 있음 → 즉시 claim_coupon → 토스트 안내 ("쿠폰 보기" 액션)
+  //   · userId 없음 → 카카오 OAuth ?coupon=1 복귀 → useEffect 가 1 회 자동 발급
+  // claim_coupon = (coupon_id, share_event_id, catcher_user_id) UNIQUE 멱등(#21).
+  // visitor / 연락처 불필요. 달력 회귀 인상 0.
   const funnelCoupon = detail.coupon ?? null;
+  const navigate = useNavigate();
+  const claimedRef = useRef(false);
+
+  async function claimCouponNow() {
+    if (!funnelCoupon || !userId || claimInFlight) return;
+    setClaimInFlight(true);
+    try {
+      const supabase = getSupabase();
+      const { data: se, error: seErr } = await supabase
+        .from("share_events")
+        .select("id")
+        .eq("share_uuid", shareUuid)
+        .maybeSingle();
+      if (seErr || !se?.id) {
+        toast.error("공유 정보를 찾을 수 없어요. 다시 시도해 주세요.");
+        return;
+      }
+      const { data: claim, error: claimErr } = await supabase.rpc("claim_coupon", {
+        p_coupon_id: funnelCoupon.id,
+        p_share_event_id: se.id,
+        p_catcher_user_id: userId,
+      });
+      if (claimErr) {
+        console.error("[d.$shareUuid] claim_coupon failed:", claimErr);
+        toast.error("쿠폰 발급에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      const firstRow = Array.isArray(claim) ? claim[0] : null;
+      const code =
+        firstRow && typeof firstRow === "object" && firstRow !== null && "claim_code" in firstRow
+          ? String((firstRow as { claim_code: unknown }).claim_code ?? "")
+          : "";
+      toast.success("쿠폰을 받았어요", {
+        description: code ? `쿠폰 번호 ${code}` : "내 페이지에서 확인할 수 있어요.",
+        action: code
+          ? {
+              label: "쿠폰 보기",
+              onClick: () =>
+                void navigate({
+                  to: "/coupon/$claim_code",
+                  params: { claim_code: code },
+                }),
+            }
+          : { label: "내 쿠폰", onClick: () => void navigate({ to: "/me" }) },
+      });
+    } catch (e) {
+      console.error("[d.$shareUuid] claim_coupon unexpected:", e);
+      toast.error("처리 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setClaimInFlight(false);
+    }
+  }
+
+  // OAuth 복귀 ?coupon=1 + 로그인 + funnel coupon 있으면 1 회 자동 발급.
   useEffect(() => {
     if (!authChecked) return;
-    if (search.reserve !== "1") return;
+    if (search.coupon !== "1") return;
     if (!userId) return;
     if (!funnelCoupon) return;
-    if (reserveSheetOpen) return;
-    setReserveSheetOpen(true);
-  }, [authChecked, search.reserve, userId, funnelCoupon, reserveSheetOpen]);
+    if (claimedRef.current) return;
+    claimedRef.current = true;
+    void claimCouponNow();
+    // claimCouponNow 는 deps 제외 — 매 렌더 새 참조라 무한 루프 방지.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authChecked, search.coupon, userId, funnelCoupon]);
 
   function handleReserveAndClaim() {
     if (!funnelCoupon) return;
     if (userId) {
-      setReserveSheetOpen(true);
+      void claimCouponNow();
       return;
     }
-    // 미로그인 → 카카오 OAuth, next 로 현 /d/{shareUuid}?reserve=1 복귀.
-    const next = `/d/${shareUuid}?reserve=1`;
+    // 미로그인 → 카카오 OAuth, next 로 현 /d/{shareUuid}?coupon=1 복귀.
+    const next = `/d/${shareUuid}?coupon=1`;
     void startKakaoLogin(next);
   }
 
@@ -519,17 +580,7 @@ function DropPage() {
         </SheetContent>
       </Sheet>
 
-      {/* H1-d funnel — [예약 문의하고 쿠폰 받기] 시트 */}
-      {funnelCoupon && userId ? (
-        <ReserveFunnelSheet
-          open={reserveSheetOpen}
-          onOpenChange={setReserveSheetOpen}
-          shareUuid={shareUuid}
-          dropId={detail.drop.id}
-          coupon={{ id: funnelCoupon.id, title: funnelCoupon.title }}
-          userId={userId}
-        />
-      ) : null}
+      {/* B3 — ReserveFunnelSheet 호출 제거. sticky → claim_coupon 직접. */}
     </>
   );
 }

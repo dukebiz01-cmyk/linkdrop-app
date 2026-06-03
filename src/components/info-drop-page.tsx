@@ -1182,9 +1182,7 @@ export function InfoDropPage({
               data-testid="cta-sticky-primary"
               className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white"
             >
-              <span className="truncate">
-                {isReservation ? "예약 문의하기" : "예약하고 쿠폰 받기"}
-              </span>
+              <span className="truncate">쿠폰 받기</span>
             </button>
           </div>
         </div>
