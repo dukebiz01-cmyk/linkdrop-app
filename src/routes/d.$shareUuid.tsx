@@ -261,9 +261,6 @@ function DropPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [claimInFlight, setClaimInFlight] = useState(false);
-  // 쿠폰 게이팅 — 네이버 예약 시작(시트 "예약 페이지 열기" 클릭) 전까지 sticky 쿠폰 버튼 잠금.
-  // 네이버는 새 탭으로 열려 이 카드 state 가 유지되므로 useState 로 충분(영속 불필요).
-  const [reservationStarted, setReservationStarted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -333,18 +330,13 @@ function DropPage() {
       return null;
     }
   })();
-  // 네이버/tel 예약 URL 여부 — onPrimaryAction 의 시트 경로(=잠금 해제 경로)가 작동하는 URL.
-  // 비-네이버(캠핏/야놀자/자체) 는 시트가 안 열려 reservationStarted 가 켜질 길이 없으므로
-  // 게이팅 대상에서 제외(아니면 쿠폰 영구 잠김).
+  // 네이버/tel 예약 URL 여부 — onPrimaryAction 이 네이버 이동 시트를 띄울지 결정한다.
   const isNaverReservation =
     !!reservationUrl &&
     (reservationUrl.startsWith("https://booking.naver.com") ||
       reservationUrl.startsWith("https://naver.me") ||
       reservationUrl.startsWith("https://map.naver.com") ||
       reservationUrl.startsWith("tel:"));
-  // 쿠폰 게이팅 — 해제 경로 있는 네이버/tel 예약일 때만 잠그고, 예약 시작 후 해제.
-  // 비-네이버 예약 / 순수 쿠폰 드롭은 항상 false(=활성).
-  const couponLocked = isNaverReservation && !reservationStarted;
   // 예약 가능 날짜 — wizard 의 ?r= 디코드. DB 미저장이라 query param 으로 임시 운반.
   // 빈 배열이면 InfoDropPage 가 캘린더 카드를 자동 숨김.
   const reservationDatesFromQuery = decodeReservationDates(search.r);
@@ -443,7 +435,6 @@ function DropPage() {
         officialStatus="user_shared"
         dropId={detail.drop.id}
         initialSlots={slots}
-        couponLocked={couponLocked}
         funnelCoupon={
           funnelCoupon
             ? {
@@ -579,7 +570,6 @@ function DropPage() {
                     url: pendingNaverUrl,
                     share_uuid: shareUuid,
                   });
-                  setReservationStarted(true); // B 시점 — 쿠폰 버튼 잠금 해제
                   window.open(pendingNaverUrl, "_blank", "noopener,noreferrer");
                 }
               }}

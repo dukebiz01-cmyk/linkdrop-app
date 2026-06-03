@@ -120,8 +120,6 @@ export interface InfoDropPageProps {
   partnerId?: string | null;
   /** P3 — SSR loader 가 미리 가져온 슬롯 행. 주어지면(빈 배열 포함) 클라 fetch 스킵. */
   initialSlots?: SlotAvailableRow[];
-  /** 쿠폰 게이팅 — true 면 sticky 쿠폰 버튼 비활성(예약 시작 전). 예약 흐름 있는 드롭에서만. */
-  couponLocked?: boolean;
   /** H1-d funnel — drop 의 partner active coupon (있으면). null/undefined 면 CTA 미노출.
    *  U1: 카드 표시용 conditions/valid_until 추가. id/title 외 옵셔널. */
   funnelCoupon?: {
@@ -577,7 +575,6 @@ export function InfoDropPage({
   dropId,
   partnerId,
   initialSlots,
-  couponLocked,
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   const parsedVideo = videoSourceUrl ? parseVideoUrl(videoSourceUrl) : null;
@@ -718,8 +715,6 @@ export function InfoDropPage({
 
   // v7.2 — sticky 바는 funnelCoupon 있을 때만 표시. 없으면 본문 pb 축소.
   const hasStickyBar = Boolean(funnelCoupon && onReserveAndClaim);
-  // 쿠폰 게이팅은 예약 캘린더가 실제 렌더되는 드롭에서만. 캘린더 없는 정보/순수쿠폰 드롭은 항상 활성.
-  const stickyCouponLocked = Boolean(couponLocked) && showReservationCalendar;
 
   return (
     <div
@@ -1198,16 +1193,10 @@ export function InfoDropPage({
             <button
               type="button"
               onClick={onReserveAndClaim}
-              disabled={stickyCouponLocked}
               data-testid="cta-sticky-primary"
-              className={cn(
-                "flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 text-base font-bold",
-                stickyCouponLocked
-                  ? "bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed"
-                  : "bg-[#0A0A0A] text-white",
-              )}
+              className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white"
             >
-              <span className="truncate">{stickyCouponLocked ? "예약 후 쿠폰 받기" : "쿠폰 받기"}</span>
+              <span className="truncate">쿠폰 받기</span>
             </button>
           </div>
         </div>
