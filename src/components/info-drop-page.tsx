@@ -619,6 +619,8 @@ export function InfoDropPage({
   const isReservation = resolvedVariant === "reservation";
   // v7.2 — 쿠폰 드롭에도 매장 캘린더 탭 [쿠폰][예약가능 캘린더]. partnerId 있을 때만.
   const isCoupon = resolvedVariant === "coupon";
+  // 예약 캘린더(ReservationCalendarClient)가 실제로 렌더되는 드롭인지. 쿠폰 게이팅 범위 한정용.
+  const showReservationCalendar = isReservation || (isCoupon && Boolean(partnerId));
   const reservationGuide = MOCK_RESERVATION_SECTION_GUIDE;
   const videoHeadline = isReservation ? safeTitle : pageCopy.sectionTitle;
   const safeThumb = videoThumbnailUrl?.trim() || "";
@@ -716,6 +718,8 @@ export function InfoDropPage({
 
   // v7.2 — sticky 바는 funnelCoupon 있을 때만 표시. 없으면 본문 pb 축소.
   const hasStickyBar = Boolean(funnelCoupon && onReserveAndClaim);
+  // 쿠폰 게이팅은 예약 캘린더가 실제 렌더되는 드롭에서만. 캘린더 없는 정보/순수쿠폰 드롭은 항상 활성.
+  const stickyCouponLocked = Boolean(couponLocked) && showReservationCalendar;
 
   return (
     <div
@@ -896,7 +900,7 @@ export function InfoDropPage({
 
         {/* 예약 드롭 = [예약가능 캘린더 | 예약하기 | 쿠폰] 3탭 (기존).
             v7.2 쿠폰 드롭 = [쿠폰 | 예약가능 캘린더] 2탭. 정보/구매/상담 진입 X. */}
-        {(isReservation || (isCoupon && Boolean(partnerId))) && (() => {
+        {showReservationCalendar && (() => {
           const hasReservationDates =
             Array.isArray(reservationDates) && reservationDates.length > 0;
           const isGift = funnelCoupon?.coupon_type === "gift";
@@ -1194,16 +1198,16 @@ export function InfoDropPage({
             <button
               type="button"
               onClick={onReserveAndClaim}
-              disabled={couponLocked}
+              disabled={stickyCouponLocked}
               data-testid="cta-sticky-primary"
               className={cn(
                 "flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 text-base font-bold",
-                couponLocked
+                stickyCouponLocked
                   ? "bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed"
                   : "bg-[#0A0A0A] text-white",
               )}
             >
-              <span className="truncate">{couponLocked ? "예약 후 쿠폰 받기" : "쿠폰 받기"}</span>
+              <span className="truncate">{stickyCouponLocked ? "예약 후 쿠폰 받기" : "쿠폰 받기"}</span>
             </button>
           </div>
         </div>
