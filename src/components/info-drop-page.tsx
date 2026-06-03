@@ -295,8 +295,9 @@ function ReservationCalendarClient(props: {
   // v7.1 — partnerId 있을 때만 매장 슬롯 가용일 fetch (정보 드롭 회귀 0:
   // partnerId 가 undefined/null 이면 호출 자체 없음). 오늘 이후 행만 반환.
   useEffect(() => {
-    // P3 — SSR 가 슬롯을 내려줬으면(빈 배열 포함) 클라 fetch 스킵. undefined 일 때만 fallback.
-    if (props.initialSlots) return;
+    // P3 — SSR 가 슬롯을 채워 내려줬으면 클라 fetch 스킵. 빈 배열([])이면 SSR 누락
+    // (간헐) 가능성 → 클라 fetch 로 복구. undefined 도 fallback.
+    if (props.initialSlots && props.initialSlots.length > 0) return;
     if (!props.partnerId) return;
     let cancelled = false;
     (async () => {
