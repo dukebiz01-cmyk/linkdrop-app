@@ -62,14 +62,30 @@ type DropSearch = {
   coupon?: string;
 };
 
+// P3 — get_available_slots 반환 행. SSR loader 가 미리 가져와 HTML 에 실어 보낸다.
+// (카카오 WebView 에서 클라 useEffect fetch 가 실패해 '남은 N자리' 가 안 뜨던 문제 대응.)
+type SlotRow = {
+  slot_date: string;
+  slot_time: string | null;
+  max_capacity: number;
+  current_bookings: number;
+  available: number;
+};
+
 type MockLoaderData = {
   mode: "mock";
   shareUuid: string;
   variant: DropVariant;
   reservationDates: ReservationDateItem[];
   reservationUrl: string | null;
+  slots: SlotRow[];
 };
-type DbLoaderData = { mode: "db"; detail: DropDetailRpc | null; shareUuid: string };
+type DbLoaderData = {
+  mode: "db";
+  detail: DropDetailRpc | null;
+  shareUuid: string;
+  slots: SlotRow[];
+};
 type LoaderData = MockLoaderData | DbLoaderData;
 
 function mockLoaderData(
@@ -85,6 +101,7 @@ function mockLoaderData(
     variant: resolvePublicDropVariant(code, normalizeVariant(searchVariant)),
     reservationDates,
     reservationUrl,
+    slots: [],
   };
 }
 
@@ -123,15 +140,38 @@ export const Route = createFileRoute("/d/$shareUuid")({
     // 실제 share_uuid → get_drop_detail RPC (v3.5: maker/store 포함, 조회수 +1)
     try {
       const supabase = await getAuthClient();
-      if (!supabase) return { mode: "db", detail: null, shareUuid };
+      if (!supabase) return { mode: "db", detail: null, shareUuid, slots: [] };
       const { data, error } = await supabase.rpc("get_drop_detail", {
         p_share_uuid: shareUuid,
       });
-      if (error || !data) return { mode: "db", detail: null, shareUuid };
-      return { mode: "db", detail: data as unknown as DropDetailRpc, shareUuid };
+      if (error || !data) return { mode: "db", detail: null, shareUuid, slots: [] };
+      const detail = data as unknown as DropDetailRpc;
+
+      // P3 — partner_id 있으면 슬롯도 SSR 에서 미리 가져온다(get_drop_detail 과 동일 인스턴스).
+      // anon EXECUTE 확인 완료. 실패해도 페이지는 정상 — slots=[] 로 두는 graceful 패턴.
+      // p_date = Asia/Seoul 오늘(서버 UTC 무관). en-CA → "YYYY-MM-DD".
+      let slots: SlotRow[] = [];
+      const partnerId = detail.drop?.partner_id ?? null;
+      if (partnerId) {
+        try {
+          const kstToday = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Asia/Seoul",
+          }).format(new Date());
+          const { data: slotData, error: slotError } = await supabase.rpc(
+            "get_available_slots",
+            { p_partner_id: partnerId, p_date: kstToday },
+          );
+          if (!slotError && Array.isArray(slotData)) {
+            slots = slotData as unknown as SlotRow[];
+          }
+        } catch (slotErr) {
+          console.error("[d/$shareUuid loader] get_available_slots", slotErr);
+        }
+      }
+      return { mode: "db", detail, shareUuid, slots };
     } catch (err) {
       console.error("[d/$shareUuid loader]", err);
-      return { mode: "db", detail: null, shareUuid };
+      return { mode: "db", detail: null, shareUuid, slots: [] };
     }
   },
   head: ({ loaderData, params }) => {
@@ -270,7 +310,7 @@ function DropPage() {
     );
   }
 
-  const { detail, shareUuid } = loaderData;
+  const { detail, shareUuid, slots } = loaderData;
 
   // 실제 share_uuid 인데 조회 실패 → mock info 변형으로 fallback (무로그인 화면 깨짐 방지)
   if (!detail) {
@@ -387,6 +427,7 @@ function DropPage() {
         videoSourceUrl={detail.source?.source_url ?? undefined}
         officialStatus="user_shared"
         dropId={detail.drop.id}
+        initialSlots={slots}
         funnelCoupon={
           funnelCoupon
             ? {

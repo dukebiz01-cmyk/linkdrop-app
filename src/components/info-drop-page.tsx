@@ -118,6 +118,8 @@ export interface InfoDropPageProps {
   dropId: string;
   /** v7.1c — 매장별 예약 캘린더 연동용. 예약 드롭에서만 의미 있음 (정보 드롭 무관). */
   partnerId?: string | null;
+  /** P3 — SSR loader 가 미리 가져온 슬롯 행. 주어지면(빈 배열 포함) 클라 fetch 스킵. */
+  initialSlots?: SlotAvailableRow[];
   /** H1-d funnel — drop 의 partner active coupon (있으면). null/undefined 면 CTA 미노출.
    *  U1: 카드 표시용 conditions/valid_until 추가. id/title 외 옵셔널. */
   funnelCoupon?: {
@@ -275,11 +277,16 @@ function ReservationCalendarClient(props: {
   readOnly?: boolean;
   /** v7.1 — 매장별 슬롯 가용일. partnerId 있으면 get_available_slots 호출해 modifier 로 표시. */
   partnerId?: string | null;
+  /** P3 — SSR loader 가 미리 가져온 슬롯. 주어지면 클라 fetch 스킵하고 이 값으로 초기화. */
+  initialSlots?: SlotAvailableRow[];
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
 }) {
   const [mounted, setMounted] = useState(false);
-  const [partnerSlots, setPartnerSlots] = useState<SlotAvailableRow[]>([]);
+  // P3 — SSR slots 있으면 그것으로 초기화(available>0 만), 없으면 기존대로 빈 배열 후 클라 fetch.
+  const [partnerSlots, setPartnerSlots] = useState<SlotAvailableRow[]>(
+    props.initialSlots ? props.initialSlots.filter((r) => r.available > 0) : [],
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -288,6 +295,8 @@ function ReservationCalendarClient(props: {
   // v7.1 — partnerId 있을 때만 매장 슬롯 가용일 fetch (정보 드롭 회귀 0:
   // partnerId 가 undefined/null 이면 호출 자체 없음). 오늘 이후 행만 반환.
   useEffect(() => {
+    // P3 — SSR 가 슬롯을 내려줬으면(빈 배열 포함) 클라 fetch 스킵. undefined 일 때만 fallback.
+    if (props.initialSlots) return;
     if (!props.partnerId) return;
     let cancelled = false;
     (async () => {
@@ -313,7 +322,7 @@ function ReservationCalendarClient(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.partnerId]);
+  }, [props.partnerId, props.initialSlots]);
 
   // Phase A — Date[] 대신 {date, available} 보존. 캘린더 셀에 "남은 N자리"
   // 라벨을 위한 데이터. RPC available 컬럼 그대로 통과.
@@ -564,6 +573,7 @@ export function InfoDropPage({
   officialStatus,
   dropId,
   partnerId,
+  initialSlots,
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   const parsedVideo = videoSourceUrl ? parseVideoUrl(videoSourceUrl) : null;
@@ -901,6 +911,7 @@ export function InfoDropPage({
               campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
               makerAvailableDates={reservationDates}
               partnerId={partnerId}
+              initialSlots={initialSlots}
               readOnly={isReshare}
               onCheckAvailability={() => {
                 // B1 — 캘린더 [예약하기] 시트 경로 통일. 직행 window.open 제거.
