@@ -287,6 +287,8 @@ function ReservationCalendarClient(props: {
   const [partnerSlots, setPartnerSlots] = useState<SlotAvailableRow[]>(
     props.initialSlots ? props.initialSlots.filter((r) => r.available > 0) : [],
   );
+  // [dbg] 임시 진단용 — ?dbg 일 때만 readout. 곧 제거.
+  const [dbgErr, setDbgErr] = useState<string>("");
 
   useEffect(() => {
     setMounted(true);
@@ -310,6 +312,7 @@ function ReservationCalendarClient(props: {
         });
         if (error) {
           console.error("[ReservationCalendarClient] get_available_slots failed:", error);
+          setDbgErr(String((error as any)?.message ?? error));
           return;
         }
         if (cancelled) return;
@@ -347,6 +350,11 @@ function ReservationCalendarClient(props: {
 
   return (
     <section data-testid="variant-reservation" className="w-full max-w-full">
+      {typeof window !== "undefined" && window.location.search.includes("dbg") && (
+        <div style={{ fontSize: 11, color: "#b91c1c", padding: "4px 8px", wordBreak: "break-all" }}>
+          [dbg] v=gatefb init={props.initialSlots ? String(props.initialSlots.length) : "undef"} slots={String(partnerSlots.length)} pid={props.partnerId ? "y" : "n"} err={dbgErr || "-"}
+        </div>
+      )}
       <ReservationCalendarPage
         partnerName={props.partnerName}
         makerAvailableDates={props.makerAvailableDates}
