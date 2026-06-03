@@ -905,6 +905,7 @@ export function InfoDropPage({
                 const safe =
                   reservationUrl.startsWith("https://booking.naver.com") ||
                   reservationUrl.startsWith("https://naver.me") ||
+                  reservationUrl.startsWith("https://map.naver.com") ||
                   reservationUrl.startsWith("tel:");
                 if (safe) window.open(reservationUrl, "_blank", "noopener");
               }}

@@ -348,6 +348,7 @@ function DropPage() {
           const safeRes =
             reservationUrl.startsWith("https://booking.naver.com") ||
             reservationUrl.startsWith("https://naver.me") ||
+            reservationUrl.startsWith("https://map.naver.com") ||
             reservationUrl.startsWith("tel:");
           if (safeRes) {
             trackReceiverEvent("reservation_click", detail.drop.id);
