@@ -44,27 +44,42 @@ function costKrw(inTok: number, outTok: number): number {
   return Math.round(usd * USD_TO_KRW * 100) / 100;
 }
 
+// v2 — 손님(수신자) 관점 + 영상·매장·시기 맥락 반영. 옛 v1 캐시는
+//      PROMPT_VERSION 매치 미스로 자연 만료(30 일). backfill 별도.
+const PROMPT_VERSION = "v2";
+
 const SYSTEM_PROMPT = `너는 LinkDrop의 영상 요약 AI야.
-영상 정보를 친구한테 카톡으로 보낼 만큼 간결하고 매력적으로 정리해.
+이 요약은 카카오톡으로 링크를 받은 손님(수신자)이 읽어.
+보내는 사람이 아니라 "받는 손님" 입장에서, "이게 나한테 어떤 가치가 있나"를 중심으로 정리해.
 
-규칙:
-1. 한국어로 작성
-2. 친근하고 자연스러운 톤
-3. 어려운 단어 X (어르신도 이해 가능)
-4. AI 추정임을 명시 (단정형 X)
+핵심 원칙:
+1. 손님(받는 사람)이 주어. "당신이 받는/가는/알게 되는" 느낌. "손님 모으기", "혜택 제공" 같은 업주·판매자 표현 절대 금지.
+2. 영상·매장의 맥락을 반영: 시기(계절·시간대), 장소(지역), 대상(가족·1인·연인·친구)을 정보에서 추정해 톤에 자연스럽게 녹여. 받는 시점에 맞는 권유 (예: 여름 캠핑 영상이면 "이 더위에 가기 좋아요").
+3. 친구가 친구에게 추천하는 말투. 친근하고 자연스럽게.
+4. 어려운 단어 금지 (어르신도 이해).
+5. AI 추정임을 드러내 (단정형 금지, "~인 것 같아요" 톤).
 
-목적별 강조:
-- 정보: 핵심 내용 + 추천 이유
-- 쿠폰: 매장 + 혜택 + 사용 조건
-- 예약: 매장 + 가격대 + 시즌 추천
-- 구매: 제품 + 특징 + 추천 사용자
-- 상담: 분야 + 전문성 + 응답 시간
+목적별 강조 (모두 손님 시점):
+- 정보: 이 영상에서 손님이 알게 될 핵심 + 따라 하기 좋은 팁
+- 쿠폰: 받을 수 있는 혜택 + 받아두면 좋은 이유 + 사용 조건
+- 예약: 예약할 때 고려할 점 + 시기·인원·분위기 추천 포인트
+- 구매: 살 때 도움 될 비교 포인트 + 어떤 사람에게 맞나
+- 상담: 어떤 고민이 있을 때 문의하면 좋은가 + 무엇을 기대할 수 있나
 
 응답 형식 (JSON only, 코드블록·설명 없이 JSON 만):
 {
   "ai_summary": "200-300자 요약 (한 문단)",
   "ai_key_points": ["핵심 1", "핵심 2", "핵심 3", "핵심 4", "핵심 5"]
 }`;
+
+const KO_MONTHS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+function currentSeasonKo(): string {
+  const m = new Date().getMonth() + 1;
+  if (m >= 3 && m <= 5) return "봄";
+  if (m >= 6 && m <= 8) return "여름";
+  if (m >= 9 && m <= 11) return "가을";
+  return "겨울";
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -101,7 +116,8 @@ Deno.serve(async (req) => {
     );
   }
 
-  // 2) 30일 캐시 조회 — 캐시 키 (source_id, purpose)
+  // 2) 30일 캐시 조회 — 캐시 키 (source_id, purpose, prompt_version)
+  //    v7.2: prompt_version 매치 추가 → 옛 v1 캐시는 자연 만료, 신 v2 만 hit.
   const since = new Date(Date.now() - CACHE_TTL_DAYS * 86_400_000).toISOString();
   const { data: cachedRow } = await supabase
     .from("ai_generations")
@@ -110,6 +126,7 @@ Deno.serve(async (req) => {
     .eq("source_id", body.source_id)
     .eq("status", "success")
     .eq("response->>purpose", body.purpose)
+    .eq("response->>prompt_version", PROMPT_VERSION)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -156,9 +173,40 @@ Deno.serve(async (req) => {
 
   const description =
     ((source.raw_meta as Record<string, unknown> | null)?.["description"] as string) ?? "";
+
+  // v7.2 — drop_id 있으면 매장 맥락(display_name/partner_kind/address) 추가.
+  // 위저드 미리보기 등 drop_id 없는 호출은 시기만 추가. 매장 정보 없어도 안전.
+  let storeLine = "";
+  if (body.drop_id) {
+    const { data: dropRow } = await supabase
+      .from("info_drops")
+      .select("partner_id")
+      .eq("id", body.drop_id)
+      .maybeSingle();
+    const partnerId = (dropRow as { partner_id?: string | null } | null)?.partner_id;
+    if (partnerId) {
+      const { data: partnerRow } = await supabase
+        .from("partners")
+        .select("display_name, partner_kind, address")
+        .eq("id", partnerId)
+        .maybeSingle();
+      if (partnerRow) {
+        const p = partnerRow as { display_name?: string; partner_kind?: string; address?: string };
+        const parts = [p.display_name, p.partner_kind, p.address].filter((s) => s && String(s).trim());
+        if (parts.length > 0) storeLine = `매장: ${parts.join(" · ")}\n`;
+      }
+    }
+  }
+
+  const now = new Date();
+  const timeLine = `현재 시점: ${now.getFullYear()}년 ${KO_MONTHS[now.getMonth()]} (${currentSeasonKo()})\n`;
+
   const userPrompt =
     `제목: ${source.title ?? "(없음)"}\n채널: ${source.author_name ?? "(없음)"}\n` +
-    `설명: ${description}\n목적: ${body.purpose}`;
+    `설명: ${description}\n` +
+    storeLine +
+    timeLine +
+    `목적: ${body.purpose}`;
 
   // 4) Claude Haiku 호출
   let inTok = 0;
@@ -202,7 +250,7 @@ Deno.serve(async (req) => {
       .eq("id", body.drop_id);
   }
 
-  // 6) record_ai_generation — response 에 purpose 포함(캐시 키)
+  // 6) record_ai_generation — response 에 purpose + prompt_version (캐시 키)
   const { data: genId } = await supabase.rpc("record_ai_generation", {
     p_generation_type: GENERATION_TYPE,
     p_user_id: body.user_id,
@@ -210,7 +258,7 @@ Deno.serve(async (req) => {
     p_drop_id: body.drop_id ?? null,
     p_model: MODEL,
     p_prompt: userPrompt,
-    p_response: { ...result, purpose: body.purpose },
+    p_response: { ...result, purpose: body.purpose, prompt_version: PROMPT_VERSION },
     p_tokens_used: inTok + outTok,
     p_cost_krw: costKrw(inTok, outTok),
     p_status: "success",
