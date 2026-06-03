@@ -315,10 +315,12 @@ function ReservationCalendarClient(props: {
     };
   }, [props.partnerId]);
 
-  const partnerSlotDates = useMemo(() => {
+  // Phase A — Date[] 대신 {date, available} 보존. 캘린더 셀에 "남은 N자리"
+  // 라벨을 위한 데이터. RPC available 컬럼 그대로 통과.
+  const partnerSlotEntries = useMemo(() => {
     return partnerSlots.map((r) => {
       const [y, m, d] = r.slot_date.split("-").map(Number);
-      return new Date(y, m - 1, d);
+      return { date: new Date(y, m - 1, d), available: r.available };
     });
   }, [partnerSlots]);
 
@@ -338,7 +340,7 @@ function ReservationCalendarClient(props: {
       <ReservationCalendarPage
         partnerName={props.partnerName}
         makerAvailableDates={props.makerAvailableDates}
-        partnerSlotDates={partnerSlotDates}
+        partnerSlotEntries={partnerSlotEntries}
         readOnly={props.readOnly}
         className="mx-0 mt-0 w-full max-w-full"
         onCheckAvailability={props.onCheckAvailability}

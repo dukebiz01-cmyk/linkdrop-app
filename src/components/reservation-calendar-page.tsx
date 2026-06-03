@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import type { DateRange } from "react-day-picker";
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { WIZARD_SECONDARY_BUTTON_CLASS } from "@/components/create-wizard-button-styles";
 import {
   MOCK_RESERVATION_CAMPGROUND_INFO,
@@ -161,11 +161,12 @@ export interface ReservationCalendarPageProps {
   /** 메이커가 Create Wizard 에서 보낸 예약 가능 날짜 — 달력 마킹·상세 목록용. */
   makerAvailableDates?: ReservationDateItem[];
   /**
-   * v7.1 — 업주가 reservation_slots 에 마킹한 실제 가용일.
-   * makerAvailableDates(?r= 운반) 와 별도 modifier 로 표시(둘 다 보임).
-   * 없으면 무시 (정보 드롭/매장별 미연동 회귀 0).
+   * Phase A — 매장 슬롯 가용일 + 남은 자리수. Date[] 대신 entries 로
+   * available 보존. 캘린더 셀에 "남은 N자리" 라벨 + 임박(N=1) 경고색.
+   * RPC get_available_slots 의 available 컬럼 그대로 통과.
+   * (이전 v7.1 partnerSlotDates 는 Date[] 만 → 자리수 정보 손실)
    */
-  partnerSlotDates?: Date[];
+  partnerSlotEntries?: Array<{ date: Date; available: number }>;
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
   /**
@@ -257,10 +258,61 @@ const CALENDAR_BUTTON_OVERRIDE = cn(
 const MAKER_OPEN_CLASS = "rounded-lg ring-1 ring-inset ring-[#15803D]/40";
 const MAKER_WARN_CLASS = "rounded-lg ring-1 ring-inset ring-[#B45309]/40";
 
-// v7.1 — 매장 슬롯 가용일 ("업주가 실제로 마킹한 날"). 카카오식 가독성 패스 —
-// 검정 ring-2 (들쭉날쭉 + 강한 회색감) 폐기, 연한 초록 배경 + 진한 초록 글자 +
-// 얇은 초록 ring 으로 통일. 날짜 숫자가 항상 읽히고 셀 정렬 균일.
-const PARTNER_SLOT_CLASS = "rounded-lg bg-[#f0fdf4] text-[#16a34a] font-bold ring-1 ring-inset ring-[#15803d]/40";
+// Phase A — 매장 슬롯 셀은 DayButton 커스텀(makeReservationDayButton) 으로
+// 색·텍스트 일원화. modifier 기반 PARTNER_SLOT_CLASS 미사용 (legacy 주석).
+// 색 토큰만 보존 — DayButton 안에서 동일 hex 사용.
+//   가능(>=2)  : bg-[#f0fdf4] / text-[#16a34a] / ring-[#15803d]/40
+//   임박(=1)   : bg-[#fef3c7] / text-[#92400e] / ring-[#92400e]/40
+
+// Phase A — 매장 슬롯 셀 커스텀 button. ui/calendar 의 CalendarDayButton
+// 을 wrap. entry 없는 셀은 그대로 위임 → focus/data-attr/selected 등
+// 기본 동작 보존. entry 있는 셀만 색·"남은 N자리" 텍스트 override.
+function makeReservationDayButton(slotMap: Map<string, number>) {
+  return function ReservationDayButton(
+    props: React.ComponentProps<typeof CalendarDayButton>,
+  ) {
+    const iso = isoFromDate(props.day.date);
+    const available = slotMap.get(iso);
+    if (available === undefined) {
+      return <CalendarDayButton {...props} />;
+    }
+    const isUrgent = available <= 1;
+    const colorClass = isUrgent
+      ? "!bg-[#fef3c7] !text-[#92400e] !ring-1 !ring-inset !ring-[#92400e]/40"
+      : "!bg-[#f0fdf4] !text-[#16a34a] !ring-1 !ring-inset !ring-[#15803d]/40";
+    return (
+      <CalendarDayButton
+        {...props}
+        className={cn(props.className, colorClass, "!rounded-lg !font-bold")}
+      >
+        {/* div 로 감싸 ui/calendar L168 의 [&>span]:text-xs/opacity-70
+            셀렉터 회피 — 직접 자식이 div 가 되어 매치 0 */}
+        <div className="flex flex-col items-center leading-none">
+          <span className="text-sm leading-none">{props.day.date.getDate()}</span>
+          <span className="mt-0.5 text-[9px] leading-none">
+            남은 {available}자리
+          </span>
+        </div>
+      </CalendarDayButton>
+    );
+  };
+}
+
+// 범례 — 캘린더 카드 하단 작은 인디케이터.
+function SlotLegend() {
+  return (
+    <div className="mt-3 flex items-center gap-3 text-[11px] text-text-muted">
+      <span className="inline-flex items-center gap-1">
+        <span className="size-3 rounded-md bg-[#f0fdf4] ring-1 ring-inset ring-[#15803d]/40" />
+        남은 자리
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <span className="size-3 rounded-md bg-[#fef3c7] ring-1 ring-inset ring-[#92400e]/40" />
+        마감 임박
+      </span>
+    </div>
+  );
+}
 
 function parseLocalDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
@@ -426,7 +478,7 @@ export function ReservationCalendarPage(props: ReservationCalendarPageProps) {
       <ReadOnlyReservationCard
         campgroundInfo={props.campgroundInfo ?? MOCK_RESERVATION_CAMPGROUND_INFO}
         makerAvailableDates={props.makerAvailableDates ?? []}
-        partnerSlotDates={props.partnerSlotDates}
+        partnerSlotEntries={props.partnerSlotEntries}
         onCheckAvailability={props.onCheckAvailability}
         onSecondaryAction={props.onSecondaryAction}
         className={props.className}
@@ -439,7 +491,7 @@ export function ReservationCalendarPage(props: ReservationCalendarPageProps) {
 function EditableReservationCard({
   campgroundInfo = MOCK_RESERVATION_CAMPGROUND_INFO,
   makerAvailableDates = [],
-  partnerSlotDates,
+  partnerSlotEntries,
   onCheckAvailability,
   onSecondaryAction,
   className,
@@ -518,6 +570,14 @@ function EditableReservationCard({
     setCheckFeedback(null);
   }, [checkIn, checkOut, adults, children, pets]);
 
+  // Phase A — 매장 슬롯 자리수 Map(iso -> available). DayButton closure 가둠.
+  const editableDayButton = useMemo(() => {
+    const slotMap = new Map<string, number>(
+      (partnerSlotEntries ?? []).map((e) => [isoFromDate(e.date), e.available]),
+    );
+    return makeReservationDayButton(slotMap);
+  }, [partnerSlotEntries]);
+
   return (
     <div className={cn("w-full max-w-full space-y-4", className)}>
       <CampgroundInfoCard info={campgroundInfo} />
@@ -551,16 +611,16 @@ function EditableReservationCard({
           modifiers={{
             makerOpen: makerOpenDates,
             makerWarn: makerWarnDates,
-            partnerSlot: partnerSlotDates ?? [],
           }}
           modifiersClassNames={{
             makerOpen: MAKER_OPEN_CLASS,
             makerWarn: MAKER_WARN_CLASS,
-            partnerSlot: PARTNER_SLOT_CLASS,
           }}
+          components={{ DayButton: editableDayButton }}
           className={cn("w-full max-w-full p-0 [--cell-size:2.25rem]", CALENDAR_BUTTON_OVERRIDE)}
           classNames={RESERVATION_CALENDAR_CLASS_NAMES}
         />
+        <SlotLegend />
       </div>
 
       {hasMakerDates && (
@@ -700,13 +760,13 @@ function EditableReservationCard({
 function ReadOnlyReservationCard({
   campgroundInfo,
   makerAvailableDates,
-  partnerSlotDates,
+  partnerSlotEntries,
   onCheckAvailability,
   onSecondaryAction,
   className,
 }: {
   campgroundInfo: ReservationCampgroundInfo;
-  partnerSlotDates?: Date[];
+  partnerSlotEntries?: Array<{ date: Date; available: number }>;
   makerAvailableDates: ReservationDateItem[];
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
@@ -739,6 +799,14 @@ function ReadOnlyReservationCard({
   // v7.2 — mock 5/18 fallback 제거 (ReadOnly 도 동일 정책)
   const defaultMonth = earliestMakerDate ?? new Date();
 
+  // Phase A — 매장 슬롯 자리수 Map. Editable 과 동일 패턴.
+  const readOnlyDayButton = useMemo(() => {
+    const slotMap = new Map<string, number>(
+      (partnerSlotEntries ?? []).map((e) => [isoFromDate(e.date), e.available]),
+    );
+    return makeReservationDayButton(slotMap);
+  }, [partnerSlotEntries]);
+
   // 시그니처 유지를 위한 stub — 수신자 선택값 없음 → 메이커 기본값으로 채워서 전달.
   const readonlySelection: ReservationSelection = {
     checkIn: undefined,
@@ -769,17 +837,17 @@ function ReadOnlyReservationCard({
             modifiers={{
               makerOpen: makerOpenDates,
               makerWarn: makerWarnDates,
-              partnerSlot: partnerSlotDates ?? [],
             }}
             modifiersClassNames={{
               makerOpen: MAKER_OPEN_CLASS,
               makerWarn: MAKER_WARN_CLASS,
-              partnerSlot: PARTNER_SLOT_CLASS,
             }}
+            components={{ DayButton: readOnlyDayButton }}
             className={cn("w-full max-w-full p-0 [--cell-size:2.25rem]", CALENDAR_BUTTON_OVERRIDE)}
             classNames={RESERVATION_CALENDAR_CLASS_NAMES}
           />
         </div>
+        <SlotLegend />
         <p className="mt-2 text-[11px] font-medium tracking-ko text-text-subtle">
           재공유된 화면이라 날짜를 변경할 수 없어요. 초록색 칸이 예약 가능한 날짜예요.
         </p>
