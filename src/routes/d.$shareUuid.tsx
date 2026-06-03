@@ -261,6 +261,9 @@ function DropPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [claimInFlight, setClaimInFlight] = useState(false);
+  // 쿠폰 게이팅 — 네이버 예약 시작(시트 "예약 페이지 열기" 클릭) 전까지 sticky 쿠폰 버튼 잠금.
+  // 네이버는 새 탭으로 열려 이 카드 state 가 유지되므로 useState 로 충분(영속 불필요).
+  const [reservationStarted, setReservationStarted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -330,6 +333,9 @@ function DropPage() {
       return null;
     }
   })();
+  // 쿠폰 게이팅 — 예약 흐름(reservationUrl) 있을 때만 잠그고, 네이버 예약 시작 후 해제.
+  // reservationUrl 없는 순수 쿠폰 드롭은 항상 false(=활성).
+  const couponLocked = Boolean(reservationUrl) && !reservationStarted;
   // 예약 가능 날짜 — wizard 의 ?r= 디코드. DB 미저장이라 query param 으로 임시 운반.
   // 빈 배열이면 InfoDropPage 가 캘린더 카드를 자동 숨김.
   const reservationDatesFromQuery = decodeReservationDates(search.r);
@@ -428,6 +434,7 @@ function DropPage() {
         officialStatus="user_shared"
         dropId={detail.drop.id}
         initialSlots={slots}
+        couponLocked={couponLocked}
         funnelCoupon={
           funnelCoupon
             ? {
@@ -568,6 +575,7 @@ function DropPage() {
                     url: pendingNaverUrl,
                     share_uuid: shareUuid,
                   });
+                  setReservationStarted(true); // B 시점 — 쿠폰 버튼 잠금 해제
                   window.open(pendingNaverUrl, "_blank", "noopener,noreferrer");
                 }
               }}

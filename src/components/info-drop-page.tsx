@@ -120,6 +120,8 @@ export interface InfoDropPageProps {
   partnerId?: string | null;
   /** P3 — SSR loader 가 미리 가져온 슬롯 행. 주어지면(빈 배열 포함) 클라 fetch 스킵. */
   initialSlots?: SlotAvailableRow[];
+  /** 쿠폰 게이팅 — true 면 sticky 쿠폰 버튼 비활성(예약 시작 전). 예약 흐름 있는 드롭에서만. */
+  couponLocked?: boolean;
   /** H1-d funnel — drop 의 partner active coupon (있으면). null/undefined 면 CTA 미노출.
    *  U1: 카드 표시용 conditions/valid_until 추가. id/title 외 옵셔널. */
   funnelCoupon?: {
@@ -287,8 +289,6 @@ function ReservationCalendarClient(props: {
   const [partnerSlots, setPartnerSlots] = useState<SlotAvailableRow[]>(
     props.initialSlots ? props.initialSlots.filter((r) => r.available > 0) : [],
   );
-  // [dbg] 임시 진단용 — ?dbg 일 때만 readout. 곧 제거.
-  const [dbgErr, setDbgErr] = useState<string>("");
 
   useEffect(() => {
     setMounted(true);
@@ -312,7 +312,6 @@ function ReservationCalendarClient(props: {
         });
         if (error) {
           console.error("[ReservationCalendarClient] get_available_slots failed:", error);
-          setDbgErr(String((error as any)?.message ?? error));
           return;
         }
         if (cancelled) return;
@@ -350,11 +349,6 @@ function ReservationCalendarClient(props: {
 
   return (
     <section data-testid="variant-reservation" className="w-full max-w-full">
-      {typeof window !== "undefined" && window.location.search.includes("dbg") && (
-        <div style={{ fontSize: 11, color: "#b91c1c", padding: "4px 8px", wordBreak: "break-all" }}>
-          [dbg] v=gatefb init={props.initialSlots ? String(props.initialSlots.length) : "undef"} slots={String(partnerSlots.length)} pid={props.partnerId ? "y" : "n"} err={dbgErr || "-"}
-        </div>
-      )}
       <ReservationCalendarPage
         partnerName={props.partnerName}
         makerAvailableDates={props.makerAvailableDates}
@@ -583,6 +577,7 @@ export function InfoDropPage({
   dropId,
   partnerId,
   initialSlots,
+  couponLocked,
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   const parsedVideo = videoSourceUrl ? parseVideoUrl(videoSourceUrl) : null;
@@ -1199,10 +1194,16 @@ export function InfoDropPage({
             <button
               type="button"
               onClick={onReserveAndClaim}
+              disabled={couponLocked}
               data-testid="cta-sticky-primary"
-              className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white"
+              className={cn(
+                "flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 text-base font-bold",
+                couponLocked
+                  ? "bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed"
+                  : "bg-[#0A0A0A] text-white",
+              )}
             >
-              <span className="truncate">쿠폰 받기</span>
+              <span className="truncate">{couponLocked ? "예약 후 쿠폰 받기" : "쿠폰 받기"}</span>
             </button>
           </div>
         </div>
