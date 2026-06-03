@@ -184,7 +184,10 @@ const VARIANT_PAGE_COPY: Record<
   },
   coupon: {
     label: "쿠폰",
-    sectionTitle: "혜택으로 손님 모으기",
+    // v7.2 — 손님 관점 카피. "혜택으로 손님 모으기"(업주 관점) → "받을 수
+    // 있는 혜택"(손님 관점, 모든 업종 범용). 업주 위저드 미리보기
+    // (create/types.ts PURPOSE_FLOW_CONFIG.쿠폰.title) 는 무수정.
+    sectionTitle: "받을 수 있는 혜택",
     ctaHeading: "쿠폰 받기",
   },
   reservation: {
