@@ -902,20 +902,14 @@ export function InfoDropPage({
               makerAvailableDates={reservationDates}
               partnerId={partnerId}
               readOnly={isReshare}
-              onCheckAvailability={(_selection) => {
-                if (!reservationUrl) return;
-                const safe =
-                  reservationUrl.startsWith("https://booking.naver.com") ||
-                  reservationUrl.startsWith("https://naver.me") ||
-                  reservationUrl.startsWith("https://map.naver.com") ||
-                  reservationUrl.startsWith("tel:");
-                if (safe) {
-                  // 캘린더 [예약하기] 클릭 추적 — onPrimaryAction L353 의
-                  // reservation_click 과 동일 이벤트. 손님 깔때기 노출→
-                  // 클릭→네이버이동→복귀 4 단계 중 2번째 채움.
-                  trackReceiverEvent("reservation_click", dropId);
-                  window.open(reservationUrl, "_blank", "noopener");
-                }
+              onCheckAvailability={() => {
+                // B1 — 캘린더 [예약하기] 시트 경로 통일. 직행 window.open 제거.
+                // onPrimaryAction(d.$shareUuid) = reservation_click 1회 + 시트 ①
+                // (setPendingNaverUrl/setNaverPending) → "예약 페이지 열기" 시
+                // naver_booking_click + window.open → visibilitychange 복귀
+                // 감지 → 시트 ② "예약했어요" → naver_booking_returned 풀 체인.
+                // reservation_click 은 onPrimaryAction 한 곳에서만 발화 → 중복 0.
+                onPrimaryAction?.();
               }}
               onSecondaryAction={(action) => handleCtaClick(action)}
             />
