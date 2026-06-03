@@ -727,29 +727,6 @@ function EditableReservationCard({
       {checkFeedback && (
         <p className="text-sm font-medium leading-relaxed tracking-ko text-text-muted">{checkFeedback}</p>
       )}
-
-      <div>
-        <p className="mb-2 text-xs font-semibold tracking-ko text-text-subtle">다른 방법으로 문의</p>
-        <div className="grid min-w-0 grid-cols-3 gap-2">
-          {(
-            [
-              ["phone", "전화", "cta-reservation-phone"],
-              ["sms", "문자", "cta-reservation-sms"],
-              ["directions", "길찾기", "cta-reservation-directions"],
-            ] as const
-          ).map(([action, label, testId]) => (
-            <button
-              key={action}
-              type="button"
-              data-testid={testId}
-              className={cn(WIZARD_SECONDARY_BUTTON_CLASS, "h-11 min-h-[44px] px-2 text-xs font-bold")}
-              onClick={() => onSecondaryAction?.(action)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -912,29 +889,6 @@ function ReadOnlyReservationCard({
       >
         예약하기
       </button>
-
-      <div>
-        <p className="mb-2 text-xs font-semibold tracking-ko text-text-subtle">다른 방법으로 문의</p>
-        <div className="grid min-w-0 grid-cols-3 gap-2">
-          {(
-            [
-              ["phone", "전화", "cta-reservation-phone"],
-              ["sms", "문자", "cta-reservation-sms"],
-              ["directions", "길찾기", "cta-reservation-directions"],
-            ] as const
-          ).map(([action, label, testId]) => (
-            <button
-              key={action}
-              type="button"
-              data-testid={testId}
-              className={cn(WIZARD_SECONDARY_BUTTON_CLASS, "h-11 min-h-[44px] px-2 text-xs font-bold")}
-              onClick={() => onSecondaryAction?.(action)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
