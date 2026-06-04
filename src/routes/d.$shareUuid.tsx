@@ -298,12 +298,8 @@ function DropPage() {
               window.location.pathname + window.location.search,
             );
           }
-          if (!cancelled) {
-            setUserId(uid);
-            // 진단 토스트 — 수정 후 ✓ 로 바뀌는지 확인용.
-            toast(uid ? "복귀: 세션 읽음 ✓" : "복귀: 세션 못 읽음 ✗");
-            if (!uid) toast.error("로그인 복원 실패 — 다시 시도해 주세요");
-          }
+          // 진단(✓/✗) 은 authChecked+coupon=1 alert 로 일원화 — 여기선 userId 세팅만.
+          if (!cancelled) setUserId(uid);
         } else {
           const { data } = await supabase.auth.getSession();
           if (!cancelled) setUserId(data?.session?.user?.id ?? null);
@@ -312,7 +308,11 @@ function DropPage() {
         console.error("[d.$shareUuid] session restore failed:", e);
         if (!cancelled) {
           setUserId(null);
-          if (hasTokenHash) toast.error("로그인 복원 실패 — 다시 시도해 주세요");
+          // 2) hash setSession 실패 — alert 로 결정적 지점 표시(토스트는 빨라 못 읽음).
+          if (hasTokenHash) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert("로그인 복원 실패: " + msg);
+          }
         }
       } finally {
         if (!cancelled) setAuthChecked(true);
@@ -393,6 +393,17 @@ function DropPage() {
   const funnelCoupon = detail.coupon ?? null;
   const navigate = useNavigate();
   const claimedRef = useRef(false);
+  const returnDiagRef = useRef(false);
+
+  // 1) 카드 복귀 진단 — authChecked 완료 + ?coupon=1 일 때 세션 읽힘 여부를 alert 로.
+  //    (카톡에서 토스트는 너무 빨라 못 읽음 → 안 사라지는 alert.) 1 회만.
+  useEffect(() => {
+    if (!authChecked) return;
+    if (search.coupon !== "1") return;
+    if (returnDiagRef.current) return;
+    returnDiagRef.current = true;
+    alert(userId ? "복귀: 세션 읽음 ✓" : "복귀: 세션 못 읽음 ✗");
+  }, [authChecked, search.coupon, userId]);
 
   async function claimCouponNow() {
     if (!funnelCoupon || !userId || claimInFlight) return;
@@ -415,9 +426,11 @@ function DropPage() {
       });
       if (claimErr) {
         console.error("[d.$shareUuid] claim_coupon failed:", claimErr);
+        alert("claim 실패: " + claimErr.message);
         toast.error("쿠폰 발급에 실패했어요. 잠시 후 다시 시도해 주세요.");
         return;
       }
+      alert("claim 성공");
       const firstRow = Array.isArray(claim) ? claim[0] : null;
       const code =
         firstRow && typeof firstRow === "object" && firstRow !== null && "claim_code" in firstRow
