@@ -308,10 +308,8 @@ function DropPage() {
         console.error("[d.$shareUuid] session restore failed:", e);
         if (!cancelled) {
           setUserId(null);
-          // 2) hash setSession 실패 — alert 로 결정적 지점 표시(토스트는 빨라 못 읽음).
           if (hasTokenHash) {
-            const msg = e instanceof Error ? e.message : String(e);
-            alert("로그인 복원 실패: " + msg);
+            toast.error("로그인 정보를 불러오지 못했어요. 다시 시도해 주세요");
           }
         }
       } finally {
@@ -395,14 +393,15 @@ function DropPage() {
   const claimedRef = useRef(false);
   const returnDiagRef = useRef(false);
 
-  // 1) 카드 복귀 진단 — authChecked 완료 + ?coupon=1 일 때 세션 읽힘 여부를 alert 로.
-  //    (카톡에서 토스트는 너무 빨라 못 읽음 → 안 사라지는 alert.) 1 회만.
+  // 카드 복귀 — authChecked 완료 + ?coupon=1 인데 세션을 못 읽었으면(claim 불가) 안내. 1 회만.
   useEffect(() => {
     if (!authChecked) return;
     if (search.coupon !== "1") return;
     if (returnDiagRef.current) return;
     returnDiagRef.current = true;
-    alert(userId ? "복귀: 세션 읽음 ✓" : "복귀: 세션 못 읽음 ✗");
+    if (!userId) {
+      toast.error("로그인 정보를 불러오지 못했어요. 다시 시도해 주세요");
+    }
   }, [authChecked, search.coupon, userId]);
 
   async function claimCouponNow() {
@@ -426,11 +425,9 @@ function DropPage() {
       });
       if (claimErr) {
         console.error("[d.$shareUuid] claim_coupon failed:", claimErr);
-        alert("claim 실패: " + claimErr.message);
         toast.error("쿠폰 발급에 실패했어요. 잠시 후 다시 시도해 주세요.");
         return;
       }
-      alert("claim 성공");
       const firstRow = Array.isArray(claim) ? claim[0] : null;
       const code =
         firstRow && typeof firstRow === "object" && firstRow !== null && "claim_code" in firstRow
