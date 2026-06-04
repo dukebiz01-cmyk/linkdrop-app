@@ -60,17 +60,33 @@ function AuthCallback() {
       window.location.replace(path);
     };
 
+    // 카톡 웹뷰 대응 — 카드(nextPath)로 복귀할 때 토큰을 hash 로 함께 넘긴다.
+    // 웹뷰가 full 페이지 이동 후 storage(쿠키) 를 안 넘겨주면 카드의 getSession 이
+    // 세션을 못 읽는(시나리오 B) → 카드가 hash 로 자기 컨텍스트에서 세션을 확보하도록.
+    // implicit flow 라 토큰은 클라이언트에만 머무름. 토큰 없으면 기존대로 path 만.
+    const finishToNext = (
+      session: { access_token?: string; refresh_token?: string } | null | undefined,
+    ) => {
+      const at = session?.access_token;
+      const rt = session?.refresh_token;
+      if (at && rt) {
+        finish(`${nextPath}#access_token=${at}&refresh_token=${rt}`);
+      } else {
+        finish(nextPath);
+      }
+    };
+
     (async () => {
       // 1) onAuthStateChange 먼저 구독 — SIGNED_IN 이벤트 놓치지 않게.
       const sub = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session) finish(nextPath);
+        if (session) finishToNext(session);
       });
       subscription = sub.data.subscription;
 
       // 2) 마운트 시점에 이미 세션 있나.
       const { data: pre } = await supabase.auth.getSession();
       if (pre?.session) {
-        finish(nextPath);
+        finishToNext(pre.session);
         return;
       }
 
@@ -81,12 +97,12 @@ function AuthCallback() {
         const access_token = params.get("access_token");
         const refresh_token = params.get("refresh_token");
         if (access_token && refresh_token) {
-          const { error } = await supabase.auth.setSession({
+          const { data: setData, error } = await supabase.auth.setSession({
             access_token,
             refresh_token,
           });
           if (!error) {
-            finish(nextPath);
+            finishToNext(setData?.session ?? { access_token, refresh_token });
             return;
           }
           console.error("[auth.callback] setSession failed:", error);
@@ -99,7 +115,7 @@ function AuthCallback() {
         tries++;
         const { data } = await supabase.auth.getSession();
         if (data?.session) {
-          finish(nextPath);
+          finishToNext(data.session);
           return;
         }
         if (tries >= 10 && poll) clearInterval(poll);

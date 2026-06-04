@@ -265,11 +265,55 @@ function DropPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const supabase = getSupabase();
+      // 카톡 웹뷰 복귀 — auth.callback 이 토큰을 hash 로 넘겨줌(#access_token&refresh_token).
+      // 카드가 자기 컨텍스트에서 세션을 확보해 storage(쿠키) 미승계(시나리오 B) 를 우회한다.
+      const hash = typeof window !== "undefined" ? window.location.hash : "";
+      const hasTokenHash = hash.includes("access_token");
       try {
-        const { data } = await getSupabase().auth.getSession();
-        if (!cancelled) setUserId(data?.session?.user.id ?? null);
+        if (hasTokenHash) {
+          // 1) detectSessionInUrl 이 이미 자동 처리했을 수 있음 → getSession 으로 먼저 확인
+          //    (이미 세션 있으면 setSession 재세팅 생략 — 자동/수동 충돌 방지).
+          let { data } = await supabase.auth.getSession();
+          // 2) 자동 처리 안 됐으면 hash 토큰으로 직접 setSession.
+          if (!data?.session) {
+            const params = new URLSearchParams(hash.replace(/^#/, ""));
+            const access_token = params.get("access_token");
+            const refresh_token = params.get("refresh_token");
+            if (access_token && refresh_token) {
+              const { data: setData, error } = await supabase.auth.setSession({
+                access_token,
+                refresh_token,
+              });
+              if (error) throw error;
+              data = setData;
+            }
+          }
+          const uid = data?.session?.user?.id ?? null;
+          // 보안 — 인식/세팅 직후 hash 즉시 제거(?coupon=1 query 는 유지).
+          if (typeof window !== "undefined") {
+            window.history.replaceState(
+              null,
+              "",
+              window.location.pathname + window.location.search,
+            );
+          }
+          if (!cancelled) {
+            setUserId(uid);
+            // 진단 토스트 — 수정 후 ✓ 로 바뀌는지 확인용.
+            toast(uid ? "복귀: 세션 읽음 ✓" : "복귀: 세션 못 읽음 ✗");
+            if (!uid) toast.error("로그인 복원 실패 — 다시 시도해 주세요");
+          }
+        } else {
+          const { data } = await supabase.auth.getSession();
+          if (!cancelled) setUserId(data?.session?.user?.id ?? null);
+        }
       } catch (e) {
-        console.error("[d.$shareUuid] getSession failed:", e);
+        console.error("[d.$shareUuid] session restore failed:", e);
+        if (!cancelled) {
+          setUserId(null);
+          if (hasTokenHash) toast.error("로그인 복원 실패 — 다시 시도해 주세요");
+        }
       } finally {
         if (!cancelled) setAuthChecked(true);
       }
