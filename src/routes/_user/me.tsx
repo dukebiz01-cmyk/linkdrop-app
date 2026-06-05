@@ -158,7 +158,8 @@ export const Route = createFileRoute("/_user/me")({
       )
       .eq("catcher_user_id", userId)
       .order("issued_at", { ascending: false })
-      .limit(10);
+      // 지갑 — 사실상 전체 노출(11개째부터 안 보이던 문제 해소). 페이지네이션은 범위 밖.
+      .limit(100);
 
     return {
       userId,

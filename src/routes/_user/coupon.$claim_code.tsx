@@ -238,6 +238,18 @@ function CouponDetailView({
           </div>
         ) : null}
 
+        {/* 쿠폰함 동선 — 받은 쿠폰을 다시 찾는 경로 명시 (재방문 보조). */}
+        <button
+          type="button"
+          onClick={onBack}
+          className="mt-[18px] flex w-full min-h-[52px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 text-base font-bold text-white transition-colors hover:bg-[#171717]"
+        >
+          내 쿠폰함 보기
+        </button>
+        <p className="mt-2 text-center text-xs text-[#64748B]">
+          받은 쿠폰은 '나' 탭에서 다시 볼 수 있어요.
+        </p>
+
         {/* 푸터 */}
         <footer className="mt-[26px] text-center">
           <div className="inline-flex items-center gap-1.5 text-sm font-bold text-[#475569]">
