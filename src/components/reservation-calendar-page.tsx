@@ -883,9 +883,13 @@ function ReadOnlyReservationCard({
 
       <button
         type="button"
+        disabled={!readonlySelection.checkIn}
         data-testid="cta-reservation-check"
-        className={RESERVATION_PRIMARY_ENABLED}
-        onClick={() => onCheckAvailability?.(readonlySelection)}
+        className={readonlySelection.checkIn ? RESERVATION_PRIMARY_ENABLED : RESERVATION_PRIMARY_DISABLED}
+        onClick={() => {
+          if (!readonlySelection.checkIn) return;
+          onCheckAvailability?.(readonlySelection);
+        }}
       >
         예약하기
       </button>

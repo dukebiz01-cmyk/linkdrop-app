@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Calendar, Users, Phone, User, MessageSquare, CheckCircle2 } from "lucide-react";
+import { Calendar, Phone, User, MessageSquare, CheckCircle2 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getSupabase } from "@/lib/supabase";
 
@@ -49,6 +49,28 @@ function normalizePhone(raw: string): string {
   return raw.replace(/[^0-9]/g, "");
 }
 
+// "YYYY-MM-DD" → "M월 D일"
+function formatKDate(iso: string): string {
+  const [, m, d] = iso.split("-");
+  if (!m || !d) return iso;
+  return `${Number(m)}월 ${Number(d)}일`;
+}
+
+// 캘린더 선택값 → 읽기전용 요약 ("7월 1일 체크인 · 7월 2일 체크아웃 · 1박 · 2명")
+function buildReserveSummary(checkIn: string, checkOut: string, guestCount: string): string {
+  const parts: string[] = [];
+  if (checkIn) parts.push(`${formatKDate(checkIn)} 체크인`);
+  if (checkOut && checkOut !== checkIn) {
+    parts.push(`${formatKDate(checkOut)} 체크아웃`);
+    const ms = new Date(checkOut).getTime() - new Date(checkIn).getTime();
+    const nights = Math.max(1, Math.round(ms / 86400000));
+    parts.push(`${nights}박`);
+  }
+  const g = Number(guestCount);
+  if (Number.isFinite(g) && g > 0) parts.push(`${g}명`);
+  return parts.join(" · ");
+}
+
 export function ReserveFunnelSheet({
   open,
   onOpenChange,
@@ -67,11 +89,14 @@ export function ReserveFunnelSheet({
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // 23505(이미 진행 중) = 실패 아니라 중복 가드 → ErrorBody 제목 분기용.
+  const [errorIsDup, setErrorIsDup] = useState(false);
 
   useEffect(() => {
     if (open) {
       setStep("form");
       setErrorMsg(null);
+      setErrorIsDup(false);
       // 캘린더 선택값 prefill (이중입력 방지). 연락처(이름/전화/메시지)는 매 오픈 초기화.
       setCheckIn(initialCheckIn ?? "");
       setCheckOut(initialCheckOut ?? "");
@@ -183,6 +208,7 @@ export function ReserveFunnelSheet({
         const errMsg = (resErr as { message?: string } | null)?.message ?? "";
         const isCatcherDup =
           errCode === "23505" || errMsg.includes("uq_reservations_active_catcher");
+        setErrorIsDup(isCatcherDup);
         setErrorMsg(
           isCatcherDup
             ? "이미 진행 중인 예약이 있어요. 예약 내역을 확인해 주세요."
@@ -207,11 +233,8 @@ export function ReserveFunnelSheet({
         {step === "form" ? (
           <FormBody
             checkIn={checkIn}
-            setCheckIn={setCheckIn}
             checkOut={checkOut}
-            setCheckOut={setCheckOut}
             guestCount={guestCount}
-            setGuestCount={setGuestCount}
             name={name}
             setName={setName}
             phone={phone}
@@ -233,7 +256,7 @@ export function ReserveFunnelSheet({
         ) : step === "done" ? (
           <DoneBody onClose={() => onOpenChange(false)} />
         ) : (
-          <ErrorBody errorMsg={errorMsg} onRetry={() => setStep("form")} />
+          <ErrorBody errorMsg={errorMsg} isDup={errorIsDup} onRetry={() => setStep("form")} />
         )}
       </SheetContent>
     </Sheet>
@@ -250,11 +273,8 @@ function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNo
 
 function FormBody(props: {
   checkIn: string;
-  setCheckIn: (v: string) => void;
   checkOut: string;
-  setCheckOut: (v: string) => void;
   guestCount: string;
-  setGuestCount: (v: string) => void;
   name: string;
   setName: (v: string) => void;
   phone: string;
@@ -265,6 +285,14 @@ function FormBody(props: {
   step: Step;
   onSubmit: () => void;
 }) {
+  const phoneDigits = normalizePhone(props.phone);
+  // 2b — 이름 비었거나 전화 9~11자리 미충족(또는 날짜 미선택)이면 제출 비활성.
+  const canSubmit =
+    props.step === "form" &&
+    Boolean(props.checkIn) &&
+    props.name.trim().length > 0 &&
+    phoneDigits.length >= 9 &&
+    phoneDigits.length <= 11;
   return (
     <div className="space-y-4">
       <header>
@@ -277,49 +305,21 @@ function FormBody(props: {
       </header>
 
       <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-        <div>
-          <Label htmlFor="check-in">
-            <span className="inline-flex items-center gap-1.5">
-              <Calendar className="size-4 text-[#94A3B8]" strokeWidth={2} />
-              체크인
-            </span>
-          </Label>
-          <input
-            id="check-in"
-            type="date"
-            value={props.checkIn}
-            onChange={(e) => props.setCheckIn(e.target.value)}
-            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="check-out">체크아웃 (연박이면 입력)</Label>
-          <input
-            id="check-out"
-            type="date"
-            value={props.checkOut}
-            onChange={(e) => props.setCheckOut(e.target.value)}
-            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="guest-count">
-            <span className="inline-flex items-center gap-1.5">
-              <Users className="size-4 text-[#94A3B8]" strokeWidth={2} />
-              인원
-            </span>
-          </Label>
-          <input
-            id="guest-count"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            value={props.guestCount}
-            onChange={(e) => props.setGuestCount(e.target.value)}
-            className="mt-1 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
-          />
+        {/* 1 — 날짜/인원은 캘린더에서 고른 값. 이중입력 제거 → 읽기전용 요약. */}
+        <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#94A3B8]">
+            <Calendar className="size-4" strokeWidth={2} />
+            예약 정보
+          </span>
+          {props.checkIn ? (
+            <p className="mt-1 text-sm font-bold text-[#0F172A]">
+              {buildReserveSummary(props.checkIn, props.checkOut, props.guestCount)}
+            </p>
+          ) : (
+            <p className="mt-1 text-sm font-medium text-[#EF4444]">
+              캘린더에서 날짜를 먼저 골라주세요.
+            </p>
+          )}
         </div>
 
         <div>
@@ -382,7 +382,7 @@ function FormBody(props: {
       <button
         type="button"
         onClick={props.onSubmit}
-        disabled={props.step !== "form"}
+        disabled={!canSubmit}
         className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {props.step === "submitting" ? "보내는 중…" : "예약 신청 보내기"}
@@ -415,10 +415,21 @@ function DoneBody({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ErrorBody({ errorMsg, onRetry }: { errorMsg: string | null; onRetry: () => void }) {
+function ErrorBody({
+  errorMsg,
+  isDup,
+  onRetry,
+}: {
+  errorMsg: string | null;
+  isDup: boolean;
+  onRetry: () => void;
+}) {
   return (
     <div className="space-y-4 py-6 text-center">
-      <h2 className="text-lg font-bold text-[#0F172A]">처리에 실패했어요</h2>
+      {/* 23505 중복은 실패가 아니라 가드 → 제목으로 오해 방지. 본문 메시지는 유지. */}
+      <h2 className="text-lg font-bold text-[#0F172A]">
+        {isDup ? "이미 예약 신청하셨어요" : "처리에 실패했어요"}
+      </h2>
       <p className="text-sm text-[#475569]">
         {errorMsg ?? "잠시 후 다시 시도해 주세요."}
       </p>
