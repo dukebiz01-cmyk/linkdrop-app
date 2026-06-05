@@ -409,7 +409,12 @@ function DropPage() {
   }, [authChecked, search.coupon, userId]);
 
   async function claimCouponNow() {
-    if (!funnelCoupon || !userId || claimInFlight) return;
+    if (!funnelCoupon || claimInFlight) return;
+    // 무음 금지 — 세션 풀림(userId null)이면 사용자에게 알리고 재시도 유도.
+    if (!userId) {
+      toast.error("로그인이 풀렸어요. 다시 눌러주세요");
+      return;
+    }
     setClaimInFlight(true);
     try {
       const supabase = getSupabase();
@@ -437,19 +442,13 @@ function DropPage() {
         firstRow && typeof firstRow === "object" && firstRow !== null && "claim_code" in firstRow
           ? String((firstRow as { claim_code: unknown }).claim_code ?? "")
           : "";
-      toast.success("쿠폰을 받았어요", {
-        description: code ? `쿠폰 번호 ${code}` : "내 페이지에서 확인할 수 있어요.",
-        action: code
-          ? {
-              label: "쿠폰 보기",
-              onClick: () =>
-                void navigate({
-                  to: "/coupon/$claim_code",
-                  params: { claim_code: code },
-                }),
-            }
-          : { label: "내 쿠폰", onClick: () => void navigate({ to: "/me" }) },
-      });
+      // 카톡 토스트는 순삭이라 결과를 못 봄 → 쿠폰 상세 페이지로 이동해 지속 확인.
+      toast.success("쿠폰을 받았어요");
+      if (code) {
+        void navigate({ to: "/coupon/$claim_code", params: { claim_code: code } });
+      } else {
+        void navigate({ to: "/me" });
+      }
     } catch (e) {
       console.error("[d.$shareUuid] claim_coupon unexpected:", e);
       toast.error("처리 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.");
