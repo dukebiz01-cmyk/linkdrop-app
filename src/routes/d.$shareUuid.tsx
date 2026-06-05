@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { InfoDropPage } from "@/components/info-drop-page";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { ReserveFunnelSheet } from "@/components/receiver/ReserveFunnelSheet";
+import type { ReservationSelection } from "@/components/reservation-calendar-page";
 import { getAuthClient } from "@/lib/auth-context";
 import {
   decodeReservationDates,
@@ -19,6 +20,13 @@ import { startKakaoLogin } from "@/lib/oauth-kakao";
 import { getSupabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
+
+// 로컬 Date → "YYYY-MM-DD" (인앱 예약 신청 prefill·URL 운반용).
+function toIsoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
 
 const PROD_BASE = "https://app.drop.how";
 const BRAND_TITLE = "LinkDrop — 친구가 보내준 카드";
@@ -60,6 +68,11 @@ type DropSearch = {
   ref?: string;
   // B3: OAuth 복귀 후 쿠폰 자동 발급 표식.
   coupon?: string;
+  // A안 직접예약: OAuth 복귀 후 예약 신청 시트 자동 오픈 표식 + 캘린더 선택값 운반.
+  reserve?: string;
+  ci?: string; // check-in  (YYYY-MM-DD)
+  co?: string; // check-out (YYYY-MM-DD)
+  g?: string; // guest count
 };
 
 // P3 — get_available_slots 반환 행. SSR loader 가 미리 가져와 HTML 에 실어 보낸다.
@@ -122,6 +135,10 @@ export const Route = createFileRoute("/d/$shareUuid")({
       shareDepth: depth,
       ref: typeof search.ref === "string" ? search.ref : undefined,
       coupon: typeof search.coupon === "string" ? search.coupon : undefined,
+      reserve: typeof search.reserve === "string" ? search.reserve : undefined,
+      ci: typeof search.ci === "string" ? search.ci : undefined,
+      co: typeof search.co === "string" ? search.co : undefined,
+      g: typeof search.g === "string" ? search.g : undefined,
     };
   },
   loader: async ({ params, location }): Promise<LoaderData> => {
@@ -254,9 +271,13 @@ function ShareUuidRouteErrorFallback({ error }: { error: Error }) {
 
 function DropPage() {
   const loaderData = Route.useLoaderData();
-  const [naverPending, setNaverPending] = useState(false);
-  const [pendingNaverUrl, setPendingNaverUrl] = useState<string | null>(null);
-  const [returnPrompt, setReturnPrompt] = useState(false);
+  // A안 직접예약 — 인앱 신청 시트 + 캘린더 선택값 prefill.
+  const [reserveSheetOpen, setReserveSheetOpen] = useState(false);
+  const [reservePrefill, setReservePrefill] = useState<{
+    checkIn: string;
+    checkOut: string;
+    guestCount: number;
+  }>({ checkIn: "", checkOut: "", guestCount: 2 });
   // B3 — 로그인 유저 id + 쿠폰 발급 가드(중복 호출 차단). 마운트 시 getSession 으로 확인.
   const [userId, setUserId] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -321,17 +342,6 @@ function DropPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!pendingNaverUrl) return;
-    const handler = () => {
-      if (document.visibilityState === "visible") {
-        setNaverPending(false);
-        setReturnPrompt(true);
-      }
-    };
-    document.addEventListener("visibilitychange", handler);
-    return () => document.removeEventListener("visibilitychange", handler);
-  }, [pendingNaverUrl]);
   // ?u= — wizard 가 메이커 입력 예약 URL 을 query 로 운반. store.reservation_url 이
   // DB 에 아직 저장되지 않은 동안의 임시 경로 (Phase 1 호환).
   const search = Route.useSearch();
@@ -372,18 +382,11 @@ function DropPage() {
       return null;
     }
   })();
-  // 네이버/tel 예약 URL 여부 — onPrimaryAction 이 네이버 이동 시트를 띄울지 결정한다.
-  const isNaverReservation =
-    !!reservationUrl &&
-    (reservationUrl.startsWith("https://booking.naver.com") ||
-      reservationUrl.startsWith("https://naver.me") ||
-      reservationUrl.startsWith("https://map.naver.com") ||
-      reservationUrl.startsWith("tel:"));
   // 예약 가능 날짜 — wizard 의 ?r= 디코드. DB 미저장이라 query param 으로 임시 운반.
   // 빈 배열이면 InfoDropPage 가 캘린더 카드를 자동 숨김.
   const reservationDatesFromQuery = decodeReservationDates(search.r);
 
-  // B3 — 쿠폰만 발급. ReserveFunnelSheet 예약 폼 미사용. claim_coupon RPC 만 호출.
+  // 쿠폰 받기(sticky) — 예약(직접예약 시트)과 분리된 독립 흐름. claim_coupon RPC 만 호출.
   //   · userId 있음 → 즉시 claim_coupon → 토스트 안내 ("쿠폰 보기" 액션)
   //   · userId 없음 → 카카오 OAuth ?coupon=1 복귀 → useEffect 가 1 회 자동 발급
   // claim_coupon = (coupon_id, share_event_id, catcher_user_id) UNIQUE 멱등(#21).
@@ -391,6 +394,7 @@ function DropPage() {
   const funnelCoupon = detail.coupon ?? null;
   const navigate = useNavigate();
   const claimedRef = useRef(false);
+  const reserveResumeRef = useRef(false);
   const returnDiagRef = useRef(false);
 
   // 카드 복귀 — authChecked 완료 + ?coupon=1 인데 세션을 못 읽었으면(claim 불가) 안내. 1 회만.
@@ -478,6 +482,40 @@ function DropPage() {
     void startKakaoLogin(next);
   }
 
+  // A안 직접예약 — '예약하기' 클릭. 로그인 강제(catcher_user_id abuse 방어) →
+  //   userId 있음 → 시트 오픈(캘린더 선택값 prefill)
+  //   userId 없음 → 카카오 OAuth, next 에 선택값 실어 복귀(?reserve=1&ci&co&g)
+  function handleReservationRequest(selection?: ReservationSelection) {
+    const ci = selection?.checkIn ? toIsoDate(selection.checkIn) : "";
+    const co = selection?.checkOut ? toIsoDate(selection.checkOut) : "";
+    const g = selection ? selection.adults + selection.children : 0;
+    if (userId) {
+      setReservePrefill({ checkIn: ci, checkOut: co, guestCount: g || 2 });
+      setReserveSheetOpen(true);
+      return;
+    }
+    const next = `/d/${shareUuid}?reserve=1&ci=${encodeURIComponent(ci)}&co=${encodeURIComponent(
+      co,
+    )}&g=${encodeURIComponent(String(g))}`;
+    void startKakaoLogin(next);
+  }
+
+  // OAuth 복귀 ?reserve=1 + 로그인 → ci/co/g 읽어 prefill + 시트 자동 오픈. 1 회만.
+  useEffect(() => {
+    if (!authChecked) return;
+    if (search.reserve !== "1") return;
+    if (!userId) return;
+    if (reserveResumeRef.current) return;
+    reserveResumeRef.current = true;
+    const g = Number(search.g);
+    setReservePrefill({
+      checkIn: search.ci ?? "",
+      checkOut: search.co ?? "",
+      guestCount: Number.isFinite(g) && g > 0 ? g : 2,
+    });
+    setReserveSheetOpen(true);
+  }, [authChecked, search.reserve, search.ci, search.co, search.g, userId]);
+
   return (
     <>
       <InfoDropPage
@@ -506,13 +544,9 @@ function DropPage() {
             : null
         }
         onReserveAndClaim={handleReserveAndClaim}
-        onPrimaryAction={() => {
-          if (!reservationUrl || typeof window === "undefined") return;
-          if (isNaverReservation) {
-            trackReceiverEvent("reservation_click", detail.drop.id);
-            setPendingNaverUrl(reservationUrl);
-            setNaverPending(true);
-          }
+        onReservationRequest={(selection) => {
+          trackReceiverEvent("reservation_click", detail.drop.id);
+          handleReservationRequest(selection);
         }}
         onWatchOriginal={() => {
           const url = detail.source?.source_url;
@@ -606,78 +640,19 @@ function DropPage() {
         onForward={() => console.log("[d/$shareUuid] forward")}
       />
 
-      <Sheet open={naverPending} onOpenChange={setNaverPending}>
-        <SheetContent side="bottom" className="rounded-t-2xl pb-8 px-6">
-          <div className="flex flex-col gap-3 pt-6">
-            <h2 className="text-lg font-bold tracking-ko text-text-strong">
-              네이버 예약 페이지로 이동합니다
-            </h2>
-            <p className="text-sm tracking-ko text-text-muted">
-              예약 완료 후 이 화면으로 돌아오세요
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                if (pendingNaverUrl) {
-                  // EVENTS-FIX: 실제 네이버 페이지 이동 트래킹 (best-effort, 본동작은 그대로)
-                  trackReceiverEvent("naver_booking_click", detail.drop.id, {
-                    url: pendingNaverUrl,
-                    share_uuid: shareUuid,
-                  });
-                  window.open(pendingNaverUrl, "_blank", "noopener,noreferrer");
-                }
-              }}
-              className="w-full min-h-[44px] rounded-2xl bg-[#0A0A0A] py-4 font-bold text-white"
-            >
-              예약 페이지 열기
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setNaverPending(false);
-                setPendingNaverUrl(null);
-              }}
-              className="min-h-[44px] text-sm text-[#A3A3A3]"
-            >
-              취소
-            </button>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      <Sheet open={returnPrompt} onOpenChange={setReturnPrompt}>
-        <SheetContent side="bottom" className="rounded-t-2xl pb-8 px-6">
-          <div className="flex flex-col gap-3 pt-6">
-            <h2 className="text-lg font-bold tracking-ko text-text-strong">
-              예약하셨나요?
-            </h2>
-            <button
-              type="button"
-              onClick={() => {
-                // EVENTS-FIX: 네이버 페이지 복귀 응답 트래킹 (best-effort, state 정리는 그대로)
-                trackReceiverEvent("naver_booking_returned", detail.drop.id, {
-                  url: pendingNaverUrl,
-                  share_uuid: shareUuid,
-                });
-                setReturnPrompt(false);
-                setPendingNaverUrl(null);
-              }}
-              className="w-full min-h-[44px] rounded-2xl bg-[#0A0A0A] py-4 font-bold text-white"
-            >
-              예약했어요
-            </button>
-            <button
-              type="button"
-              onClick={() => setReturnPrompt(false)}
-              className="min-h-[44px] text-sm text-[#A3A3A3]"
-            >
-              나중에 할게요
-            </button>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* B3 — ReserveFunnelSheet 호출 제거. sticky → claim_coupon 직접. */}
+      {/* A안 직접예약 — 인앱 신청 시트. 로그인 강제(userId 있을 때만 렌더). */}
+      {userId ? (
+        <ReserveFunnelSheet
+          open={reserveSheetOpen}
+          onOpenChange={setReserveSheetOpen}
+          shareUuid={shareUuid}
+          dropId={detail.drop.id}
+          userId={userId}
+          initialCheckIn={reservePrefill.checkIn}
+          initialCheckOut={reservePrefill.checkOut}
+          initialGuestCount={reservePrefill.guestCount}
+        />
+      ) : null}
     </>
   );
 }

@@ -1,32 +1,28 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { Calendar, Users, Phone, User, MessageSquare, CheckCircle2 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getSupabase } from "@/lib/supabase";
 
 /**
- * H1-d funnel — 예약 문의 + 쿠폰 받기 시트.
+ * 직접예약 (인앱 예약 신청) 시트 — A안. 네이버로 내보내지 않고 /d 안에서 예약 *신청*.
+ * 신청 = 리드 캡처(확정·결제·정산 없음). 쿠폰과 분리(claim_coupon 호출 안 함).
  *
  * 흐름 (4 step):
- *   1. form  — 날짜·인원·이름·전화·메시지 입력
- *   2. submitting — create_reservation_anon → claim_coupon 순차 호출
- *   3. done  — 완료 화면 (claim_code 안내)
- *   4. error — 에러 화면 (재시도)
+ *   1. form  — (캘린더에서 prefill된) 날짜·인원 + 이름·전화·메시지
+ *   2. submitting — upsert_visitor → create_reservation_anon
+ *   3. done  — "예약 신청이 접수되었어요" (확정 아님 — 매장 확인 후 연락)
+ *   4. error — 에러 화면 (재시도). 23505=이미 진행 중인 예약 안내.
  *
  * 인자:
  *   - shareUuid: 현재 share_event 의 share_uuid (share_events.id 조회용)
  *   - dropId: info_drops.id
- *   - coupon: get_drop_detail.coupon (null 이면 시트 자체가 렌더 안 되어야 함 — 부모가 가드)
- *   - userId: 로그인한 catcher_user_id
+ *   - userId: 로그인한 catcher_user_id (A안 로그인 강제)
+ *   - initialCheckIn/Out/GuestCount: 캘린더 선택값 prefill (이중입력 방지, 수정 가능)
  *
  * RPC:
- *   - create_reservation_anon(13인자, SECURITY DEFINER, partner_id 는 info_drops 에서
- *     자동 추출. info_drops.partner_id 가 NULL 이면 RAISE EXCEPTION — v5.6a 백필로 노을재
- *     drops 는 모두 채워짐).
- *   - claim_coupon(p_coupon_id, p_share_event_id, p_catcher_user_id) → claim_code 발급.
- *
- * 보존: 네이버 예약(onPrimaryAction)·F1 카톡 공유·E2 트래커 무영향. /me 받은 혜택은
- *     coupon_claims.catcher_user_id = userId 로 자동 노출.
+ *   - create_reservation_anon(SECURITY DEFINER): reservations INSERT + reservation_contacts
+ *     + reservation_notifications + slot current_bookings +1 (소프트홀드). partner_id 는
+ *     info_drops 에서 자동 추출. reward 미발생(gross=0).
  */
 
 type Props = {
@@ -34,8 +30,10 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   shareUuid: string;
   dropId: string;
-  coupon: { id: string; title: string };
   userId: string;
+  initialCheckIn?: string;
+  initialCheckOut?: string;
+  initialGuestCount?: number;
 };
 
 type Step = "form" | "submitting" | "done" | "error";
@@ -56,8 +54,10 @@ export function ReserveFunnelSheet({
   onOpenChange,
   shareUuid,
   dropId,
-  coupon,
   userId,
+  initialCheckIn,
+  initialCheckOut,
+  initialGuestCount,
 }: Props) {
   const [step, setStep] = useState<Step>("form");
   const [checkIn, setCheckIn] = useState("");
@@ -67,22 +67,20 @@ export function ReserveFunnelSheet({
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [claimCode, setClaimCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setStep("form");
       setErrorMsg(null);
-      setClaimCode(null);
-      // RSV-DUP-FIX (A-3): 시트 재오픈 시 form 필드도 초기화 — 같은 입력 재제출(이서화 케이스) 차단
-      setCheckIn("");
-      setCheckOut("");
-      setGuestCount("2");
+      // 캘린더 선택값 prefill (이중입력 방지). 연락처(이름/전화/메시지)는 매 오픈 초기화.
+      setCheckIn(initialCheckIn ?? "");
+      setCheckOut(initialCheckOut ?? "");
+      setGuestCount(initialGuestCount ? String(initialGuestCount) : "2");
       setName("");
       setPhone("");
       setMessage("");
     }
-  }, [open]);
+  }, [open, initialCheckIn, initialCheckOut, initialGuestCount]);
 
   const isMultiNight = checkOut.length > 0 && checkOut !== checkIn;
 
@@ -172,8 +170,8 @@ export function ReserveFunnelSheet({
         p_phone_hash: phoneHash,
         p_phone_last4: phoneLast4,
         p_customer_message: message.trim() || null,
-        // A4 (v6.7/6.8): 카카오 로그인 후 funnel 시점 userId 저장 → abuse 1차 방어.
-        //   claim_coupon 에 이미 같은 userId 를 전달 중. RPC 가 DEFAULT NULL 이라 안전.
+        // A안 로그인 강제 — catcher_user_id 로 uq_reservations_active_catcher
+        //   (drop당 1인 1활성예약) abuse 방어. RPC 가 DEFAULT NULL 이라 안전.
         p_catcher_user_id: userId ?? null,
       });
       if (resErr) {
@@ -194,24 +192,7 @@ export function ReserveFunnelSheet({
         return;
       }
 
-      const { data: claim, error: claimErr } = await supabase.rpc("claim_coupon", {
-        p_coupon_id: coupon.id,
-        p_share_event_id: shareEventId,
-        p_catcher_user_id: userId,
-      });
-      if (claimErr) {
-        console.error("[ReserveFunnel] claim_coupon failed:", claimErr);
-        // 예약은 성공했으므로 done 으로 가되 쿠폰 코드는 안내 메시지로 대체
-        setClaimCode(null);
-        setStep("done");
-        return;
-      }
-      const firstRow = Array.isArray(claim) ? claim[0] : null;
-      const codeFromRpc =
-        firstRow && typeof firstRow === "object" && firstRow !== null && "claim_code" in firstRow
-          ? String((firstRow as { claim_code: unknown }).claim_code ?? "")
-          : null;
-      setClaimCode(codeFromRpc || null);
+      // 쿠폰과 분리(디커플링) — 예약 신청은 claim_coupon 호출 안 함. 리드 캡처까지만.
       setStep("done");
     } catch (e) {
       console.error("[ReserveFunnel] unexpected:", e);
@@ -238,7 +219,6 @@ export function ReserveFunnelSheet({
             message={message}
             setMessage={setMessage}
             errorMsg={errorMsg}
-            couponTitle={coupon.title}
             step={step}
             onSubmit={handleSubmit}
           />
@@ -248,14 +228,10 @@ export function ReserveFunnelSheet({
               className="size-8 animate-spin rounded-full border-2 border-[#E5E7EB] border-t-[#0A0A0A]"
               aria-hidden
             />
-            <p className="text-sm font-semibold text-[#0F172A]">예약 문의를 보내고 있어요…</p>
+            <p className="text-sm font-semibold text-[#0F172A]">예약 신청을 보내고 있어요…</p>
           </div>
         ) : step === "done" ? (
-          <DoneBody
-            couponTitle={coupon.title}
-            claimCode={claimCode}
-            onClose={() => onOpenChange(false)}
-          />
+          <DoneBody onClose={() => onOpenChange(false)} />
         ) : (
           <ErrorBody errorMsg={errorMsg} onRetry={() => setStep("form")} />
         )}
@@ -286,18 +262,17 @@ function FormBody(props: {
   message: string;
   setMessage: (v: string) => void;
   errorMsg: string | null;
-  couponTitle: string;
   step: Step;
   onSubmit: () => void;
 }) {
   return (
     <div className="space-y-4">
       <header>
-        <h2 className="text-lg font-bold text-[#0F172A]">예약 문의하기</h2>
+        <h2 className="text-lg font-bold text-[#0F172A]">예약 신청하기</h2>
         <p className="mt-1 text-sm text-[#64748B]">
-          보내드리면 사장님이 확인 후 카톡으로 연락드려요.
+          신청을 보내면 매장에서 확인 후 카톡으로 연락드려요.
           <br />
-          제출과 함께 <strong className="text-[#0A0A0A]">{props.couponTitle}</strong> 쿠폰이 발급돼요.
+          신청만으로는 예약이 확정되지 않아요.
         </p>
       </header>
 
@@ -410,35 +385,13 @@ function FormBody(props: {
         disabled={props.step !== "form"}
         className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {props.step === "submitting" ? "보내는 중…" : "예약 문의 보내기"}
+        {props.step === "submitting" ? "보내는 중…" : "예약 신청 보내기"}
       </button>
     </div>
   );
 }
 
-function DoneBody({
-  couponTitle,
-  claimCode,
-  onClose,
-}: {
-  couponTitle: string;
-  claimCode: string | null;
-  onClose: () => void;
-}) {
-  const navigate = useNavigate();
-
-  function goToMyCoupon() {
-    onClose();
-    if (claimCode) {
-      void navigate({
-        to: "/coupon/$claim_code",
-        params: { claim_code: claimCode },
-      });
-    } else {
-      void navigate({ to: "/me" });
-    }
-  }
-
+function DoneBody({ onClose }: { onClose: () => void }) {
   return (
     <div className="space-y-5 pt-2">
       <div className="flex justify-center">
@@ -447,35 +400,16 @@ function DoneBody({
         </span>
       </div>
       <div className="text-center">
-        <h2 className="text-lg font-bold text-[#0F172A]">예약 문의 접수됐어요</h2>
-        <p className="mt-2 text-sm text-[#475569]">사장님 확인 후 카톡으로 연락드려요.</p>
+        <h2 className="text-lg font-bold text-[#0F172A]">예약 신청이 접수되었어요</h2>
+        <p className="mt-2 text-sm text-[#475569]">매장에서 확인 후 연락드려요.</p>
+        <p className="mt-1 text-xs text-[#94A3B8]">신청만으로는 예약이 확정되지 않아요.</p>
       </div>
-      <div className="rounded-2xl bg-[#F8FAFC] p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">받은 쿠폰</p>
-        <p className="mt-1 text-base font-bold text-[#0F172A]">{couponTitle}</p>
-        {claimCode ? (
-          <p className="mt-2 text-xs text-[#64748B]">
-            쿠폰 번호 <span className="font-mono font-bold text-[#0F172A]">{claimCode}</span>
-            <br />
-            방문 시 사장님께 보여주세요.
-          </p>
-        ) : (
-          <p className="mt-2 text-xs text-[#64748B]">받은 혜택은 내 페이지에서 확인할 수 있어요.</p>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={goToMyCoupon}
-        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
-      >
-        내 쿠폰 보기
-      </button>
       <button
         type="button"
         onClick={onClose}
-        className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-6 py-3 text-sm font-semibold text-[#475569]"
+        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white"
       >
-        닫기
+        확인
       </button>
     </div>
   );

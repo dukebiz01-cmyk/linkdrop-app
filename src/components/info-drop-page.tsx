@@ -107,6 +107,8 @@ export interface InfoDropPageProps {
   /** 영상 원본 URL — youtube 인 경우 in-app embed 모달 활성 */
   videoSourceUrl?: string;
   onPrimaryAction?: () => void;
+  /** 직접예약(인앱 신청) — '예약하기' 클릭 시 캘린더 선택값과 함께 부모가 시트를 연다. */
+  onReservationRequest?: (selection?: ReservationSelection) => void;
   onWatchOriginal?: () => void;
   onShare?: () => void;
   onCopyLink?: () => void | Promise<void>;
@@ -567,6 +569,7 @@ export function InfoDropPage({
   isReshare = false,
   videoSourceUrl,
   onPrimaryAction,
+  onReservationRequest,
   onWatchOriginal,
   onShare,
   onCopyLink,
@@ -916,14 +919,10 @@ export function InfoDropPage({
               partnerId={partnerId}
               initialSlots={initialSlots}
               readOnly={isReshare}
-              onCheckAvailability={() => {
-                // B1 — 캘린더 [예약하기] 시트 경로 통일. 직행 window.open 제거.
-                // onPrimaryAction(d.$shareUuid) = reservation_click 1회 + 시트 ①
-                // (setPendingNaverUrl/setNaverPending) → "예약 페이지 열기" 시
-                // naver_booking_click + window.open → visibilitychange 복귀
-                // 감지 → 시트 ② "예약했어요" → naver_booking_returned 풀 체인.
-                // reservation_click 은 onPrimaryAction 한 곳에서만 발화 → 중복 0.
-                onPrimaryAction?.();
+              onCheckAvailability={(selection) => {
+                // A안 직접예약 — 캘린더 [예약하기] = 인앱 신청 시트. 선택한 날짜·인원을
+                // 부모(d.$shareUuid)로 올려 prefill + 로그인 게이트 + 시트 오픈.
+                onReservationRequest?.(selection);
               }}
               onSecondaryAction={(action) => handleCtaClick(action)}
             />
@@ -946,11 +945,11 @@ export function InfoDropPage({
                 </p>
               </section>
 
-              {reservationUrl || onPrimaryAction ? (
+              {onReservationRequest ? (
                 <ActionButton
                   type="button"
                   data-testid="cta-reservation-tab"
-                  onClick={() => onPrimaryAction?.()}
+                  onClick={() => onReservationRequest?.()}
                   className={WIZARD_PRIMARY_BUTTON_CLASS}
                 >
                   예약하기
@@ -967,7 +966,7 @@ export function InfoDropPage({
                     예약하기
                   </ActionButton>
                   <p className="text-xs font-medium tracking-ko text-text-muted">
-                    예약 링크가 설정되지 않았습니다.
+                    예약 신청을 받을 수 없는 드롭이에요.
                   </p>
                 </div>
               )}
