@@ -91,8 +91,8 @@ type MakerInfo = {
   display_name: string;
   partner_kind: string | null;
   metadata: { description?: string | null; [k: string]: unknown } | null;
-  // pb/biz 등급 판정용 — 사업자등록번호. 있으면 biz(사업자 인증), 없으면 pb(공개).
-  business_no: string | null;
+  // pb/biz 등급 판정용 — verification_status='approved' 면 biz(인증), 아니면 pb.
+  verification_status: string | null;
 };
 
 // 받은 쿠폰 → 메이커 dedup 용 raw row (client GROUP BY 불가 → JS dedup).
@@ -207,7 +207,7 @@ export const Route = createFileRoute("/_user/me")({
     const { data: claimMakerRows } = await supabase
       .from("coupon_claims")
       .select(
-        "issued_at, coupon:coupons(partner_id, partner:partners(id, display_name, partner_kind, metadata, business_no))",
+        "issued_at, coupon:coupons(partner_id, partner:partners(id, display_name, partner_kind, metadata, verification_status))",
       )
       .eq("catcher_user_id", userId)
       .order("issued_at", { ascending: false });
@@ -225,7 +225,7 @@ export const Route = createFileRoute("/_user/me")({
     const { data: follows } = await supabase
       .from("maker_follows")
       .select(
-        "followed_partner_id, created_at, partner:partners(id, display_name, partner_kind, metadata, business_no)",
+        "followed_partner_id, created_at, partner:partners(id, display_name, partner_kind, metadata, verification_status)",
       )
       .eq("follower_user_id", userId)
       .eq("status", "active")
@@ -512,7 +512,7 @@ function MePage() {
                         type="button"
                         onClick={() => handleSubscribe(m)}
                         disabled={busyMakerId === m.id}
-                        className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg bg-[#21365C] px-3 text-sm font-bold text-white hover:bg-[#1A2C4D] disabled:opacity-50"
+                        className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg bg-[#0E4D42] px-3 text-sm font-bold text-white hover:bg-[#0A3D35] disabled:opacity-50"
                       >
                         구독
                       </button>
@@ -539,7 +539,7 @@ function MePage() {
                       type="button"
                       onClick={() => handleUnsubscribe(m.id)}
                       disabled={busyMakerId === m.id}
-                      className="shrink-0 text-sm font-semibold text-[#64748B] hover:text-[#0A0A0A] disabled:opacity-50"
+                      className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg border border-[#D4D4D4] bg-transparent px-3 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC] disabled:opacity-50"
                     >
                       구독 취소
                     </button>
@@ -817,17 +817,20 @@ function partnerKindLabel(kind: string | null | undefined): string {
   }
 }
 
-// pb/biz 등급 판정 — 사업자등록번호(business_no) 있으면 biz(사업자 인증), 없으면 pb(공개).
-// (verification_status 는 노출 게이트라 전부 approved → 판별력 없음.)
+// pb/biz 등급 판정 — verification_status='approved' 면 biz(인증), 아니면 pb(공개).
 function makerTier(maker: MakerInfo): "pb" | "biz" {
-  return maker.business_no?.trim() ? "biz" : "pb";
+  return maker.verification_status === "approved" ? "biz" : "pb";
 }
 
-// 메이커 등급 칩 — pb: 네이비 톤 / biz: 퍼플 톤. 11px, radius-md.
+// 메이커 등급 칩 — pb: 틸 톤 / biz: 퍼플 톤. 11px, radius-md, 대문자 라벨.
 function MakerTierChip({ tier }: { tier: "pb" | "biz" }) {
-  const cls = tier === "biz" ? "bg-[#F0EDFB] text-[#4C3FA0]" : "bg-[#EAECF4] text-[#21365C]";
+  const cls = tier === "biz" ? "bg-[#F0EDFB] text-[#4C3FA0]" : "bg-[#E1F5EE] text-[#0E4D42]";
   return (
-    <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${cls}`}>{tier}</span>
+    <span
+      className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold tracking-[0.02em] ${cls}`}
+    >
+      {tier.toUpperCase()}
+    </span>
   );
 }
 
