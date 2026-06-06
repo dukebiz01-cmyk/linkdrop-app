@@ -13,8 +13,9 @@ import {
   Copy,
   Check,
   Wallet,
+  Send,
 } from "lucide-react";
-// Wallet = 쿠폰 지갑 섹션 헤더. Gift = 증정 쿠폰 혜택 라벨 재사용.
+// Wallet = 쿠폰 지갑 섹션 헤더. Send = 받은 쿠폰 메이커, Heart = 구독한 메이커. Gift = 증정 쿠폰 라벨.
 import { Toaster } from "@/components/ui/sonner";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
@@ -83,16 +84,29 @@ function extractYouTubeVideoIdFromThumb(thumb: string | null | undefined): strin
   return m?.[1] ?? null;
 }
 
-// 내 단골 가게 — maker_follows(본인, status=active) + partners(approved) 조인 1행.
-// partners 엔 로고 컬럼이 없어 이니셜 아바타로 표시. metadata.description 우선 부제.
-type FavoritePartnerRow = {
+// 메이커(=사업체 partners 한 행) 표시 정보. partners 엔 로고 컬럼이 없어
+// display_name 첫 글자 이니셜 아바타로 표시. metadata.description 우선 부제.
+type MakerInfo = {
+  id: string;
+  display_name: string;
+  partner_kind: string | null;
+  metadata: { description?: string | null; [k: string]: unknown } | null;
+};
+
+// 받은 쿠폰 → 메이커 dedup 용 raw row (client GROUP BY 불가 → JS dedup).
+type ClaimMakerRow = {
+  issued_at: string | null;
+  coupon: {
+    partner_id: string | null;
+    partner: MakerInfo | null;
+  } | null;
+};
+
+// maker_follows(active) + partners 조인 raw row.
+type FollowRow = {
   followed_partner_id: string;
   created_at: string | null;
-  partner: {
-    display_name: string;
-    partner_kind: string | null;
-    metadata: { description?: string | null; [k: string]: unknown } | null;
-  } | null;
+  partner: MakerInfo | null;
 };
 
 type MePageData = {
@@ -103,7 +117,10 @@ type MePageData = {
   isBusiness: boolean;
   myDrops: MyDropRow[];
   coupons: CouponClaimRow[];
-  favorites: FavoritePartnerRow[];
+  // 받은 쿠폰을 발행한 메이커(중복 제거) — 구독 버튼 부착.
+  receivedMakers: MakerInfo[];
+  // 현재 구독(active) 중인 메이커.
+  subscribedMakers: MakerInfo[];
 };
 
 /**
@@ -112,7 +129,7 @@ type MePageData = {
  * 부모 _user.tsx beforeLoad 가 인증 단독 담당. 자식 loader 는 graceful — userId null
  * 이어도 throw 없이 빈 데이터로 진행 (메모리 #17 fix1 패턴, profile.tsx 참조).
  *
- * 6 섹션: 내 정보 · 쿠폰 지갑 · 내 단골 가게 · 내 카드 · 내 매장(조건부) · 설정
+ * 섹션: 내 정보 · 쿠폰 지갑 · 받은 쿠폰 메이커 · 구독한 메이커 · 내 카드 · 내 매장(조건부) · 설정
  *
  * v5.5 마이그레이션으로 get_my_drops 반환에 share_uuid 추가됨 → ④ 내 카드의
  * "성과 보기" 링크 활성화 (isBusiness && share_uuid 동시 조건). N1-b.
@@ -134,7 +151,8 @@ export const Route = createFileRoute("/_user/me")({
       isBusiness: false,
       myDrops: [],
       coupons: [],
-      favorites: [],
+      receivedMakers: [],
+      subscribedMakers: [],
     };
 
     const supabase = await getAuthClient();
@@ -181,16 +199,39 @@ export const Route = createFileRoute("/_user/me")({
       // 지갑 — 사실상 전체 노출(11개째부터 안 보이던 문제 해소). 페이지네이션은 범위 밖.
       .limit(100);
 
-    // 내 단골 가게 — maker_follows(본인 RLS) + partners(approved public read) 조인.
-    //   approved 아닌 partner 는 RLS 로 자동 제외(에러 아님). 표시 전용.
-    const { data: favorites } = await supabase
+    // 받은 쿠폰 메이커 — claims → coupons → partners. client GROUP BY 불가라
+    //   JS 에서 partner.id 기준 dedup(이미 issued_at desc 정렬 → 첫 등장이 최신).
+    //   partner null(미승인 RLS 탈락)은 skip.
+    const { data: claimMakerRows } = await supabase
+      .from("coupon_claims")
+      .select(
+        "issued_at, coupon:coupons(partner_id, partner:partners(id, display_name, partner_kind, metadata))",
+      )
+      .eq("catcher_user_id", userId)
+      .order("issued_at", { ascending: false });
+
+    const receivedMakers: MakerInfo[] = [];
+    const seenMaker = new Set<string>();
+    for (const row of (claimMakerRows as ClaimMakerRow[] | null) ?? []) {
+      const partner = row.coupon?.partner;
+      if (!partner?.id || seenMaker.has(partner.id)) continue;
+      seenMaker.add(partner.id);
+      receivedMakers.push(partner);
+    }
+
+    // 구독한 메이커 — maker_follows(본인 RLS, active) + partners(approved public read).
+    const { data: follows } = await supabase
       .from("maker_follows")
       .select(
-        "followed_partner_id, created_at, partner:partners(display_name, partner_kind, metadata)",
+        "followed_partner_id, created_at, partner:partners(id, display_name, partner_kind, metadata)",
       )
       .eq("follower_user_id", userId)
       .eq("status", "active")
       .order("created_at", { ascending: false });
+
+    const subscribedMakers: MakerInfo[] = ((follows as FollowRow[] | null) ?? [])
+      .map((f) => f.partner)
+      .filter((p): p is MakerInfo => Boolean(p?.id));
 
     return {
       userId,
@@ -200,7 +241,8 @@ export const Route = createFileRoute("/_user/me")({
       isBusiness: Boolean(isBusiness),
       myDrops,
       coupons: (coupons as CouponClaimRow[] | null) ?? [],
-      favorites: (favorites as FavoritePartnerRow[] | null) ?? [],
+      receivedMakers,
+      subscribedMakers,
     };
   },
   component: MePage,
@@ -222,6 +264,10 @@ function MePage() {
   const claimedHandledRef = useRef(false);
   // 작업 C: 내 카드 접기/펼치기 (상위 2개 + 더보기/접기 토글)
   const [dropsExpanded, setDropsExpanded] = useState(false);
+  // 명시적 구독 — subscribedMakers 를 로컬 상태로 들고 구독/취소 시 reactive 갱신.
+  const [subscribedMakers, setSubscribedMakers] = useState<MakerInfo[]>(data.subscribedMakers);
+  const [busyMakerId, setBusyMakerId] = useState<string | null>(null);
+  const subscribedIds = new Set(subscribedMakers.map((m) => m.id));
   // 작업 B: 내 카드 썸네일 탭 → 인앱 임베드 재생 (단일 모달 인스턴스)
   const [embedState, setEmbedState] = useState<{
     open: boolean;
@@ -282,6 +328,63 @@ function MePage() {
       originalUrl: url || `https://www.youtube.com/watch?v=${videoId}`,
       title: d.source?.title?.trim() || "영상 재생",
     });
+  }
+
+  // 구독 — maker_follows upsert(active). UNIQUE(follower,partner) 충돌 시 status 갱신.
+  async function handleSubscribe(maker: MakerInfo) {
+    if (!data.userId) return;
+    setBusyMakerId(maker.id);
+    try {
+      const { error } = await getSupabase().from("maker_follows").upsert(
+        {
+          follower_user_id: data.userId,
+          followed_partner_id: maker.id,
+          source: "manual",
+          consent_at: new Date().toISOString(),
+          status: "active",
+        },
+        { onConflict: "follower_user_id,followed_partner_id" },
+      );
+      if (error) {
+        console.error("[me] subscribe failed:", error);
+        toast.error("구독에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      setSubscribedMakers((prev) =>
+        prev.some((m) => m.id === maker.id) ? prev : [maker, ...prev],
+      );
+      toast.success("구독했어요.");
+    } catch (err) {
+      console.error("[me] subscribe unexpected:", err);
+      toast.error("처리 중 문제가 생겼어요.");
+    } finally {
+      setBusyMakerId(null);
+    }
+  }
+
+  // 구독 취소 — status='unfollowed'. 구독한 메이커 섹션에서 사라지고, 받은쿠폰 줄은 다시 [구독].
+  async function handleUnsubscribe(partnerId: string) {
+    if (!data.userId) return;
+    setBusyMakerId(partnerId);
+    try {
+      const { error } = await getSupabase()
+        .from("maker_follows")
+        .update({ status: "unfollowed" })
+        .eq("follower_user_id", data.userId)
+        .eq("followed_partner_id", partnerId);
+      if (error) {
+        console.error("[me] unsubscribe failed:", error);
+        toast.error("구독 취소에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      setSubscribedMakers((prev) => prev.filter((m) => m.id !== partnerId));
+      toast.success("구독을 취소했어요.");
+    } catch (err) {
+      console.error("[me] unsubscribe unexpected:", err);
+      toast.error("처리 중 문제가 생겼어요.");
+    } finally {
+      setBusyMakerId(null);
+    }
   }
 
   async function handleSignOut() {
@@ -385,16 +488,61 @@ function MePage() {
           )}
         </section>
 
-        {/* ③ 내 단골 가게 — maker_follows(본인, active) + partners(approved).
-            표시 전용(메이커 페이지 미존재 → 탭 동작 없음). 해제/이동은 후속.
+        {/* ③-A 받은 쿠폰 메이커 — 쿠폰을 발행한 메이커(중복 제거) + 구독 버튼.
             쿠폰 지갑과 동일 톤: hairline divide-y, 박스 중첩 금지, 이니셜 아바타. */}
-        <SectionCard Icon={Heart} title="내 단골 가게">
-          {data.favorites.length === 0 ? (
-            <EmptyText text="아직 단골 맺은 가게가 없어요." />
+        <SectionCard Icon={Send} title="받은 쿠폰 메이커">
+          <p className="mb-3 text-xs font-medium text-[#64748B]">
+            구독을 하면 해당 메이커의 혜택을 지속적으로 받아볼 수 있어요.
+          </p>
+          {data.receivedMakers.length === 0 ? (
+            <EmptyText text="받은 쿠폰이 없어요." />
           ) : (
             <ul className="divide-y divide-[#F1F5F9]">
-              {data.favorites.map((f) => (
-                <FavoritePartnerRowCard key={f.followed_partner_id} row={f} />
+              {data.receivedMakers.map((m) => (
+                <MakerRow
+                  key={m.id}
+                  maker={m}
+                  right={
+                    subscribedIds.has(m.id) ? (
+                      <span className="shrink-0 text-sm font-semibold text-[#94A3B8]">구독 중</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleSubscribe(m)}
+                        disabled={busyMakerId === m.id}
+                        className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg bg-[#0A0A0A] px-3 text-sm font-bold text-white hover:bg-[#1A1A1A] disabled:opacity-50"
+                      >
+                        구독
+                      </button>
+                    )
+                  }
+                />
+              ))}
+            </ul>
+          )}
+        </SectionCard>
+
+        {/* ③-B 구독한 메이커 — maker_follows(본인, active). 구독 취소 = status='unfollowed'. */}
+        <SectionCard Icon={Heart} title="구독한 메이커">
+          {subscribedMakers.length === 0 ? (
+            <EmptyText text="아직 구독한 메이커가 없어요." />
+          ) : (
+            <ul className="divide-y divide-[#F1F5F9]">
+              {subscribedMakers.map((m) => (
+                <MakerRow
+                  key={m.id}
+                  maker={m}
+                  right={
+                    <button
+                      type="button"
+                      onClick={() => handleUnsubscribe(m.id)}
+                      disabled={busyMakerId === m.id}
+                      className="shrink-0 text-sm font-semibold text-[#64748B] hover:text-[#0A0A0A] disabled:opacity-50"
+                    >
+                      구독 취소
+                    </button>
+                  }
+                />
               ))}
             </ul>
           )}
@@ -667,12 +815,12 @@ function partnerKindLabel(kind: string | null | undefined): string {
   }
 }
 
-// 단골 가게 1줄 카드 — 이니셜 아바타 + 이름 + 부제(설명 우선, 없으면 업종 라벨).
+// 메이커 1줄 행 — 이니셜 아바타 + 이름 + 부제(설명 우선, 없으면 업종 라벨) + 우측 액션.
 // partners 에 로고 컬럼이 없어 display_name 첫 글자 이니셜로 표시(쿠폰 지갑 패턴).
-function FavoritePartnerRowCard({ row }: { row: FavoritePartnerRow }) {
-  const name = row.partner?.display_name?.trim() || "가게";
-  const description = row.partner?.metadata?.description?.trim();
-  const subtitle = description || partnerKindLabel(row.partner?.partner_kind);
+function MakerRow({ maker, right }: { maker: MakerInfo; right?: React.ReactNode }) {
+  const name = maker.display_name?.trim() || "메이커";
+  const description = maker.metadata?.description?.trim();
+  const subtitle = description || partnerKindLabel(maker.partner_kind);
   const initial = name.charAt(0) || "?";
 
   return (
@@ -686,6 +834,7 @@ function FavoritePartnerRowCard({ row }: { row: FavoritePartnerRow }) {
         <p className="truncate text-base font-bold text-[#0F172A]">{name}</p>
         <p className="mt-0.5 truncate text-sm font-medium text-[#64748B]">{subtitle}</p>
       </div>
+      {right}
     </li>
   );
 }
