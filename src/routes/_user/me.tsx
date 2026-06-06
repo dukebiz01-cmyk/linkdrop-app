@@ -83,6 +83,18 @@ function extractYouTubeVideoIdFromThumb(thumb: string | null | undefined): strin
   return m?.[1] ?? null;
 }
 
+// 내 단골 가게 — maker_follows(본인, status=active) + partners(approved) 조인 1행.
+// partners 엔 로고 컬럼이 없어 이니셜 아바타로 표시. metadata.description 우선 부제.
+type FavoritePartnerRow = {
+  followed_partner_id: string;
+  created_at: string | null;
+  partner: {
+    display_name: string;
+    partner_kind: string | null;
+    metadata: { description?: string | null; [k: string]: unknown } | null;
+  } | null;
+};
+
 type MePageData = {
   userId: string | null;
   email: string | null;
@@ -91,6 +103,7 @@ type MePageData = {
   isBusiness: boolean;
   myDrops: MyDropRow[];
   coupons: CouponClaimRow[];
+  favorites: FavoritePartnerRow[];
 };
 
 /**
@@ -99,7 +112,7 @@ type MePageData = {
  * 부모 _user.tsx beforeLoad 가 인증 단독 담당. 자식 loader 는 graceful — userId null
  * 이어도 throw 없이 빈 데이터로 진행 (메모리 #17 fix1 패턴, profile.tsx 참조).
  *
- * 6 섹션: 내 정보 · 받은 혜택 · 내 구독 · 내 카드 · 내 매장(조건부) · 설정
+ * 6 섹션: 내 정보 · 쿠폰 지갑 · 내 단골 가게 · 내 카드 · 내 매장(조건부) · 설정
  *
  * v5.5 마이그레이션으로 get_my_drops 반환에 share_uuid 추가됨 → ④ 내 카드의
  * "성과 보기" 링크 활성화 (isBusiness && share_uuid 동시 조건). N1-b.
@@ -121,6 +134,7 @@ export const Route = createFileRoute("/_user/me")({
       isBusiness: false,
       myDrops: [],
       coupons: [],
+      favorites: [],
     };
 
     const supabase = await getAuthClient();
@@ -167,6 +181,17 @@ export const Route = createFileRoute("/_user/me")({
       // 지갑 — 사실상 전체 노출(11개째부터 안 보이던 문제 해소). 페이지네이션은 범위 밖.
       .limit(100);
 
+    // 내 단골 가게 — maker_follows(본인 RLS) + partners(approved public read) 조인.
+    //   approved 아닌 partner 는 RLS 로 자동 제외(에러 아님). 표시 전용.
+    const { data: favorites } = await supabase
+      .from("maker_follows")
+      .select(
+        "followed_partner_id, created_at, partner:partners(display_name, partner_kind, metadata)",
+      )
+      .eq("follower_user_id", userId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
+
     return {
       userId,
       email,
@@ -175,6 +200,7 @@ export const Route = createFileRoute("/_user/me")({
       isBusiness: Boolean(isBusiness),
       myDrops,
       coupons: (coupons as CouponClaimRow[] | null) ?? [],
+      favorites: (favorites as FavoritePartnerRow[] | null) ?? [],
     };
   },
   component: MePage,
@@ -359,9 +385,19 @@ function MePage() {
           )}
         </section>
 
-        {/* ③ 내 구독 — 정적 빈상태 (테이블 없음) */}
-        <SectionCard Icon={Heart} title="내 구독">
-          <EmptyText text="구독한 매장이 여기 표시돼요." />
+        {/* ③ 내 단골 가게 — maker_follows(본인, active) + partners(approved).
+            표시 전용(메이커 페이지 미존재 → 탭 동작 없음). 해제/이동은 후속.
+            쿠폰 지갑과 동일 톤: hairline divide-y, 박스 중첩 금지, 이니셜 아바타. */}
+        <SectionCard Icon={Heart} title="내 단골 가게">
+          {data.favorites.length === 0 ? (
+            <EmptyText text="아직 단골 맺은 가게가 없어요." />
+          ) : (
+            <ul className="divide-y divide-[#F1F5F9]">
+              {data.favorites.map((f) => (
+                <FavoritePartnerRowCard key={f.followed_partner_id} row={f} />
+              ))}
+            </ul>
+          )}
         </SectionCard>
 
         {/* ④ 내 카드 — 성과 보기 링크는 비지니스만 (share_uuid 있는 카드만 활성, v5.5 반환).
@@ -608,6 +644,49 @@ function StatusPill({ status }: { status: string | null }) {
     <span className="inline-flex items-center rounded-md bg-[#F1F5F9] px-2 py-0.5 text-xs font-semibold text-[#94A3B8]">
       {labelCouponStatus(status)}
     </span>
+  );
+}
+
+// partner_kind enum → 손님 친화 한글 라벨. 내부 용어 노출 금지.
+function partnerKindLabel(kind: string | null | undefined): string {
+  switch (kind) {
+    case "campsite":
+      return "캠핑장";
+    case "store":
+      return "매장";
+    case "brand":
+      return "브랜드";
+    case "ticket_seller":
+      return "티켓";
+    case "campaign_org":
+      return "캠페인";
+    case "creator_owned":
+      return "크리에이터";
+    default:
+      return "기타";
+  }
+}
+
+// 단골 가게 1줄 카드 — 이니셜 아바타 + 이름 + 부제(설명 우선, 없으면 업종 라벨).
+// partners 에 로고 컬럼이 없어 display_name 첫 글자 이니셜로 표시(쿠폰 지갑 패턴).
+function FavoritePartnerRowCard({ row }: { row: FavoritePartnerRow }) {
+  const name = row.partner?.display_name?.trim() || "가게";
+  const description = row.partner?.metadata?.description?.trim();
+  const subtitle = description || partnerKindLabel(row.partner?.partner_kind);
+  const initial = name.charAt(0) || "?";
+
+  return (
+    <li className="flex items-center gap-3 py-3">
+      <Avatar className="size-10 shrink-0">
+        <AvatarFallback className="bg-[#F1F5F9] text-base font-bold text-[#0F172A]">
+          {initial}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-base font-bold text-[#0F172A]">{name}</p>
+        <p className="mt-0.5 truncate text-sm font-medium text-[#64748B]">{subtitle}</p>
+      </div>
+    </li>
   );
 }
 
