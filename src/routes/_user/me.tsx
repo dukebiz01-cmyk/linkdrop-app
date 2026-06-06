@@ -91,6 +91,8 @@ type MakerInfo = {
   display_name: string;
   partner_kind: string | null;
   metadata: { description?: string | null; [k: string]: unknown } | null;
+  // pb/biz 등급 판정용 — 사업자등록번호. 있으면 biz(사업자 인증), 없으면 pb(공개).
+  business_no: string | null;
 };
 
 // 받은 쿠폰 → 메이커 dedup 용 raw row (client GROUP BY 불가 → JS dedup).
@@ -205,7 +207,7 @@ export const Route = createFileRoute("/_user/me")({
     const { data: claimMakerRows } = await supabase
       .from("coupon_claims")
       .select(
-        "issued_at, coupon:coupons(partner_id, partner:partners(id, display_name, partner_kind, metadata))",
+        "issued_at, coupon:coupons(partner_id, partner:partners(id, display_name, partner_kind, metadata, business_no))",
       )
       .eq("catcher_user_id", userId)
       .order("issued_at", { ascending: false });
@@ -223,7 +225,7 @@ export const Route = createFileRoute("/_user/me")({
     const { data: follows } = await supabase
       .from("maker_follows")
       .select(
-        "followed_partner_id, created_at, partner:partners(id, display_name, partner_kind, metadata)",
+        "followed_partner_id, created_at, partner:partners(id, display_name, partner_kind, metadata, business_no)",
       )
       .eq("follower_user_id", userId)
       .eq("status", "active")
@@ -510,7 +512,7 @@ function MePage() {
                         type="button"
                         onClick={() => handleSubscribe(m)}
                         disabled={busyMakerId === m.id}
-                        className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg bg-[#0A0A0A] px-3 text-sm font-bold text-white hover:bg-[#1A1A1A] disabled:opacity-50"
+                        className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg bg-[#21365C] px-3 text-sm font-bold text-white hover:bg-[#1A2C4D] disabled:opacity-50"
                       >
                         구독
                       </button>
@@ -815,13 +817,28 @@ function partnerKindLabel(kind: string | null | undefined): string {
   }
 }
 
-// 메이커 1줄 행 — 이니셜 아바타 + 이름 + 부제(설명 우선, 없으면 업종 라벨) + 우측 액션.
+// pb/biz 등급 판정 — 사업자등록번호(business_no) 있으면 biz(사업자 인증), 없으면 pb(공개).
+// (verification_status 는 노출 게이트라 전부 approved → 판별력 없음.)
+function makerTier(maker: MakerInfo): "pb" | "biz" {
+  return maker.business_no?.trim() ? "biz" : "pb";
+}
+
+// 메이커 등급 칩 — pb: 네이비 톤 / biz: 퍼플 톤. 11px, radius-md.
+function MakerTierChip({ tier }: { tier: "pb" | "biz" }) {
+  const cls = tier === "biz" ? "bg-[#F0EDFB] text-[#4C3FA0]" : "bg-[#EAECF4] text-[#21365C]";
+  return (
+    <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${cls}`}>{tier}</span>
+  );
+}
+
+// 메이커 1줄 행 — 이니셜 아바타 + 이름(+등급 칩) + 부제(설명 우선, 없으면 업종 라벨) + 우측 액션.
 // partners 에 로고 컬럼이 없어 display_name 첫 글자 이니셜로 표시(쿠폰 지갑 패턴).
 function MakerRow({ maker, right }: { maker: MakerInfo; right?: React.ReactNode }) {
   const name = maker.display_name?.trim() || "메이커";
   const description = maker.metadata?.description?.trim();
   const subtitle = description || partnerKindLabel(maker.partner_kind);
   const initial = name.charAt(0) || "?";
+  const tier = makerTier(maker);
 
   return (
     <li className="flex items-center gap-3 py-3">
@@ -831,7 +848,10 @@ function MakerRow({ maker, right }: { maker: MakerInfo; right?: React.ReactNode 
         </AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-base font-bold text-[#0F172A]">{name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="truncate text-base font-bold text-[#0F172A]">{name}</p>
+          <MakerTierChip tier={tier} />
+        </div>
         <p className="mt-0.5 truncate text-sm font-medium text-[#64748B]">{subtitle}</p>
       </div>
       {right}

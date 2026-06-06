@@ -1,10 +1,10 @@
 import { cn } from "@/lib/utils";
 
-/** v0 Primary CTA — 블루 (#0A0A0A). */
+/** v0 Primary CTA — 딥 네이비 (#21365C). 텍스트는 흰색 유지. */
 export const WIZARD_PRIMARY_BUTTON_CLASS = cn(
   "min-h-[52px] h-[52px] w-full rounded-2xl border-0 px-6 text-base font-bold tracking-ko text-white",
-  "bg-[#0A0A0A] transition-colors duration-150 ease-out",
-  "hover:bg-[#171717]",
+  "bg-[#21365C] transition-colors duration-150 ease-out",
+  "hover:bg-[#1A2C4D]",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] focus-visible:ring-offset-2",
   "disabled:cursor-not-allowed disabled:bg-[#E5E7EB] disabled:text-[#A3A3A3] disabled:opacity-100",
   "disabled:hover:bg-[#E5E7EB]",

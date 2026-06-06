@@ -117,8 +117,9 @@
   /* Border */
   --border: #e5e5e5;
 
-  /* Action (black button — 1 per screen) */
-  --action: #0a0a0a;
+  /* Action (filled primary button — 1 per screen). 딥 네이비.
+     주의: 텍스트 색이 아님(텍스트는 --text-strong #0a0a0a). 채워진 액션 배경 전용. */
+  --action: #21365c;
   --action-foreground: #ffffff;
 
   /* Accent — single brand color */
