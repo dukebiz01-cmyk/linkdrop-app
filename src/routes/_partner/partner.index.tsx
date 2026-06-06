@@ -106,9 +106,13 @@ function PartnerHome() {
   const data = Route.useLoaderData();
   const router = useRouter();
   const [actingId, setActingId] = useState<string | null>(null);
+  // 처리 끝남 목록 접기/펼치기 — 기본 5건만, 더보기로 전체.
+  const [othersExpanded, setOthersExpanded] = useState(false);
 
   const pending = data.reservations.filter((r) => r.status === "pending");
   const others = data.reservations.filter((r) => r.status !== "pending");
+  const OTHERS_PREVIEW = 5;
+  const visibleOthers = othersExpanded ? others : others.slice(0, OTHERS_PREVIEW);
 
   async function handleConfirm(reservationId: string) {
     setActingId(reservationId);
@@ -157,9 +161,7 @@ function PartnerHome() {
   return (
     <main className="min-h-screen bg-[#F8FAFC] tracking-ko pb-12">
       <header className="bg-white px-5 py-4 border-b border-[#F1F5F9]">
-        <h1 className="text-lg font-bold text-[#0F172A]">
-          {data.partnerName ?? "매장"}
-        </h1>
+        <h1 className="text-lg font-bold text-[#0F172A]">{data.partnerName ?? "매장"}</h1>
         <p className="mt-0.5 text-xs text-[#64748B]">내 매장</p>
       </header>
 
@@ -193,7 +195,9 @@ function PartnerHome() {
             </span>
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">예약 캘린더</p>
-              <p className="mt-0.5 text-xs text-[#64748B]">가능한 날짜를 마킹해 손님에게 보여줘요</p>
+              <p className="mt-0.5 text-xs text-[#64748B]">
+                가능한 날짜를 마킹해 손님에게 보여줘요
+              </p>
             </div>
           </div>
           <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
@@ -276,14 +280,15 @@ function PartnerHome() {
           )}
         </section>
 
-        {/* 처리 끝난 예약 (confirmed/rejected/completed) */}
+        {/* 처리 끝난 예약 (confirmed/rejected/completed) — 기본 5건만, 더보기로 전체.
+            정렬은 로더(get_partner_reservations, created_at DESC) 그대로. */}
         {others.length > 0 ? (
           <section>
             <h2 className="mb-2 px-1 text-sm font-semibold text-[#0A0A0A]">
               처리 끝남 ({others.length})
             </h2>
             <ul className="space-y-3">
-              {others.map((r) => (
+              {visibleOthers.map((r) => (
                 <li
                   key={r.reservation_id}
                   className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] opacity-80"
@@ -295,6 +300,15 @@ function PartnerHome() {
                 </li>
               ))}
             </ul>
+            {others.length > OTHERS_PREVIEW ? (
+              <button
+                type="button"
+                onClick={() => setOthersExpanded((v) => !v)}
+                className="mt-3 flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-4 text-sm font-semibold text-[#0A0A0A] hover:bg-[#FAFAFA]"
+              >
+                {othersExpanded ? "접기" : `더보기 (${others.length - OTHERS_PREVIEW}건)`}
+              </button>
+            ) : null}
           </section>
         ) : null}
       </div>
@@ -324,11 +338,9 @@ function ReservationBody({ row }: { row: ReservationRow }) {
       ) : null}
       {row.customer_message?.trim() ? (
         <div className="flex gap-2 text-sm text-[#475569]">
-          <MessageSquare
-            className="mt-0.5 size-4 shrink-0 text-[#94A3B8]"
-            strokeWidth={2}
-          />
-          <p className="whitespace-pre-line">{row.customer_message}</p>
+          <MessageSquare className="mt-0.5 size-4 shrink-0 text-[#94A3B8]" strokeWidth={2} />
+          {/* 메모가 길어도 카드는 짧게 — 2줄로 줄이고 말줄임(…). */}
+          <p className="line-clamp-2 min-w-0 whitespace-pre-line">{row.customer_message}</p>
         </div>
       ) : null}
     </div>
