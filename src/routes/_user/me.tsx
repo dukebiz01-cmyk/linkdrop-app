@@ -7,7 +7,6 @@ import {
   Heart,
   FileText,
   Store,
-  Settings,
   LogOut,
   ChevronRight,
   BarChart3,
@@ -439,13 +438,15 @@ function MePage() {
           )}
         </SectionCard>
 
-        {/* ⑥ 설정 — 로그아웃 */}
-        <SectionCard Icon={Settings} title="설정">
+        {/* ⑥ 설정 — 하단 계정 섹션. 본문과 얇은 구분선으로 분리, 로그아웃 행은
+            '더보기' 버튼과 동일한 풀폭 정렬(border + bg-white + rounded-xl + min-h-[44px]). */}
+        <section className="border-t border-[#E5E7EB] pt-4">
+          <h2 className="mb-3 px-1 text-sm font-semibold text-[#0A0A0A]">설정</h2>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <button
                 type="button"
-                className="flex w-full min-h-[44px] items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-[#EF4444] hover:bg-[#FEF2F2]"
+                className="flex w-full min-h-[44px] items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-semibold text-[#EF4444] transition-colors hover:bg-[#FEF2F2]"
               >
                 <LogOut className="size-4" strokeWidth={2} />
                 로그아웃
@@ -473,7 +474,7 @@ function MePage() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </SectionCard>
+        </section>
       </div>
       {embedState ? (
         <YouTubeEmbedModal
