@@ -33,15 +33,15 @@
   --spacing: 4px;
 
   /* Font family — Pretendard + system fallback */
-  --font-sans: "Pretendard", "Pretendard Variable", -apple-system,
-    BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-sans:
+    "Pretendard", "Pretendard Variable", -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI",
+    Roboto, sans-serif;
 
   /* Letter-spacing for Korean text */
   --tracking-ko: -0.02em;
 
   /* Shadow — soft only (modal/dropdown) */
-  --shadow-soft: 0 8px 24px -8px rgb(0 0 0 / 0.12),
-    0 2px 6px -2px rgb(0 0 0 / 0.06);
+  --shadow-soft: 0 8px 24px -8px rgb(0 0 0 / 0.12), 0 2px 6px -2px rgb(0 0 0 / 0.06);
 
   /* Color tokens */
   --color-bg: var(--bg);
@@ -108,10 +108,10 @@
   --surface: #fafaf9;
 
   /* 5-step gray (text scale) */
-  --text-strong: #0a0a0a;   /* 1: titles, primary text */
-  --text: #262626;          /* 2: body */
-  --text-muted: #525252;    /* 3: secondary */
-  --text-subtle: #a3a3a3;   /* 4: placeholder, helper */
+  --text-strong: #0a0a0a; /* 1: titles, primary text */
+  --text: #262626; /* 2: body */
+  --text-muted: #525252; /* 3: secondary */
+  --text-subtle: #a3a3a3; /* 4: placeholder, helper */
   --text-disabled: #d4d4d4; /* 5: disabled */
 
   /* Border */
@@ -127,7 +127,7 @@
 
   /* Intent — strip/chip only */
   --intent-info: #171717;
-  --intent-info-bg: #FAFAFA;
+  --intent-info-bg: #fafafa;
   --intent-success: #15803d;
   --intent-success-bg: #f0fdf4;
   --intent-warning: #b45309;
@@ -136,15 +136,15 @@
   --intent-danger-bg: #fef2f2;
 
   /* 9 LinkDrop intent strip colors (4px left strip only) */
-  --intent-info-strip: #0A0A0A;        /* 정보 공유 */
-  --intent-discussion-strip: #7c3aed;  /* 친구와 의논 */
-  --intent-coupon-strip: #db2777;      /* 쿠폰 */
+  --intent-info-strip: #0a0a0a; /* 정보 공유 */
+  --intent-discussion-strip: #7c3aed; /* 친구와 의논 */
+  --intent-coupon-strip: #db2777; /* 쿠폰 */
   --intent-reservation-strip: #0891b2; /* 예약 유도 */
-  --intent-commerce-strip: #ea580c;    /* 구매 유도 */
-  --intent-ticket-strip: #c026d3;      /* 티켓 판매 */
-  --intent-lead-strip: #16a34a;        /* 상담 신청 */
-  --intent-campaign-strip: #ca8a04;    /* 공식 안내 */
-  --intent-custom-strip: #525252;      /* 직접 설정 */
+  --intent-commerce-strip: #ea580c; /* 구매 유도 */
+  --intent-ticket-strip: #c026d3; /* 티켓 판매 */
+  --intent-lead-strip: #16a34a; /* 상담 신청 */
+  --intent-campaign-strip: #ca8a04; /* 공식 안내 */
+  --intent-custom-strip: #525252; /* 직접 설정 */
 }
 
 @layer base {
@@ -170,5 +170,46 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-radius: 8px;
+  }
+}
+
+/* 쿠폰 지갑 — "담기는" 연출. 받은 쿠폰 카드가 지갑 안으로 슬라이드+스케일 인.
+   transform/opacity 만 사용. prefers-reduced-motion 이면 연출 생략(즉시 표시). */
+@keyframes wallet-card-in {
+  from {
+    transform: translateY(14px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes wallet-count-pulse {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.wallet-card-in {
+  animation: wallet-card-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.wallet-count-pulse {
+  animation: wallet-count-pulse 600ms ease-out 1;
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wallet-card-in,
+  .wallet-count-pulse {
+    animation: none;
   }
 }

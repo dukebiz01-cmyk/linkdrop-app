@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   User,
@@ -107,6 +107,12 @@ type MePageData = {
  */
 export const Route = createFileRoute("/_user/me")({
   head: () => ({ meta: [{ title: "나 — LinkDrop" }] }),
+  // A안: 쿠폰 claim 직후 /me?claimed=<claim_code> 로 착지 → 해당 카드 입장 연출.
+  // claimed 외 파라미터는 버린다(연출 후 즉시 제거되는 일회성 신호).
+  validateSearch: (search: Record<string, unknown>): { claimed?: string } => {
+    const claimed = typeof search.claimed === "string" ? search.claimed : undefined;
+    return claimed ? { claimed } : {};
+  },
   loader: async (): Promise<MePageData> => {
     const empty: MePageData = {
       userId: null,
@@ -182,8 +188,13 @@ function getInitial(displayName: string, email: string | null): string {
 
 function MePage() {
   const data = Route.useLoaderData();
+  const search = Route.useSearch();
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
+  // 담기는 연출 — claim 직후 해당 카드 강조(입장 애니 + 하이라이트 링) ~2초.
+  const [highlightCode, setHighlightCode] = useState<string | null>(null);
+  const claimedCardRef = useRef<HTMLLIElement | null>(null);
+  const claimedHandledRef = useRef(false);
   // 작업 C: 내 카드 접기/펼치기 (상위 2개 + 더보기/접기 토글)
   const [dropsExpanded, setDropsExpanded] = useState(false);
   // 작업 B: 내 카드 썸네일 탭 → 인앱 임베드 재생 (단일 모달 인스턴스)
@@ -196,6 +207,40 @@ function MePage() {
 
   // 쿠폰 지갑 — '사용 가능'(issued)만 강조 카운트. 현금처럼 쓸 수 있는 장 수.
   const availableCount = data.coupons.filter((c) => c.status === "issued").length;
+
+  // A안 담김 연출 — mount 시 search.claimed 1회 처리.
+  // 1) "쿠폰 지갑에 담겼어요" 토스트 → 2) URL 에서 claimed 제거(재연출 방지) →
+  // 3) reduced-motion 아니면 해당 카드 하이라이트 + scrollIntoView, ~2초 후 해제.
+  // SSR/하이드레이션 불일치 방지를 위해 모든 연출 결정은 mount 이후 effect 에서만.
+  useEffect(() => {
+    if (claimedHandledRef.current) return;
+    const claimed = search.claimed;
+    if (!claimed) return;
+    claimedHandledRef.current = true;
+
+    toast.success("쿠폰 지갑에 담겼어요");
+
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
+    // 새로고침 재연출 방지 — claimed 제거(replace).
+    void navigate({ to: "/me", search: {}, replace: true });
+
+    if (reduced) return; // 연출 생략, 즉시 표시
+
+    setHighlightCode(claimed);
+    const clearTimer = window.setTimeout(() => setHighlightCode(null), 2000);
+    const raf = requestAnimationFrame(() => {
+      claimedCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => {
+      window.clearTimeout(clearTimer);
+      cancelAnimationFrame(raf);
+    };
+    // mount-only: search.claimed/navigate 는 1회만 읽음(재실행 시 가드로 차단).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function openEmbedFromDrop(d: MyDropRow) {
     const url = d.source?.source_url ?? "";
@@ -287,9 +332,10 @@ function MePage() {
             </div>
             {data.coupons.length > 0 ? (
               <span
+                key={highlightCode ? "pulse" : "idle"}
                 className={`text-sm font-bold ${
                   availableCount > 0 ? "text-[#0A0A0A]" : "text-[#94A3B8]"
-                }`}
+                } ${highlightCode ? "wallet-count-pulse" : ""}`}
               >
                 사용 가능 {availableCount}장
               </span>
@@ -299,9 +345,17 @@ function MePage() {
             <EmptyText text="받은 쿠폰이 여기 모여요." />
           ) : (
             <ul className="divide-y divide-[#F1F5F9]">
-              {data.coupons.map((c) => (
-                <CouponClaimCard key={c.id} row={c} />
-              ))}
+              {data.coupons.map((c) => {
+                const active = highlightCode === c.claim_code;
+                return (
+                  <CouponClaimCard
+                    key={c.id}
+                    row={c}
+                    active={active}
+                    innerRef={active ? claimedCardRef : undefined}
+                  />
+                );
+              })}
             </ul>
           )}
         </section>
@@ -437,7 +491,16 @@ function MePage() {
   );
 }
 
-function CouponClaimCard({ row }: { row: CouponClaimRow }) {
+function CouponClaimCard({
+  row,
+  active = false,
+  innerRef,
+}: {
+  row: CouponClaimRow;
+  // active: 방금 담긴 카드 → 입장 애니 + 하이라이트 링. ~2초 후 부모가 해제.
+  active?: boolean;
+  innerRef?: React.Ref<HTMLLIElement>;
+}) {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
 
@@ -475,6 +538,7 @@ function CouponClaimCard({ row }: { row: CouponClaimRow }) {
     // 지갑 안의 한 '장' — 보더박스 없이 hairline divider(ul)로만 구분, 박스 중첩 회피.
     // phase1 A: 카드 전체 클릭 + 복사 button 중첩 → div role=button, 키보드(Enter/Space) 유지.
     <li
+      ref={innerRef}
       role="button"
       tabIndex={0}
       onClick={goDetail}
@@ -484,9 +548,9 @@ function CouponClaimCard({ row }: { row: CouponClaimRow }) {
           goDetail();
         }
       }}
-      className={`-mx-2 cursor-pointer rounded-xl px-2 py-4 text-left transition-colors hover:bg-[#FAFAFA] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] ${
+      className={`-mx-2 cursor-pointer rounded-xl px-2 py-4 text-left transition-[background-color,box-shadow] hover:bg-[#FAFAFA] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] ${
         dim ? "opacity-50" : ""
-      }`}
+      } ${active ? "wallet-card-in bg-[#FAFAFA] ring-2 ring-[#0A0A0A]" : ""}`}
     >
       {/* 상태(사용 가능=현금처럼 또렷) + 유효기간 */}
       <div className="flex items-center justify-between gap-2">

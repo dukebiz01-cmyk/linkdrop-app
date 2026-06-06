@@ -33,26 +33,20 @@ const BRAND_TITLE = "LinkDrop — 친구가 보내준 카드";
 const BRAND_DESCRIPTION = "영상 속 정보를 친구와 카톡으로 나누는 가장 빠른 방법";
 
 // description fallback chain: ai_summary → curator_message → 정적 기본. 200자 cap.
-function buildDescription(detail: {
-  drop?: { ai_summary?: string | null } | null;
-  curator_message?: string | null;
-} | null): string {
-  const candidates = [
-    detail?.drop?.ai_summary,
-    detail?.curator_message,
-    BRAND_DESCRIPTION,
-  ];
-  const picked = candidates.find(
-    (s): s is string => typeof s === "string" && s.trim().length > 0,
-  );
+function buildDescription(
+  detail: {
+    drop?: { ai_summary?: string | null } | null;
+    curator_message?: string | null;
+  } | null,
+): string {
+  const candidates = [detail?.drop?.ai_summary, detail?.curator_message, BRAND_DESCRIPTION];
+  const picked = candidates.find((s): s is string => typeof s === "string" && s.trim().length > 0);
   const text = picked ?? BRAND_DESCRIPTION;
   return text.length > 200 ? text.slice(0, 197) + "..." : text;
 }
 
 // twitter:card 결정 — og:image 있으면 large_image, 없으면 summary.
-function pickTwitterCard(
-  imageUrl: string | null | undefined,
-): "summary_large_image" | "summary" {
+function pickTwitterCard(imageUrl: string | null | undefined): "summary_large_image" | "summary" {
   return imageUrl && imageUrl.trim().length > 0 ? "summary_large_image" : "summary";
 }
 
@@ -174,10 +168,10 @@ export const Route = createFileRoute("/d/$shareUuid")({
           const kstToday = new Intl.DateTimeFormat("en-CA", {
             timeZone: "Asia/Seoul",
           }).format(new Date());
-          const { data: slotData, error: slotError } = await supabase.rpc(
-            "get_available_slots",
-            { p_partner_id: partnerId, p_date: kstToday },
-          );
+          const { data: slotData, error: slotError } = await supabase.rpc("get_available_slots", {
+            p_partner_id: partnerId,
+            p_date: kstToday,
+          });
           if (!slotError && Array.isArray(slotData)) {
             slots = slotData as unknown as SlotRow[];
           }
@@ -348,9 +342,7 @@ function DropPage() {
 
   // 재공유 마커 — parentShareId / shareDepth>0 / ref 중 하나라도 있으면 read-only.
   // 첫 수신자(마커 없음)는 기존 편집 가능 UI 유지.
-  const isReshare = Boolean(
-    search.parentShareId || (search.shareDepth ?? 0) > 0 || search.ref,
-  );
+  const isReshare = Boolean(search.parentShareId || (search.shareDepth ?? 0) > 0 || search.ref);
 
   if (loaderData.mode === "mock") {
     return renderMockInfoDropPage(
@@ -442,10 +434,10 @@ function DropPage() {
         firstRow && typeof firstRow === "object" && firstRow !== null && "claim_code" in firstRow
           ? String((firstRow as { claim_code: unknown }).claim_code ?? "")
           : "";
-      // 카톡 토스트는 순삭이라 결과를 못 봄 → 쿠폰 상세 페이지로 이동해 지속 확인.
-      toast.success("쿠폰을 받았어요");
+      // A안: 받으면 상세가 아니라 "지갑으로 착지". 담김 연출/토스트는 /me 가 담당.
+      // claimed=claim_code 를 search 로 넘겨 /me 에서 해당 카드 입장 연출.
       if (code) {
-        void navigate({ to: "/coupon/$claim_code", params: { claim_code: code } });
+        void navigate({ to: "/me", search: { claimed: code } });
       } else {
         void navigate({ to: "/me" });
       }
@@ -532,10 +524,13 @@ function DropPage() {
                 id: funnelCoupon.id,
                 title: funnelCoupon.title,
                 conditions:
-                  (funnelCoupon.conditions as {
-                    min_amount?: number;
-                    [k: string]: unknown;
-                  } | null | undefined) ?? null,
+                  (funnelCoupon.conditions as
+                    | {
+                        min_amount?: number;
+                        [k: string]: unknown;
+                      }
+                    | null
+                    | undefined) ?? null,
                 valid_until: funnelCoupon.valid_until ?? null,
                 coupon_type: funnelCoupon.coupon_type ?? null,
                 gift_item: funnelCoupon.gift_item ?? null,
@@ -606,9 +601,7 @@ function DropPage() {
           }
 
           const linkUrl =
-            reshareLink ??
-            props.shareUrl ??
-            `https://app.drop.how/d/${detail.share_uuid}`;
+            reshareLink ?? props.shareUrl ?? `https://app.drop.how/d/${detail.share_uuid}`;
 
           // BOOST2 — intent 별 CTA 버튼 1개. 라벨은 60대 친화 (#16).
           // 버튼 link = 본문 링크와 동일(=/d/ 새 단축링크 또는 폴백).
