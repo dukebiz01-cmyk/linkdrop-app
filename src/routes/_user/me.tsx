@@ -13,8 +13,9 @@ import {
   BarChart3,
   Copy,
   Check,
+  Wallet,
 } from "lucide-react";
-// Gift 는 받은 혜택 카드 + 증정 쿠폰 표시에서 재사용. 별도 import X.
+// Wallet = 쿠폰 지갑 섹션 헤더. Gift = 증정 쿠폰 혜택 라벨 재사용.
 import { Toaster } from "@/components/ui/sonner";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
@@ -193,11 +194,13 @@ function MePage() {
     title: string;
   } | null>(null);
 
+  // 쿠폰 지갑 — '사용 가능'(issued)만 강조 카운트. 현금처럼 쓸 수 있는 장 수.
+  const availableCount = data.coupons.filter((c) => c.status === "issued").length;
+
   function openEmbedFromDrop(d: MyDropRow) {
     const url = d.source?.source_url ?? "";
     const fromUrl = url ? parseVideoUrl(url) : null;
-    const videoId =
-      fromUrl?.videoId ?? extractYouTubeVideoIdFromThumb(d.source?.thumbnail_url);
+    const videoId = fromUrl?.videoId ?? extractYouTubeVideoIdFromThumb(d.source?.thumbnail_url);
     if (!videoId) {
       // 안전 fallback: videoId 없으면 모달 안 띄움. 빈 모달 금지.
       toast.info("이 영상은 인앱 재생을 지원하지 않아요.");
@@ -273,18 +276,35 @@ function MePage() {
           </SectionCard>
         ) : null}
 
-        {/* ② 받은 혜택 — 카드 탭 = 상세, "코드 복사" = clipboard. 60대 친화 라벨(#16). */}
-        <SectionCard Icon={Gift} title="받은 혜택">
+        {/* ② 쿠폰 지갑 — 쿠폰 = 현금성 자산. 지갑 패널은 가볍게, 그 안의 쿠폰 '장'들이
+            주인공. 헤더에 '사용 가능 N장' 강조. 카드 탭 = 상세, "코드 복사" = clipboard.
+            박스 중첩 회피: 흰 패널 안에서 쿠폰들은 hairline divider 로만 구분(보더박스 X). */}
+        <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Wallet className="size-4 text-[#0A0A0A]" strokeWidth={2} />
+              <h3 className="text-sm font-semibold text-[#0A0A0A]">쿠폰 지갑</h3>
+            </div>
+            {data.coupons.length > 0 ? (
+              <span
+                className={`text-sm font-bold ${
+                  availableCount > 0 ? "text-[#0A0A0A]" : "text-[#94A3B8]"
+                }`}
+              >
+                사용 가능 {availableCount}장
+              </span>
+            ) : null}
+          </div>
           {data.coupons.length === 0 ? (
-            <EmptyText text="받은 혜택이 여기 모여요." />
+            <EmptyText text="받은 쿠폰이 여기 모여요." />
           ) : (
-            <ul className="space-y-2">
+            <ul className="divide-y divide-[#F1F5F9]">
               {data.coupons.map((c) => (
                 <CouponClaimCard key={c.id} row={c} />
               ))}
             </ul>
           )}
-        </SectionCard>
+        </section>
 
         {/* ③ 내 구독 — 정적 빈상태 (테이블 없음) */}
         <SectionCard Icon={Heart} title="내 구독">
@@ -300,59 +320,57 @@ function MePage() {
           ) : (
             <>
               <ul className="space-y-2">
-                {data.myDrops
-                  .slice(0, dropsExpanded ? data.myDrops.length : 2)
-                  .map((d) => (
-                    <li key={d.id} className="rounded-xl bg-[#F8FAFC] px-3 py-3">
-                      <div className="flex items-center gap-3">
+                {data.myDrops.slice(0, dropsExpanded ? data.myDrops.length : 2).map((d) => (
+                  <li key={d.id} className="rounded-xl bg-[#F8FAFC] px-3 py-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => openEmbedFromDrop(d)}
+                        aria-label="영상 재생"
+                        className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-[#E2E8F0] transition-opacity hover:opacity-90"
+                      >
+                        {d.source?.thumbnail_url ? (
+                          <img
+                            src={d.source.thumbnail_url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : null}
+                      </button>
+                      <div className="min-w-0 flex-1">
                         <button
                           type="button"
                           onClick={() => openEmbedFromDrop(d)}
-                          aria-label="영상 재생"
-                          className="relative size-12 shrink-0 overflow-hidden rounded-lg bg-[#E2E8F0] transition-opacity hover:opacity-90"
+                          className="block w-full min-w-0 text-left"
                         >
-                          {d.source?.thumbnail_url ? (
-                            <img
-                              src={d.source.thumbnail_url}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          ) : null}
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <button
-                            type="button"
-                            onClick={() => openEmbedFromDrop(d)}
-                            className="block w-full min-w-0 text-left"
-                          >
-                            <p className="truncate text-sm font-semibold text-[#0F172A] hover:underline">
-                              {d.source?.title?.trim() || "(제목 없음)"}
-                            </p>
-                          </button>
-                          <p className="mt-0.5 text-xs text-[#64748B]">
-                            조회 {numFmt(d.view_count)} · 공유 {numFmt(d.share_count)} · 전환{" "}
-                            {numFmt(d.conversion_count)}
+                          <p className="truncate text-sm font-semibold text-[#0F172A] hover:underline">
+                            {d.source?.title?.trim() || "(제목 없음)"}
                           </p>
-                        </div>
-                      </div>
-                      {data.isBusiness && d.share_uuid ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            navigate({
-                              to: "/results/$shareUuid",
-                              params: { shareUuid: d.share_uuid! },
-                            })
-                          }
-                          className="mt-2 flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-[#0A0A0A] hover:underline"
-                        >
-                          <BarChart3 className="size-4" strokeWidth={2} />
-                          성과 보기
-                          <ChevronRight className="size-4" strokeWidth={2} />
                         </button>
-                      ) : null}
-                    </li>
-                  ))}
+                        <p className="mt-0.5 text-xs text-[#64748B]">
+                          조회 {numFmt(d.view_count)} · 공유 {numFmt(d.share_count)} · 전환{" "}
+                          {numFmt(d.conversion_count)}
+                        </p>
+                      </div>
+                    </div>
+                    {data.isBusiness && d.share_uuid ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate({
+                            to: "/results/$shareUuid",
+                            params: { shareUuid: d.share_uuid! },
+                          })
+                        }
+                        className="mt-2 flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-[#0A0A0A] hover:underline"
+                      >
+                        <BarChart3 className="size-4" strokeWidth={2} />
+                        성과 보기
+                        <ChevronRight className="size-4" strokeWidth={2} />
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
               </ul>
               {data.myDrops.length > 2 ? (
                 <button
@@ -360,9 +378,7 @@ function MePage() {
                   onClick={() => setDropsExpanded((v) => !v)}
                   className="mt-3 flex w-full min-h-[44px] items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm font-semibold tracking-ko text-[#0A0A0A] transition-colors hover:bg-[#FAFAFA]"
                 >
-                  {dropsExpanded
-                    ? "접기"
-                    : `더보기 (${data.myDrops.length - 2})`}
+                  {dropsExpanded ? "접기" : `더보기 (${data.myDrops.length - 2})`}
                 </button>
               ) : null}
             </>
@@ -433,6 +449,9 @@ function CouponClaimCard({ row }: { row: CouponClaimRow }) {
   const isExpired = row.status === "expired" || row.status === "cancelled";
   const dim = isUsed || isExpired;
 
+  // 혜택/증정품 = 가장 큰 가치(현금 같은 자산). 증정이면 '{품목} 증정', 아니면 쿠폰 제목.
+  const benefit = isGift && giftItem ? `${giftItem} 증정` : couponTitle;
+
   async function handleCopy(e: React.MouseEvent) {
     e.stopPropagation();
     try {
@@ -453,59 +472,77 @@ function CouponClaimCard({ row }: { row: CouponClaimRow }) {
   }
 
   return (
-    <li>
-      {/* phase1 A: 카드 전체 button 안에 복사 button 중첩 → div role=button 으로
-          전환. 키보드 접근성(Enter/Space) 유지. 복사 버튼은 그대로 button. */}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={goDetail}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            goDetail();
-          }
-        }}
-        className={`w-full cursor-pointer rounded-xl bg-[#F8FAFC] px-4 py-3 text-left transition-colors hover:bg-[#F1F5F9] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] ${
-          dim ? "opacity-60" : ""
-        }`}
-      >
-        <p className="truncate text-sm font-bold text-[#0F172A]">
-          {couponTitle}
-        </p>
-        {storeName ? (
-          <p className="mt-0.5 truncate text-xs text-[#64748B]">{storeName}</p>
-        ) : null}
-        {isGift && giftItem ? (
-          <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-[#0A0A0A]">
-            <Gift className="size-3" strokeWidth={2.4} />
-            {giftItem} 증정
-          </p>
-        ) : null}
-        <div className="mt-2 flex items-center gap-2">
-          <span className="font-mono text-base font-bold tracking-wide text-[#0F172A]">
-            {row.claim_code}
+    // 지갑 안의 한 '장' — 보더박스 없이 hairline divider(ul)로만 구분, 박스 중첩 회피.
+    // phase1 A: 카드 전체 클릭 + 복사 button 중첩 → div role=button, 키보드(Enter/Space) 유지.
+    <li
+      role="button"
+      tabIndex={0}
+      onClick={goDetail}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          goDetail();
+        }
+      }}
+      className={`-mx-2 cursor-pointer rounded-xl px-2 py-4 text-left transition-colors hover:bg-[#FAFAFA] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] ${
+        dim ? "opacity-50" : ""
+      }`}
+    >
+      {/* 상태(사용 가능=현금처럼 또렷) + 유효기간 */}
+      <div className="flex items-center justify-between gap-2">
+        <StatusPill status={row.status} />
+        {row.expires_at ? (
+          <span className="shrink-0 text-xs font-medium text-[#94A3B8]">
+            {formatDate(row.expires_at)}까지
           </span>
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2 text-xs font-semibold text-[#0A0A0A] hover:bg-[#FAFAFA]"
-            aria-label="쿠폰 번호 복사"
-          >
-            {copied ? (
-              <Check className="size-3" strokeWidth={2.4} />
-            ) : (
-              <Copy className="size-3" strokeWidth={2} />
-            )}
-            {copied ? "복사됨" : "코드 복사"}
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-[#64748B]">
-          {labelCouponStatus(row.status)}
-          {row.expires_at ? ` · ${formatDate(row.expires_at)}까지` : null}
-        </p>
+        ) : null}
+      </div>
+
+      {/* 혜택/증정 = 가장 크게(가치) */}
+      <p className="mt-2 flex items-start gap-1.5 text-lg font-extrabold leading-tight text-[#0F172A]">
+        {isGift ? <Gift className="mt-0.5 size-5 shrink-0" strokeWidth={2.4} /> : null}
+        <span className="min-w-0">{benefit}</span>
+      </p>
+      {storeName ? (
+        <p className="mt-1 truncate text-sm font-medium text-[#64748B]">{storeName}</p>
+      ) : null}
+
+      {/* 쿠폰 번호 + 복사 */}
+      <div className="mt-3 flex items-center gap-2">
+        <span className="font-mono text-base font-bold tracking-wide text-[#0F172A]">
+          {row.claim_code}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2 text-xs font-semibold text-[#0A0A0A] hover:bg-[#FAFAFA]"
+          aria-label="쿠폰 번호 복사"
+        >
+          {copied ? (
+            <Check className="size-3" strokeWidth={2.4} />
+          ) : (
+            <Copy className="size-3" strokeWidth={2} />
+          )}
+          {copied ? "복사됨" : "코드 복사"}
+        </button>
       </div>
     </li>
+  );
+}
+
+// 상태 칩 — '사용 가능'은 검정 솔리드로 또렷하게(쓸 수 있는 돈처럼), 그 외는 회색 dim.
+function StatusPill({ status }: { status: string | null }) {
+  if (status === "issued") {
+    return (
+      <span className="inline-flex items-center rounded-md bg-[#0A0A0A] px-2 py-0.5 text-xs font-bold text-white">
+        사용 가능
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-md bg-[#F1F5F9] px-2 py-0.5 text-xs font-semibold text-[#94A3B8]">
+      {labelCouponStatus(status)}
+    </span>
   );
 }
 
