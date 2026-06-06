@@ -1,5 +1,9 @@
 import type { ReactElement } from "react";
-import { InfoDropPage, type InfoDropPageProps, type DropViewVariant } from "@/components/info-drop-page";
+import {
+  InfoDropPage,
+  type InfoDropPageProps,
+  type DropViewVariant,
+} from "@/components/info-drop-page";
 import type { PriceOfferRow } from "@/components/ai-price-comparison-card";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import type { DropPurpose } from "@/lib/types";
@@ -61,9 +65,7 @@ export function isPublicDropMockPath(shareCode: string): boolean {
  * WHY: DB 영속화 없이 Create Wizard 입력값을 /d 수신자 화면까지 전달.
  *      인코더는 create-drop-wizard.tsx 의 encodeReservationDates.
  */
-export function decodeReservationDates(
-  encoded: string | undefined | null,
-): ReservationDateItem[] {
+export function decodeReservationDates(encoded: string | undefined | null): ReservationDateItem[] {
   if (!encoded) return [];
   try {
     const b64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
@@ -137,13 +139,8 @@ export function resolvePublicDropVariant(
  * 첫 인자는 share_uuid(또는 mock path "test"/"preview-*"). 두 번째가 실제 6자
  * base62 share_code. mock 경로는 share_code가 없으므로 두 번째 미전달 → 긴 URL.
  */
-export function buildPublicDropShareUrl(
-  shareUuid: string,
-  shareCode?: string | null,
-): string {
-  return shareCode
-    ? `https://drop.how/${shareCode}`
-    : `https://app.drop.how/d/${shareUuid}`;
+export function buildPublicDropShareUrl(shareUuid: string, shareCode?: string | null): string {
+  return shareCode ? `https://drop.how/${shareCode}` : `https://app.drop.how/d/${shareUuid}`;
 }
 
 function narrowIntent(variant: DropViewVariant): InfoDropPageProps["intent"] {
@@ -175,8 +172,7 @@ function buildFallbackMockProps(
     variant,
     productName: variant === "purchase" ? "공유 상품" : undefined,
     brandGuess: variant === "purchase" ? "Helinox" : undefined,
-    priceOffers:
-      variant === "purchase" ? MOCK_PRICE_OFFERS.map((o) => ({ ...o })) : undefined,
+    priceOffers: variant === "purchase" ? MOCK_PRICE_OFFERS.map((o) => ({ ...o })) : undefined,
     local: {
       name: "포레스트 커피",
       category: "카페 · 브런치",
@@ -311,7 +307,6 @@ export function renderMockInfoDropPage(
       {...props}
       variant={variant}
       reservationDates={reservationDates}
-      reservationUrl={safeReservationUrl}
       isReshare={isReshare}
       officialStatus="user_shared"
       onWatchOriginal={() => {

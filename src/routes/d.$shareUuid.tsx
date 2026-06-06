@@ -362,18 +362,6 @@ function DropPage() {
   }
 
   const props = infoDropAdapter(detail);
-  // store.reservation_url 우선, 없으면 wizard 의 ?u= 사용. http(s) 만 허용.
-  // InfoDropPage 가 이 값으로 CTA 활성/비활성 + 안내 문구를 결정한다.
-  const reservationUrlSource = detail.store?.reservation_url ?? search.u ?? null;
-  const reservationUrl = (() => {
-    if (!reservationUrlSource) return null;
-    try {
-      const u = new URL(reservationUrlSource);
-      return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
-    } catch {
-      return null;
-    }
-  })();
   // 예약 가능 날짜 — wizard 의 ?r= 디코드. DB 미저장이라 query param 으로 임시 운반.
   // 빈 배열이면 InfoDropPage 가 캘린더 카드를 자동 숨김.
   const reservationDatesFromQuery = decodeReservationDates(search.r);
@@ -512,7 +500,6 @@ function DropPage() {
       <InfoDropPage
         {...props}
         reservationDates={reservationDatesFromQuery}
-        reservationUrl={reservationUrl}
         isReshare={isReshare}
         videoSourceUrl={detail.source?.source_url ?? undefined}
         officialStatus="user_shared"

@@ -16,10 +16,7 @@ import {
   MessageSquare,
   MapPin,
 } from "lucide-react";
-import {
-  AiPriceComparisonCard,
-  type PriceOfferRow,
-} from "@/components/ai-price-comparison-card";
+import { AiPriceComparisonCard, type PriceOfferRow } from "@/components/ai-price-comparison-card";
 import { ActionButton } from "@/components/ActionButton";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import {
@@ -44,11 +41,7 @@ import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
 import { trackReceiverEvent } from "@/lib/event-tracking";
-import {
-  getBadgeLabel,
-  getBadgeColor,
-  type OfficialStatus,
-} from "@/lib/helpers/drop-status";
+import { getBadgeLabel, getBadgeColor, type OfficialStatus } from "@/lib/helpers/drop-status";
 import { AbuseReportSheet } from "@/components/abuse-report-sheet";
 
 // ============================================================
@@ -92,12 +85,6 @@ export interface InfoDropPageProps {
   shareUrl?: string;
   /** 예약 목적 — 메이커가 보낸 예약 가능 날짜 (수신자 달력 마킹용). */
   reservationDates?: ReservationDateItem[];
-  /**
-   * 예약 목적 — 메이커가 설정한 예약 버튼 연결 URL.
-   * 값이 있으면 "예약하기" CTA 활성, 클릭 시 onPrimaryAction 발화.
-   * 빈 값/undefined 이면 CTA 비활성 + 안내 문구 노출.
-   */
-  reservationUrl?: string | null;
   /**
    * 재공유(re-share) 수신자 화면 여부. 부모 라우트가 URL 마커
    * (parentShareId · shareDepth · ref) 로 판별해 전달.
@@ -435,11 +422,7 @@ function ReservationCardTabs({
         })}
       </div>
 
-      <div
-        role="tabpanel"
-        data-testid={`reservation-tabpanel-${tab}`}
-        className="space-y-4"
-      >
+      <div role="tabpanel" data-testid={`reservation-tabpanel-${tab}`} className="space-y-4">
         {tab === "calendar" && calendarPanel}
         {tab === "reserve" && reservePanel}
         {tab === "coupon" && couponPanel}
@@ -565,7 +548,6 @@ export function InfoDropPage({
   funnelCoupon,
   onReserveAndClaim,
   reservationDates,
-  reservationUrl,
   isReshare = false,
   videoSourceUrl,
   onPrimaryAction,
@@ -726,9 +708,7 @@ export function InfoDropPage({
         // sticky 바 = 12(pt) + 52(primary) + 12(pb) + safe-area ≈ 76px + safe-area.
         // 본문 마지막 ~ sticky 바 사이 안 겹치게 pb-[calc(5.5rem+safe-area)] (88px).
         // sticky 없는 드롭(정보/구매/상담) = pb-8 만으로 충분.
-        hasStickyBar
-          ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
-          : "pb-8",
+        hasStickyBar ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "pb-8",
       )}
       data-testid="public-drop-page"
       data-variant={resolvedVariant}
@@ -740,8 +720,8 @@ export function InfoDropPage({
             <AvatarImage src={safeMaker.avatarUrl} alt={safeMaker.name} />
             <AvatarFallback className="bg-surface text-sm font-semibold text-text-muted">
               {safeMaker.name.charAt(0) || "?"}
-          </AvatarFallback>
-        </Avatar>
+            </AvatarFallback>
+          </Avatar>
           <div>
             <p className="text-sm font-bold tracking-ko text-text-strong">
               {safeMaker.name}
@@ -751,16 +731,16 @@ export function InfoDropPage({
               LinkDrop으로 공유된 영상
             </p>
           </div>
-          {(officialStatus === 'official' || officialStatus === 'user_shared') && (
+          {(officialStatus === "official" || officialStatus === "user_shared") && (
             <div
               style={{
-                marginLeft: 'auto',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '2px 8px',
-                borderRadius: '6px',
-                fontSize: '11px',
+                marginLeft: "auto",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "2px 8px",
+                borderRadius: "6px",
+                fontSize: "11px",
                 fontWeight: 700,
                 backgroundColor: getBadgeColor(officialStatus).bg,
                 color: getBadgeColor(officialStatus).text,
@@ -769,9 +749,7 @@ export function InfoDropPage({
                   : undefined,
               }}
             >
-              {officialStatus === 'official' && (
-                <ShieldCheck size={12} strokeWidth={2.5} />
-              )}
+              {officialStatus === "official" && <ShieldCheck size={12} strokeWidth={2.5} />}
               {getBadgeLabel(officialStatus)}
             </div>
           )}
@@ -838,7 +816,10 @@ export function InfoDropPage({
                 className="absolute inset-0 flex items-center justify-center"
               >
                 <span className="flex size-16 items-center justify-center rounded-full bg-bg/95 shadow-soft">
-                  <Play className="ml-0.5 size-6 fill-text-strong text-text-strong" strokeWidth={2} />
+                  <Play
+                    className="ml-0.5 size-6 fill-text-strong text-text-strong"
+                    strokeWidth={2}
+                  />
                 </span>
               </button>
             </div>
@@ -861,7 +842,7 @@ export function InfoDropPage({
               <p className="text-sm font-medium tracking-ko text-text-muted">{safeTitle}</p>
             )}
             <p className="text-xs font-medium text-text-subtle">{safeCreator.channelName}</p>
-      </div>
+          </div>
         </section>
 
         {makerMessage && (
@@ -898,135 +879,138 @@ export function InfoDropPage({
 
         {/* 예약 드롭 = [예약가능 캘린더 | 예약하기 | 쿠폰] 3탭 (기존).
             v7.2 쿠폰 드롭 = [쿠폰 | 예약가능 캘린더] 2탭. 정보/구매/상담 진입 X. */}
-        {showReservationCalendar && (() => {
-          const hasReservationDates =
-            Array.isArray(reservationDates) && reservationDates.length > 0;
-          const isGift = funnelCoupon?.coupon_type === "gift";
-          const giftItem = funnelCoupon?.gift_item?.trim() || "";
+        {showReservationCalendar &&
+          (() => {
+            const hasReservationDates =
+              Array.isArray(reservationDates) && reservationDates.length > 0;
+            const isGift = funnelCoupon?.coupon_type === "gift";
+            const giftItem = funnelCoupon?.gift_item?.trim() || "";
 
-          // v7.1 — partnerId 가 있으면 매장 슬롯 가용일도 표시(makerAvailableDates 와 공존).
-          // makerAvailableDates 비어도 partnerId 있으면 캘린더 카드를 보여주어
-          // 업주가 마킹한 날을 확인 가능.
-          // 쿠폰 변형은 partnerId 만 신호 (위 게이트에서 이미 보장).
-          const showCalendar = isCoupon
-            ? Boolean(partnerId)
-            : hasReservationDates || Boolean(partnerId);
-          const calendarPanel = showCalendar ? (
-            <ReservationCalendarClient
-              partnerName={safeLocal.name}
-              campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
-              makerAvailableDates={reservationDates}
-              partnerId={partnerId}
-              initialSlots={initialSlots}
-              readOnly={isReshare}
-              onCheckAvailability={(selection) => {
-                // A안 직접예약 — 캘린더 [예약하기] = 인앱 신청 시트. 선택한 날짜·인원을
-                // 부모(d.$shareUuid)로 올려 prefill + 로그인 게이트 + 시트 오픈.
-                onReservationRequest?.(selection);
-              }}
-              onSecondaryAction={(action) => handleCtaClick(action)}
-            />
-          ) : (
-            <section className="rounded-2xl border border-border bg-surface p-4">
-              <p className="text-sm font-medium tracking-ko text-text-muted">
-                업주가 아직 가능한 날짜를 마킹하지 않았어요. 아래 [예약하기] 탭으로 예약 문의를 보낼 수 있어요.
-              </p>
-            </section>
-          );
-
-          const reservePanel = (
-            <div className="space-y-3">
+            // v7.1 — partnerId 가 있으면 매장 슬롯 가용일도 표시(makerAvailableDates 와 공존).
+            // makerAvailableDates 비어도 partnerId 있으면 캘린더 카드를 보여주어
+            // 업주가 마킹한 날을 확인 가능.
+            // 쿠폰 변형은 partnerId 만 신호 (위 게이트에서 이미 보장).
+            const showCalendar = isCoupon
+              ? Boolean(partnerId)
+              : hasReservationDates || Boolean(partnerId);
+            const calendarPanel = showCalendar ? (
+              <ReservationCalendarClient
+                partnerName={safeLocal.name}
+                campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
+                makerAvailableDates={reservationDates}
+                partnerId={partnerId}
+                initialSlots={initialSlots}
+                readOnly={isReshare}
+                onCheckAvailability={(selection) => {
+                  // A안 직접예약 — 캘린더 [예약하기] = 인앱 신청 시트. 선택한 날짜·인원을
+                  // 부모(d.$shareUuid)로 올려 prefill + 로그인 게이트 + 시트 오픈.
+                  onReservationRequest?.(selection);
+                }}
+                onSecondaryAction={(action) => handleCtaClick(action)}
+              />
+            ) : (
               <section className="rounded-2xl border border-border bg-surface p-4">
-                <h2 className="text-base font-bold tracking-ko text-text-strong">예약하기</h2>
-                <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
-                  {hasReservationDates
-                    ? "원하는 날짜를 골라 예약을 진행할 수 있어요."
-                    : "아래 버튼을 눌러 예약 문의를 보낼 수 있어요."}
+                <p className="text-sm font-medium tracking-ko text-text-muted">
+                  업주가 아직 가능한 날짜를 마킹하지 않았어요. 아래 [예약하기] 탭으로 예약 문의를
+                  보낼 수 있어요.
                 </p>
               </section>
+            );
 
-              {onReservationRequest ? (
-                <ActionButton
-                  type="button"
-                  data-testid="cta-reservation-tab"
-                  onClick={() => onReservationRequest?.()}
-                  className={WIZARD_PRIMARY_BUTTON_CLASS}
-                >
-                  예약하기
-                </ActionButton>
-              ) : (
-                <div className="space-y-2">
+            const reservePanel = (
+              <div className="space-y-3">
+                <section className="rounded-2xl border border-border bg-surface p-4">
+                  <h2 className="text-base font-bold tracking-ko text-text-strong">예약하기</h2>
+                  <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
+                    {hasReservationDates
+                      ? "원하는 날짜를 골라 예약을 진행할 수 있어요."
+                      : "아래 버튼을 눌러 예약 문의를 보낼 수 있어요."}
+                  </p>
+                </section>
+
+                {onReservationRequest ? (
                   <ActionButton
                     type="button"
-                    data-testid="cta-reservation-tab-disabled"
-                    disabled
-                    aria-disabled
+                    data-testid="cta-reservation-tab"
+                    onClick={() => onReservationRequest?.()}
                     className={WIZARD_PRIMARY_BUTTON_CLASS}
                   >
                     예약하기
                   </ActionButton>
-                  <p className="text-xs font-medium tracking-ko text-text-muted">
-                    예약 신청을 받을 수 없는 드롭이에요.
-                  </p>
-                </div>
-              )}
-
-              {/* 빌링 X 고지 — Duke 요구. 결제는 매장에서. */}
-              <p
-                data-testid="billing-notice"
-                className="text-[11px] leading-relaxed tracking-ko text-text-subtle"
-              >
-                결제는 매장에서 직접 진행돼요. 자세한 내용은 매장에 문의해 주세요.
-              </p>
-            </div>
-          );
-
-          const couponPanel = funnelCoupon ? (
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-                <div className="mb-3 flex items-center gap-2">
-                  <Ticket className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-                  <span className="text-sm font-medium tracking-ko text-[#64748B]">
-                    받을 수 있는 쿠폰
-                  </span>
-                </div>
-                <p className="text-lg font-bold tracking-ko text-[#0F172A]">
-                  {funnelCoupon.title}
-                </p>
-                {isGift && giftItem ? (
-                  <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#FAFAFA] px-3 py-1 text-sm font-bold tracking-ko text-[#0A0A0A]">
-                    <Gift className="size-4" strokeWidth={2.2} />
-                    {giftItem} 증정
-                  </p>
                 ) : (
-                  typeof funnelCoupon.conditions?.min_amount === "number" && (
-                    <p className="mt-2 text-sm font-medium tracking-ko text-[#64748B]">
-                      {funnelCoupon.conditions.min_amount.toLocaleString("ko-KR")}원 이상 사용하실 때
+                  <div className="space-y-2">
+                    <ActionButton
+                      type="button"
+                      data-testid="cta-reservation-tab-disabled"
+                      disabled
+                      aria-disabled
+                      className={WIZARD_PRIMARY_BUTTON_CLASS}
+                    >
+                      예약하기
+                    </ActionButton>
+                    <p className="text-xs font-medium tracking-ko text-text-muted">
+                      예약 신청을 받을 수 없는 드롭이에요.
                     </p>
-                  )
+                  </div>
                 )}
-                <p className="mt-1 text-sm font-medium tracking-ko text-[#64748B]">
-                  {funnelCoupon.valid_until
-                    ? `${new Date(funnelCoupon.valid_until).toLocaleDateString("ko-KR")}까지`
-                    : "기간 제한 없음"}
+
+                {/* 빌링 X 고지 — Duke 요구. 결제는 매장에서. */}
+                <p
+                  data-testid="billing-notice"
+                  className="text-[11px] leading-relaxed tracking-ko text-text-subtle"
+                >
+                  결제는 매장에서 직접 진행돼요. 자세한 내용은 매장에 문의해 주세요.
                 </p>
               </div>
-              <p className="text-xs font-medium tracking-ko text-text-muted">
-                예약 확정 시 쿠폰을 받을 수 있어요.
-              </p>
-            </div>
-          ) : null;
+            );
 
-          return (
-            <ReservationCardTabs
-              variant={isCoupon ? "coupon" : "reservation"}
-              hasCoupon={Boolean(funnelCoupon)}
-              calendarPanel={calendarPanel}
-              reservePanel={reservePanel}
-              couponPanel={couponPanel}
-            />
-          );
-        })()}
+            const couponPanel = funnelCoupon ? (
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Ticket className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+                    <span className="text-sm font-medium tracking-ko text-[#64748B]">
+                      받을 수 있는 쿠폰
+                    </span>
+                  </div>
+                  <p className="text-lg font-bold tracking-ko text-[#0F172A]">
+                    {funnelCoupon.title}
+                  </p>
+                  {isGift && giftItem ? (
+                    <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#FAFAFA] px-3 py-1 text-sm font-bold tracking-ko text-[#0A0A0A]">
+                      <Gift className="size-4" strokeWidth={2.2} />
+                      {giftItem} 증정
+                    </p>
+                  ) : (
+                    typeof funnelCoupon.conditions?.min_amount === "number" && (
+                      <p className="mt-2 text-sm font-medium tracking-ko text-[#64748B]">
+                        {funnelCoupon.conditions.min_amount.toLocaleString("ko-KR")}원 이상 사용하실
+                        때
+                      </p>
+                    )
+                  )}
+                  <p className="mt-1 text-sm font-medium tracking-ko text-[#64748B]">
+                    {funnelCoupon.valid_until
+                      ? `${new Date(funnelCoupon.valid_until).toLocaleDateString("ko-KR")}까지`
+                      : "기간 제한 없음"}
+                  </p>
+                </div>
+                <p className="text-xs font-medium tracking-ko text-text-muted">
+                  예약 확정 시 쿠폰을 받을 수 있어요.
+                </p>
+              </div>
+            ) : null;
+
+            return (
+              <ReservationCardTabs
+                variant={isCoupon ? "coupon" : "reservation"}
+                hasCoupon={Boolean(funnelCoupon)}
+                calendarPanel={calendarPanel}
+                reservePanel={reservePanel}
+                couponPanel={couponPanel}
+              />
+            );
+          })()}
 
         {resolvedVariant === "purchase" && (
           <section data-testid="variant-purchase">
@@ -1048,7 +1032,9 @@ export function InfoDropPage({
             비우고 sticky 단일 액션 으로. purchase/lead 만 본문 CTAS 사용. */}
         {ctas.length > 0 && (
           <section>
-            <h2 className="text-sm font-bold tracking-ko text-text-strong">{pageCopy.ctaHeading}</h2>
+            <h2 className="text-sm font-bold tracking-ko text-text-strong">
+              {pageCopy.ctaHeading}
+            </h2>
             <div className="mt-3 flex flex-col gap-2">
               {ctas.map((cta) => {
                 const ctaTestId = getCtaTestId(resolvedVariant, cta.id);
@@ -1082,10 +1068,7 @@ export function InfoDropPage({
             전화/문자/길찾기 가로 아이콘. 60대 친화 큰 터치. */}
         {(resolvedVariant === "coupon" || isReservation) &&
           (hasPhone || Boolean(safeLocal.address?.trim() || safeLocal.name?.trim())) && (
-            <section
-              data-testid="secondary-contact-row"
-              className="flex items-stretch gap-2"
-            >
+            <section data-testid="secondary-contact-row" className="flex items-stretch gap-2">
               {hasPhone ? (
                 <button
                   type="button"
@@ -1121,7 +1104,7 @@ export function InfoDropPage({
               ) : null}
             </section>
           )}
-        </div>
+      </div>
 
       {/* v7.2 5a — 하단 공유 블록 (모든 드롭 공통).
             [LinkDrop][링크 복사][카카오톡 공유] 균일 가로 3 버튼.

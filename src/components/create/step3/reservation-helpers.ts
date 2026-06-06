@@ -51,15 +51,8 @@ export const RESERVATION_DESTS: {
   kind: ReservationDestKind;
 }[] = [
   {
-    id: "naver",
-    label: "네이버 예약",
-    inputLabel: "네이버 예약 링크 주소",
-    placeholder: "https://booking.naver.com/...",
-    inputType: "url",
-    kind: "link",
-  },
-  {
     // 자체 예약 — 캠핏·땡큐캠핑·홈페이지 등 외부 예약 링크를 모두 포함한다.
+    // (네이버 예약 핸드오프는 인앱 예약 신청으로 전환되며 제거됨.)
     id: "self",
     label: "자체 예약",
     inputLabel: "예약 링크 주소 (캠핏·땡큐캠핑·홈페이지 등)",
