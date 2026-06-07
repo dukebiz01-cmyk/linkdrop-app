@@ -22,6 +22,7 @@ import { getSupabase } from "@/lib/supabase";
 import { shareToKakao } from "@/lib/kakao";
 import { Toaster } from "@/components/ui/sonner";
 import { StoreProfileCard, type AllianceActiveCoupon } from "@/components/partner/StoreProfileCard";
+import { haversineKm, formatDistanceKm } from "@/lib/geo";
 
 type ReservationRow = {
   reservation_id: string;
@@ -45,6 +46,7 @@ type IncomingRequest = {
   name: string;
   industry: string | null; // 업종 한글 (없으면 미표시)
   address: string | null;
+  distanceText: string | null; // 내 매장 기준 직선거리 (좌표 없으면 null)
 };
 
 // 내 동맹 — accepted 연결의 상대(ally) 요약. 탭 → /alliance/{slug ?? id}.
@@ -55,6 +57,7 @@ type Ally = {
   name: string;
   industry: string | null; // 업종 한글 (없으면 미표시)
   address: string | null;
+  distanceText: string | null; // 내 매장 기준 직선거리 (좌표 없으면 null)
 };
 
 type LoaderData = {
@@ -105,7 +108,9 @@ export const Route = createFileRoute("/_partner/partner/")({
     // 매장 프로필 카드용 컬럼 추가(business_type/partner_kind/address/verification_status).
     const { data: partner } = await supabase
       .from("partners")
-      .select("id, display_name, slug, business_type, partner_kind, address, verification_status")
+      .select(
+        "id, display_name, slug, business_type, partner_kind, address, lat, lng, verification_status",
+      )
       .eq("owner_user_id", ownerUserId)
       .maybeSingle();
 
@@ -117,7 +122,7 @@ export const Route = createFileRoute("/_partner/partner/")({
     //   활성 쿠폰(get_active_store_coupons) / 업종 한글(business_categories depth=1, 등록화면 재사용) /
     //   받은 제휴 요청(maker_connections target=내 partner, pending + 요청자 partner 임베드) /
     //   내 동맹(maker_connections accepted, 나=requester|target, 양쪽 FK 임베드).
-    const allyFields = "id, display_name, slug, business_type, partner_kind, address";
+    const allyFields = "id, display_name, slug, business_type, partner_kind, address, lat, lng";
     const [
       { data: reservations },
       { count: subscriberCount },
@@ -137,7 +142,7 @@ export const Route = createFileRoute("/_partner/partner/")({
       supabase
         .from("maker_connections")
         .select(
-          "id, requester_partner_id, status, requester:partners!maker_connections_requester_partner_id_fkey(id, display_name, business_type, partner_kind, address)",
+          "id, requester_partner_id, status, requester:partners!maker_connections_requester_partner_id_fkey(id, display_name, business_type, partner_kind, address, lat, lng)",
         )
         .eq("target_partner_id", partner.id)
         .eq("status", "pending"),
@@ -159,6 +164,12 @@ export const Route = createFileRoute("/_partner/partner/")({
       ? (majorMap.get(partner.business_type) ?? null)
       : null;
 
+    // 내 매장 좌표 — 상대 매장과의 직선거리 계산 기준. 없으면 거리만 생략(행은 정상).
+    const myLat = (partner.lat as number | null) ?? null;
+    const myLng = (partner.lng as number | null) ?? null;
+    const distanceTo = (lat: number | null, lng: number | null): string | null =>
+      formatDistanceKm(haversineKm(myLat, myLng, lat, lng));
+
     type IncomingRaw = {
       id: string;
       requester_partner_id: string;
@@ -169,6 +180,8 @@ export const Route = createFileRoute("/_partner/partner/")({
         business_type: string | null;
         partner_kind: string | null;
         address: string | null;
+        lat: number | null;
+        lng: number | null;
       } | null;
     };
     const incomingRequests: IncomingRequest[] = ((incomingRaw as IncomingRaw[] | null) ?? [])
@@ -180,6 +193,7 @@ export const Route = createFileRoute("/_partner/partner/")({
           ? (majorMap.get(r.requester!.business_type) ?? null)
           : null,
         address: r.requester!.address,
+        distanceText: distanceTo(r.requester!.lat, r.requester!.lng),
       }));
 
     // 내 동맹 — ally 판별: requester_partner_id === 내 partner.id 면 target, 아니면 requester.
@@ -190,6 +204,8 @@ export const Route = createFileRoute("/_partner/partner/")({
       business_type: string | null;
       partner_kind: string | null;
       address: string | null;
+      lat: number | null;
+      lng: number | null;
     };
     type AcceptedRaw = {
       id: string;
@@ -210,6 +226,7 @@ export const Route = createFileRoute("/_partner/partner/")({
           name: ally.display_name,
           industry: ally.business_type ? (majorMap.get(ally.business_type) ?? null) : null,
           address: ally.address,
+          distanceText: distanceTo(ally.lat, ally.lng),
         };
       })
       .filter((a): a is Ally => a !== null);
@@ -418,7 +435,8 @@ function PartnerHome() {
                 <li key={r.connectionId} className="py-3 first:pt-0 last:pb-0">
                   <p className="truncate text-sm font-bold text-[#0F172A]">{r.name}</p>
                   <p className="mt-0.5 truncate text-xs text-[#64748B]">
-                    {[r.industry, r.address?.trim()].filter(Boolean).join(" · ") || "정보 없음"}
+                    {[r.industry, r.address?.trim(), r.distanceText].filter(Boolean).join(" · ") ||
+                      "정보 없음"}
                   </p>
                   <div className="mt-3 flex gap-2">
                     <button
@@ -470,7 +488,9 @@ function PartnerHome() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-[#0F172A]">{a.name}</p>
                       <p className="mt-0.5 truncate text-xs text-[#64748B]">
-                        {[a.industry, a.address?.trim()].filter(Boolean).join(" · ") || "정보 없음"}
+                        {[a.industry, a.address?.trim(), a.distanceText]
+                          .filter(Boolean)
+                          .join(" · ") || "정보 없음"}
                       </p>
                     </div>
                     <ChevronRight className="size-4 shrink-0 text-[#94A3B8]" strokeWidth={2} />

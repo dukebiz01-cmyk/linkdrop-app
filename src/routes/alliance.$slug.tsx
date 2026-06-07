@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Link2, Store } from "lucide-react";
+import { Link2, MapPin, Store } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
+import { haversineKm, formatDistanceKm } from "@/lib/geo";
 import { Toaster } from "@/components/ui/sonner";
 import { StoreProfileCard, type AllianceActiveCoupon } from "@/components/partner/StoreProfileCard";
 
@@ -19,6 +20,7 @@ type AlliancePartner = {
   businessTypeLabel: string | null;
   partner_kind: string | null;
   address: string | null;
+  contact_phone: string | null;
   verification_status: string | null;
 };
 
@@ -32,6 +34,8 @@ type AllianceLoaderData = {
   sameIndustry: boolean; // 동종(같은 business_type)
   connection: ConnState; // 나-상대 연결 상태
   isAuthedBusiness: boolean; // 사업자로 로그인됨
+  // 내 매장 ↔ 보는 매장 직선거리 표시 문구. 좌표 없거나 비로그인/비사업자면 null.
+  distanceText: string | null;
 };
 
 type ConnRow = {
@@ -51,12 +55,14 @@ export const Route = createFileRoute("/alliance/$slug")({
       sameIndustry: false,
       connection: null,
       isAuthedBusiness: false,
+      distanceText: null,
     };
     const supabase = await getAuthClient();
     if (!supabase) return empty;
 
     const key = params.slug;
-    const sel = "id, display_name, business_type, partner_kind, address, verification_status, slug";
+    const sel =
+      "id, display_name, business_type, partner_kind, address, contact_phone, lat, lng, verification_status, slug";
 
     // slug 우선 → 없으면 uuid 면 id 로.
     let { data: partner } = await supabase
@@ -74,22 +80,29 @@ export const Route = createFileRoute("/alliance/$slug")({
       business_type: string | null;
       partner_kind: string | null;
       address: string | null;
+      contact_phone: string | null;
+      lat: number | null;
+      lng: number | null;
       verification_status: string | null;
     };
 
-    // 보는 사람 — 세션 + 소유 partner.
+    // 보는 사람 — 세션 + 소유 partner(거리 계산용 좌표 포함).
     const { data: sessionData } = await supabase.auth.getSession();
     const uid = sessionData.session?.user.id ?? null;
     let viewerPartnerId: string | null = null;
     let viewerBusinessType: string | null = null;
+    let viewerLat: number | null = null;
+    let viewerLng: number | null = null;
     if (uid) {
       const { data: vp } = await supabase
         .from("partners")
-        .select("id, business_type")
+        .select("id, business_type, lat, lng")
         .eq("owner_user_id", uid)
         .maybeSingle();
       viewerPartnerId = vp?.id ?? null;
       viewerBusinessType = (vp?.business_type as string | null) ?? null;
+      viewerLat = (vp?.lat as number | null) ?? null;
+      viewerLng = (vp?.lng as number | null) ?? null;
     }
 
     const [{ data: couponsRaw }, { data: majors }, connRes] = await Promise.all([
@@ -143,6 +156,13 @@ export const Route = createFileRoute("/alliance/$slug")({
         iAmRequester: pair[0].requester_partner_id === viewerPartnerId,
       };
 
+    // 거리 — 내 매장 ↔ 보는 매장 직선거리. 좌표 하나라도 없거나 비사업자면 null(haversine 가드).
+    const distKm = viewerPartnerId
+      ? haversineKm(viewerLat, viewerLng, viewed.lat, viewed.lng)
+      : null;
+    const distLabel = formatDistanceKm(distKm);
+    const distanceText = distLabel ? `내 매장에서 ${distLabel}` : null;
+
     return {
       partner: {
         id: viewed.id,
@@ -151,6 +171,7 @@ export const Route = createFileRoute("/alliance/$slug")({
         businessTypeLabel,
         partner_kind: viewed.partner_kind ?? null,
         address: viewed.address ?? null,
+        contact_phone: viewed.contact_phone ?? null,
         verification_status: viewed.verification_status ?? null,
       },
       activeCoupons: (couponsRaw as AllianceActiveCoupon[] | null) ?? [],
@@ -159,6 +180,7 @@ export const Route = createFileRoute("/alliance/$slug")({
       sameIndustry,
       connection,
       isAuthedBusiness: Boolean(viewerPartnerId),
+      distanceText,
     };
   },
   component: AllianceView,
@@ -280,8 +302,20 @@ function AllianceView() {
           businessTypeLabel={partner.businessTypeLabel}
           partnerKind={partner.partner_kind}
           address={partner.address}
+          contactPhone={partner.contact_phone}
           activeCoupons={data.activeCoupons}
-          footer={buildFooter()}
+          footer={
+            <div className="space-y-2">
+              {/* 거리 — 내 매장 기준 직선거리(차로 표현 금지). 좌표/사업자 조건 충족 시만. */}
+              {data.distanceText ? (
+                <p className="flex items-center justify-center gap-1 text-xs font-medium text-[#94A3B8]">
+                  <MapPin className="size-3.5" strokeWidth={2} />
+                  {data.distanceText}
+                </p>
+              ) : null}
+              {buildFooter()}
+            </div>
+          }
         />
       </div>
 

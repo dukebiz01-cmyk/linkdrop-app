@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { MapPin, Tag, Ticket, Users } from "lucide-react";
+import { MapPin, Phone, Tag, Ticket, Users } from "lucide-react";
 
 // 매장 프로필 카드(명함) — 사장 본인 내매장 + 공유용 /alliance 뷰 공용.
 // 보는 partner 를 prop 으로 받고, 구독수 등 소유자 전용 요소는 비소유자 뷰에서 숨긴다.
@@ -16,6 +16,8 @@ export type StoreProfileCardProps = {
   businessTypeLabel: string | null; // 업종 한글 (business_categories depth=1)
   partnerKind: string | null; // 보조
   address: string | null;
+  // 명함 고정 정보 — 연락처(있으면 tel: 링크). 없으면 행 미표시.
+  contactPhone?: string | null;
   activeCoupons: AllianceActiveCoupon[];
   /** 소유자 전용 — 구독수. undefined/null 이면 구독 행 숨김(비소유자 뷰). */
   subscriberCount?: number | null;
@@ -98,6 +100,7 @@ export function StoreProfileCard({
   businessTypeLabel,
   partnerKind,
   address,
+  contactPhone,
   activeCoupons,
   subscriberCount,
   note,
@@ -127,10 +130,22 @@ export function StoreProfileCard({
         {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
       </div>
 
-      {/* 업종 · 지역 · (구독수: 소유자 전용) */}
+      {/* 업종 · 지역 · 연락처 · (구독수: 소유자 전용) */}
       <div className="mt-4 space-y-2">
         <ProfileRow Icon={Tag} label="업종" value={industry || "미등록"} muted={!industry} />
         <ProfileRow Icon={MapPin} label="지역" value={addr || "위치 미등록"} muted={!addr} />
+        {contactPhone?.trim() ? (
+          <div className="flex items-center gap-2 text-sm">
+            <Phone className="size-4 shrink-0 text-[#0E4D42]" strokeWidth={2} />
+            <span className="w-9 shrink-0 text-xs font-medium text-[#94A3B8]">연락처</span>
+            <a
+              href={`tel:${contactPhone.replace(/[^0-9+]/g, "")}`}
+              className="truncate font-semibold text-[#0E4D42] hover:underline"
+            >
+              {contactPhone.trim()}
+            </a>
+          </div>
+        ) : null}
         {subscriberCount != null ? (
           <ProfileRow Icon={Users} label="구독" value={`${subscriberCount.toLocaleString()}명`} />
         ) : null}
