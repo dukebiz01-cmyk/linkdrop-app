@@ -786,12 +786,12 @@ function CouponClaimCard({
       } ${active ? "wallet-card-in ring-2 ring-[#0A0A0A]" : ""}`}
     >
       <div className="px-4 pb-3 pt-4">
-        {/* 상단: 상태 배지 | 받은 날짜 */}
+        {/* 상단: 상태 배지 | 받은 날짜 (기존 표기 유지: YY.MM.DD HH:mm) */}
         <div className="flex items-center justify-between gap-2">
           <CouponStatusBadge status={displayStatus} />
           {row.issued_at ? (
             <span className="shrink-0 text-xs font-medium text-[#94A3B8]">
-              {formatMonthDayKST(row.issued_at)} 받음
+              {formatReceivedKST(row.issued_at)} 받음
             </span>
           ) : null}
         </div>
@@ -883,7 +883,24 @@ function buildConditionLine(coupon: CouponClaimRow["coupon"]): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
-// issued_at/used_at → "M.D" (Asia/Seoul).
+// issued_at → "YY.MM.DD HH:mm" (Asia/Seoul). 받은 날짜 기존 표기.
+function formatReceivedKST(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Seoul",
+    year: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((x) => x.type === t)?.value ?? "";
+  return `${get("year")}.${get("month")}.${get("day")} ${get("hour")}:${get("minute")}`;
+}
+
+// used_at → "M.D" (Asia/Seoul). 사용일 표기.
 function formatMonthDayKST(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
