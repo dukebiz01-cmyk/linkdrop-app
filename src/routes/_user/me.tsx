@@ -118,6 +118,9 @@ type FollowRow = {
   partner: MakerInfo | null;
 };
 
+// 쿠폰 지갑 상태 필터 — 사용 가능(usable=available+expiring) / 곧 만료 / 사용 완료 / 만료.
+type CouponFilter = "available" | "expiring" | "used" | "expired";
+
 type MePageData = {
   userId: string | null;
   email: string | null;
@@ -293,6 +296,20 @@ function getInitial(displayName: string, email: string | null): string {
   return source.charAt(0).toUpperCase();
 }
 
+// 필터별 빈 상태 문구.
+function couponFilterEmptyText(f: CouponFilter): string {
+  switch (f) {
+    case "available":
+      return "쓸 수 있는 혜택이 없어요.";
+    case "expiring":
+      return "곧 만료되는 혜택이 없어요.";
+    case "used":
+      return "사용 완료한 혜택이 없어요.";
+    case "expired":
+      return "만료된 혜택이 없어요.";
+  }
+}
+
 function MePage() {
   const data = Route.useLoaderData();
   const search = Route.useSearch();
@@ -316,8 +333,22 @@ function MePage() {
     title: string;
   } | null>(null);
 
-  // 쿠폰 지갑 — 실제 사용 가능(만료 전, '곧 만료' 포함)한 장 수. expires_at 반영.
-  const availableCount = data.coupons.filter((c) => isCouponUsable(c)).length;
+  // 쿠폰 지갑 필터 칩 — 기본 '사용 가능'(usable). 클라이언트 로컬 state(서버 호출 없음).
+  const [couponFilter, setCouponFilter] = useState<CouponFilter>("available");
+
+  // 상태별 카운트 (coupon-status 헬퍼). usable(쓸 수 있는) = 사용 가능 + 곧 만료.
+  const usableCount = data.coupons.filter((c) => isCouponUsable(c)).length;
+  const expiringCount = data.coupons.filter((c) => getCouponDisplayStatus(c) === "expiring").length;
+  const usedCount = data.coupons.filter((c) => getCouponDisplayStatus(c) === "used").length;
+  const expiredCount = data.coupons.filter((c) => getCouponDisplayStatus(c) === "expired").length;
+
+  // 선택 필터에 맞는 쿠폰만(loader 의 최신순 정렬 그대로 유지).
+  const filteredCoupons = data.coupons.filter((c) => {
+    const s = getCouponDisplayStatus(c);
+    return couponFilter === "available"
+      ? s === "available" || s === "expiring"
+      : s === couponFilter;
+  });
 
   // A안 담김 연출 — mount 시 search.claimed 1회 처리.
   // 1) "쿠폰 지갑에 담겼어요" 토스트 → 2) URL 에서 claimed 제거(재연출 방지) →
@@ -489,31 +520,61 @@ function MePage() {
           </SectionCard>
         ) : null}
 
-        {/* ② 쿠폰 지갑 — 쿠폰 = 현금성 자산. 지갑 패널은 가볍게, 그 안의 쿠폰 '장'들이
-            주인공. 헤더에 '사용 가능 N장' 강조. 카드 탭 = 상세, "코드 복사" = clipboard.
-            박스 중첩 회피: 흰 패널 안에서 쿠폰들은 hairline divider 로만 구분(보더박스 X). */}
+        {/* ② 내 혜택 지갑 — 행동형 헤더 + 상태 필터 칩(2/5). 카드(1/5)·정렬·다른 섹션 무수정.
+            필터는 클라이언트 로컬 state, 정렬은 loader 최신순 유지. */}
         <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-          <div className="mb-4 flex items-center justify-between gap-2">
+          {/* 헤더 */}
+          <div className="mb-3">
             <div className="flex items-center gap-2">
-              <Wallet className="size-4 text-[#0A0A0A]" strokeWidth={2} />
-              <h3 className="text-sm font-semibold text-[#0A0A0A]">쿠폰 지갑</h3>
+              <Wallet className="size-4 text-[#0E4D42]" strokeWidth={2} />
+              <h3 className="text-base font-bold text-[#0A0A0A]">내 혜택 지갑</h3>
             </div>
-            {data.coupons.length > 0 ? (
-              <span
-                key={highlightCode ? "pulse" : "idle"}
-                className={`text-sm font-bold ${
-                  availableCount > 0 ? "text-[#0A0A0A]" : "text-[#94A3B8]"
-                } ${highlightCode ? "wallet-count-pulse" : ""}`}
-              >
-                사용 가능 {availableCount}장
-              </span>
-            ) : null}
+            <p className="mt-1 text-sm font-medium text-[#64748B]">
+              쓸 수 있는 혜택 {usableCount}개
+              {expiringCount > 0 ? (
+                <span className="font-semibold text-[#B45309]"> · 곧 만료 {expiringCount}개</span>
+              ) : null}
+            </p>
           </div>
+
+          {/* 상태 필터 칩 — 선택=teal/흰, 그 외=아웃라인/회색 */}
+          {data.coupons.length > 0 ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {(
+                [
+                  { key: "available", label: "사용 가능", count: usableCount },
+                  { key: "expiring", label: "곧 만료", count: expiringCount },
+                  { key: "used", label: "사용 완료", count: usedCount },
+                  { key: "expired", label: "만료", count: expiredCount },
+                ] as const
+              ).map((chip) => {
+                const selected = couponFilter === chip.key;
+                return (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => setCouponFilter(chip.key)}
+                    className={`inline-flex min-h-[32px] items-center rounded-full px-3 text-xs font-bold transition-colors ${
+                      selected
+                        ? "bg-[#0E4D42] text-white"
+                        : "border border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#FAFAFA]"
+                    }`}
+                  >
+                    {chip.label} {chip.count}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {/* 리스트 */}
           {data.coupons.length === 0 ? (
             <EmptyText text="받은 쿠폰이 여기 모여요." />
+          ) : filteredCoupons.length === 0 ? (
+            <EmptyText text={couponFilterEmptyText(couponFilter)} />
           ) : (
             <ul className="space-y-3">
-              {data.coupons.map((c) => {
+              {filteredCoupons.map((c) => {
                 const active = highlightCode === c.claim_code;
                 return (
                   <CouponClaimCard
