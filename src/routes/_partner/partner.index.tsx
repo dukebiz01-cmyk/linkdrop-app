@@ -47,6 +47,16 @@ type IncomingRequest = {
   address: string | null;
 };
 
+// 내 동맹 — accepted 연결의 상대(ally) 요약. 탭 → /alliance/{slug ?? id}.
+type Ally = {
+  connectionId: string;
+  partnerId: string;
+  slug: string | null;
+  name: string;
+  industry: string | null; // 업종 한글 (없으면 미표시)
+  address: string | null;
+};
+
 type LoaderData = {
   ownerUserId: string | null;
   partnerId: string | null;
@@ -62,6 +72,8 @@ type LoaderData = {
   activeCoupons: AllianceActiveCoupon[];
   // 받은 제휴 요청 (pending).
   incomingRequests: IncomingRequest[];
+  // 내 동맹 (accepted).
+  allies: Ally[];
 };
 
 export const Route = createFileRoute("/_partner/partner/")({
@@ -80,6 +92,7 @@ export const Route = createFileRoute("/_partner/partner/")({
       subscriberCount: 0,
       activeCoupons: [],
       incomingRequests: [],
+      allies: [],
     };
     const supabase = await getAuthClient();
     if (!supabase) return empty;
@@ -100,15 +113,18 @@ export const Route = createFileRoute("/_partner/partner/")({
       return { ...empty, ownerUserId };
     }
 
-    // 5개 병렬: 예약 / 구독수(maker_follows active count, partner_owner SELECT RLS) /
+    // 6개 병렬: 예약 / 구독수(maker_follows active count, partner_owner SELECT RLS) /
     //   활성 쿠폰(get_active_store_coupons) / 업종 한글(business_categories depth=1, 등록화면 재사용) /
-    //   받은 제휴 요청(maker_connections target=내 partner, pending + 요청자 partner 임베드).
+    //   받은 제휴 요청(maker_connections target=내 partner, pending + 요청자 partner 임베드) /
+    //   내 동맹(maker_connections accepted, 나=requester|target, 양쪽 FK 임베드).
+    const allyFields = "id, display_name, slug, business_type, partner_kind, address";
     const [
       { data: reservations },
       { count: subscriberCount },
       { data: activeCouponsRaw },
       { data: majors },
       { data: incomingRaw },
+      { data: acceptedRaw },
     ] = await Promise.all([
       supabase.rpc("get_partner_reservations", { p_partner_id: partner.id }),
       supabase
@@ -125,6 +141,15 @@ export const Route = createFileRoute("/_partner/partner/")({
         )
         .eq("target_partner_id", partner.id)
         .eq("status", "pending"),
+      supabase
+        .from("maker_connections")
+        .select(
+          `id, requester_partner_id, target_partner_id, status, ` +
+            `requester:partners!maker_connections_requester_partner_id_fkey(${allyFields}), ` +
+            `target:partners!maker_connections_target_partner_id_fkey(${allyFields})`,
+        )
+        .eq("status", "accepted")
+        .or(`requester_partner_id.eq.${partner.id},target_partner_id.eq.${partner.id}`),
     ]);
 
     const majorMap = new Map(
@@ -157,6 +182,38 @@ export const Route = createFileRoute("/_partner/partner/")({
         address: r.requester!.address,
       }));
 
+    // 내 동맹 — ally 판별: requester_partner_id === 내 partner.id 면 target, 아니면 requester.
+    type AllyPartner = {
+      id: string;
+      display_name: string;
+      slug: string | null;
+      business_type: string | null;
+      partner_kind: string | null;
+      address: string | null;
+    };
+    type AcceptedRaw = {
+      id: string;
+      requester_partner_id: string;
+      target_partner_id: string;
+      status: string;
+      requester: AllyPartner | null;
+      target: AllyPartner | null;
+    };
+    const allies: Ally[] = ((acceptedRaw as AcceptedRaw[] | null) ?? [])
+      .map((r): Ally | null => {
+        const ally = r.requester_partner_id === partner.id ? r.target : r.requester;
+        if (!ally?.id) return null;
+        return {
+          connectionId: r.id,
+          partnerId: ally.id,
+          slug: ally.slug,
+          name: ally.display_name,
+          industry: ally.business_type ? (majorMap.get(ally.business_type) ?? null) : null,
+          address: ally.address,
+        };
+      })
+      .filter((a): a is Ally => a !== null);
+
     return {
       ownerUserId,
       partnerId: partner.id,
@@ -170,6 +227,7 @@ export const Route = createFileRoute("/_partner/partner/")({
       subscriberCount: subscriberCount ?? 0,
       activeCoupons: (activeCouponsRaw as AllianceActiveCoupon[] | null) ?? [],
       incomingRequests,
+      allies,
     };
   },
   component: PartnerHome,
@@ -382,6 +440,41 @@ function PartnerHome() {
                       수락
                     </button>
                   </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {/* 내 동맹 — accepted 연결. 0건이면 카드 숨김. 행 탭 → 상대 /alliance 뷰. */}
+        {data.allies.length > 0 ? (
+          <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <Users className="size-4 text-[#0E4D42]" strokeWidth={2} />
+              <h2 className="text-sm font-semibold text-[#0A0A0A]">내 동맹</h2>
+              <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#0E4D42] px-1.5 text-[11px] font-bold text-white">
+                {data.allies.length}
+              </span>
+            </div>
+            <ul className="divide-y divide-[#F1F5F9]">
+              {data.allies.map((a) => (
+                <li key={a.connectionId}>
+                  <Link
+                    to="/alliance/$slug"
+                    params={{ slug: a.slug ?? a.partnerId }}
+                    className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-[#FAFAFA]"
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#E1F5EE] text-base font-bold text-[#0E4D42]">
+                      {a.name.trim().charAt(0) || "?"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-[#0F172A]">{a.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-[#64748B]">
+                        {[a.industry, a.address?.trim()].filter(Boolean).join(" · ") || "정보 없음"}
+                      </p>
+                    </div>
+                    <ChevronRight className="size-4 shrink-0 text-[#94A3B8]" strokeWidth={2} />
+                  </Link>
                 </li>
               ))}
             </ul>
