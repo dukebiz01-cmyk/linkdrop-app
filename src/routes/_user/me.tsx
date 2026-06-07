@@ -17,6 +17,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
+import { shareToKakao } from "@/lib/kakao";
 import {
   getCouponDisplayStatus,
   isCouponUsable,
@@ -46,6 +47,13 @@ type CouponClaimRow = {
   used_at: string | null;
   expires_at: string | null;
   claim_code: string;
+  // 재공유(3/5) — claim 의 출처 share_event(부모). 없으면 친구에게 보내기 버튼 미표시.
+  share_event_id: string | null;
+  share_event: {
+    share_uuid: string | null;
+    share_code: string | null;
+    info_drop_id: string | null;
+  } | null;
   coupon: {
     title: string;
     coupon_type: string | null;
@@ -206,7 +214,8 @@ export const Route = createFileRoute("/_user/me")({
     const { data: couponsEmbed, error: couponsErr } = await supabase
       .from("coupon_claims")
       .select(
-        "id, coupon_id, status, issued_at, used_at, expires_at, claim_code, " +
+        "id, coupon_id, status, issued_at, used_at, expires_at, claim_code, share_event_id, " +
+          "share_event:share_events!coupon_claims_share_event_id_fkey(share_uuid, share_code, info_drop_id), " +
           "coupon:coupons(title, coupon_type, gift_item, valid_until, conditions, per_user_limit, " +
           "partner:partners(display_name, business_type, partner_kind, address))",
       )
@@ -215,20 +224,19 @@ export const Route = createFileRoute("/_user/me")({
       .limit(100);
 
     let coupons = (couponsEmbed as CouponClaimRow[] | null) ?? [];
-    // 폴백: 임베드(coupons/partners) 조회가 어떤 이유로든 실패하면 지갑이 통째로 비지
-    //   않도록 claim 만 다시 조회한다(카드 제목/매장명은 '쿠폰' fallback). 상태/정렬 동일.
+    // 폴백: 임베드(coupons/partners/share_events) 조회가 어떤 이유로든 실패하면 지갑이 통째로
+    //   비지 않도록 claim 만 다시 조회한다(제목/매장명='쿠폰' fallback, 친구보내기 버튼은 미표시).
     if (couponsErr) {
       console.error("[me] coupon_claims 임베드 조회 실패 — claim-only 폴백:", couponsErr);
       const { data: plain } = await supabase
         .from("coupon_claims")
-        .select("id, coupon_id, status, issued_at, used_at, expires_at, claim_code")
+        .select("id, coupon_id, status, issued_at, used_at, expires_at, claim_code, share_event_id")
         .eq("catcher_user_id", userId)
         .order("issued_at", { ascending: false })
         .limit(100);
-      coupons = ((plain as Omit<CouponClaimRow, "coupon">[] | null) ?? []).map((c) => ({
-        ...c,
-        coupon: null,
-      }));
+      coupons = ((plain as Omit<CouponClaimRow, "coupon" | "share_event">[] | null) ?? []).map(
+        (c) => ({ ...c, share_event: null, coupon: null }),
+      );
     }
 
     // 업종 한글 라벨 — 등록화면과 동일 매핑(business_categories depth=1) 재사용. 카드의 '업종' 표시용.
@@ -583,6 +591,7 @@ function MePage() {
                     active={active}
                     innerRef={active ? claimedCardRef : undefined}
                     businessLabels={data.businessLabels}
+                    userId={data.userId}
                   />
                 );
               })}
@@ -778,20 +787,23 @@ function MePage() {
   );
 }
 
-// 쿠폰 지갑 카드 — 티켓 디자인. 비주얼 + 정보(1/5). 친구에게 보내기/발신자/거리는 후속.
+// 쿠폰 지갑 카드 — 티켓 디자인(1/5) + 친구에게 보내기 재공유(3/5). 발신자 라벨/거리는 후속.
 function CouponClaimCard({
   row,
   active = false,
   innerRef,
   businessLabels,
+  userId,
 }: {
   row: CouponClaimRow;
   // active: 방금 담긴 카드 → 입장 애니 + 하이라이트 링. ~2초 후 부모가 해제.
   active?: boolean;
   innerRef?: React.Ref<HTMLLIElement>;
   businessLabels: Record<string, string>;
+  userId: string | null;
 }) {
   const navigate = useNavigate();
+  const [sending, setSending] = useState(false);
 
   const coupon = row.coupon;
   const storeName = coupon?.partner?.display_name?.trim() || "매장";
@@ -828,6 +840,77 @@ function CouponClaimCard({
 
   function goDetail() {
     void navigate({ to: "/coupon/$claim_code", params: { claim_code: row.claim_code } });
+  }
+
+  // 친구에게 보내기 = 출처 드롭 재공유. claim 의 share_event(출처) 가 있어야만 노출.
+  const se = row.share_event;
+  const canReshare = usable && Boolean(se?.info_drop_id || se?.share_uuid || se?.share_code);
+
+  // 출처 드롭을 카카오로 재공유(보낸 사람=현재 유저). 새 share edge 실패 시 원본 링크 폴백.
+  async function handleSend(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (sending) return;
+    setSending(true);
+    try {
+      let link: string | null = null;
+      // 1) 새 share edge (sender=나, parent=claim 의 출처 share_event) → drop.how/{code}
+      if (se?.info_drop_id && row.share_event_id) {
+        try {
+          const { data: edgeRows, error: edgeErr } = await getSupabase().rpc(
+            "ld_create_share_edge_v3",
+            {
+              p_info_drop_id: se.info_drop_id,
+              p_sender_user_id: userId,
+              p_channel: "kakao",
+              p_parent_share_event_id: row.share_event_id,
+            },
+          );
+          if (!edgeErr) {
+            const r = Array.isArray(edgeRows) ? edgeRows[0] : edgeRows;
+            const code =
+              r && typeof r === "object" && "share_code" in r
+                ? String((r as { share_code: unknown }).share_code ?? "")
+                : "";
+            if (code) link = `https://drop.how/${code}`;
+          } else {
+            console.warn("[me] reshare RPC failed:", edgeErr);
+          }
+        } catch (err) {
+          console.warn("[me] reshare RPC unexpected:", err);
+        }
+      }
+      // 2) 폴백 — 원본 share 링크(보낸 사람 기록 없음)
+      if (!link) {
+        link = se?.share_code
+          ? `https://drop.how/${se.share_code}`
+          : se?.share_uuid
+            ? `https://app.drop.how/d/${se.share_uuid}`
+            : null;
+      }
+      if (!link) {
+        toast.error("공유 링크를 만들 수 없어요.");
+        return;
+      }
+      // 클립보드 복사 보장 + 카카오 best-effort(실패해도 복사로 충분).
+      try {
+        await navigator.clipboard.writeText(link);
+      } catch {
+        /* noop */
+      }
+      const res = await shareToKakao({
+        title: `${storeName}의 혜택`,
+        description: benefit,
+        imageUrl: "",
+        linkUrl: link,
+        buttons: [{ title: "혜택 받기", link }],
+      });
+      toast.success(res.ok ? "친구에게 보냈어요." : "링크를 복사했어요. 친구에게 붙여넣어 주세요.");
+    } catch (err) {
+      console.error("[me] 친구에게 보내기 실패:", err);
+      toast.error("공유에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -889,17 +972,29 @@ function CouponClaimCard({
             <span className="pointer-events-none absolute left-0 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#F1F5F9]" />
             <span className="pointer-events-none absolute right-0 top-1/2 size-4 translate-x-1/2 -translate-y-1/2 rounded-full bg-[#F1F5F9]" />
           </div>
-          <div className="px-4 pb-4 pt-3">
+          <div className="flex gap-2 px-4 pb-4 pt-3">
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 goDetail();
               }}
-              className="flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white hover:bg-[#171717]"
+              className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white hover:bg-[#171717]"
             >
               {ctaLabel}
             </button>
+            {/* 친구에게 보내기 = 출처 드롭 재공유. 아웃라인(보더/투명/검정 글자). 출처 있을 때만. */}
+            {canReshare ? (
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={sending}
+                className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#D4D4D4] bg-white px-3 text-sm font-bold text-[#0A0A0A] hover:bg-[#FAFAFA] disabled:opacity-50"
+              >
+                <Send className="size-4" strokeWidth={2} />
+                친구에게 보내기
+              </button>
+            ) : null}
           </div>
         </>
       ) : null}
