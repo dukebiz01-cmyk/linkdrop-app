@@ -117,9 +117,9 @@
   /* Border */
   --border: #e5e5e5;
 
-  /* Action (filled primary button — 1 per screen). 딥 틸.
-     주의: 텍스트 색이 아님(텍스트는 --text-strong #0a0a0a). 채워진 액션 배경 전용. */
-  --action: #0e4d42;
+  /* Action (filled primary button — 1 per screen). 검정.
+     teal 은 accent 전용 — primary 채워진 버튼 fill 은 검정. 텍스트 색 아님(--text-strong). */
+  --action: #0a0a0a;
   --action-foreground: #ffffff;
 
   /* Accent — single brand color */
