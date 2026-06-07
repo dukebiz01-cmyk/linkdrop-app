@@ -48,11 +48,13 @@ type CouponClaimRow = {
   expires_at: string | null;
   claim_code: string;
   // 재공유(3/5) — claim 의 출처 share_event(부모). 없으면 친구에게 보내기 버튼 미표시.
+  // 발신자(4/5) — sender_user_id. 이름은 public_profiles 별도 조회(senderNames).
   share_event_id: string | null;
   share_event: {
     share_uuid: string | null;
     share_code: string | null;
     info_drop_id: string | null;
+    sender_user_id: string | null;
   } | null;
   coupon: {
     title: string;
@@ -66,6 +68,7 @@ type CouponClaimRow = {
       business_type: string | null;
       partner_kind: string | null;
       address: string | null;
+      owner_user_id: string | null; // 매장 직접 판별(sender==owner)
     } | null;
   } | null;
 };
@@ -139,6 +142,8 @@ type MePageData = {
   coupons: CouponClaimRow[];
   // 업종 코드 → 한글 라벨 (business_categories depth=1, 등록화면 매핑 재사용).
   businessLabels: Record<string, string>;
+  // 발신자 id → display_name (public_profiles, RLS 우회 뷰). 발신자 라벨용.
+  senderNames: Record<string, string>;
   // 받은 쿠폰을 발행한 메이커(중복 제거) — 구독 버튼 부착.
   receivedMakers: MakerInfo[];
   // 현재 구독(active) 중인 메이커.
@@ -174,6 +179,7 @@ export const Route = createFileRoute("/_user/me")({
       myDrops: [],
       coupons: [],
       businessLabels: {},
+      senderNames: {},
       receivedMakers: [],
       subscribedMakers: [],
     };
@@ -215,9 +221,9 @@ export const Route = createFileRoute("/_user/me")({
       .from("coupon_claims")
       .select(
         "id, coupon_id, status, issued_at, used_at, expires_at, claim_code, share_event_id, " +
-          "share_event:share_events!coupon_claims_share_event_id_fkey(share_uuid, share_code, info_drop_id), " +
+          "share_event:share_events!coupon_claims_share_event_id_fkey(share_uuid, share_code, info_drop_id, sender_user_id), " +
           "coupon:coupons(title, coupon_type, gift_item, valid_until, conditions, per_user_limit, " +
-          "partner:partners(display_name, business_type, partner_kind, address))",
+          "partner:partners(display_name, business_type, partner_kind, address, owner_user_id))",
       )
       .eq("catcher_user_id", userId)
       .order("issued_at", { ascending: false })
@@ -247,6 +253,24 @@ export const Route = createFileRoute("/_user/me")({
     const businessLabels: Record<string, string> = {};
     for (const m of (majors as { code: string; label: string }[] | null) ?? []) {
       businessLabels[m.code] = m.label;
+    }
+
+    // 발신자 이름 — share_event.sender_user_id 의 display_name. profiles 는 self-read 라
+    //   타인 이름은 public_profiles 뷰(RLS 우회)로 별도 조회. 발신자 라벨용.
+    const senderIds = Array.from(
+      new Set(
+        coupons.map((c) => c.share_event?.sender_user_id).filter((x): x is string => Boolean(x)),
+      ),
+    );
+    const senderNames: Record<string, string> = {};
+    if (senderIds.length > 0) {
+      const { data: pp } = await supabase
+        .from("public_profiles")
+        .select("id, display_name")
+        .in("id", senderIds);
+      for (const r of (pp as { id: string; display_name: string | null }[] | null) ?? []) {
+        if (r.display_name) senderNames[r.id] = r.display_name;
+      }
     }
 
     // 받은 쿠폰 메이커 — claims → coupons → partners. client GROUP BY 불가라
@@ -292,6 +316,7 @@ export const Route = createFileRoute("/_user/me")({
       myDrops,
       coupons,
       businessLabels,
+      senderNames,
       receivedMakers,
       subscribedMakers,
     };
@@ -591,6 +616,7 @@ function MePage() {
                     active={active}
                     innerRef={active ? claimedCardRef : undefined}
                     businessLabels={data.businessLabels}
+                    senderNames={data.senderNames}
                     userId={data.userId}
                   />
                 );
@@ -800,6 +826,7 @@ function CouponClaimCard({
   active?: boolean;
   innerRef?: React.Ref<HTMLLIElement>;
   businessLabels: Record<string, string>;
+  senderNames: Record<string, string>;
   userId: string | null;
 }) {
   const navigate = useNavigate();
@@ -837,6 +864,20 @@ function CouponClaimCard({
   // CTA 라벨 — 캠핑/펜션/숙박류면 예약, 그 외 매장.
   const isLodging = businessType === "stay_leisure" || partnerKind === "campsite";
   const ctaLabel = isLodging ? "예약하고 사용하기" : "매장에서 사용하기";
+
+  // 발신자 라벨(4/5) — sender==owner → 매장 직접 / sender(친구) → 공유 / 없음·해석불가 → 추천.
+  const senderId = row.share_event?.sender_user_id ?? null;
+  const ownerId = coupon?.partner?.owner_user_id ?? null;
+  const senderLabel: { kind: "store" | "friend" | "platform"; text: string } = (() => {
+    if (senderId && ownerId && senderId === ownerId) {
+      return { kind: "store", text: `${storeName}${josaIGa(storeName)} 보낸 혜택` };
+    }
+    if (senderId) {
+      const name = senderNames[senderId];
+      if (name) return { kind: "friend", text: `${name}님이 공유한 혜택` };
+    }
+    return { kind: "platform", text: "LinkDrop 추천 혜택" };
+  })();
 
   function goDetail() {
     void navigate({ to: "/coupon/$claim_code", params: { claim_code: row.claim_code } });
@@ -962,6 +1003,11 @@ function CouponClaimCard({
 
         {/* 기간 */}
         {periodLine ? <p className="mt-1.5 text-xs text-[#94A3B8]">{periodLine}</p> : null}
+
+        {/* 발신자 라벨 — 매장 직접 / 친구 공유 / 추천. 모든 상태(dim 카드면 같이 흐림). */}
+        <div className="mt-2.5">
+          <SenderPill label={senderLabel} />
+        </div>
       </div>
 
       {/* CTA (사용 가능/곧 만료만) — 점선 perforation + 노치 + 검정 버튼. 사용완료/만료는 히스토리(CTA 없음). */}
@@ -999,6 +1045,41 @@ function CouponClaimCard({
         </>
       ) : null}
     </li>
+  );
+}
+
+// 받침 유무로 이/가 선택(한글 음절만). 그 외는 '이'.
+function josaIGa(word: string): string {
+  const w = word.trim();
+  const last = w.charCodeAt(w.length - 1);
+  if (last >= 0xac00 && last <= 0xd7a3) {
+    return (last - 0xac00) % 28 !== 0 ? "이" : "가";
+  }
+  return "이";
+}
+
+// 발신자 pill — 친구 공유=teal+사람 / 매장 직접=회색+가게 / 추천=회색(아이콘 없음).
+function SenderPill({ label }: { label: { kind: "store" | "friend" | "platform"; text: string } }) {
+  if (label.kind === "friend") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#E1F5EE] px-2 py-0.5 text-[11px] font-bold text-[#085041]">
+        <User className="size-3" strokeWidth={2.2} />
+        {label.text}
+      </span>
+    );
+  }
+  if (label.kind === "store") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[11px] font-bold text-[#64748B]">
+        <Store className="size-3" strokeWidth={2.2} />
+        {label.text}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[11px] font-bold text-[#94A3B8]">
+      {label.text}
+    </span>
   );
 }
 
