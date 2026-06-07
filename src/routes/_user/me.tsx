@@ -10,8 +10,6 @@ import {
   LogOut,
   ChevronRight,
   BarChart3,
-  Copy,
-  Check,
   Wallet,
   Send,
 } from "lucide-react";
@@ -50,13 +48,16 @@ type CouponClaimRow = {
   claim_code: string;
   coupon: {
     title: string;
-    discount_value: number | string | null;
-    discount_unit: string | null;
-    valid_until: string | null;
     coupon_type: string | null;
     gift_item: string | null;
+    valid_until: string | null;
+    conditions: { min_amount?: number; [k: string]: unknown } | null;
+    per_user_limit: number | null;
     partner: {
       display_name: string;
+      business_type: string | null;
+      partner_kind: string | null;
+      address: string | null;
     } | null;
   } | null;
 };
@@ -125,6 +126,8 @@ type MePageData = {
   isBusiness: boolean;
   myDrops: MyDropRow[];
   coupons: CouponClaimRow[];
+  // 업종 코드 → 한글 라벨 (business_categories depth=1, 등록화면 매핑 재사용).
+  businessLabels: Record<string, string>;
   // 받은 쿠폰을 발행한 메이커(중복 제거) — 구독 버튼 부착.
   receivedMakers: MakerInfo[];
   // 현재 구독(active) 중인 메이커.
@@ -159,6 +162,7 @@ export const Route = createFileRoute("/_user/me")({
       isBusiness: false,
       myDrops: [],
       coupons: [],
+      businessLabels: {},
       receivedMakers: [],
       subscribedMakers: [],
     };
@@ -200,8 +204,8 @@ export const Route = createFileRoute("/_user/me")({
       .from("coupon_claims")
       .select(
         "id, coupon_id, status, issued_at, used_at, expires_at, claim_code, " +
-          "coupon:coupons(title, discount_value, discount_unit, valid_until, coupon_type, gift_item, " +
-          "partner:partners(display_name))",
+          "coupon:coupons(title, coupon_type, gift_item, valid_until, conditions, per_user_limit, " +
+          "partner:partners(display_name, business_type, partner_kind, address))",
       )
       .eq("catcher_user_id", userId)
       .order("issued_at", { ascending: false })
@@ -222,6 +226,16 @@ export const Route = createFileRoute("/_user/me")({
         ...c,
         coupon: null,
       }));
+    }
+
+    // 업종 한글 라벨 — 등록화면과 동일 매핑(business_categories depth=1) 재사용. 카드의 '업종' 표시용.
+    const { data: majors } = await supabase
+      .from("business_categories")
+      .select("code, label")
+      .eq("depth", 1);
+    const businessLabels: Record<string, string> = {};
+    for (const m of (majors as { code: string; label: string }[] | null) ?? []) {
+      businessLabels[m.code] = m.label;
     }
 
     // 받은 쿠폰 메이커 — claims → coupons → partners. client GROUP BY 불가라
@@ -266,6 +280,7 @@ export const Route = createFileRoute("/_user/me")({
       isBusiness: Boolean(isBusiness),
       myDrops,
       coupons,
+      businessLabels,
       receivedMakers,
       subscribedMakers,
     };
@@ -497,7 +512,7 @@ function MePage() {
           {data.coupons.length === 0 ? (
             <EmptyText text="받은 쿠폰이 여기 모여요." />
           ) : (
-            <ul className="divide-y divide-[#F1F5F9]">
+            <ul className="space-y-3">
               {data.coupons.map((c) => {
                 const active = highlightCode === c.claim_code;
                 return (
@@ -506,6 +521,7 @@ function MePage() {
                     row={c}
                     active={active}
                     innerRef={active ? claimedCardRef : undefined}
+                    businessLabels={data.businessLabels}
                   />
                 );
               })}
@@ -701,52 +717,59 @@ function MePage() {
   );
 }
 
+// 쿠폰 지갑 카드 — 티켓 디자인. 비주얼 + 정보(1/5). 친구에게 보내기/발신자/거리는 후속.
 function CouponClaimCard({
   row,
   active = false,
   innerRef,
+  businessLabels,
 }: {
   row: CouponClaimRow;
   // active: 방금 담긴 카드 → 입장 애니 + 하이라이트 링. ~2초 후 부모가 해제.
   active?: boolean;
   innerRef?: React.Ref<HTMLLIElement>;
+  businessLabels: Record<string, string>;
 }) {
   const navigate = useNavigate();
-  const [copied, setCopied] = useState(false);
 
-  const couponTitle = row.coupon?.title?.trim() || "쿠폰";
-  const storeName = row.coupon?.partner?.display_name?.trim() || "";
-  const isGift = row.coupon?.coupon_type === "gift";
-  const giftItem = row.coupon?.gift_item?.trim() || "";
-  // 표시 상태 — status/used_at/expires_at 종합(만료 반영). 사용 가능/곧 만료 = 활성(또렷).
+  const coupon = row.coupon;
+  const storeName = coupon?.partner?.display_name?.trim() || "매장";
+  const storeInitial = storeName.charAt(0) || "?";
+  const businessType = coupon?.partner?.business_type ?? null;
+  const partnerKind = coupon?.partner?.partner_kind ?? null;
+  const isGift = coupon?.coupon_type === "gift";
+  const giftItem = coupon?.gift_item?.trim() || "";
+  const benefit = isGift && giftItem ? `${giftItem} 증정` : coupon?.title?.trim() || "쿠폰";
+
+  // 표시 상태 — coupon-status.ts 헬퍼 그대로(만료 반영).
   const displayStatus = getCouponDisplayStatus(row);
+  const usable = displayStatus === "available" || displayStatus === "expiring";
   const dim = displayStatus === "used" || displayStatus === "expired";
 
-  // 혜택/증정품 = 가장 큰 가치(현금 같은 자산). 증정이면 '{품목} 증정', 아니면 쿠폰 제목.
-  const benefit = isGift && giftItem ? `${giftItem} 증정` : couponTitle;
+  // 업종(business_categories 라벨 우선, 없으면 partner_kind 보조) · 지역(시/군 짧게)
+  const industry = (businessType && businessLabels[businessType]) || partnerKindLabel(partnerKind);
+  const region = shortRegion(coupon?.partner?.address);
+  const storeSub = [industry, region].filter(Boolean).join(" · ");
 
-  async function handleCopy(e: React.MouseEvent) {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(row.claim_code);
-      setCopied(true);
-      toast.success("쿠폰 번호를 복사했어요.");
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast.error("복사에 실패했어요.");
-    }
-  }
+  const conditionLine = buildConditionLine(coupon);
+
+  // 기간: 사용가능·곧만료 → "YYYY.MM.DD까지"(valid_until) / 사용완료 → "M.D 사용"(used_at) / 만료 → 생략.
+  const periodLine =
+    usable && coupon?.valid_until
+      ? `${formatDateFull(coupon.valid_until)}까지`
+      : displayStatus === "used" && row.used_at
+        ? `${formatMonthDayKST(row.used_at)} 사용`
+        : null;
+
+  // CTA 라벨 — 캠핑/펜션/숙박류면 예약, 그 외 매장.
+  const isLodging = businessType === "stay_leisure" || partnerKind === "campsite";
+  const ctaLabel = isLodging ? "예약하고 사용하기" : "매장에서 사용하기";
 
   function goDetail() {
-    void navigate({
-      to: "/coupon/$claim_code",
-      params: { claim_code: row.claim_code },
-    });
+    void navigate({ to: "/coupon/$claim_code", params: { claim_code: row.claim_code } });
   }
 
   return (
-    // 지갑 안의 한 '장' — 보더박스 없이 hairline divider(ul)로만 구분, 박스 중첩 회피.
-    // phase1 A: 카드 전체 클릭 + 복사 button 중첩 → div role=button, 키보드(Enter/Space) 유지.
     <li
       ref={innerRef}
       role="button"
@@ -758,89 +781,133 @@ function CouponClaimCard({
           goDetail();
         }
       }}
-      className={`-mx-2 cursor-pointer rounded-xl px-2 py-4 text-left transition-[background-color,box-shadow] hover:bg-[#FAFAFA] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] ${
+      className={`block cursor-pointer overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white text-left transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] ${
         dim ? "opacity-50" : ""
-      } ${active ? "wallet-card-in bg-[#FAFAFA] ring-2 ring-[#0A0A0A]" : ""}`}
+      } ${active ? "wallet-card-in ring-2 ring-[#0A0A0A]" : ""}`}
     >
-      {/* 상태(사용 가능/곧 만료=또렷, 사용 완료/만료=흐림) + 유효기간 */}
-      <div className="flex items-center justify-between gap-2">
-        <StatusPill status={displayStatus} />
-        {row.expires_at ? (
-          <span className="shrink-0 text-xs font-medium text-[#94A3B8]">
-            {formatDate(row.expires_at)}까지
+      <div className="px-4 pb-3 pt-4">
+        {/* 상단: 상태 배지 | 받은 날짜 */}
+        <div className="flex items-center justify-between gap-2">
+          <CouponStatusBadge status={displayStatus} />
+          {row.issued_at ? (
+            <span className="shrink-0 text-xs font-medium text-[#94A3B8]">
+              {formatMonthDayKST(row.issued_at)} 받음
+            </span>
+          ) : null}
+        </div>
+
+        {/* 매장 — 이니셜 원(teal tint) + 이름 / 업종·지역 */}
+        <div className="mt-3 flex items-center gap-2">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#E1F5EE] text-xs font-bold text-[#085041]">
+            {storeInitial}
           </span>
-        ) : null}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-[#0F172A]">{storeName}</p>
+            {storeSub ? <p className="truncate text-xs text-[#94A3B8]">{storeSub}</p> : null}
+          </div>
+        </div>
+
+        {/* 혜택 */}
+        <p className="mt-3 flex items-start gap-1.5 text-[17px] font-extrabold leading-snug text-[#0F172A]">
+          {isGift ? <Gift className="mt-0.5 size-[18px] shrink-0" strokeWidth={2.4} /> : null}
+          <span className="min-w-0">{benefit}</span>
+        </p>
+
+        {/* 조건 1줄 */}
+        {conditionLine ? <p className="mt-1 text-xs text-[#94A3B8]">{conditionLine}</p> : null}
+
+        {/* 기간 */}
+        {periodLine ? <p className="mt-1.5 text-xs text-[#94A3B8]">{periodLine}</p> : null}
       </div>
 
-      {/* 혜택/증정 = 가장 크게(가치) */}
-      <p className="mt-2 flex items-start gap-1.5 text-lg font-extrabold leading-tight text-[#0F172A]">
-        {isGift ? <Gift className="mt-0.5 size-5 shrink-0" strokeWidth={2.4} /> : null}
-        <span className="min-w-0">{benefit}</span>
-      </p>
-      {storeName ? (
-        <p className="mt-1 truncate text-sm font-medium text-[#64748B]">{storeName}</p>
-      ) : null}
-
-      {/* 쿠폰 번호 + 복사 */}
-      <div className="mt-3 flex items-center gap-2">
-        <span className="font-mono text-base font-bold tracking-wide text-[#0F172A]">
-          {row.claim_code}
-        </span>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2 text-xs font-semibold text-[#0A0A0A] hover:bg-[#FAFAFA]"
-          aria-label="쿠폰 번호 복사"
-        >
-          {copied ? (
-            <Check className="size-3" strokeWidth={2.4} />
-          ) : (
-            <Copy className="size-3" strokeWidth={2} />
-          )}
-          {copied ? "복사됨" : "코드 복사"}
-        </button>
-      </div>
-
-      {/* 받은 날짜·시간 (KST) — 작게, '만료일까지'(상단)와 구분. */}
-      {row.issued_at ? (
-        <p className="mt-2 text-xs text-[#94A3B8]">{formatReceivedKST(row.issued_at)} 받음</p>
+      {/* CTA (사용 가능/곧 만료만) — 점선 perforation + 노치 + 검정 버튼. 사용완료/만료는 히스토리(CTA 없음). */}
+      {usable ? (
+        <>
+          <div className="relative" aria-hidden>
+            <div className="mx-4 border-t border-dashed border-[#E2E8F0]" />
+            <span className="pointer-events-none absolute left-0 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#F1F5F9]" />
+            <span className="pointer-events-none absolute right-0 top-1/2 size-4 translate-x-1/2 -translate-y-1/2 rounded-full bg-[#F1F5F9]" />
+          </div>
+          <div className="px-4 pb-4 pt-3">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                goDetail();
+              }}
+              className="flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white hover:bg-[#171717]"
+            >
+              {ctaLabel}
+            </button>
+          </div>
+        </>
       ) : null}
     </li>
   );
 }
 
-// issued_at → "YY.MM.DD HH:mm" (Asia/Seoul). 받은 시각 표시용.
-function formatReceivedKST(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Seoul",
-    year: "2-digit",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(d);
-  const get = (t: string) => parts.find((x) => x.type === t)?.value ?? "";
-  return `${get("year")}.${get("month")}.${get("day")} ${get("hour")}:${get("minute")}`;
-}
-
-// 상태 칩 — 사용 가능/곧 만료(활성)는 검정 솔리드로 또렷하게(쓸 수 있는 돈처럼),
-// 사용 완료/만료는 회색 dim. 라벨은 헬퍼 한 곳(couponStatusLabel)에서.
-function StatusPill({ status }: { status: CouponDisplayStatus }) {
-  if (status === "available" || status === "expiring") {
-    return (
-      <span className="inline-flex items-center rounded-md bg-[#0A0A0A] px-2 py-0.5 text-xs font-bold text-white">
-        {couponStatusLabel(status)}
-      </span>
-    );
-  }
+// 상태 배지 — 사용가능 초록 / 곧만료 amber / 사용완료·만료 회색. 라벨은 couponStatusLabel.
+function CouponStatusBadge({ status }: { status: CouponDisplayStatus }) {
+  const cls =
+    status === "available"
+      ? "bg-[#ECFDF5] text-[#059669]"
+      : status === "expiring"
+        ? "bg-[#FFFBEB] text-[#B45309]"
+        : "bg-[#F5F5F5] text-[#94A3B8]";
   return (
-    <span className="inline-flex items-center rounded-md bg-[#F1F5F9] px-2 py-0.5 text-xs font-semibold text-[#94A3B8]">
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${cls}`}
+    >
       {couponStatusLabel(status)}
     </span>
   );
+}
+
+// 짧은 지역 — address 에서 시/군/구 토큰(없으면 첫 토큰).
+function shortRegion(address: string | null | undefined): string | null {
+  const a = address?.trim();
+  if (!a) return null;
+  const tokens = a.split(/\s+/);
+  return tokens.find((t) => /[시군구]$/.test(t)) ?? tokens[0] ?? null;
+}
+
+// 조건 1줄 — conditions.min_amount("N원 이상") + per_user_limit("1인 N회"). 없으면 null.
+function buildConditionLine(coupon: CouponClaimRow["coupon"]): string | null {
+  if (!coupon) return null;
+  const parts: string[] = [];
+  const min =
+    typeof coupon.conditions?.min_amount === "number" ? coupon.conditions.min_amount : null;
+  if (min && min > 0) parts.push(`${min.toLocaleString("ko-KR")}원 이상`);
+  const per = typeof coupon.per_user_limit === "number" ? coupon.per_user_limit : null;
+  if (per && per > 0) parts.push(`1인 ${per}회`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+// issued_at/used_at → "M.D" (Asia/Seoul).
+function formatMonthDayKST(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((x) => x.type === t)?.value ?? "";
+  return `${get("month")}.${get("day")}`;
+}
+
+// valid_until → "YYYY.MM.DD" (Asia/Seoul).
+function formatDateFull(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((x) => x.type === t)?.value ?? "";
+  return `${get("year")}.${get("month")}.${get("day")}`;
 }
 
 // partner_kind enum → 손님 친화 한글 라벨. 내부 용어 노출 금지.
@@ -934,13 +1001,4 @@ function EmptyText({ text }: { text: string }) {
 
 function numFmt(n: number | null | undefined): string {
   return (typeof n === "number" ? n : 0).toLocaleString();
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const y = String(d.getFullYear()).slice(2);
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}.${m}.${day}`;
 }
