@@ -783,8 +783,30 @@ function CouponClaimCard({
           {copied ? "복사됨" : "코드 복사"}
         </button>
       </div>
+
+      {/* 받은 날짜·시간 (KST) — 작게, '만료일까지'(상단)와 구분. */}
+      {row.issued_at ? (
+        <p className="mt-2 text-xs text-[#94A3B8]">{formatReceivedKST(row.issued_at)} 받음</p>
+      ) : null}
     </li>
   );
+}
+
+// issued_at → "YY.MM.DD HH:mm" (Asia/Seoul). 받은 시각 표시용.
+function formatReceivedKST(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Seoul",
+    year: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((x) => x.type === t)?.value ?? "";
+  return `${get("year")}.${get("month")}.${get("day")} ${get("hour")}:${get("minute")}`;
 }
 
 // 상태 칩 — 사용 가능/곧 만료(활성)는 검정 솔리드로 또렷하게(쓸 수 있는 돈처럼),
