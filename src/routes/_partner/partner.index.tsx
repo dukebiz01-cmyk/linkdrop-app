@@ -396,7 +396,7 @@ function PartnerHome() {
                 className="flex min-h-[44px] w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#F5F5F5] px-4 text-sm font-bold text-[#A3A3A3]"
               >
                 <Megaphone className="size-4" strokeWidth={2} />
-                공동프로모션 만들기
+                공동 혜택 만들기
                 <span className="text-xs font-semibold">· 준비 중</span>
               </button>
             }
@@ -451,7 +451,7 @@ function PartnerHome() {
           <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
             <div className="mb-3 flex items-center gap-2">
               <Users className="size-4 text-[#0E4D42]" strokeWidth={2} />
-              <h2 className="text-sm font-semibold text-[#0A0A0A]">내 동맹</h2>
+              <h2 className="text-sm font-semibold text-[#0A0A0A]">내 제휴 파트너</h2>
               <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#0E4D42] px-1.5 text-[11px] font-bold text-white">
                 {data.allies.length}
               </span>

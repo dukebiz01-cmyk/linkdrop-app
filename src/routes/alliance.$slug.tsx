@@ -246,7 +246,7 @@ function AllianceView() {
     if (requested || (conn?.status === "pending" && conn.iAmRequester)) {
       return <DisabledFooter label="요청함" />;
     }
-    if (conn?.status === "accepted") return <DisabledFooter label="동맹 중" />;
+    if (conn?.status === "accepted") return <DisabledFooter label="제휴 중" />;
     if (conn?.status === "pending" && !conn.iAmRequester) {
       return <DisabledFooter label="요청 받음" />;
     }
