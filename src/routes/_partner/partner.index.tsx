@@ -434,7 +434,7 @@ function PartnerHome() {
                       type="button"
                       onClick={() => handleConnection(r.connectionId, "accepted")}
                       disabled={reqBusyId === r.connectionId}
-                      className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0E4D42] px-4 text-sm font-bold text-white hover:bg-[#0A3D35] disabled:opacity-50"
+                      className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white hover:bg-[#171717] disabled:opacity-50"
                     >
                       <CheckCircle2 className="size-4" strokeWidth={2} />
                       수락

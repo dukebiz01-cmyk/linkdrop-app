@@ -1176,7 +1176,7 @@ export function InfoDropPage({
               type="button"
               onClick={onReserveAndClaim}
               data-testid="cta-sticky-primary"
-              className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0E4D42] px-4 text-base font-bold text-white hover:bg-[#0A3D35]"
+              className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white hover:bg-[#171717]"
             >
               <span className="truncate">쿠폰 받기</span>
             </button>

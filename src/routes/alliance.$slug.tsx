@@ -258,7 +258,7 @@ function AllianceView() {
         type="button"
         onClick={handleRequest}
         disabled={busy}
-        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[#0E4D42] px-4 text-sm font-bold text-white hover:bg-[#0A3D35] disabled:opacity-50"
+        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white hover:bg-[#171717] disabled:opacity-50"
       >
         <Link2 className="size-4" strokeWidth={2} />
         제휴 요청

@@ -512,7 +512,7 @@ function MePage() {
                         type="button"
                         onClick={() => handleSubscribe(m)}
                         disabled={busyMakerId === m.id}
-                        className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg bg-[#0E4D42] px-3 text-sm font-bold text-white hover:bg-[#0A3D35] disabled:opacity-50"
+                        className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg bg-[#0A0A0A] px-3 text-sm font-bold text-white hover:bg-[#171717] disabled:opacity-50"
                       >
                         구독
                       </button>
