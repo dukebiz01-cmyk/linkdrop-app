@@ -195,7 +195,8 @@ export const Route = createFileRoute("/_user/me")({
     // coupon5: coupons + partners 중첩 JOIN — 카드에 제목·매장명 표시.
     //   coupons_public_read(is_active=true) + partners_public_read(verification_status=approved)
     //   PUBLIC SELECT 정책으로 JOIN 통과.
-    const { data: coupons } = await supabase
+    // status 필터 없음 → used/만료 모두 포함. issued_at 내림차순(최신순). 전체(11개째 이후 포함).
+    const { data: couponsEmbed, error: couponsErr } = await supabase
       .from("coupon_claims")
       .select(
         "id, coupon_id, status, issued_at, used_at, expires_at, claim_code, " +
@@ -204,8 +205,24 @@ export const Route = createFileRoute("/_user/me")({
       )
       .eq("catcher_user_id", userId)
       .order("issued_at", { ascending: false })
-      // 지갑 — 사실상 전체 노출(11개째부터 안 보이던 문제 해소). 페이지네이션은 범위 밖.
       .limit(100);
+
+    let coupons = (couponsEmbed as CouponClaimRow[] | null) ?? [];
+    // 폴백: 임베드(coupons/partners) 조회가 어떤 이유로든 실패하면 지갑이 통째로 비지
+    //   않도록 claim 만 다시 조회한다(카드 제목/매장명은 '쿠폰' fallback). 상태/정렬 동일.
+    if (couponsErr) {
+      console.error("[me] coupon_claims 임베드 조회 실패 — claim-only 폴백:", couponsErr);
+      const { data: plain } = await supabase
+        .from("coupon_claims")
+        .select("id, coupon_id, status, issued_at, used_at, expires_at, claim_code")
+        .eq("catcher_user_id", userId)
+        .order("issued_at", { ascending: false })
+        .limit(100);
+      coupons = ((plain as Omit<CouponClaimRow, "coupon">[] | null) ?? []).map((c) => ({
+        ...c,
+        coupon: null,
+      }));
+    }
 
     // 받은 쿠폰 메이커 — claims → coupons → partners. client GROUP BY 불가라
     //   JS 에서 partner.id 기준 dedup(이미 issued_at desc 정렬 → 첫 등장이 최신).
@@ -248,7 +265,7 @@ export const Route = createFileRoute("/_user/me")({
       avatarUrl: profile?.avatar_url ?? null,
       isBusiness: Boolean(isBusiness),
       myDrops,
-      coupons: (coupons as CouponClaimRow[] | null) ?? [],
+      coupons,
       receivedMakers,
       subscribedMakers,
     };
