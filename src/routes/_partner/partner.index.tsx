@@ -16,6 +16,7 @@ import {
   Megaphone,
   Share2,
   Inbox,
+  Unlink,
 } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
@@ -279,6 +280,9 @@ function PartnerHome() {
   // 받은 제휴 요청 — 로컬 상태(수락/거절 시 즉시 제거).
   const [incoming, setIncoming] = useState<IncomingRequest[]>(data.incomingRequests);
   const [reqBusyId, setReqBusyId] = useState<string | null>(null);
+  // 내 제휴 파트너 — 로컬 상태(제휴 해제 시 즉시 제거).
+  const [allies, setAllies] = useState<Ally[]>(data.allies);
+  const [endingId, setEndingId] = useState<string | null>(null);
 
   const pending = data.reservations.filter((r) => r.status === "pending");
   const others = data.reservations.filter((r) => r.status !== "pending");
@@ -376,6 +380,31 @@ function PartnerHome() {
     }
   }
 
+  // 제휴 해제 — end_partnership RPC(accepted면 양쪽 누구나 DELETE). confirm 후 호출.
+  async function handleEndPartnership(connectionId: string, name: string) {
+    if (typeof window !== "undefined" && !window.confirm(`${name}님과의 제휴를 해제할까요?`)) {
+      return;
+    }
+    setEndingId(connectionId);
+    try {
+      const { error } = await getSupabase().rpc("end_partnership", {
+        p_connection_id: connectionId,
+      });
+      if (error) {
+        console.error("[partner.index] end_partnership failed:", error);
+        toast.error("해제에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      setAllies((prev) => prev.filter((x) => x.connectionId !== connectionId));
+      toast.success("제휴를 해제했어요.");
+    } catch (err) {
+      console.error("[partner.index] end_partnership unexpected:", err);
+      toast.error("처리 중 문제가 생겼어요.");
+    } finally {
+      setEndingId(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#F8FAFC] tracking-ko pb-12">
       <header className="bg-white px-5 py-4 border-b border-[#F1F5F9]">
@@ -464,23 +493,23 @@ function PartnerHome() {
           </section>
         ) : null}
 
-        {/* 내 동맹 — accepted 연결. 0건이면 카드 숨김. 행 탭 → 상대 /alliance 뷰. */}
-        {data.allies.length > 0 ? (
+        {/* 내 제휴 파트너 — accepted 연결. 0건이면 카드 숨김. 행 탭 → 상대 /alliance 뷰. */}
+        {allies.length > 0 ? (
           <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
             <div className="mb-3 flex items-center gap-2">
               <Users className="size-4 text-[#0E4D42]" strokeWidth={2} />
               <h2 className="text-sm font-semibold text-[#0A0A0A]">내 제휴 파트너</h2>
               <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#0E4D42] px-1.5 text-[11px] font-bold text-white">
-                {data.allies.length}
+                {allies.length}
               </span>
             </div>
             <ul className="divide-y divide-[#F1F5F9]">
-              {data.allies.map((a) => (
-                <li key={a.connectionId}>
+              {allies.map((a) => (
+                <li key={a.connectionId} className="flex items-center gap-2">
                   <Link
                     to="/alliance/$slug"
                     params={{ slug: a.slug ?? a.partnerId }}
-                    className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-[#FAFAFA]"
+                    className="-mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-[#FAFAFA]"
                   >
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#E1F5EE] text-base font-bold text-[#0E4D42]">
                       {a.name.trim().charAt(0) || "?"}
@@ -495,6 +524,19 @@ function PartnerHome() {
                     </div>
                     <ChevronRight className="size-4 shrink-0 text-[#94A3B8]" strokeWidth={2} />
                   </Link>
+                  {/* 제휴 해제 — 파괴적 액션이라 아웃라인/회색(teal 채움 아님). 행 탭과 분리. */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleEndPartnership(a.connectionId, a.name);
+                    }}
+                    disabled={endingId === a.connectionId}
+                    className="inline-flex min-h-[36px] shrink-0 items-center gap-1 rounded-lg border border-[#D4D4D4] bg-white px-2.5 text-xs font-semibold text-[#64748B] hover:bg-[#FAFAFA] disabled:opacity-50"
+                  >
+                    <Unlink className="size-3.5" strokeWidth={2} />
+                    제휴 해제
+                  </button>
                 </li>
               ))}
             </ul>

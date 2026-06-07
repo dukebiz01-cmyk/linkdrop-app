@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Link2, MapPin, Store } from "lucide-react";
+import { Link2, MapPin, Store, Unlink, X } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
 import { haversineKm, formatDistanceKm } from "@/lib/geo";
@@ -24,7 +24,7 @@ type AlliancePartner = {
   verification_status: string | null;
 };
 
-type ConnState = { status: string; iAmRequester: boolean } | null;
+type ConnState = { id: string; status: string; iAmRequester: boolean } | null;
 
 type AllianceLoaderData = {
   partner: AlliancePartner | null;
@@ -39,6 +39,7 @@ type AllianceLoaderData = {
 };
 
 type ConnRow = {
+  id: string;
   requester_partner_id: string;
   target_partner_id: string;
   status: string;
@@ -111,7 +112,7 @@ export const Route = createFileRoute("/alliance/$slug")({
       viewerPartnerId
         ? supabase
             .from("maker_connections")
-            .select("requester_partner_id, target_partner_id, status")
+            .select("id, requester_partner_id, target_partner_id, status")
             .or(
               `requester_partner_id.eq.${viewerPartnerId},target_partner_id.eq.${viewerPartnerId}`,
             )
@@ -147,11 +148,14 @@ export const Route = createFileRoute("/alliance/$slug")({
     const pendingTheirs = pair.find(
       (c) => c.status === "pending" && c.target_partner_id === viewerPartnerId,
     );
-    if (accepted) connection = { status: "accepted", iAmRequester: false };
-    else if (pendingMine) connection = { status: "pending", iAmRequester: true };
-    else if (pendingTheirs) connection = { status: "pending", iAmRequester: false };
+    if (accepted) connection = { id: accepted.id, status: "accepted", iAmRequester: false };
+    else if (pendingMine)
+      connection = { id: pendingMine.id, status: "pending", iAmRequester: true };
+    else if (pendingTheirs)
+      connection = { id: pendingTheirs.id, status: "pending", iAmRequester: false };
     else if (pair.length)
       connection = {
+        id: pair[0].id,
         status: pair[0].status,
         iAmRequester: pair[0].requester_partner_id === viewerPartnerId,
       };
@@ -186,6 +190,31 @@ export const Route = createFileRoute("/alliance/$slug")({
   component: AllianceView,
 });
 
+// 파괴적 액션(제휴 해제 / 요청 취소) — 아웃라인(검정 글자/보더), teal 채움 아님.
+function OutlineActionButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#D4D4D4] bg-white px-4 text-sm font-bold text-[#0A0A0A] hover:bg-[#FAFAFA] disabled:opacity-50"
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
 function DisabledFooter({ label }: { label: string }) {
   return (
     <button
@@ -201,6 +230,7 @@ function DisabledFooter({ label }: { label: string }) {
 
 function AllianceView() {
   const data = Route.useLoaderData();
+  const router = useRouter();
   const [requested, setRequested] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -220,6 +250,7 @@ function AllianceView() {
         if (error.code === "23505") {
           setRequested(true);
           toast.info("이미 제휴를 요청했어요.");
+          await router.invalidate();
           return;
         }
         console.error("[alliance] request failed:", error);
@@ -228,8 +259,39 @@ function AllianceView() {
       }
       setRequested(true);
       toast.success("제휴를 요청했어요.");
+      // 연결 row(id 포함) 로드 → '요청 취소' 가능하도록 상태 재조회.
+      await router.invalidate();
     } catch (err) {
       console.error("[alliance] request unexpected:", err);
+      toast.error("처리 중 문제가 생겼어요.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 제휴 해제 / 요청 취소 — end_partnership RPC. confirm 후 호출, 성공 시 상태 재조회.
+  async function endOrCancel(connectionId: string, isCancel: boolean) {
+    const confirmMsg = isCancel ? "보낸 요청을 취소할까요?" : "제휴를 해제할까요?";
+    if (typeof window !== "undefined" && !window.confirm(confirmMsg)) return;
+    setBusy(true);
+    try {
+      const { error } = await getSupabase().rpc("end_partnership", {
+        p_connection_id: connectionId,
+      });
+      if (error) {
+        console.error("[alliance] end_partnership failed:", error);
+        toast.error(
+          isCancel
+            ? "취소에 실패했어요. 잠시 후 다시 시도해 주세요."
+            : "해제에 실패했어요. 잠시 후 다시 시도해 주세요.",
+        );
+        return;
+      }
+      setRequested(false);
+      toast.success(isCancel ? "요청을 취소했어요." : "제휴를 해제했어요.");
+      await router.invalidate();
+    } catch (err) {
+      console.error("[alliance] end_partnership unexpected:", err);
       toast.error("처리 중 문제가 생겼어요.");
     } finally {
       setBusy(false);
@@ -265,10 +327,38 @@ function AllianceView() {
       return <DisabledFooter label="동종 업종은 제휴할 수 없어요" />;
     }
     const conn = data.connection;
-    if (requested || (conn?.status === "pending" && conn.iAmRequester)) {
+    // 요청함(내가 요청자, pending) → 요청 취소 가능. 연결 id 있어야 취소 호출.
+    if (conn?.status === "pending" && conn.iAmRequester) {
+      return (
+        <div className="space-y-2">
+          <p className="text-center text-xs font-medium text-[#94A3B8]">요청함</p>
+          <OutlineActionButton
+            icon={<X className="size-4" strokeWidth={2} />}
+            label="요청 취소"
+            disabled={busy}
+            onClick={() => endOrCancel(conn.id, true)}
+          />
+        </div>
+      );
+    }
+    // 요청 직후 optimistic(아직 연결 미로드) — 취소 버튼은 재조회 후 노출.
+    if (requested) {
       return <DisabledFooter label="요청함" />;
     }
-    if (conn?.status === "accepted") return <DisabledFooter label="제휴 중" />;
+    // 제휴 중(accepted) → 양쪽 누구나 제휴 해제 가능.
+    if (conn?.status === "accepted") {
+      return (
+        <div className="space-y-2">
+          <p className="text-center text-xs font-medium text-[#94A3B8]">제휴 중</p>
+          <OutlineActionButton
+            icon={<Unlink className="size-4" strokeWidth={2} />}
+            label="제휴 해제"
+            disabled={busy}
+            onClick={() => endOrCancel(conn.id, false)}
+          />
+        </div>
+      );
+    }
     if (conn?.status === "pending" && !conn.iAmRequester) {
       return <DisabledFooter label="요청 받음" />;
     }
