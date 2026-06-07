@@ -11,6 +11,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
+import { getCouponDisplayStatus } from "@/lib/coupon-status";
 import { Toaster } from "@/components/ui/sonner";
 
 /**
@@ -82,12 +83,8 @@ function CouponDetailPage() {
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F5F5F5]">
           <CalendarIcon className="h-7 w-7 text-[#A3A3A3]" strokeWidth={1.75} />
         </div>
-        <h2 className="mt-5 text-[17px] font-semibold text-[#0A0A0A]">
-          쿠폰을 찾을 수 없어요
-        </h2>
-        <p className="mt-2 text-sm text-[#525252]">
-          유효한 쿠폰 번호인지 확인해 주세요.
-        </p>
+        <h2 className="mt-5 text-[17px] font-semibold text-[#0A0A0A]">쿠폰을 찾을 수 없어요</h2>
+        <p className="mt-2 text-sm text-[#525252]">유효한 쿠폰 번호인지 확인해 주세요.</p>
         <button
           type="button"
           onClick={() => navigate({ to: "/me" })}
@@ -99,32 +96,25 @@ function CouponDetailPage() {
     );
   }
 
-  return (
-    <CouponDetailView
-      data={data}
-      onBack={() => navigate({ to: "/me" })}
-    />
-  );
+  return <CouponDetailView data={data} onBack={() => navigate({ to: "/me" })} />;
 }
 
-function CouponDetailView({
-  data,
-  onBack,
-}: {
-  data: CouponDetailData;
-  onBack: () => void;
-}) {
-  const status = data.status as
-    | "issued"
-    | "used"
-    | "expired"
-    | "cancelled"
-    | string;
-  const isActive = status === "issued";
-  const isUsed = status === "used";
-  const isExpired = status === "expired";
+function CouponDetailView({ data, onBack }: { data: CouponDetailData; onBack: () => void }) {
+  const status = data.status;
+  const expiresAt = data.expires_at ?? data.coupon?.valid_until ?? null;
+  // 표시 상태 — status/used_at/expires_at 종합(만료 반영). 만료일은 표시값과 동일 기준.
+  const displayStatus = getCouponDisplayStatus({
+    status,
+    used_at: data.used_at,
+    expires_at: expiresAt,
+  });
   const isCancelled = status === "cancelled";
-  const isDim = isUsed || isExpired || isCancelled;
+  // 활성(사용 가능/곧 만료) ↔ 흐림(사용 완료/만료/취소).
+  const isActive = displayStatus === "available" || displayStatus === "expiring";
+  const isExpiring = displayStatus === "expiring";
+  const isUsed = displayStatus === "used";
+  const isExpired = displayStatus === "expired" && !isCancelled;
+  const isDim = !isActive;
 
   const couponTitle = data.coupon?.title?.trim() || "쿠폰";
   const storeName = data.coupon?.partner?.display_name?.trim() || "";
@@ -134,7 +124,6 @@ function CouponDetailView({
     !isGift && typeof data.coupon?.conditions?.min_amount === "number"
       ? data.coupon.conditions.min_amount
       : null;
-  const expiresAt = data.expires_at ?? data.coupon?.valid_until ?? null;
 
   return (
     <main className="flex min-h-screen flex-col items-center bg-[#EAEEF4] tracking-ko px-[18px] pb-10 pt-[22px]">
@@ -149,9 +138,7 @@ function CouponDetailView({
           >
             <ArrowLeft className="h-5 w-5" strokeWidth={2.2} />
           </button>
-          <h1 className="text-[19px] font-extrabold tracking-[-0.02em] text-[#0A0A0A]">
-            쿠폰
-          </h1>
+          <h1 className="text-[19px] font-extrabold tracking-[-0.02em] text-[#0A0A0A]">쿠폰</h1>
         </div>
 
         {/* 쿠폰 카드 (티켓 구조) */}
@@ -169,6 +156,7 @@ function CouponDetailView({
               </span>
               <StatusBadge
                 isActive={isActive}
+                isExpiring={isExpiring}
                 isUsed={isUsed}
                 isExpired={isExpired}
                 isCancelled={isCancelled}
@@ -205,19 +193,14 @@ function CouponDetailView({
           </div>
 
           {/* 점선 perforation + 좌우 notch */}
-          <div
-            className="relative mx-[22px] border-t-2 border-dashed border-[#E2E8F0]"
-            aria-hidden
-          >
+          <div className="relative mx-[22px] border-t-2 border-dashed border-[#E2E8F0]" aria-hidden>
             <span className="absolute left-[-35px] top-1/2 h-[26px] w-[26px] -translate-y-1/2 rounded-full bg-[#EAEEF4]" />
             <span className="absolute right-[-35px] top-1/2 h-[26px] w-[26px] -translate-y-1/2 rounded-full bg-[#EAEEF4]" />
           </div>
 
           {/* 하단 — 쿠폰 번호 + 복사 */}
           <div className="px-[22px] pb-6 pt-[18px]">
-            <p className="mb-2 text-sm font-semibold text-[#64748B]">
-              쿠폰 번호
-            </p>
+            <p className="mb-2 text-sm font-semibold text-[#64748B]">쿠폰 번호</p>
             <CouponCodeRow code={data.claim_code} disabled={isDim} />
           </div>
         </article>
@@ -226,10 +209,7 @@ function CouponDetailView({
         {isActive ? (
           <div className="mt-[18px] flex items-center gap-[13px] rounded-2xl bg-white px-[18px] py-4 shadow-[0_2px_10px_rgba(15,23,42,0.05)]">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F5F5F5]">
-              <HomeIcon
-                className="h-[21px] w-[21px] text-[#0A0A0A]"
-                strokeWidth={2}
-              />
+              <HomeIcon className="h-[21px] w-[21px] text-[#0A0A0A]" strokeWidth={2} />
             </span>
             <p className="text-base font-bold leading-[1.4] tracking-[-0.01em] text-[#1E293B]">
               방문 시 사장님께
@@ -311,20 +291,23 @@ function CouponCodeRow({ code, disabled }: { code: string; disabled: boolean }) 
 
 function StatusBadge({
   isActive,
+  isExpiring,
   isUsed,
   isExpired,
   isCancelled,
 }: {
   isActive: boolean;
+  isExpiring: boolean;
   isUsed: boolean;
   isExpired: boolean;
   isCancelled: boolean;
 }) {
   if (isActive) {
+    // 사용 가능/곧 만료 모두 usable → 기존 초록 배지 재사용(색 추가 없음), 라벨만 분기.
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-[#ECFDF5] px-[11px] py-[5px] text-[13px] font-bold text-[#10B981]">
         <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-        사용 가능
+        {isExpiring ? "곧 만료" : "사용 가능"}
       </span>
     );
   }

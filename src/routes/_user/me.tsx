@@ -19,6 +19,12 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
+import {
+  getCouponDisplayStatus,
+  isCouponUsable,
+  couponStatusLabel,
+  type CouponDisplayStatus,
+} from "@/lib/coupon-status";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 import { parseVideoUrl } from "@/lib/video-metadata";
@@ -278,8 +284,8 @@ function MePage() {
     title: string;
   } | null>(null);
 
-  // 쿠폰 지갑 — '사용 가능'(issued)만 강조 카운트. 현금처럼 쓸 수 있는 장 수.
-  const availableCount = data.coupons.filter((c) => c.status === "issued").length;
+  // 쿠폰 지갑 — 실제 사용 가능(만료 전, '곧 만료' 포함)한 장 수. expires_at 반영.
+  const availableCount = data.coupons.filter((c) => isCouponUsable(c)).length;
 
   // A안 담김 연출 — mount 시 search.claimed 1회 처리.
   // 1) "쿠폰 지갑에 담겼어요" 토스트 → 2) URL 에서 claimed 제거(재연출 방지) →
@@ -695,9 +701,9 @@ function CouponClaimCard({
   const storeName = row.coupon?.partner?.display_name?.trim() || "";
   const isGift = row.coupon?.coupon_type === "gift";
   const giftItem = row.coupon?.gift_item?.trim() || "";
-  const isUsed = row.status === "used";
-  const isExpired = row.status === "expired" || row.status === "cancelled";
-  const dim = isUsed || isExpired;
+  // 표시 상태 — status/used_at/expires_at 종합(만료 반영). 사용 가능/곧 만료 = 활성(또렷).
+  const displayStatus = getCouponDisplayStatus(row);
+  const dim = displayStatus === "used" || displayStatus === "expired";
 
   // 혜택/증정품 = 가장 큰 가치(현금 같은 자산). 증정이면 '{품목} 증정', 아니면 쿠폰 제목.
   const benefit = isGift && giftItem ? `${giftItem} 증정` : couponTitle;
@@ -739,9 +745,9 @@ function CouponClaimCard({
         dim ? "opacity-50" : ""
       } ${active ? "wallet-card-in bg-[#FAFAFA] ring-2 ring-[#0A0A0A]" : ""}`}
     >
-      {/* 상태(사용 가능=현금처럼 또렷) + 유효기간 */}
+      {/* 상태(사용 가능/곧 만료=또렷, 사용 완료/만료=흐림) + 유효기간 */}
       <div className="flex items-center justify-between gap-2">
-        <StatusPill status={row.status} />
+        <StatusPill status={displayStatus} />
         {row.expires_at ? (
           <span className="shrink-0 text-xs font-medium text-[#94A3B8]">
             {formatDate(row.expires_at)}까지
@@ -781,18 +787,19 @@ function CouponClaimCard({
   );
 }
 
-// 상태 칩 — '사용 가능'은 검정 솔리드로 또렷하게(쓸 수 있는 돈처럼), 그 외는 회색 dim.
-function StatusPill({ status }: { status: string | null }) {
-  if (status === "issued") {
+// 상태 칩 — 사용 가능/곧 만료(활성)는 검정 솔리드로 또렷하게(쓸 수 있는 돈처럼),
+// 사용 완료/만료는 회색 dim. 라벨은 헬퍼 한 곳(couponStatusLabel)에서.
+function StatusPill({ status }: { status: CouponDisplayStatus }) {
+  if (status === "available" || status === "expiring") {
     return (
       <span className="inline-flex items-center rounded-md bg-[#0A0A0A] px-2 py-0.5 text-xs font-bold text-white">
-        사용 가능
+        {couponStatusLabel(status)}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center rounded-md bg-[#F1F5F9] px-2 py-0.5 text-xs font-semibold text-[#94A3B8]">
-      {labelCouponStatus(status)}
+      {couponStatusLabel(status)}
     </span>
   );
 }
@@ -897,19 +904,4 @@ function formatDate(iso: string): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}.${m}.${day}`;
-}
-
-function labelCouponStatus(s: string | null): string {
-  switch (s) {
-    case "issued":
-      return "사용 가능";
-    case "used":
-      return "사용 완료";
-    case "expired":
-      return "기간 만료";
-    case "cancelled":
-      return "취소";
-    default:
-      return "상태 확인 중";
-  }
 }
