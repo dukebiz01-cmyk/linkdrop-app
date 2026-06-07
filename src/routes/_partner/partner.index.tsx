@@ -13,13 +13,15 @@ import {
   Sparkles,
   BarChart3,
   CalendarRange,
-  MapPin,
-  Tag,
   Megaphone,
+  Share2,
+  Inbox,
 } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
+import { shareToKakao } from "@/lib/kakao";
 import { Toaster } from "@/components/ui/sonner";
+import { StoreProfileCard, type AllianceActiveCoupon } from "@/components/partner/StoreProfileCard";
 
 type ReservationRow = {
   reservation_id: string;
@@ -37,17 +39,19 @@ type ReservationRow = {
   created_at: string | null;
 };
 
-// 매장 프로필 카드 — 진행 중 혜택(활성 쿠폰) 표시용. get_active_store_coupons 반환 일부.
-type ActiveCouponRow = {
-  id: string;
-  title: string | null;
-  valid_until: string | null;
+// 받은 제휴 요청 — maker_connections(target=내 partner, pending) + 요청자 partner 요약.
+type IncomingRequest = {
+  connectionId: string;
+  name: string;
+  industry: string | null; // 업종 한글 (없으면 미표시)
+  address: string | null;
 };
 
 type LoaderData = {
   ownerUserId: string | null;
   partnerId: string | null;
   partnerName: string | null;
+  partnerSlug: string | null; // 명함 공유 URL (없으면 id fallback)
   reservations: ReservationRow[];
   // 매장 프로필 카드(명함) — 전부 기존 데이터/RPC 조합, DB 변경 없음.
   verificationStatus: string | null;
@@ -55,7 +59,9 @@ type LoaderData = {
   partnerKind: string | null; // 보조
   address: string | null;
   subscriberCount: number; // maker_follows active count
-  activeCoupons: ActiveCouponRow[];
+  activeCoupons: AllianceActiveCoupon[];
+  // 받은 제휴 요청 (pending).
+  incomingRequests: IncomingRequest[];
 };
 
 export const Route = createFileRoute("/_partner/partner/")({
@@ -65,6 +71,7 @@ export const Route = createFileRoute("/_partner/partner/")({
       ownerUserId: null,
       partnerId: null,
       partnerName: null,
+      partnerSlug: null,
       reservations: [],
       verificationStatus: null,
       businessTypeLabel: null,
@@ -72,6 +79,7 @@ export const Route = createFileRoute("/_partner/partner/")({
       address: null,
       subscriberCount: 0,
       activeCoupons: [],
+      incomingRequests: [],
     };
     const supabase = await getAuthClient();
     if (!supabase) return empty;
@@ -84,7 +92,7 @@ export const Route = createFileRoute("/_partner/partner/")({
     // 매장 프로필 카드용 컬럼 추가(business_type/partner_kind/address/verification_status).
     const { data: partner } = await supabase
       .from("partners")
-      .select("id, display_name, business_type, partner_kind, address, verification_status")
+      .select("id, display_name, slug, business_type, partner_kind, address, verification_status")
       .eq("owner_user_id", ownerUserId)
       .maybeSingle();
 
@@ -92,13 +100,15 @@ export const Route = createFileRoute("/_partner/partner/")({
       return { ...empty, ownerUserId };
     }
 
-    // 4개 병렬: 예약 / 구독수(maker_follows active count, partner_owner SELECT RLS) /
-    //   활성 쿠폰(get_active_store_coupons) / 업종 한글(business_categories depth=1, 등록화면 재사용).
+    // 5개 병렬: 예약 / 구독수(maker_follows active count, partner_owner SELECT RLS) /
+    //   활성 쿠폰(get_active_store_coupons) / 업종 한글(business_categories depth=1, 등록화면 재사용) /
+    //   받은 제휴 요청(maker_connections target=내 partner, pending + 요청자 partner 임베드).
     const [
       { data: reservations },
       { count: subscriberCount },
       { data: activeCouponsRaw },
       { data: majors },
+      { data: incomingRaw },
     ] = await Promise.all([
       supabase.rpc("get_partner_reservations", { p_partner_id: partner.id }),
       supabase
@@ -108,6 +118,13 @@ export const Route = createFileRoute("/_partner/partner/")({
         .eq("status", "active"),
       supabase.rpc("get_active_store_coupons", { p_partner_id: partner.id }),
       supabase.from("business_categories").select("code, label").eq("depth", 1),
+      supabase
+        .from("maker_connections")
+        .select(
+          "id, requester_partner_id, status, requester:partners!maker_connections_requester_partner_id_fkey(id, display_name, business_type, partner_kind, address)",
+        )
+        .eq("target_partner_id", partner.id)
+        .eq("status", "pending"),
     ]);
 
     const majorMap = new Map(
@@ -117,17 +134,42 @@ export const Route = createFileRoute("/_partner/partner/")({
       ? (majorMap.get(partner.business_type) ?? null)
       : null;
 
+    type IncomingRaw = {
+      id: string;
+      requester_partner_id: string;
+      status: string;
+      requester: {
+        id: string;
+        display_name: string;
+        business_type: string | null;
+        partner_kind: string | null;
+        address: string | null;
+      } | null;
+    };
+    const incomingRequests: IncomingRequest[] = ((incomingRaw as IncomingRaw[] | null) ?? [])
+      .filter((r) => r.requester)
+      .map((r) => ({
+        connectionId: r.id,
+        name: r.requester!.display_name,
+        industry: r.requester!.business_type
+          ? (majorMap.get(r.requester!.business_type) ?? null)
+          : null,
+        address: r.requester!.address,
+      }));
+
     return {
       ownerUserId,
       partnerId: partner.id,
       partnerName: partner.display_name ?? null,
+      partnerSlug: partner.slug ?? null,
       reservations: (reservations as ReservationRow[] | null) ?? [],
       verificationStatus: partner.verification_status ?? null,
       businessTypeLabel,
       partnerKind: partner.partner_kind ?? null,
       address: partner.address ?? null,
       subscriberCount: subscriberCount ?? 0,
-      activeCoupons: (activeCouponsRaw as ActiveCouponRow[] | null) ?? [],
+      activeCoupons: (activeCouponsRaw as AllianceActiveCoupon[] | null) ?? [],
+      incomingRequests,
     };
   },
   component: PartnerHome,
@@ -153,160 +195,15 @@ function formatDate(iso: string): string {
   return `${y}.${m}.${day}`;
 }
 
-// partner_kind enum → 한글 라벨 (업종 보조 표시용). business_type 한글이 우선.
-function partnerKindLabel(kind: string | null): string | null {
-  switch (kind) {
-    case "campsite":
-      return "캠핑장";
-    case "store":
-      return "매장";
-    case "brand":
-      return "브랜드";
-    case "ticket_seller":
-      return "티켓";
-    case "campaign_org":
-      return "캠페인";
-    case "creator_owned":
-      return "크리에이터";
-    case "other":
-      return "기타";
-    default:
-      return null;
-  }
-}
-
-// 등급 칩 — me.tsx 와 동일 스타일. biz: 퍼플 / pb: 틸. 대문자, 11px, tracking 0.02em.
-function TierChip({ tier }: { tier: "biz" | "pb" }) {
-  const cls = tier === "biz" ? "bg-[#F0EDFB] text-[#4C3FA0]" : "bg-[#E1F5EE] text-[#0E4D42]";
-  return (
-    <span
-      className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold tracking-[0.02em] ${cls}`}
-    >
-      {tier.toUpperCase()}
-    </span>
-  );
-}
-
-// 프로필 한 줄 — 아이콘 + 작은 회색 라벨 + 값.
-function ProfileRow({
-  Icon,
-  label,
-  value,
-  muted = false,
-}: {
-  Icon: typeof Tag;
-  label: string;
-  value: string;
-  muted?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      <Icon className="size-4 shrink-0 text-[#94A3B8]" strokeWidth={2} />
-      <span className="w-9 shrink-0 text-xs font-medium text-[#94A3B8]">{label}</span>
-      <span className={`truncate font-medium ${muted ? "text-[#94A3B8]" : "text-[#0F172A]"}`}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-// 매장 프로필 카드(명함) — 사장 본인. 흰 배경 + 보더, 딥 틸 액센트. 검정 미니멀.
-function StoreProfileCard({
-  name,
-  tier,
-  businessTypeLabel,
-  partnerKind,
-  address,
-  subscriberCount,
-  activeCoupons,
-}: {
-  name: string;
-  tier: "biz" | "pb";
-  businessTypeLabel: string | null;
-  partnerKind: string | null;
-  address: string | null;
-  subscriberCount: number;
-  activeCoupons: ActiveCouponRow[];
-}) {
-  const initial = name.trim().charAt(0) || "?";
-  const industry = businessTypeLabel || partnerKindLabel(partnerKind);
-  const visibleCoupons = activeCoupons.slice(0, 3);
-  const extra = activeCoupons.length - visibleCoupons.length;
-  const addr = address?.trim();
-
-  return (
-    <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
-      {/* 헤더 — 이니셜 아바타 + 이름 + 등급 칩 */}
-      <div className="flex items-center gap-3">
-        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[#E1F5EE] text-lg font-bold text-[#0E4D42]">
-          {initial}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <p className="truncate text-base font-bold text-[#0F172A]">{name}</p>
-            <TierChip tier={tier} />
-          </div>
-          <p className="mt-0.5 text-xs font-medium text-[#94A3B8]">내 매장 명함</p>
-        </div>
-      </div>
-
-      {/* 업종 · 지역 · 구독수 */}
-      <div className="mt-4 space-y-2">
-        <ProfileRow Icon={Tag} label="업종" value={industry || "미등록"} muted={!industry} />
-        <ProfileRow Icon={MapPin} label="지역" value={addr || "위치 미등록"} muted={!addr} />
-        <ProfileRow Icon={Users} label="구독" value={`${subscriberCount.toLocaleString()}명`} />
-      </div>
-
-      {/* 진행 중 혜택 (활성 쿠폰) */}
-      <div className="mt-4 border-t border-[#F1F5F9] pt-4">
-        <div className="mb-2 flex items-center gap-1.5">
-          <Ticket className="size-4 text-[#0E4D42]" strokeWidth={2} />
-          <h3 className="text-sm font-semibold text-[#0A0A0A]">진행 중 혜택</h3>
-        </div>
-        {activeCoupons.length === 0 ? (
-          <p className="text-sm text-[#94A3B8]">진행 중인 혜택 없음</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {visibleCoupons.map((c) => (
-              <li key={c.id} className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-medium text-[#0F172A]">
-                  {c.title?.trim() || "쿠폰"}
-                </span>
-                {c.valid_until ? (
-                  <span className="shrink-0 text-xs text-[#94A3B8]">
-                    {formatDate(c.valid_until)}까지
-                  </span>
-                ) : null}
-              </li>
-            ))}
-            {extra > 0 ? (
-              <li className="text-xs font-medium text-[#64748B]">외 {extra}개</li>
-            ) : null}
-          </ul>
-        )}
-      </div>
-
-      {/* 공동프로모션 만들기 — 비활성(준비 중). piece 4에서 활성화. */}
-      <button
-        type="button"
-        disabled
-        aria-disabled
-        className="mt-4 flex min-h-[44px] w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#F5F5F5] px-4 text-sm font-bold text-[#A3A3A3]"
-      >
-        <Megaphone className="size-4" strokeWidth={2} />
-        공동프로모션 만들기
-        <span className="text-xs font-semibold">· 준비 중</span>
-      </button>
-    </section>
-  );
-}
-
 function PartnerHome() {
   const data = Route.useLoaderData();
   const router = useRouter();
   const [actingId, setActingId] = useState<string | null>(null);
   // 처리 끝남 목록 접기/펼치기 — 기본 5건만, 더보기로 전체.
   const [othersExpanded, setOthersExpanded] = useState(false);
+  // 받은 제휴 요청 — 로컬 상태(수락/거절 시 즉시 제거).
+  const [incoming, setIncoming] = useState<IncomingRequest[]>(data.incomingRequests);
+  const [reqBusyId, setReqBusyId] = useState<string | null>(null);
 
   const pending = data.reservations.filter((r) => r.status === "pending");
   const others = data.reservations.filter((r) => r.status !== "pending");
@@ -357,6 +254,53 @@ function PartnerHome() {
     }
   }
 
+  // 명함 공유 — /alliance/{slug} (없으면 {id}) 절대 URL 클립보드 복사 + 가능하면 카톡.
+  async function handleShareCard() {
+    if (!data.partnerId) return;
+    const path = data.partnerSlug ? `/alliance/${data.partnerSlug}` : `/alliance/${data.partnerId}`;
+    const url = `https://app.drop.how${path}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("명함 링크를 복사했어요.");
+    } catch {
+      toast.error("복사에 실패했어요.");
+    }
+    // best-effort 카톡 공유 — 실패해도 클립보드 복사로 충분.
+    try {
+      await shareToKakao({
+        title: `${data.partnerName ?? "매장"} 명함`,
+        description: "LinkDrop에서 제휴를 제안해 보세요.",
+        imageUrl: "",
+        linkUrl: url,
+      });
+    } catch {
+      /* noop */
+    }
+  }
+
+  // 받은 제휴 요청 수락/거절 — maker_connections UPDATE(target_update RLS 허용).
+  async function handleConnection(connectionId: string, next: "accepted" | "rejected") {
+    setReqBusyId(connectionId);
+    try {
+      const { error } = await getSupabase()
+        .from("maker_connections")
+        .update({ status: next, updated_at: new Date().toISOString() })
+        .eq("id", connectionId);
+      if (error) {
+        console.error("[partner.index] connection update failed:", error);
+        toast.error("처리에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      setIncoming((prev) => prev.filter((r) => r.connectionId !== connectionId));
+      toast.success(next === "accepted" ? "제휴를 수락했어요." : "제휴 요청을 거절했어요.");
+    } catch (err) {
+      console.error("[partner.index] connection update unexpected:", err);
+      toast.error("처리 중 문제가 생겼어요.");
+    } finally {
+      setReqBusyId(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#F8FAFC] tracking-ko pb-12">
       <header className="bg-white px-5 py-4 border-b border-[#F1F5F9]">
@@ -365,7 +309,7 @@ function PartnerHome() {
       </header>
 
       <div className="space-y-4 px-5 pt-4">
-        {/* 매장 프로필 카드(명함) — 동맹 piece 1. 최상단. 상대 노출/연결은 다음 piece. */}
+        {/* 매장 프로필 카드(명함) — 최상단. 명함 공유 버튼 추가(piece 2). */}
         {data.partnerId ? (
           <StoreProfileCard
             name={data.partnerName ?? "매장"}
@@ -375,7 +319,73 @@ function PartnerHome() {
             address={data.address}
             subscriberCount={data.subscriberCount}
             activeCoupons={data.activeCoupons}
+            note="내 매장 명함"
+            headerAction={
+              <button
+                type="button"
+                onClick={handleShareCard}
+                className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-[#0E4D42] bg-white px-2.5 text-xs font-bold text-[#0E4D42] hover:bg-[#E1F5EE]"
+              >
+                <Share2 className="size-3.5" strokeWidth={2} />
+                명함 공유
+              </button>
+            }
+            footer={
+              <button
+                type="button"
+                disabled
+                aria-disabled
+                className="flex min-h-[44px] w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#F5F5F5] px-4 text-sm font-bold text-[#A3A3A3]"
+              >
+                <Megaphone className="size-4" strokeWidth={2} />
+                공동프로모션 만들기
+                <span className="text-xs font-semibold">· 준비 중</span>
+              </button>
+            }
           />
+        ) : null}
+
+        {/* 받은 제휴 요청 — pending 0건이면 카드 숨김. */}
+        {incoming.length > 0 ? (
+          <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <Inbox className="size-4 text-[#0E4D42]" strokeWidth={2} />
+              <h2 className="text-sm font-semibold text-[#0A0A0A]">받은 제휴 요청</h2>
+              <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#0E4D42] px-1.5 text-[11px] font-bold text-white">
+                {incoming.length}
+              </span>
+            </div>
+            <ul className="divide-y divide-[#F1F5F9]">
+              {incoming.map((r) => (
+                <li key={r.connectionId} className="py-3 first:pt-0 last:pb-0">
+                  <p className="truncate text-sm font-bold text-[#0F172A]">{r.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-[#64748B]">
+                    {[r.industry, r.address?.trim()].filter(Boolean).join(" · ") || "정보 없음"}
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleConnection(r.connectionId, "rejected")}
+                      disabled={reqBusyId === r.connectionId}
+                      className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#D4D4D4] bg-white px-4 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC] disabled:opacity-50"
+                    >
+                      <XCircle className="size-4" strokeWidth={2} />
+                      거절
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleConnection(r.connectionId, "accepted")}
+                      disabled={reqBusyId === r.connectionId}
+                      className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0E4D42] px-4 text-sm font-bold text-white hover:bg-[#0A3D35] disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="size-4" strokeWidth={2} />
+                      수락
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
         ) : null}
 
         {/* ① 이번 달 성과 */}

@@ -24,6 +24,7 @@ import { Route as ApiOembedRouteImport } from './routes/api/oembed'
 import { Route as ApiEventsRouteImport } from './routes/api/events'
 import { Route as ApiConsultationsRouteImport } from './routes/api/consultations'
 import { Route as ApiAbuseReportsRouteImport } from './routes/api/abuse-reports'
+import { Route as AllianceSlugRouteImport } from './routes/alliance.$slug'
 import { Route as UserProfileRouteImport } from './routes/_user/profile'
 import { Route as UserMeRouteImport } from './routes/_user/me'
 import { Route as UserInboxRouteImport } from './routes/_user/inbox'
@@ -124,6 +125,11 @@ const ApiConsultationsRoute = ApiConsultationsRouteImport.update({
 const ApiAbuseReportsRoute = ApiAbuseReportsRouteImport.update({
   id: '/api/abuse-reports',
   path: '/api/abuse-reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AllianceSlugRoute = AllianceSlugRouteImport.update({
+  id: '/alliance/$slug',
+  path: '/alliance/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const UserProfileRoute = UserProfileRouteImport.update({
@@ -284,6 +290,7 @@ export interface FileRoutesByFullPath {
   '/inbox': typeof UserInboxRoute
   '/me': typeof UserMeRoute
   '/profile': typeof UserProfileRoute
+  '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
   '/api/events': typeof ApiEventsRoute
@@ -327,6 +334,7 @@ export interface FileRoutesByTo {
   '/inbox': typeof UserInboxRoute
   '/me': typeof UserMeRoute
   '/profile': typeof UserProfileRoute
+  '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
   '/api/events': typeof ApiEventsRoute
@@ -374,6 +382,7 @@ export interface FileRoutesById {
   '/_user/inbox': typeof UserInboxRoute
   '/_user/me': typeof UserMeRoute
   '/_user/profile': typeof UserProfileRoute
+  '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
   '/api/events': typeof ApiEventsRoute
@@ -419,6 +428,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/me'
     | '/profile'
+    | '/alliance/$slug'
     | '/api/abuse-reports'
     | '/api/consultations'
     | '/api/events'
@@ -462,6 +472,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/me'
     | '/profile'
+    | '/alliance/$slug'
     | '/api/abuse-reports'
     | '/api/consultations'
     | '/api/events'
@@ -508,6 +519,7 @@ export interface FileRouteTypes {
     | '/_user/inbox'
     | '/_user/me'
     | '/_user/profile'
+    | '/alliance/$slug'
     | '/api/abuse-reports'
     | '/api/consultations'
     | '/api/events'
@@ -548,6 +560,7 @@ export interface RootRouteChildren {
   UserRoute: typeof UserRouteWithChildren
   LoginRoute: typeof LoginRoute
   TermsRoute: typeof TermsRoute
+  AllianceSlugRoute: typeof AllianceSlugRoute
   ApiAbuseReportsRoute: typeof ApiAbuseReportsRoute
   ApiConsultationsRoute: typeof ApiConsultationsRoute
   ApiEventsRoute: typeof ApiEventsRoute
@@ -668,6 +681,13 @@ declare module '@tanstack/react-router' {
       path: '/api/abuse-reports'
       fullPath: '/api/abuse-reports'
       preLoaderRoute: typeof ApiAbuseReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/alliance/$slug': {
+      id: '/alliance/$slug'
+      path: '/alliance/$slug'
+      fullPath: '/alliance/$slug'
+      preLoaderRoute: typeof AllianceSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_user/profile': {
@@ -970,6 +990,7 @@ const rootRouteChildren: RootRouteChildren = {
   UserRoute: UserRouteWithChildren,
   LoginRoute: LoginRoute,
   TermsRoute: TermsRoute,
+  AllianceSlugRoute: AllianceSlugRoute,
   ApiAbuseReportsRoute: ApiAbuseReportsRoute,
   ApiConsultationsRoute: ApiConsultationsRoute,
   ApiEventsRoute: ApiEventsRoute,
