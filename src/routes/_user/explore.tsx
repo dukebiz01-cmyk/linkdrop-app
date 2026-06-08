@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Lock } from "lucide-react";
 import { toast } from "sonner";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
@@ -17,7 +16,8 @@ function extractYouTubeVideoIdFromThumb(thumb: string | null | undefined): strin
 }
 
 // chunk1 — 탐색 라우트.
-//   비지니스 인증된 owner 만 본문 노출. 일반 사용자는 안내 카드만.
+//   로그인 유저 전체에 본문 노출 (사업자 게이트 해제). isBusiness 는 wizard 의
+//   purpose 소프트게이트(손님=정보만)용으로만 전달.
 //   본문: 내가 등록(content_sources.registered_by_user_id=uid) 한 콘텐츠 목록 +
 //         "콘텐츠 자동 찾기" (chunk2 에서 외부 검색) placeholder.
 
@@ -48,12 +48,15 @@ export const Route = createFileRoute("/_user/explore")({
     const uid = sess.session?.user.id ?? null;
     if (!uid) return empty;
 
+    // 일반 손님 개방 — isBusiness 플래그는 세팅하되 단락하지 않음.
+    //   사업자 아니어도 로그인 유저면 본인 content_sources 를 항상 반환한다.
+    //   isBusiness 는 DiscoverSection/wizard 의 purpose 소프트게이트용으로만 전달.
     const { data: isBusiness } = await supabase.rpc("is_active_partner_owner", {
       _user_id: uid,
     });
-    if (!isBusiness) return empty;
 
     // chunk1 1d — partner_id 동시 fetch. 카드 만들기 시 자동 연결용.
+    //   손님(approved partner 없음)이면 null → wizard 가 partner_id 생략.
     const { data: partner } = await supabase
       .from("partners")
       .select("id")
@@ -70,40 +73,13 @@ export const Route = createFileRoute("/_user/explore")({
       .limit(100);
 
     return {
-      isBusiness: true,
+      isBusiness: Boolean(isBusiness),
       partnerId: partner?.id ?? null,
       sources: (rows ?? []) as ContentSourceRow[],
     };
   },
   component: ExplorePage,
 });
-
-function NotBusinessNotice() {
-  return (
-    <div className="mx-auto max-w-md px-6 pt-8">
-      <header className="mb-6">
-        <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">탐색</h1>
-        <p className="mt-2 text-sm font-medium tracking-ko text-[#737373]">
-          매장 사장님이 모은 콘텐츠로 카드를 만들어요.
-        </p>
-      </header>
-
-      <section className="rounded-2xl border border-[#E5E5E5] bg-white p-6 text-center">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#F5F5F5]">
-          <Lock className="h-5 w-5 text-[#525252]" strokeWidth={2} />
-        </div>
-        <h2 className="text-base font-bold tracking-ko text-[#0A0A0A]">
-          비지니스 인증 후 이용할 수 있어요
-        </h2>
-        <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-[#737373]">
-          매장 사장님을 위한 탐색이에요. 매장 등록 후 인증되면
-          <br />
-          모아둔 영상으로 카드를 만들 수 있어요.
-        </p>
-      </section>
-    </div>
-  );
-}
 
 function ExplorePage() {
   const { isBusiness, partnerId, sources } = Route.useLoaderData();
@@ -142,10 +118,6 @@ function ExplorePage() {
       return t.includes(q) || c.includes(q);
     });
   }, [sources, query]);
-
-  if (!isBusiness) {
-    return <NotBusinessNotice />;
-  }
 
   function handleCreate(sourceId: string) {
     navigate({

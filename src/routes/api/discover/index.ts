@@ -1,9 +1,8 @@
 // POST /api/discover — 매장 키워드 → 자동 보강 → YouTube 검색 후보
 //
 // 동작:
-//   1) auth.getUser() — 로그인 필수.
-//   2) is_active_partner_owner(uid) = true 아니면 403.
-//   3) approved partner 조회 (body.partner_id 우선, 없으면 첫 행).
+//   1) auth.getUser() — 로그인 필수 (사업자 게이트 해제: 일반 손님 개방).
+//   2) approved partner 조회 (body.partner_id 우선, 없으면 첫 행). 손님은 null.
 //   4) enhancedQuery 생성 — display_name / metadata.sub_category / address 첫 토큰
 //      을 합쳐 매장 매칭 정확도 ↑. 길이 상한 60.
 //   5) invokeEdge('discover-content', { keyword: enhancedQuery }).
@@ -136,16 +135,9 @@ export const Route = createFileRoute("/api/discover/")({
             );
           }
 
-          // 2. 비지니스 게이트
-          const { data: isBusiness } = await supabase.rpc("is_active_partner_owner", {
-            _user_id: user.id,
-          });
-          if (!isBusiness) {
-            return Response.json(
-              { error: "NOT_BUSINESS", message: "비지니스 인증 후 이용할 수 있어요." },
-              { status: 403 },
-            );
-          }
+          // 2. 일반 손님 개방 — 비지니스 게이트 제거. 로그인(user)만 요구.
+          //   partner 조회(아래 4)는 그대로 두되, 손님이면 null → buildEnhancedQuery
+          //   가 원시 키워드로 fallback (null 안전).
 
           // 3. 입력
           const body = (await request.json()) as DiscoverBody;
