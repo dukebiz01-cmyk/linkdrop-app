@@ -73,6 +73,33 @@ type CouponClaimRow = {
   } | null;
 };
 
+// get_my_wallet RPC(setof jsonb) flat row — CouponClaimRow 중첩 구조로 reshape 전 형태.
+type WalletRpcRow = {
+  id: string;
+  coupon_id: string;
+  status: string;
+  issued_at: string | null;
+  used_at: string | null;
+  expires_at: string | null;
+  claim_code: string;
+  share_event_id: string | null;
+  share_uuid: string | null;
+  share_code: string | null;
+  info_drop_id: string | null;
+  sender_user_id: string | null;
+  coupon_title: string | null;
+  coupon_type: string | null;
+  gift_item: string | null;
+  valid_until: string | null;
+  conditions: { min_amount?: number; [k: string]: unknown } | null;
+  per_user_limit: number | null;
+  partner_display_name: string | null;
+  business_type: string | null;
+  partner_kind: string | null;
+  partner_address: string | null;
+  partner_owner_user_id: string | null;
+};
+
 type MyDropRow = {
   id: string;
   purpose: string | null;
@@ -212,38 +239,48 @@ export const Route = createFileRoute("/_user/me")({
     });
     const myDrops = Array.isArray(dropsJson) ? (dropsJson as MyDropRow[]) : [];
 
-    // 받은 혜택 (RLS claims_self_read = catcher_user_id = auth.uid())
-    // coupon5: coupons + partners 중첩 JOIN — 카드에 제목·매장명 표시.
-    //   coupons_public_read(is_active=true) + partners_public_read(verification_status=approved)
-    //   PUBLIC SELECT 정책으로 JOIN 통과.
-    // status 필터 없음 → used/만료 모두 포함. issued_at 내림차순(최신순). 전체(11개째 이후 포함).
-    const { data: couponsEmbed, error: couponsErr } = await supabase
-      .from("coupon_claims")
-      .select(
-        "id, coupon_id, status, issued_at, used_at, expires_at, claim_code, share_event_id, " +
-          "share_event:share_events!coupon_claims_share_event_id_fkey(share_uuid, share_code, info_drop_id, sender_user_id), " +
-          "coupon:coupons(title, coupon_type, gift_item, valid_until, conditions, per_user_limit, " +
-          "partner:partners(display_name, business_type, partner_kind, address, owner_user_id))",
-      )
-      .eq("catcher_user_id", userId)
-      .order("issued_at", { ascending: false })
-      .limit(100);
-
-    let coupons = (couponsEmbed as CouponClaimRow[] | null) ?? [];
-    // 폴백: 임베드(coupons/partners/share_events) 조회가 어떤 이유로든 실패하면 지갑이 통째로
-    //   비지 않도록 claim 만 다시 조회한다(제목/매장명='쿠폰' fallback, 친구보내기 버튼은 미표시).
-    if (couponsErr) {
-      console.error("[me] coupon_claims 임베드 조회 실패 — claim-only 폴백:", couponsErr);
-      const { data: plain } = await supabase
-        .from("coupon_claims")
-        .select("id, coupon_id, status, issued_at, used_at, expires_at, claim_code, share_event_id")
-        .eq("catcher_user_id", userId)
-        .order("issued_at", { ascending: false })
-        .limit(100);
-      coupons = ((plain as Omit<CouponClaimRow, "coupon" | "share_event">[] | null) ?? []).map(
-        (c) => ({ ...c, share_event: null, coupon: null }),
-      );
-    }
+    // 받은 혜택 — get_my_wallet RPC(SECURITY DEFINER, auth.uid() 본인 claim만 RLS 우회).
+    //   기존 임베드(coupons/partners/share_events) 가 RLS 로 깨지던 문제 해소. setof jsonb →
+    //   flat 객체 배열을 기존 CouponClaimRow 중첩 구조로 reshape(카드 코드 그대로 동작).
+    //   used/만료 포함·issued_at 최신순은 RPC 가 보장.
+    const { data: walletRows, error: walletErr } = await supabase.rpc("get_my_wallet");
+    if (walletErr) console.error("[me] get_my_wallet 실패:", walletErr);
+    const coupons: CouponClaimRow[] = ((walletRows as WalletRpcRow[] | null) ?? []).map((r) => ({
+      id: r.id,
+      coupon_id: r.coupon_id,
+      status: r.status,
+      issued_at: r.issued_at,
+      used_at: r.used_at,
+      expires_at: r.expires_at,
+      claim_code: r.claim_code,
+      share_event_id: r.share_event_id,
+      share_event: r.share_event_id
+        ? {
+            share_uuid: r.share_uuid,
+            share_code: r.share_code,
+            info_drop_id: r.info_drop_id,
+            sender_user_id: r.sender_user_id,
+          }
+        : null,
+      coupon:
+        r.coupon_title != null
+          ? {
+              title: r.coupon_title,
+              coupon_type: r.coupon_type,
+              gift_item: r.gift_item,
+              valid_until: r.valid_until,
+              conditions: r.conditions,
+              per_user_limit: r.per_user_limit,
+              partner: {
+                display_name: r.partner_display_name ?? "",
+                business_type: r.business_type,
+                partner_kind: r.partner_kind,
+                address: r.partner_address,
+                owner_user_id: r.partner_owner_user_id,
+              },
+            }
+          : null,
+    }));
 
     // 업종 한글 라벨 — 등록화면과 동일 매핑(business_categories depth=1) 재사용. 카드의 '업종' 표시용.
     const { data: majors } = await supabase
