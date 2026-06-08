@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Search,
+  Store,
   Bell,
   Link as LinkIcon,
   Clipboard,
@@ -45,7 +45,8 @@ export interface HomePageV3Props {
   onViewDrop: (dropId: string) => void;
   onViewAllDrops: () => void;
   onTabChange: (tab: HomePageV3Tab) => void;
-  onSearch: () => void;
+  /** 내 매장 이동 — 사업자(isBusiness)일 때만 상단 Store 아이콘 노출·호출. */
+  onGoStore?: () => void;
   onNotifications: () => void;
 }
 
@@ -97,19 +98,15 @@ export function HomePageV3({
   onViewDrop,
   onViewAllDrops,
   onTabChange,
-  onSearch,
+  onGoStore,
   onNotifications,
 }: HomePageV3Props) {
   // phase1 B: 일반 사용자 = 정보만. 비지니스 = 정보 + 혜택·예약.
-  const visiblePurposes = isBusiness
-    ? PURPOSES
-    : PURPOSES.filter((p) => p.id === "info");
+  const visiblePurposes = isBusiness ? PURPOSES : PURPOSES.filter((p) => p.id === "info");
   const [videoUrl, setVideoUrl] = useState("");
   const [videoPreview, setVideoPreview] = useState<VideoPreviewState | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-  const [selectedPurpose, setSelectedPurpose] = useState<HomePageV3Purpose | null>(
-    null,
-  );
+  const [selectedPurpose, setSelectedPurpose] = useState<HomePageV3Purpose | null>(null);
 
   // 실 fetchVideoMetadata (v0 mock setTimeout 대체)
   useEffect(() => {
@@ -167,21 +164,21 @@ export function HomePageV3({
           Header
       ───────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[#E5E5E5] bg-white px-5">
-        <h1
-          className="text-lg font-bold text-[#0A0A0A]"
-          style={{ letterSpacing: "-0.02em" }}
-        >
+        <h1 className="text-lg font-bold text-[#0A0A0A]" style={{ letterSpacing: "-0.02em" }}>
           LinkDrop
         </h1>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={onSearch}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-[#A3A3A3] transition-colors hover:bg-[#F5F5F5] active:bg-[#E5E5E5]"
-            aria-label="검색"
-          >
-            <Search className="h-5 w-5" strokeWidth={1.5} />
-          </button>
+          {/* 내 매장 — 사업자(isBusiness)일 때만. 일반(소비자) 계정엔 미표시. */}
+          {isBusiness ? (
+            <button
+              type="button"
+              onClick={onGoStore}
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-[#A3A3A3] transition-colors hover:bg-[#F5F5F5] active:bg-[#E5E5E5]"
+              aria-label="내 매장"
+            >
+              <Store className="h-5 w-5" strokeWidth={1.5} />
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onNotifications}
@@ -232,9 +229,7 @@ export function HomePageV3({
                 <span className="text-xs font-bold text-[#525252]">1</span>
               )}
             </div>
-            <p className="text-[15px] font-semibold text-[#0A0A0A]">
-              영상 링크 넣기
-            </p>
+            <p className="text-[15px] font-semibold text-[#0A0A0A]">영상 링크 넣기</p>
           </div>
 
           <div
@@ -299,9 +294,7 @@ export function HomePageV3({
                 <p className="truncate text-sm font-semibold text-[#0A0A0A]">
                   {videoPreview.title}
                 </p>
-                <p className="truncate text-xs text-[#A3A3A3]">
-                  {videoPreview.channelName}
-                </p>
+                <p className="truncate text-xs text-[#A3A3A3]">{videoPreview.channelName}</p>
               </div>
               <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#22C55E]">
                 <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />
@@ -350,9 +343,7 @@ export function HomePageV3({
                   <div className="flex items-start gap-3.5">
                     <div
                       className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-all duration-200 ${
-                        isSelected
-                          ? "bg-[#0A0A0A]"
-                          : "bg-[#F5F5F5] group-hover:bg-[#EBEBEB]"
+                        isSelected ? "bg-[#0A0A0A]" : "bg-[#F5F5F5] group-hover:bg-[#EBEBEB]"
                       }`}
                     >
                       <Icon
@@ -374,17 +365,13 @@ export function HomePageV3({
                               : "border-[#D4D4D4] group-hover:border-[#A3A3A3]"
                           }`}
                         >
-                          {isSelected && (
-                            <Check className="h-3 w-3 text-white" strokeWidth={3} />
-                          )}
+                          {isSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
                         </div>
                       </div>
                       <div className="mt-1">
                         <span
                           className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${
-                            isSelected
-                              ? "bg-[#0A0A0A] text-white"
-                              : "bg-[#F5F5F5] text-[#737373]"
+                            isSelected ? "bg-[#0A0A0A] text-white" : "bg-[#F5F5F5] text-[#737373]"
                           }`}
                         >
                           {purpose.tag}
@@ -406,9 +393,7 @@ export function HomePageV3({
                   >
                     <div className="overflow-hidden">
                       <div className="ml-[62px] border-t border-dashed border-[#E5E5E5] pt-3">
-                        <p className="mb-2 text-[11px] font-medium text-[#A3A3A3]">
-                          추천 버튼
-                        </p>
+                        <p className="mb-2 text-[11px] font-medium text-[#A3A3A3]">추천 버튼</p>
                         <div className="flex flex-wrap items-center gap-1.5">
                           {purpose.buttons.map((btn, idx) => (
                             <span
@@ -503,20 +488,13 @@ export function HomePageV3({
                   className="flex w-full items-center gap-3 rounded-xl border border-[#E5E5E5] bg-white p-3 shadow-[0_2px_8px_rgba(15,23,42,0.04)] transition-all hover:border-[#D4D4D4] hover:shadow-[0_4px_12px_rgba(15,23,42,0.08)] active:scale-[0.99]"
                 >
                   <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-[#F5F5F5]">
-                    <img
-                      src={drop.thumbnailUrl}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
+                    <img src={drop.thumbnailUrl} alt="" className="h-full w-full object-cover" />
                   </div>
                   <div className="min-w-0 flex-1 text-left">
-                    <p className="truncate text-sm font-semibold text-[#0A0A0A]">
-                      {drop.title}
-                    </p>
+                    <p className="truncate text-sm font-semibold text-[#0A0A0A]">{drop.title}</p>
                     <p className="mt-0.5 text-xs text-[#A3A3A3]">
                       조회 {drop.stats.views}회
-                      {drop.stats.reservations &&
-                        ` · 예약 ${drop.stats.reservations}건`}
+                      {drop.stats.reservations && ` · 예약 ${drop.stats.reservations}건`}
                     </p>
                   </div>
                   <ArrowRight className="h-5 w-5 shrink-0 text-[#A3A3A3]" />

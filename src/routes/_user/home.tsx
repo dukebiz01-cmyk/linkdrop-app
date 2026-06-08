@@ -72,8 +72,9 @@ function HomeRoute() {
           }
           // explore: 라우트 미존재 — no-op (별도 유닛에서 라우트 신설 시 연결)
         }}
-        onSearch={() => {
-          // 검색 라우트 미존재 — no-op
+        onGoStore={() => {
+          // 사업자(isBusiness=true)만 상단 Store 아이콘 노출 → 내 매장으로.
+          void navigate({ to: "/partner" });
         }}
         onNotifications={() => {
           // 알림 라우트 미존재 — no-op
