@@ -614,44 +614,30 @@ function PartnerHome() {
           <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
         </Link>
 
-        {/* 들어온 예약 (pending) */}
+        {/* 새로운 예약 (pending) — 미처리 개수 빨강 배지. 0이면 배지 없음 + 빈 상태. */}
         <section>
-          <h2 className="mb-2 px-1 text-sm font-semibold text-[#0A0A0A]">
-            들어온 예약 ({pending.length})
-          </h2>
+          <div className="mb-2 flex items-center gap-2 px-1">
+            <h2 className="text-sm font-semibold text-[#0A0A0A]">새로운 예약</h2>
+            {pending.length > 0 ? (
+              <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#EF4444] px-1.5 text-[11px] font-bold text-white">
+                {pending.length}
+              </span>
+            ) : null}
+          </div>
           {pending.length === 0 ? (
-            <div className="rounded-2xl bg-white p-6 text-center shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-              <p className="text-sm text-[#64748B]">들어온 예약이 없어요.</p>
+            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 text-center">
+              <p className="text-sm text-[#64748B]">새로 들어온 예약이 없어요.</p>
             </div>
           ) : (
             <ul className="space-y-3">
               {pending.map((r) => (
-                <li
+                <ReservationCard
                   key={r.reservation_id}
-                  className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
-                >
-                  <ReservationBody row={r} />
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleReject(r.reservation_id)}
-                      disabled={actingId === r.reservation_id}
-                      className="flex flex-1 min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC] disabled:opacity-50"
-                    >
-                      <XCircle className="size-4" strokeWidth={2} />
-                      거절
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleConfirm(r.reservation_id)}
-                      disabled={actingId === r.reservation_id}
-                      className="flex flex-1 min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:opacity-50"
-                    >
-                      <CheckCircle2 className="size-4" strokeWidth={2} />
-                      확정
-                    </button>
-                  </div>
-                </li>
+                  row={r}
+                  acting={actingId === r.reservation_id}
+                  onConfirm={handleConfirm}
+                  onReject={handleReject}
+                />
               ))}
             </ul>
           )}
@@ -666,15 +652,7 @@ function PartnerHome() {
             </h2>
             <ul className="space-y-3">
               {visibleOthers.map((r) => (
-                <li
-                  key={r.reservation_id}
-                  className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] opacity-80"
-                >
-                  <div className="mb-2">
-                    <StatusBadge status={r.status} />
-                  </div>
-                  <ReservationBody row={r} />
-                </li>
+                <ReservationCard key={r.reservation_id} row={r} />
               ))}
             </ul>
             {others.length > OTHERS_PREVIEW ? (
@@ -695,55 +673,118 @@ function PartnerHome() {
   );
 }
 
-function ReservationBody({ row }: { row: ReservationRow }) {
+// created_at → "M.D" (로컬, formatDate 와 동일 기준). "M.D 신청" 표기용.
+function formatMonthDay(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getMonth() + 1}.${d.getDate()}`;
+}
+
+// 예약 상태 배지 — pending=대기/amber, confirmed=확정/green, rejected=거절/회색, completed=완료/회색.
+function StatusBadge({ status }: { status: string | null }) {
+  if (status === "pending") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-[#FFFBEB] px-2 py-0.5 text-[11px] font-bold text-[#B45309]">
+        대기
+      </span>
+    );
+  }
+  if (status === "confirmed") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[11px] font-bold text-[#059669]">
+        확정
+      </span>
+    );
+  }
+  const label =
+    status === "rejected" ? "거절" : status === "completed" ? "완료" : (status ?? "상태");
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2 text-sm font-semibold text-[#0F172A]">
+    <span className="inline-flex items-center rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[11px] font-bold text-[#94A3B8]">
+      {label}
+    </span>
+  );
+}
+
+// 예약 카드 — 상태배지+신청일 / 날짜·슬롯 / 손님·인원 / 메모. pending 만 수락(검정)·거절(아웃라인).
+// 데이터 출처(get_partner_reservations)·수락/거절 RPC 무변경.
+function ReservationCard({
+  row,
+  acting = false,
+  onConfirm,
+  onReject,
+}: {
+  row: ReservationRow;
+  acting?: boolean;
+  onConfirm?: (id: string) => void;
+  onReject?: (id: string) => void;
+}) {
+  const isPending = row.status === "pending";
+  return (
+    <li
+      className={`rounded-2xl border border-[#E5E7EB] bg-white p-4 ${isPending ? "" : "opacity-80"}`}
+    >
+      {/* 상단: 상태 배지 | 신청일(M.D) */}
+      <div className="flex items-center justify-between gap-2">
+        <StatusBadge status={row.status} />
+        {row.created_at ? (
+          <span className="shrink-0 text-xs font-medium text-[#94A3B8]">
+            {formatMonthDay(row.created_at)} 신청
+          </span>
+        ) : null}
+      </div>
+
+      {/* 날짜 / 슬롯 (calendar_mode 분기는 formatDateRange 가 처리) */}
+      <div className="mt-3 flex items-center gap-2 text-sm font-semibold text-[#0F172A]">
         <Calendar className="size-4 text-[#0A0A0A]" strokeWidth={2} />
         {formatDateRange(row)}
       </div>
-      <div className="flex items-center gap-2 text-sm text-[#475569]">
+
+      {/* 손님 · 인원 */}
+      <div className="mt-1.5 flex items-center gap-2 text-sm text-[#475569]">
         <Users className="size-4 text-[#94A3B8]" strokeWidth={2} />
         {row.customer_name?.trim() || "손님"}
         {row.guest_count ? ` · ${row.guest_count}명` : ""}
       </div>
+
+      {/* 전화 뒷자리 (있으면) */}
       {row.phone_last4 ? (
-        <div className="flex items-center gap-2 text-sm text-[#475569]">
+        <div className="mt-1.5 flex items-center gap-2 text-sm text-[#475569]">
           <Phone className="size-4 text-[#94A3B8]" strokeWidth={2} />
           뒷자리 {row.phone_last4}
         </div>
       ) : null}
+
+      {/* 손님 메모 (있으면, 2줄 클램프) */}
       {row.customer_message?.trim() ? (
-        <div className="flex gap-2 text-sm text-[#475569]">
+        <div className="mt-1.5 flex gap-2 text-sm text-[#475569]">
           <MessageSquare className="mt-0.5 size-4 shrink-0 text-[#94A3B8]" strokeWidth={2} />
-          {/* 메모가 길어도 카드는 짧게 — 2줄로 줄이고 말줄임(…). */}
           <p className="line-clamp-2 min-w-0 whitespace-pre-line">{row.customer_message}</p>
         </div>
       ) : null}
-    </div>
-  );
-}
 
-function StatusBadge({ status }: { status: string | null }) {
-  if (status === "confirmed") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[11px] font-semibold text-[#059669]">
-        <CheckCircle2 className="size-3" strokeWidth={2} />
-        확정됨
-      </span>
-    );
-  }
-  if (status === "rejected") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[#FEF2F2] px-2 py-0.5 text-[11px] font-semibold text-[#EF4444]">
-        <XCircle className="size-3" strokeWidth={2} />
-        거절됨
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[11px] font-semibold text-[#64748B]">
-      {status ?? "상태"}
-    </span>
+      {/* 액션 — pending 만. 수락=검정 채움 / 거절=아웃라인. RPC 로직 무변경. */}
+      {isPending && onConfirm && onReject ? (
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={() => onReject(row.reservation_id)}
+            disabled={acting}
+            className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#D4D4D4] bg-white px-4 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC] disabled:opacity-50"
+          >
+            <XCircle className="size-4" strokeWidth={2} />
+            거절
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm(row.reservation_id)}
+            disabled={acting}
+            className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white hover:bg-[#171717] disabled:opacity-50"
+          >
+            <CheckCircle2 className="size-4" strokeWidth={2} />
+            확정
+          </button>
+        </div>
+      ) : null}
+    </li>
   );
 }
