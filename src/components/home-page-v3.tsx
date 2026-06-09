@@ -9,6 +9,7 @@ import {
   Calendar,
   Check,
   Sparkles,
+  Lock,
 } from "lucide-react";
 import { fetchVideoMetadata, parseVideoUrl } from "@/lib/video-metadata";
 
@@ -42,6 +43,8 @@ export interface HomePageV3Props {
   /** phase1 B: 비지니스(approved partner owner) 여부. true 만 "혜택·예약" 카드 노출. */
   isBusiness?: boolean;
   onCreateDrop: (videoUrl: string, purpose?: string) => void;
+  /** 손님이 잠긴 "혜택·예약" 카드를 탭했을 때 — 래퍼가 사업자 등록 유도 시트를 띄운다. */
+  onLockedBenefitTap?: () => void;
   onViewDrop: (dropId: string) => void;
   onViewAllDrops: () => void;
   onTabChange: (tab: HomePageV3Tab) => void;
@@ -95,14 +98,17 @@ export function HomePageV3({
   myDrops = [],
   isBusiness = false,
   onCreateDrop,
+  onLockedBenefitTap,
   onViewDrop,
   onViewAllDrops,
   onTabChange,
   onGoStore,
   onNotifications,
 }: HomePageV3Props) {
-  // phase1 B: 일반 사용자 = 정보만. 비지니스 = 정보 + 혜택·예약.
-  const visiblePurposes = isBusiness ? PURPOSES : PURPOSES.filter((p) => p.id === "info");
+  // 손님도 혜택·예약 카드를 "보되 잠금"으로 노출(등록 유도). 사업자는 활성.
+  const visiblePurposes = PURPOSES;
+  const isLockedPurpose = (p: (typeof PURPOSES)[number]) =>
+    p.id === "reservation_benefit" && !isBusiness;
   const [videoUrl, setVideoUrl] = useState("");
   const [videoPreview, setVideoPreview] = useState<VideoPreviewState | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
@@ -328,19 +334,28 @@ export function HomePageV3({
           <div className="space-y-3">
             {visiblePurposes.map((purpose) => {
               const Icon = purpose.icon;
-              const isSelected = selectedPurpose === purpose.id;
+              const locked = isLockedPurpose(purpose);
+              const isSelected = !locked && selectedPurpose === purpose.id;
               return (
                 <button
                   key={purpose.id}
                   type="button"
-                  onClick={() => setSelectedPurpose(isSelected ? null : purpose.id)}
+                  onClick={() => {
+                    if (locked) {
+                      onLockedBenefitTap?.();
+                      return;
+                    }
+                    setSelectedPurpose(isSelected ? null : purpose.id);
+                  }}
                   className={`group w-full overflow-hidden rounded-2xl border p-4 text-left transition-all duration-200 ${
-                    isSelected
-                      ? "border-[#0A0A0A] bg-[#FAFAFA] shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
-                      : "border-[#E5E5E5] bg-white hover:border-[#D4D4D4] hover:bg-[#FAFAFA]"
+                    locked
+                      ? "border-[#E5E5E5] bg-[#FAFAFA] hover:border-[#D4D4D4]"
+                      : isSelected
+                        ? "border-[#0A0A0A] bg-[#FAFAFA] shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
+                        : "border-[#E5E5E5] bg-white hover:border-[#D4D4D4] hover:bg-[#FAFAFA]"
                   }`}
                 >
-                  <div className="flex items-start gap-3.5">
+                  <div className={`flex items-start gap-3.5 ${locked ? "opacity-70" : ""}`}>
                     <div
                       className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-all duration-200 ${
                         isSelected ? "bg-[#0A0A0A]" : "bg-[#F5F5F5] group-hover:bg-[#EBEBEB]"
@@ -358,17 +373,24 @@ export function HomePageV3({
                         <p className="text-[15px] font-bold leading-snug text-[#0A0A0A]">
                           {purpose.label}
                         </p>
-                        <div
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
-                            isSelected
-                              ? "border-[#0A0A0A] bg-[#0A0A0A]"
-                              : "border-[#D4D4D4] group-hover:border-[#A3A3A3]"
-                          }`}
-                        >
-                          {isSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
-                        </div>
+                        {locked ? (
+                          <Lock
+                            className="h-4 w-4 shrink-0 text-[#A3A3A3]"
+                            strokeWidth={2}
+                          />
+                        ) : (
+                          <div
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                              isSelected
+                                ? "border-[#0A0A0A] bg-[#0A0A0A]"
+                                : "border-[#D4D4D4] group-hover:border-[#A3A3A3]"
+                            }`}
+                          >
+                            {isSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                          </div>
+                        )}
                       </div>
-                      <div className="mt-1">
+                      <div className="mt-1 flex items-center gap-1.5">
                         <span
                           className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${
                             isSelected ? "bg-[#0A0A0A] text-white" : "bg-[#F5F5F5] text-[#737373]"
@@ -376,6 +398,12 @@ export function HomePageV3({
                         >
                           {purpose.tag}
                         </span>
+                        {locked && (
+                          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-[#E5E5E5] px-2 py-0.5 text-[10px] font-semibold text-[#A3A3A3]">
+                            <Lock className="h-2.5 w-2.5" strokeWidth={2.5} />
+                            사업자 전용
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1.5 text-[13px] leading-relaxed text-[#737373]">
                         {purpose.description}

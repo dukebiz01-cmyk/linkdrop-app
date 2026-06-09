@@ -1,6 +1,15 @@
+import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { HomePageV3 } from "@/components/home-page-v3";
 import { getAuthClient } from "@/lib/auth-context";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // phase1 B: 비지니스 게이팅. me.tsx:117 동일 패턴 (is_active_partner_owner RPC).
 type HomeLoaderData = { isBusiness: boolean };
@@ -34,6 +43,8 @@ const V0_PURPOSE_TO_EN: Record<string, string> = {
 function HomeRoute() {
   const navigate = useNavigate();
   const { isBusiness } = Route.useLoaderData();
+  // 손님이 잠긴 "혜택·예약" 카드를 탭하면 사업자 등록 유도 시트를 띄운다.
+  const [showBizUpsell, setShowBizUpsell] = useState(false);
 
   // phase1-#1 마무리: home-page-v3 내장 nav 제거됨 → CSS 숨김 셀렉터 불필요.
   // 공통 BottomNav (v0 검정 4탭, URL 파생 active) 가 _user.tsx 에서 별도 렌더.
@@ -42,6 +53,7 @@ function HomeRoute() {
     <div>
       <HomePageV3
         isBusiness={isBusiness}
+        onLockedBenefitTap={() => setShowBizUpsell(true)}
         onCreateDrop={(url, purpose) => {
           const en = purpose ? V0_PURPOSE_TO_EN[purpose] : undefined;
           void navigate({
@@ -80,6 +92,38 @@ function HomeRoute() {
           // 알림 라우트 미존재 — no-op
         }}
       />
+
+      <Dialog open={showBizUpsell} onOpenChange={setShowBizUpsell}>
+        <DialogContent className="w-[90vw] max-w-sm rounded-2xl border border-[#E5E5E5] bg-white p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold tracking-ko text-[#0A0A0A]">
+              혜택·예약 카드 만들기
+            </DialogTitle>
+            <DialogDescription className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-[#737373]">
+              사업자로 등록하면 할인·쿠폰·예약 버튼을 붙인 카드로 손님을 모을 수 있어요.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 flex-col gap-2 sm:flex-col">
+            <button
+              type="button"
+              onClick={() => {
+                setShowBizUpsell(false);
+                void navigate({ to: "/partner/register" });
+              }}
+              className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#0A0A0A] px-5 text-sm font-semibold tracking-ko text-white transition-colors hover:bg-[#171717]"
+            >
+              사업자 등록하기
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowBizUpsell(false)}
+              className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl px-5 text-sm font-medium tracking-ko text-[#A3A3A3] transition-colors hover:text-[#525252]"
+            >
+              닫기
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
