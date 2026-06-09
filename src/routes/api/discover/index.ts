@@ -12,8 +12,39 @@
 // chunk1 의 "내가 모은 콘텐츠" 경로에서 향후 별도 처리.
 
 import { createFileRoute } from "@tanstack/react-router";
+import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase-server.server";
 import { invokeEdge } from "@/lib/edge-invoke.server";
+
+// Cloudflare KV 바인딩 (wrangler.jsonc kv_namespaces). 빌드 환경/로컬에서 미바인딩일 수 있어 옵셔널.
+type KVNamespaceLike = {
+  get(key: string, type?: "text" | "json"): Promise<unknown>;
+  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+};
+function getKV(): KVNamespaceLike | null {
+  const kv = (env as { KV?: KVNamespaceLike }).KV;
+  return kv ?? null;
+}
+
+// 캐시 키 — enhancedQuery 정규화(소문자 + trim + 연속공백 1칸).
+function cacheKeyFor(enhancedQuery: string): string {
+  const norm = enhancedQuery.trim().toLowerCase().replace(/\s+/g, " ");
+  return `discover:v1:${norm}`;
+}
+
+// KST(UTC+9) 기준 YYYYMMDD — rate-limit 카운터의 일 단위 버킷.
+function kstDateStamp(): string {
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const y = kst.getUTCFullYear();
+  const m = String(kst.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(kst.getUTCDate()).padStart(2, "0");
+  return `${y}${m}${d}`;
+}
+
+const CACHE_TTL_SEC = 43200; // 12h
+const RL_TTL_SEC = 90000; // ~25h — KST 자정 넘어가면 새 키로 자연 리셋
+const RL_CAP_BUSINESS = 40;
+const RL_CAP_GUEST = 20;
 
 type DiscoverBody = {
   keyword?: string;
@@ -180,7 +211,52 @@ export const Route = createFileRoute("/api/discover/")({
           }
 
           // 5. 보강 키워드
+          const isBusiness = partner != null;
           const enhancedQuery = buildEnhancedQuery(raw, partner);
+
+          // 쿼터 보호 (KV). 모든 KV 호출은 fail-open — 장애 시 검색을 죽이지 않는다.
+          const kv = getKV();
+          const cacheKey = cacheKeyFor(enhancedQuery);
+
+          // d. 캐시 조회 — 히트 시 YouTube 호출/카운터 없이 그대로 반환.
+          if (kv) {
+            try {
+              const cached = (await kv.get(cacheKey, "json")) as {
+                rawQuery: string;
+                enhancedQuery: string;
+                candidates: DiscoverCandidate[];
+                stats: DiscoverStats;
+              } | null;
+              if (cached) {
+                return Response.json({ ...cached, cached: true });
+              }
+            } catch (e) {
+              console.warn("[discover] KV cache get failed (fail-open):", e);
+            }
+          }
+
+          // e. 캐시 미스 → rate-limit. 캡: 손님 20 / 사업자 40 (KST 일 단위).
+          const cap = isBusiness ? RL_CAP_BUSINESS : RL_CAP_GUEST;
+          const rlKey = `disc_rl:${user.id}:${kstDateStamp()}`;
+          let cur = 0;
+          if (kv) {
+            try {
+              const rlRaw = (await kv.get(rlKey, "text")) as string | null;
+              cur = parseInt(rlRaw ?? "0", 10);
+              if (!Number.isFinite(cur) || cur < 0) cur = 0;
+              if (cur >= cap) {
+                return Response.json(
+                  {
+                    error: "RATE_LIMIT",
+                    message: "오늘 검색 한도를 초과했어요. 내일 다시 시도해주세요.",
+                  },
+                  { status: 429 },
+                );
+              }
+            } catch (e) {
+              console.warn("[discover] KV rate-limit get failed (fail-open):", e);
+            }
+          }
 
           // 6. Edge Function 호출
           const { data: sess } = await supabase.auth.getSession();
@@ -202,13 +278,29 @@ export const Route = createFileRoute("/api/discover/")({
             );
           }
 
-          return Response.json({
+          const payload = {
             rawQuery: raw,
             enhancedQuery,
             candidates: edge.data.candidates ?? [],
             stats: edge.data.stats ?? { yt: 0, kept: 0 },
-            cached: Boolean(edge.data.cached),
-          });
+          };
+
+          // g. 성공 후 저장 — 캐시 12h + 카운터 +1 (~25h). 둘 다 fail-open.
+          if (kv) {
+            try {
+              await kv.put(cacheKey, JSON.stringify(payload), { expirationTtl: CACHE_TTL_SEC });
+            } catch (e) {
+              console.warn("[discover] KV cache put failed (fail-open):", e);
+            }
+            try {
+              await kv.put(rlKey, String(cur + 1), { expirationTtl: RL_TTL_SEC });
+            } catch (e) {
+              console.warn("[discover] KV rate-limit put failed (fail-open):", e);
+            }
+          }
+
+          // h. 응답
+          return Response.json({ ...payload, cached: false });
         } catch (e) {
           return Response.json(
             {

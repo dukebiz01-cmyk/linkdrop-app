@@ -4,6 +4,7 @@
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  "kv_namespaces": [{ "binding": "KV", "id": "0198b72016874f44b8a908f8a5216524" }],
   "observability": {
     "enabled": false,
     "head_sampling_rate": 1,
