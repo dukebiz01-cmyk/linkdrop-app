@@ -55,7 +55,7 @@ export const RESERVATION_DESTS: {
     // (네이버 예약 핸드오프는 인앱 예약 신청으로 전환되며 제거됨.)
     id: "self",
     label: "자체 예약",
-    inputLabel: "예약 링크 주소 (캠핏·땡큐캠핑·홈페이지 등)",
+    inputLabel: "예약 링크 주소 (네이버 예약·홈페이지 등)",
     placeholder: "https://...",
     inputType: "url",
     kind: "link",

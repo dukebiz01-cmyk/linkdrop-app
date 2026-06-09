@@ -422,11 +422,11 @@ function RegisterForm({
               type="url"
               value={reservationUrl}
               onChange={(e) => setReservationUrl(e.target.value)}
-              placeholder="https://camfit.co.kr/..."
+              placeholder="https://booking.naver.com/..."
               className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
             />
             <p className="text-[11px] text-[#94A3B8]">
-              캠핏·야놀자·네이버 등 외부 예약 페이지 주소
+              네이버 예약 페이지 주소
             </p>
           </div>
 
