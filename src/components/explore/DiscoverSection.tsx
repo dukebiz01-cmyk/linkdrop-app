@@ -31,13 +31,15 @@ function extractDescription(raw: Record<string, unknown>): string {
   return "";
 }
 
-/** 매장 키워드 → YouTube 검색 + 자동 보강 + 후보 등록(claim). */
+/** 키워드 → YouTube 검색 + 후보 등록(claim). 사업자는 매장 키워드 보강, 손님은 관심 주제 검색. */
 export function DiscoverSection({
   partnerId,
   onRegistered,
+  isBusiness = false,
 }: {
   partnerId: string | null;
   onRegistered: () => void;
+  isBusiness?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -88,7 +90,10 @@ export function DiscoverSection({
         setCandidates([]);
         return;
       }
-      setEnhanced(json.enhancedQuery ?? null);
+      // 실제 보강이 일어났을 때만(enhancedQuery !== rawQuery) 안내를 띄운다.
+      // 손님은 보강이 없어 둘이 같으므로 자동으로 안 뜬다.
+      const eq = json.enhancedQuery ?? null;
+      setEnhanced(eq && eq !== k ? eq : null);
       const cs = json.candidates ?? [];
       setCandidates(cs);
       // 보강된 키워드를 입력창에 prefill — 사장님이 직접 수정 가능.
@@ -196,7 +201,7 @@ export function DiscoverSection({
             onKeyDown={(e) => {
               if (e.key === "Enter") void handleSearch();
             }}
-            placeholder="매장 키워드 (예: 모래재)"
+            placeholder={isBusiness ? "매장 키워드 (예: 모래재)" : "관심 주제로 영상 찾기 (예: 캠핑 요리)"}
             className="h-full min-w-0 flex-1 bg-transparent text-sm text-[#0A0A0A] placeholder:text-[#A3A3A3] focus:outline-none"
           />
         </div>

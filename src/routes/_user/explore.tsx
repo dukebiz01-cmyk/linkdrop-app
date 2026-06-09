@@ -166,6 +166,7 @@ function ExplorePage() {
 
       <DiscoverSection
         partnerId={partnerId}
+        isBusiness={isBusiness}
         onRegistered={() => {
           // 등록 직후 "내가 모은 콘텐츠" 리스트 갱신.
           void router.invalidate();
