@@ -3,6 +3,7 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { handleShortLink, isShortLinkHost } from "./lib/short-link-handler.server";
+import { workerEnvStore } from "./lib/worker-env.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -82,7 +83,12 @@ export default {
 
     try {
       const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
+      // Worker 의 live env/ctx 를 ALS 로 흘려 라우트 핸들러(/api/discover 등)가
+      // getWorkerEnv() 로 env.KV 에 접근할 수 있게 한다. cloudflare:workers env 가
+      // 핸들러 컨텍스트에서 undefined 인 회색지대 우회.
+      const response = await workerEnvStore.run({ env, ctx }, () =>
+        handler.fetch(request, env, ctx),
+      );
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);

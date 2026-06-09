@@ -15,6 +15,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase-server.server";
 import { invokeEdge } from "@/lib/edge-invoke.server";
+import { getWorkerEnv } from "@/lib/worker-env.server";
 
 // Cloudflare KV 바인딩 (wrangler.jsonc kv_namespaces). 빌드 환경/로컬에서 미바인딩일 수 있어 옵셔널.
 type KVNamespaceLike = {
@@ -22,7 +23,9 @@ type KVNamespaceLike = {
   put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
 };
 function getKV(): KVNamespaceLike | null {
-  const kv = (env as { KV?: KVNamespaceLike }).KV;
+  // ALS 로 흘린 worker live env 우선, 없으면 cloudflare:workers env 폴백.
+  const wenv = getWorkerEnv() ?? env;
+  const kv = (wenv as { KV?: KVNamespaceLike }).KV;
   return kv ?? null;
 }
 
