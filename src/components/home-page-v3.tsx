@@ -10,6 +10,7 @@ import {
   Check,
   Sparkles,
   Lock,
+  Sprout,
 } from "lucide-react";
 import { fetchVideoMetadata, parseVideoUrl } from "@/lib/video-metadata";
 
@@ -76,6 +77,14 @@ const PURPOSES = [
     tag: "예약 · 쿠폰",
     buttons: ["예약하기", "혜택 받기", "쿠폰 받기"],
   },
+  {
+    id: "purchase" as const,
+    label: "산지직송 팔기",
+    description: "농수산물을 시세·쿠폰과 함께 카드로 올려 팔아요",
+    icon: Sprout,
+    tag: "산지직송 · 시세",
+    buttons: ["구매하기", "쿠폰 받기", "후기 보기"],
+  },
 ];
 
 // ============================================================
@@ -108,7 +117,7 @@ export function HomePageV3({
   // 손님도 혜택·예약 카드를 "보되 잠금"으로 노출(등록 유도). 사업자는 활성.
   const visiblePurposes = PURPOSES;
   const isLockedPurpose = (p: (typeof PURPOSES)[number]) =>
-    p.id === "reservation_benefit" && !isBusiness;
+    (p.id === "reservation_benefit" || p.id === "purchase") && !isBusiness;
   const [videoUrl, setVideoUrl] = useState("");
   const [videoPreview, setVideoPreview] = useState<VideoPreviewState | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);

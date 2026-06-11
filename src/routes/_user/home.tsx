@@ -97,10 +97,10 @@ function HomeRoute() {
         <DialogContent className="w-[90vw] max-w-sm rounded-2xl border border-[#E5E5E5] bg-white p-6">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold tracking-ko text-[#0A0A0A]">
-              혜택·예약 카드 만들기
+              사업자 전용 카드예요
             </DialogTitle>
             <DialogDescription className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-[#737373]">
-              사업자로 등록하면 할인·쿠폰·예약 버튼을 붙인 카드로 손님을 모을 수 있어요.
+              사업자로 등록하면 쿠폰·예약·산지직송 판매 카드를 만들 수 있어요.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4 flex-col gap-2 sm:flex-col">
