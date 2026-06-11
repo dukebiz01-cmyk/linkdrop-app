@@ -34,6 +34,8 @@ interface ExtractResult {
   cached: boolean;
   fetchedAt: string;
   expiresAt: string;
+  /** Arch A 커머스: persist_source=true 시 생성/조회된 content_sources.id(uuid). 그 외 null. */
+  source_id?: string | null;
 }
 
 const TTL = {
@@ -304,6 +306,58 @@ async function fetchOgAdapter(
   };
 }
 
+// ---------- content_sources persistence (Arch A: 커머스 source) ----------
+// persist_source=true 일 때 OG 결과를 content_sources 에 UPSERT 하고 content_sources.id(uuid)
+// 를 반환한다. extract-meta 의 반환 계약(JSON source_id = content_sources.id uuid)과 동일하게
+// 맞춰 /api/drops → create_drop_v2(p_source_id uuid) 가 그대로 동작한다.
+// ⚠️ 컬럼 source_id(text)는 플랫폼 id(비영상 manual 은 null) — 반환하는 source_id(uuid)와 다름.
+// ⚠️ rights_status 는 set 하지 않음 → default('unclaimed'). INSERT 는 service-role 클라(supa, RLS 우회).
+// supabase-js upsert 는 payload 컬럼 전체를 ON CONFLICT 시 UPDATE 한다(미포함 컬럼은 보존).
+async function persistContentSource(
+  supa: ReturnType<typeof createClient>,
+  args: {
+    provider: string;
+    rawUrl: string;
+    canonicalUrl: string;
+    platformSourceId: string | null;
+    title: string | null;
+    thumbnailUrl: string | null;
+    rawMeta: Record<string, unknown>;
+    extractionConfidence: number;
+    priceKrw: number | null;
+    category: string | null;
+  },
+): Promise<string | null> {
+  const { data, error } = await supa
+    .from("content_sources")
+    .upsert(
+      {
+        provider: args.provider,
+        source_url: args.rawUrl,
+        canonical_url: args.canonicalUrl,
+        source_id: args.platformSourceId,
+        title: args.title,
+        thumbnail_url: args.thumbnailUrl,
+        raw_meta: args.rawMeta,
+        extraction_method: "og_tags",
+        extraction_confidence: args.extractionConfidence,
+        price_krw: args.priceKrw,
+        price_currency: "KRW",
+        category: args.category,
+        source_mode: "creator_registered",
+        extracted_at: new Date().toISOString(),
+      },
+      { onConflict: "provider,canonical_url" },
+    )
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("persist_source(content_sources) failed:", error?.message ?? "no row");
+    return null;
+  }
+  return (data as { id: string }).id;
+}
+
 // ---------- main handler ----------
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -321,7 +375,12 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "method_not_allowed" }, 405);
   }
 
-  let body: { url?: string };
+  let body: {
+    url?: string;
+    persist_source?: boolean;
+    price_krw?: number | null;
+    category?: string | null;
+  };
   try {
     body = await req.json();
   } catch {
@@ -329,6 +388,12 @@ Deno.serve(async (req) => {
   }
   const raw = body?.url?.trim();
   if (!raw) return jsonResponse({ error: "url_required" }, 400);
+
+  // Arch A 커머스 옵션 — 미전달이면 기존 동작과 100% 동일(persist 안 함).
+  const persistSource = body?.persist_source === true;
+  const priceKrw = typeof body?.price_krw === "number" ? body.price_krw : null;
+  const category =
+    typeof body?.category === "string" && body.category.trim() ? body.category.trim() : null;
 
   let parsed: URL;
   try {
@@ -362,6 +427,22 @@ Deno.serve(async (req) => {
     p_canonical_url: canonicalUrl,
   });
   if (cacheRow && cacheRow.id) {
+    // Arch A: 캐시 히트라도 persist_source 면 content_sources 에 (재)연결해 source_id(uuid) 확보.
+    let persistedSourceId: string | null = null;
+    if (persistSource && (cacheRow.title || cacheRow.thumbnail_url)) {
+      persistedSourceId = await persistContentSource(supa, {
+        provider: cacheRow.provider,
+        rawUrl: raw,
+        canonicalUrl: cacheRow.canonical_url,
+        platformSourceId: cacheRow.source_id,
+        title: cacheRow.title,
+        thumbnailUrl: cacheRow.thumbnail_url,
+        rawMeta: cacheRow.raw_meta ?? {},
+        extractionConfidence: Number(cacheRow.extraction_confidence ?? 1.0),
+        priceKrw,
+        category,
+      });
+    }
     return jsonResponse({
       provider: cacheRow.provider,
       canonicalUrl: cacheRow.canonical_url,
@@ -381,6 +462,7 @@ Deno.serve(async (req) => {
       cached: true,
       fetchedAt: cacheRow.fetched_at,
       expiresAt: cacheRow.expires_at,
+      source_id: persistedSourceId,
     } satisfies ExtractResult);
   }
 
@@ -445,6 +527,23 @@ Deno.serve(async (req) => {
     );
   }
 
+  // Arch A: persist_source 면 OG 결과를 content_sources 에 UPSERT 하고 id(uuid) 확보.
+  let persistedSourceId: string | null = null;
+  if (persistSource && (row.title || row.thumbnail_url)) {
+    persistedSourceId = await persistContentSource(supa, {
+      provider,
+      rawUrl: raw,
+      canonicalUrl,
+      platformSourceId: sourceId,
+      title: row.title,
+      thumbnailUrl: row.thumbnail_url,
+      rawMeta: row.raw_meta,
+      extractionConfidence: row.extraction_confidence,
+      priceKrw,
+      category,
+    });
+  }
+
   return jsonResponse({
     provider,
     canonicalUrl,
@@ -464,5 +563,6 @@ Deno.serve(async (req) => {
     cached: false,
     fetchedAt: row.fetched_at,
     expiresAt: row.expires_at,
+    source_id: persistedSourceId,
   } satisfies ExtractResult);
 });

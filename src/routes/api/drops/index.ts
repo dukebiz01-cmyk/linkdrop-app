@@ -24,6 +24,9 @@ type CreateDropBody = {
   /** chunk1 1d — 탐색에서 진입 시 본인 매장 자동 연결. RPC 시그니처 무수정,
    *  RPC 후 owner 매칭 검증 + info_drops.partner_id UPDATE. */
   partner_id?: string;
+  /** Slice 1 커머스 — 구매 목적 시 상품 source 메타. 프론트 미전송이라 선택(null 허용). */
+  price_krw?: number | null;
+  category?: string | null;
 };
 
 export const Route = createFileRoute("/api/drops/")({
@@ -72,20 +75,57 @@ export const Route = createFileRoute("/api/drops/")({
             );
           }
 
-          // 4. extract-meta
-          const meta = await invokeEdge<{
-            source_id: string;
-            title: string;
-            thumbnail_url: string;
-            author_name: string;
-          }>("extract-meta", { url: body.media_url }, jwt);
-          if (meta.error || !meta.data) {
-            return Response.json(
-              { error: "EXTRACT_META_FAILED", message: "영상 정보를 불러올 수 없어요.", details: meta.error },
-              { status: 502 },
+          // 4. source 추출 — 목적별 분기 (Slice 1 Arch A).
+          //    커머스(구매): extract-url-metadata 로 상품 URL OG → content_sources persist.
+          //    그 외(영상): 기존 extract-meta(YouTube/IG oEmbed) 그대로.
+          let sourceId: string;
+          let sourceTitle: string | null = null;
+          let sourceThumb: string | null = null;
+          let sourceAuthor: string | null = null;
+          if (body.purpose === "구매") {
+            const meta = await invokeEdge<{
+              source_id?: string;
+              title?: string | null;
+              thumbnailUrl?: string | null;
+              authorName?: string | null;
+            }>(
+              "extract-url-metadata",
+              {
+                url: body.media_url,
+                persist_source: true,
+                price_krw: body.price_krw ?? null,
+                category: body.category ?? null,
+              },
+              jwt,
             );
+            if (meta.error || !meta.data?.source_id) {
+              return Response.json(
+                { error: "EXTRACT_META_FAILED", message: "상품 정보를 불러올 수 없어요.", details: meta.error },
+                { status: 502 },
+              );
+            }
+            sourceId = meta.data.source_id;
+            sourceTitle = meta.data.title ?? null;
+            sourceThumb = meta.data.thumbnailUrl ?? null;
+            sourceAuthor = meta.data.authorName ?? null;
+          } else {
+            const meta = await invokeEdge<{
+              source_id: string;
+              title: string;
+              thumbnail_url: string;
+              author_name: string;
+            }>("extract-meta", { url: body.media_url }, jwt);
+            if (meta.error || !meta.data) {
+              return Response.json(
+                { error: "EXTRACT_META_FAILED", message: "영상 정보를 불러올 수 없어요.", details: meta.error },
+                { status: 502 },
+              );
+            }
+            sourceId = meta.data.source_id;
+            sourceTitle = meta.data.title ?? null;
+            sourceThumb = meta.data.thumbnail_url ?? null;
+            sourceAuthor = meta.data.author_name ?? null;
           }
-          const sourceId = meta.data.source_id;
 
           // 5. intent_id 결정 (intent_key 우선, 없으면 purpose 기반)
           let intentId: string | undefined;
@@ -187,9 +227,9 @@ export const Route = createFileRoute("/api/drops/")({
             },
             source: {
               id: sourceId,
-              title: meta.data.title,
-              thumbnail_url: meta.data.thumbnail_url,
-              author_name: meta.data.author_name,
+              title: sourceTitle,
+              thumbnail_url: sourceThumb,
+              author_name: sourceAuthor,
             },
             ai: {
               summary: summary.data?.ai_summary ?? null,
