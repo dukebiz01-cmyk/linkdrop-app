@@ -154,6 +154,26 @@ function CreateWizardPage() {
             curator_message: data.makerMessage || null,
             // chunk1 1d — 탐색 카드에서 진입한 경우 본인 매장 자동 연결.
             ...(search.partner_id ? { partner_id: search.partner_id } : {}),
+            // F2 커머스(구매) — price_krw/category 는 content_sources 에 persist(Slice 1),
+            //   가격/상품명은 렌더용 product 블록으로도 운반(get_drop_detail 이 source.price_krw
+            //   를 노출하지 않으므로). 이미지/구매링크는 source(thumbnail_url/source_url) 사용.
+            ...(data.purpose === "구매"
+              ? {
+                  price_krw: data.priceKrw ?? null,
+                  category: data.category ?? null,
+                  blocks: [
+                    {
+                      block_kind: "product",
+                      block_data: {
+                        name: data.productName ?? null,
+                        price_krw: data.priceKrw ?? null,
+                        buy_url: data.video.url,
+                      },
+                      position: 0,
+                    },
+                  ],
+                }
+              : {}),
           }),
         });
         const json = (await res.json()) as {

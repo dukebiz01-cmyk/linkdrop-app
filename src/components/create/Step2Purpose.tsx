@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Check, Gift, Sparkles } from "lucide-react";
+import { BookOpen, Check, Gift, ShoppingBag, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { CardShell } from "@/components/cards/CardShell";
 import type { CardConfig } from "@/components/cards/types";
@@ -33,6 +33,14 @@ const WIZARD_PURPOSES: {
     description: "할인·쿠폰·기간 혜택, 매장 예약 자동 연결",
     icon: Gift,
     stripClass: "bg-intent-coupon-strip",
+  },
+  // F1 커머스 — 사업자 전용. 아래 visiblePurposes 필터(isBusiness)가 비사업자에겐 자동 숨김.
+  {
+    purpose: "구매",
+    label: "상품 판매",
+    description: "상품 링크로 가격·후기 카드 만들기",
+    icon: ShoppingBag,
+    stripClass: "bg-intent-commerce-strip",
   },
 ];
 

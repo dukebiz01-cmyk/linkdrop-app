@@ -12,7 +12,7 @@ import {
   Lock,
   Sprout,
 } from "lucide-react";
-import { fetchVideoMetadata, parseVideoUrl } from "@/lib/video-metadata";
+import { fetchVideoMetadata, parseVideoUrl, isHttpUrl } from "@/lib/video-metadata";
 
 // ============================================================
 // v0.26 home page (링크우선 + 3목적 + v1.1 카피)
@@ -79,10 +79,10 @@ const PURPOSES = [
   },
   {
     id: "purchase" as const,
-    label: "산지직송 팔기",
+    label: "상품 판매",
     description: "농수산물을 시세·쿠폰과 함께 카드로 올려 팔아요",
     icon: Sprout,
-    tag: "산지직송 · 시세",
+    tag: "직거래 · 시세",
     buttons: ["구매하기", "쿠폰 받기", "후기 보기"],
   },
 ];
@@ -167,8 +167,15 @@ export function HomePageV3({
     }
   }
 
+  // F1 커머스 게이트(추가형) — 구매(purchase)는 영상 메타 fetch 없이 http/https 상품 URL
+  //   만으로 진행. 그 외 목적은 기존 영상 게이트(videoPreview) 그대로.
+  const isCommerce = selectedPurpose === "purchase";
+  const canProceedHome = isCommerce
+    ? isHttpUrl(videoUrl) && selectedPurpose !== null
+    : videoPreview !== null && selectedPurpose !== null;
+
   function handleCreateDrop() {
-    if (videoPreview && selectedPurpose) {
+    if (canProceedHome && selectedPurpose) {
       onCreateDrop(videoUrl, selectedPurpose);
     }
   }
@@ -461,23 +468,23 @@ export function HomePageV3({
           <button
             type="button"
             onClick={handleCreateDrop}
-            disabled={!videoPreview || !selectedPurpose}
+            disabled={!canProceedHome}
             className={`group relative flex items-center gap-2.5 overflow-hidden rounded-full px-8 py-4 transition-all duration-300 ${
-              videoPreview && selectedPurpose
+              canProceedHome
                 ? "bg-[#0A0A0A] shadow-[0_4px_16px_rgba(15,23,42,0.25)] hover:bg-[#171717] active:scale-[0.98]"
                 : "bg-[#E5E5E5]"
             }`}
           >
             <Sparkles
               className={`relative h-5 w-5 ${
-                videoPreview && selectedPurpose ? "text-white" : "text-[#A3A3A3]"
+                canProceedHome ? "text-white" : "text-[#A3A3A3]"
               }`}
               strokeWidth={1.75}
             />
 
             <span
               className={`relative text-base font-bold ${
-                videoPreview && selectedPurpose ? "text-white" : "text-[#A3A3A3]"
+                canProceedHome ? "text-white" : "text-[#A3A3A3]"
               }`}
             >
               Drop 만들기
@@ -485,7 +492,7 @@ export function HomePageV3({
 
             <ArrowRight
               className={`relative h-5 w-5 transition-transform duration-200 ${
-                videoPreview && selectedPurpose
+                canProceedHome
                   ? "text-white group-hover:translate-x-0.5"
                   : "text-[#A3A3A3]"
               }`}
@@ -494,9 +501,17 @@ export function HomePageV3({
           </button>
         </section>
 
-        {(!videoPreview || !selectedPurpose) && (
+        {!canProceedHome && (
           <p className="mt-3 text-center text-xs text-[#A3A3A3]">
-            {!videoPreview ? "링크를 먼저 넣어주세요" : "목적을 선택해 주세요"}
+            {!selectedPurpose
+              ? videoUrl.trim()
+                ? "목적을 선택해 주세요"
+                : "링크를 먼저 넣어주세요"
+              : isCommerce
+                ? "상품 링크(http/https)를 넣어주세요"
+                : !videoPreview
+                  ? "링크를 먼저 넣어주세요"
+                  : "목적을 선택해 주세요"}
           </p>
         )}
 

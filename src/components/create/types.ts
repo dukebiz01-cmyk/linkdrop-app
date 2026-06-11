@@ -54,6 +54,10 @@ export interface CreateDropWizardProps {
     makerMessage: string;
     /** v5.12 — 메이커가 위저드에서 선택한 funnel coupon id (쿠폰 목적만). */
     selectedFunnelCouponId?: string | null;
+    /** F2 커머스(구매) — 가격(원)/상품명/카테고리. 구매 목적에서만 채워진다. */
+    priceKrw?: number | null;
+    productName?: string | null;
+    category?: string | null;
   }) => Promise<{ shareUuid: string; shareUrl: string }>;
 }
 

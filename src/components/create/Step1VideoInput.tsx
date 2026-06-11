@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { StepBadge } from "@/components/create/StepBadge";
 import type { VideoInfo } from "@/components/create/types";
 import type { VideoMetadataFetchedBy } from "@/lib/video-metadata";
+import type { DropPurpose } from "@/lib/types";
 
 function platformLabel(platform: VideoInfo["platform"]): string {
   return platform === "youtube" ? "YouTube" : "Instagram";
@@ -29,13 +30,17 @@ export function Step1UrlInput({
   status,
   videoInfo,
   metadataFetchedBy,
+  purpose,
 }: {
   value: string;
   onChange: (v: string) => void;
   status: "idle" | "loading" | "success" | "error";
   videoInfo: VideoInfo | null;
   metadataFetchedBy: VideoMetadataFetchedBy | null;
+  /** F2 — 구매(커머스)면 상품 링크 맥락 UI 로 분기. 그 외/미지정은 영상 UI 그대로. */
+  purpose?: DropPurpose;
 }) {
+  const isCommerce = purpose === "구매";
   const [thumbBroken, setThumbBroken] = useState(false);
 
   useEffect(() => {
@@ -55,12 +60,18 @@ export function Step1UrlInput({
       <main className="flex-1 px-6 pb-32 pt-2">
         <StepBadge n={1} />
         <h1 className="mt-3 text-2xl font-extrabold tracking-ko text-text-strong">
-          보낼 영상 링크를 넣어주세요
+          {isCommerce ? "판매할 상품 링크를 넣어주세요" : "보낼 영상 링크를 넣어주세요"}
         </h1>
         <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
-          유튜브나 인스타에서 [공유] → [링크 복사] 후
-          <br />
-          아래에 붙여넣으면 AI가 Drop을 만들어줘요.
+          {isCommerce ? (
+            "스마트스토어 등 상품 페이지 링크를 붙여넣으면 카드로 만들어요."
+          ) : (
+            <>
+              유튜브나 인스타에서 [공유] → [링크 복사] 후
+              <br />
+              아래에 붙여넣으면 AI가 Drop을 만들어줘요.
+            </>
+          )}
         </p>
 
         <div className="mt-6 flex gap-2">
@@ -73,7 +84,7 @@ export function Step1UrlInput({
               type="url"
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              placeholder="https://youtu.be/..."
+              placeholder={isCommerce ? "https://smartstore.naver.com/..." : "https://youtu.be/..."}
               className="h-14 min-w-0 rounded-lg border-border pl-12 pr-10 font-mono text-sm placeholder:font-sans placeholder:text-text-subtle"
             />
             {value && (
@@ -112,7 +123,7 @@ export function Step1UrlInput({
           </div>
         )}
 
-        {status === "error" && (
+        {status === "error" && !isCommerce && (
           <div className="mt-4 flex items-center gap-3 rounded-lg border border-intent-danger/30 bg-intent-danger-bg p-4">
             <AlertCircle className="size-5 text-intent-danger" strokeWidth={2} />
             <span className="text-sm font-medium tracking-ko text-intent-danger">
@@ -121,7 +132,14 @@ export function Step1UrlInput({
           </div>
         )}
 
-        {status === "success" && videoInfo && (
+        {/* F2 커머스 — 상품 링크는 영상 메타가 없어 미리보기 대신 간단 확인 문구만. */}
+        {isCommerce && value.trim() && (
+          <p className="mt-4 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
+            상품 링크가 입력됐어요. 다음 단계에서 가격을 정해요.
+          </p>
+        )}
+
+        {status === "success" && videoInfo && !isCommerce && (
           <>
             {metadataUsesFallback(metadataFetchedBy) && (
               <p className="mt-4 text-sm font-medium leading-relaxed tracking-ko text-text-muted">

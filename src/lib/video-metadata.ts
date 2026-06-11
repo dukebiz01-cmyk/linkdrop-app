@@ -87,6 +87,21 @@ export function parseVideoUrl(url: string): ParsedVideoUrl | null {
   return null;
 }
 
+/**
+ * 커머스(상품 URL) 게이트용 — 영상 전용 parseVideoUrl 과 별개로 임의 http/https URL 검증.
+ * YouTube/Instagram 패턴을 요구하지 않는다. F1: 구매(커머스) 목적 분기에서만 사용.
+ */
+export function isHttpUrl(input: string): boolean {
+  const normalized = normalizeInputUrl(input);
+  if (!normalized) return false;
+  try {
+    const u = new URL(normalized);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function youtubeThumbnailUrl(videoId: string): string {
   return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 }

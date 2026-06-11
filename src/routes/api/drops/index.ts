@@ -205,16 +205,10 @@ export const Route = createFileRoute("/api/drops/")({
             jwt,
           );
 
-          // 8. detect-product (구매 목적만)
-          let productDetectionId: string | undefined;
-          if (body.purpose === "구매") {
-            const prod = await invokeEdge<{ detection_id?: string }>(
-              "detect-product",
-              { source_id: sourceId, drop_id: info_drop_id, user_id: user.id },
-              jwt,
-            );
-            productDetectionId = prod.data?.detection_id;
-          }
+          // 커머스: detect-product 비활성 — 가짜 오퍼 방지, KAMIS 시세로 Slice 2 대체.
+          //   (구매 드롭은 상품 URL 소스가 진실원천 — AI 상품탐지/가격비교 미사용.)
+          //   정보/쿠폰/예약은 원래 detect-product 미실행이라 영향 없음.
+          const productDetectionId: string | undefined = undefined;
 
           // 9. 응답
           return Response.json({

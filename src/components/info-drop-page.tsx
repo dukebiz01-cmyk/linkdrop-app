@@ -64,6 +64,13 @@ export interface InfoDropPageProps {
   productName?: string;
   brandGuess?: string;
   priceOffers?: PriceOfferRow[];
+  /** F2 커머스(구매) — 시세·쿠폰 없는 단순 상품 카드. 있으면 시세(AI 가격비교) 대신 렌더. */
+  commerce?: {
+    name: string;
+    priceKrw: number | null;
+    buyUrl: string;
+    imageUrl: string;
+  };
   local: {
     name: string;
     category: string;
@@ -540,6 +547,7 @@ export function InfoDropPage({
   productName,
   brandGuess,
   priceOffers,
+  commerce,
   local,
   creator,
   aiSummary,
@@ -780,6 +788,9 @@ export function InfoDropPage({
         {/* 2. 영상 카드 — 유튜브: lite embed(facade→iframe), 그 외: 썸네일 + onWatchOriginal.
             세로(쇼츠) 영상은 max-h cap 으로 화면을 다 먹지 않게 (히어로 유지 + 하단
             CTA 도달성). 가로(16:9) 는 자연 비율이라 cap 영향 거의 없음. */}
+        {/* F2 커머스 — 영상 헤더(썸네일+원본영상 프레임) 숨김. 상품 카드가 이미지 보유.
+            commerce 일 때만 숨기고, 영상/정보/쿠폰/예약 드롭은 그대로(회귀 없음). */}
+        {!commerce && (
         <section
           className={cn(
             "overflow-hidden rounded-2xl border border-border bg-bg",
@@ -844,6 +855,7 @@ export function InfoDropPage({
             <p className="text-xs font-medium text-text-subtle">{safeCreator.channelName}</p>
           </div>
         </section>
+        )}
 
         {makerMessage && (
           <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium italic leading-relaxed tracking-ko text-text-muted">
@@ -1012,19 +1024,54 @@ export function InfoDropPage({
             );
           })()}
 
-        {resolvedVariant === "purchase" && (
-          <section data-testid="variant-purchase">
-            <AiPriceComparisonCard
-              productName={productName ?? safeTitle}
-              brandGuess={brandGuess}
-              offers={priceOffers ?? []}
-              className="mx-0 mt-0"
-              onOfferClick={(_id) => {
-                handleCtaClick("seller");
-              }}
-            />
-          </section>
-        )}
+        {resolvedVariant === "purchase" &&
+          (commerce ? (
+            // F2 커머스 — 시세·쿠폰 없는 단순 상품 카드(이미지=source, 가격/이름=block, 구매=source url).
+            <section data-testid="variant-purchase" className="w-full max-w-full">
+              <div className="overflow-hidden rounded-2xl border border-border bg-bg">
+                {commerce.imageUrl ? (
+                  <img src={commerce.imageUrl} alt="" className="aspect-[4/3] w-full object-cover" />
+                ) : null}
+                <div className="space-y-3 p-4">
+                  <p className="text-base font-bold leading-snug tracking-ko text-text-strong">
+                    {commerce.name || safeTitle}
+                  </p>
+                  <p className="text-xl font-extrabold tracking-ko text-text-strong">
+                    {commerce.priceKrw != null
+                      ? `${commerce.priceKrw.toLocaleString("ko-KR")}원`
+                      : "가격 미정"}
+                  </p>
+                  <ActionButton
+                    type="button"
+                    className="w-full"
+                    onClick={() => {
+                      if (
+                        typeof window !== "undefined" &&
+                        commerce.buyUrl &&
+                        commerce.buyUrl !== "#"
+                      ) {
+                        window.open(commerce.buyUrl, "_blank", "noopener,noreferrer");
+                      }
+                    }}
+                  >
+                    구매하기
+                  </ActionButton>
+                </div>
+              </div>
+            </section>
+          ) : (
+            <section data-testid="variant-purchase">
+              <AiPriceComparisonCard
+                productName={productName ?? safeTitle}
+                brandGuess={brandGuess}
+                offers={priceOffers ?? []}
+                className="mx-0 mt-0"
+                onOfferClick={(_id) => {
+                  handleCtaClick("seller");
+                }}
+              />
+            </section>
+          ))}
 
         {resolvedVariant === "lead" && <ConsultationLeadForm partnerName={safeLocal.name} />}
 

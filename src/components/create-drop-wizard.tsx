@@ -28,6 +28,7 @@ import { shareToKakao } from "@/lib/kakao";
 import {
   fetchVideoMetadata,
   parseVideoUrl,
+  isHttpUrl,
   type VideoMetadata,
   type VideoMetadataFetchedBy,
 } from "@/lib/video-metadata";
@@ -39,6 +40,7 @@ import { Step2PurposeSelect } from "@/components/create/Step2Purpose";
 import { Step4DropPreview } from "@/components/create/Step4DropPreview";
 import { Step5PurposeShare } from "@/components/create/Step5Share";
 import { Step3Options } from "@/components/create/step3/Step3Options";
+import { Step3Commerce } from "@/components/create/step3/Step3Commerce";
 import {
   aiPreviewFromPurpose,
   buildWizardShareData,
@@ -207,6 +209,9 @@ export function CreateDropWizard({
   const isPurposePrefilled = Boolean(initialPurpose);
   const [step3DetailId, setStep3DetailId] = useState<Step3DetailId | null>(null);
   const [step3Fields, setStep3Fields] = useState<Step3FieldState>(createEmptyStep3Fields);
+  // F2 커머스(구매) — 가격(필수)/상품명(선택). 상품은 영상 메타가 없어 별도 state.
+  const [commercePrice, setCommercePrice] = useState("");
+  const [commerceName, setCommerceName] = useState("");
   // v5.12 — 쿠폰 목적에서 메이커가 선택한 funnel coupon id. onComplete 시 전달.
   const [selectedFunnelCouponId, setSelectedFunnelCouponId] = useState<string | null>(null);
   const [aiPreview, setAiPreview] = useState<AiPreviewData | null>(null);
@@ -323,6 +328,28 @@ export function CreateDropWizard({
     };
   }, [url]);
 
+  // F2 커머스 — 상품 URL 은 영상 메타가 없으므로 최소 videoInfo 를 합성한다.
+  //   영상 useEffect 와 분리(추가형). 이 effect 가 뒤에 선언돼 구매 시 videoInfo 를 확정한다.
+  //   (영상 목적이면 early-return 으로 영상 경로 무영향.)
+  useEffect(() => {
+    if (purpose !== "구매") return;
+    const trimmed = url.trim();
+    if (!isHttpUrl(trimmed)) {
+      setVideoInfo(null);
+      setUrlStatus("idle");
+      return;
+    }
+    setUrlStatus("success");
+    setVideoInfo({
+      url: trimmed,
+      thumbnailUrl: "",
+      title: commerceName.trim() || "상품",
+      channelName: "",
+      duration: "",
+      platform: "youtube", // placeholder — 커머스 카드는 플랫폼 라벨 미사용
+    });
+  }, [purpose, url, commerceName]);
+
   function buildAiPreview(p: DropPurpose): AiPreviewData {
     const base = aiPreviewFromPurpose(p);
     const message = step3Fields.shareMessage.trim();
@@ -358,6 +385,10 @@ export function CreateDropWizard({
 
   function canProceed(): boolean {
     if (step === 1) {
+      // F1 커머스(구매) — 영상 메타 fetch(urlStatus) 없이 유효 http/https 상품 URL 로 통과.
+      if (purpose === "구매") {
+        return isHttpUrl(url.trim());
+      }
       // 옛 Step 1 + Step 2 조건 합 — 영상 fetch 성공 + 목적 선택.
       return (
         parseVideoUrl(url.trim()) !== null &&
@@ -372,6 +403,8 @@ export function CreateDropWizard({
       // phase1 FIX2: 쿠폰 분기는 매장 쿠폰 자동 연결로 dead 입력 UI 제거.
       //   detailId 게이트도 함께 해제 — 위저드에서 별도 선택 없이 진행.
       if (purpose === "쿠폰") return true;
+      // F2 커머스 — 가격(원) 입력 시 통과. 시세·쿠폰 없음.
+      if (purpose === "구매") return Number(commercePrice) > 0;
       return step3DetailId !== null;
     }
     return true; // step 3 = 마지막, sticky CTA 없음
@@ -391,6 +424,9 @@ export function CreateDropWizard({
       ai,
       makerMessage: message,
       selectedFunnelCouponId: purpose === "쿠폰" ? selectedFunnelCouponId : null,
+      priceKrw: purpose === "구매" && Number(commercePrice) > 0 ? Number(commercePrice) : null,
+      productName: purpose === "구매" ? commerceName.trim() || null : null,
+      category: purpose === "구매" ? "농수산물" : null,
     });
     savingRef.current = promise;
     try {
@@ -532,6 +568,7 @@ export function CreateDropWizard({
             status={urlStatus}
             videoInfo={videoInfo}
             metadataFetchedBy={metadataFetchedBy}
+            purpose={purpose ?? undefined}
           />
           <Step2PurposeSelect
             selected={purpose}
@@ -543,8 +580,17 @@ export function CreateDropWizard({
           />
         </>
       )}
-      {/* 새 Step 2 = 옛 Step 3 (목적별 디테일, 내용 그대로). */}
-      {step === 2 && purpose && (
+      {/* F2 커머스(구매) — 옛 Step3 generic 대신 가격/상품명 전용 Step. */}
+      {step === 2 && purpose === "구매" && (
+        <Step3Commerce
+          price={commercePrice}
+          onPriceChange={setCommercePrice}
+          name={commerceName}
+          onNameChange={setCommerceName}
+        />
+      )}
+      {/* 새 Step 2 = 옛 Step 3 (목적별 디테일, 내용 그대로). 구매는 위 커머스 Step 사용. */}
+      {step === 2 && purpose && purpose !== "구매" && (
         <Step3Options
           purpose={purpose}
           detailId={step3DetailId}

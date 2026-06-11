@@ -136,6 +136,33 @@ function toPriceOffers(
   });
 }
 
+/**
+ * F2 커머스 — 구매 드롭의 단순 상품 카드 데이터.
+ *   이미지/구매링크 = source(thumbnail_url/source_url), 가격/이름 = product 블록(block_data).
+ *   get_drop_detail 이 source.price_krw 를 노출하지 않아 가격은 블록으로 운반한다.
+ *   시세·쿠폰 없음(다음 슬라이스). 구매 목적이 아니면 undefined.
+ */
+function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
+  if (d.drop.purpose !== "구매") return undefined;
+  const blocks = Array.isArray(d.blocks) ? d.blocks : [];
+  const pb = blocks.find(
+    (b): b is { block_kind?: string; block_data?: Record<string, unknown> } =>
+      !!b && typeof b === "object" && (b as { block_kind?: string }).block_kind === "product",
+  );
+  const data = (pb?.block_data ?? {}) as { name?: unknown; price_krw?: unknown };
+  const priceKrw = typeof data.price_krw === "number" ? data.price_krw : null;
+  const name =
+    typeof data.name === "string" && data.name.trim()
+      ? data.name.trim()
+      : (d.source.title ?? "");
+  return {
+    name,
+    priceKrw,
+    buyUrl: d.source.source_url ?? "#",
+    imageUrl: d.source.thumbnail_url ?? "",
+  };
+}
+
 /** get_drop_detail RPC 출력 → InfoDropPage props. */
 export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
   const product = d.products?.[0];
@@ -160,6 +187,7 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     productName: product?.product_name_guess ?? undefined,
     brandGuess: product?.brand_guess ?? undefined,
     priceOffers: product ? toPriceOffers(product.offers) : undefined,
+    commerce: buildCommerce(d),
     local: {
       name: d.store?.name ?? "",
       category: d.store?.kind ?? "공유된 정보",
@@ -170,7 +198,8 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
       phone: d.store?.phone ?? "",
     },
     creator: {
-      channelName: d.source.author_name ?? "원본 영상",
+      // 커머스(구매): "원본 영상" 프레이밍 제거 — 판매자명(author_name) 없으면 생략(빈값).
+      channelName: d.source.author_name ?? (d.drop.purpose === "구매" ? "" : "원본 영상"),
       channelUrl: d.source.source_url ?? "#",
     },
     aiSummary: d.drop.ai_summary ?? undefined,
