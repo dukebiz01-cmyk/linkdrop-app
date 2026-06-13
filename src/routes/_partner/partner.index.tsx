@@ -1,11 +1,9 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
   Calendar,
   Users,
-  Phone,
-  MessageSquare,
   CheckCircle2,
   XCircle,
   Ticket,
@@ -25,22 +23,6 @@ import { shareToKakao } from "@/lib/kakao";
 import { Toaster } from "@/components/ui/sonner";
 import { StoreProfileCard, type AllianceActiveCoupon } from "@/components/partner/StoreProfileCard";
 import { haversineKm, formatDistanceKm } from "@/lib/geo";
-
-type ReservationRow = {
-  reservation_id: string;
-  drop_id: string | null;
-  calendar_mode: string | null;
-  reserved_date: string | null;
-  time_slot: string | null;
-  check_in_date: string | null;
-  check_out_date: string | null;
-  guest_count: number | null;
-  status: string | null;
-  customer_name: string | null;
-  phone_last4: string | null;
-  customer_message: string | null;
-  created_at: string | null;
-};
 
 // 받은 제휴 요청 — maker_connections(target=내 partner, pending) + 요청자 partner 요약.
 type IncomingRequest = {
@@ -67,7 +49,6 @@ type LoaderData = {
   partnerId: string | null;
   partnerName: string | null;
   partnerSlug: string | null; // 명함 공유 URL (없으면 id fallback)
-  reservations: ReservationRow[];
   // 매장 프로필 카드(명함) — 전부 기존 데이터/RPC 조합, DB 변경 없음.
   verificationStatus: string | null;
   businessTypeLabel: string | null; // 업종 한글 (business_categories depth=1 재사용)
@@ -82,14 +63,13 @@ type LoaderData = {
 };
 
 export const Route = createFileRoute("/_partner/partner/")({
-  head: () => ({ meta: [{ title: "들어온 예약 — LinkDrop" }] }),
+  head: () => ({ meta: [{ title: "매장 관리 — LinkDrop" }] }),
   loader: async (): Promise<LoaderData> => {
     const empty: LoaderData = {
       ownerUserId: null,
       partnerId: null,
       partnerName: null,
       partnerSlug: null,
-      reservations: [],
       verificationStatus: null,
       businessTypeLabel: null,
       partnerKind: null,
@@ -120,20 +100,19 @@ export const Route = createFileRoute("/_partner/partner/")({
       return { ...empty, ownerUserId };
     }
 
-    // 6개 병렬: 예약 / 구독수(maker_follows active count, partner_owner SELECT RLS) /
+    // 5개 병렬: 구독수(maker_follows active count, partner_owner SELECT RLS) /
     //   활성 쿠폰(get_active_store_coupons) / 업종 한글(business_categories depth=1, 등록화면 재사용) /
     //   받은 제휴 요청(maker_connections target=내 partner, pending + 요청자 partner 임베드) /
     //   내 동맹(maker_connections accepted, 나=requester|target, 양쪽 FK 임베드).
+    //   예약 inbox 는 /partner/reservations 로 분리(Phase 1).
     const allyFields = "id, display_name, slug, business_type, partner_kind, address, lat, lng";
     const [
-      { data: reservations },
       { count: subscriberCount },
       { data: activeCouponsRaw },
       { data: majors },
       { data: incomingRaw },
       { data: acceptedRaw },
     ] = await Promise.all([
-      supabase.rpc("get_partner_reservations", { p_partner_id: partner.id }),
       supabase
         .from("maker_follows")
         .select("*", { count: "exact", head: true })
@@ -238,7 +217,6 @@ export const Route = createFileRoute("/_partner/partner/")({
       partnerId: partner.id,
       partnerName: partner.display_name ?? null,
       partnerSlug: partner.slug ?? null,
-      reservations: (reservations as ReservationRow[] | null) ?? [],
       verificationStatus: partner.verification_status ?? null,
       businessTypeLabel,
       partnerKind: partner.partner_kind ?? null,
@@ -252,87 +230,14 @@ export const Route = createFileRoute("/_partner/partner/")({
   component: PartnerHome,
 });
 
-function formatDateRange(row: ReservationRow): string {
-  if (row.check_in_date && row.check_out_date) {
-    return `${formatDate(row.check_in_date)} ~ ${formatDate(row.check_out_date)}`;
-  }
-  if (row.reserved_date) {
-    const time = row.time_slot ? ` ${row.time_slot}` : "";
-    return `${formatDate(row.reserved_date)}${time}`;
-  }
-  return "날짜 미정";
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const y = String(d.getFullYear()).slice(2);
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}.${m}.${day}`;
-}
-
 function PartnerHome() {
   const data = Route.useLoaderData();
-  const router = useRouter();
-  const [actingId, setActingId] = useState<string | null>(null);
-  // 처리 끝남 목록 접기/펼치기 — 기본 5건만, 더보기로 전체.
-  const [othersExpanded, setOthersExpanded] = useState(false);
   // 받은 제휴 요청 — 로컬 상태(수락/거절 시 즉시 제거).
   const [incoming, setIncoming] = useState<IncomingRequest[]>(data.incomingRequests);
   const [reqBusyId, setReqBusyId] = useState<string | null>(null);
   // 내 제휴 파트너 — 로컬 상태(제휴 해제 시 즉시 제거).
   const [allies, setAllies] = useState<Ally[]>(data.allies);
   const [endingId, setEndingId] = useState<string | null>(null);
-
-  const pending = data.reservations.filter((r) => r.status === "pending");
-  const others = data.reservations.filter((r) => r.status !== "pending");
-  const OTHERS_PREVIEW = 5;
-  const visibleOthers = othersExpanded ? others : others.slice(0, OTHERS_PREVIEW);
-
-  async function handleConfirm(reservationId: string) {
-    setActingId(reservationId);
-    try {
-      const { error } = await getSupabase().rpc("confirm_reservation", {
-        p_reservation_id: reservationId,
-        p_partner_message: "",
-      });
-      if (error) {
-        console.error("[partner.index] confirm_reservation failed:", error);
-        toast.error("확정 처리에 실패했어요. 잠시 후 다시 시도해 주세요.");
-        return;
-      }
-      toast.success("예약을 확정했어요.");
-      await router.invalidate();
-    } catch (err) {
-      console.error("[partner.index] confirm unexpected:", err);
-      toast.error("처리 중 문제가 생겼어요.");
-    } finally {
-      setActingId(null);
-    }
-  }
-
-  async function handleReject(reservationId: string) {
-    setActingId(reservationId);
-    try {
-      const { error } = await getSupabase().rpc("reject_reservation", {
-        p_reservation_id: reservationId,
-        p_reason: "",
-      });
-      if (error) {
-        console.error("[partner.index] reject_reservation failed:", error);
-        toast.error("거절 처리에 실패했어요. 잠시 후 다시 시도해 주세요.");
-        return;
-      }
-      toast.success("예약을 거절했어요.");
-      await router.invalidate();
-    } catch (err) {
-      console.error("[partner.index] reject unexpected:", err);
-      toast.error("처리 중 문제가 생겼어요.");
-    } finally {
-      setActingId(null);
-    }
-  }
 
   // 명함 공유 — /alliance/{slug} (없으면 {id}) 절대 URL 클립보드 복사 + 가능하면 카톡.
   async function handleShareCard() {
@@ -632,177 +537,25 @@ function PartnerHome() {
           <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
         </Link>
 
-        {/* 새로운 예약 (pending) — 미처리 개수 빨강 배지. 0이면 배지 없음 + 빈 상태. */}
-        <section>
-          <div className="mb-2 flex items-center gap-2 px-1">
-            <h2 className="text-sm font-semibold text-[#0A0A0A]">새로운 예약</h2>
-            {pending.length > 0 ? (
-              <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#EF4444] px-1.5 text-[11px] font-bold text-white">
-                {pending.length}
-              </span>
-            ) : null}
-          </div>
-          {pending.length === 0 ? (
-            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 text-center">
-              <p className="text-sm text-[#64748B]">새로 들어온 예약이 없어요.</p>
+        {/* 예약관리 — 들어온 예약 inbox 는 /partner/reservations 로 분리(Phase 1). */}
+        <Link
+          to="/partner/reservations"
+          className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-[#FAFAFA]">
+              <Calendar className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-[#0F172A]">예약관리</p>
+              <p className="mt-0.5 text-xs text-[#64748B]">들어온 예약을 확인하고 처리해요</p>
             </div>
-          ) : (
-            <ul className="space-y-3">
-              {pending.map((r) => (
-                <ReservationCard
-                  key={r.reservation_id}
-                  row={r}
-                  acting={actingId === r.reservation_id}
-                  onConfirm={handleConfirm}
-                  onReject={handleReject}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* 처리 끝난 예약 (confirmed/rejected/completed) — 기본 5건만, 더보기로 전체.
-            정렬은 로더(get_partner_reservations, created_at DESC) 그대로. */}
-        {others.length > 0 ? (
-          <section>
-            <h2 className="mb-2 px-1 text-sm font-semibold text-[#0A0A0A]">
-              처리 끝남 ({others.length})
-            </h2>
-            <ul className="space-y-3">
-              {visibleOthers.map((r) => (
-                <ReservationCard key={r.reservation_id} row={r} />
-              ))}
-            </ul>
-            {others.length > OTHERS_PREVIEW ? (
-              <button
-                type="button"
-                onClick={() => setOthersExpanded((v) => !v)}
-                className="mt-3 flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-4 text-sm font-semibold text-[#0A0A0A] hover:bg-[#FAFAFA]"
-              >
-                {othersExpanded ? "접기" : `더보기 (${others.length - OTHERS_PREVIEW}건)`}
-              </button>
-            ) : null}
-          </section>
-        ) : null}
+          </div>
+          <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
+        </Link>
       </div>
 
       <Toaster richColors position="top-center" />
     </main>
-  );
-}
-
-// created_at → "M.D" (로컬, formatDate 와 동일 기준). "M.D 신청" 표기용.
-function formatMonthDay(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getMonth() + 1}.${d.getDate()}`;
-}
-
-// 예약 상태 배지 — pending=대기/amber, confirmed=확정/green, rejected=거절/회색, completed=완료/회색.
-function StatusBadge({ status }: { status: string | null }) {
-  if (status === "pending") {
-    return (
-      <span className="inline-flex items-center rounded-full bg-[#FFFBEB] px-2 py-0.5 text-[11px] font-bold text-[#B45309]">
-        대기
-      </span>
-    );
-  }
-  if (status === "confirmed") {
-    return (
-      <span className="inline-flex items-center rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[11px] font-bold text-[#059669]">
-        확정
-      </span>
-    );
-  }
-  const label =
-    status === "rejected" ? "거절" : status === "completed" ? "완료" : (status ?? "상태");
-  return (
-    <span className="inline-flex items-center rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[11px] font-bold text-[#94A3B8]">
-      {label}
-    </span>
-  );
-}
-
-// 예약 카드 — 상태배지+신청일 / 날짜·슬롯 / 손님·인원 / 메모. pending 만 수락(검정)·거절(아웃라인).
-// 데이터 출처(get_partner_reservations)·수락/거절 RPC 무변경.
-function ReservationCard({
-  row,
-  acting = false,
-  onConfirm,
-  onReject,
-}: {
-  row: ReservationRow;
-  acting?: boolean;
-  onConfirm?: (id: string) => void;
-  onReject?: (id: string) => void;
-}) {
-  const isPending = row.status === "pending";
-  return (
-    <li
-      className={`rounded-2xl border border-[#E5E7EB] bg-white p-4 ${isPending ? "" : "opacity-80"}`}
-    >
-      {/* 상단: 상태 배지 | 신청일(M.D) */}
-      <div className="flex items-center justify-between gap-2">
-        <StatusBadge status={row.status} />
-        {row.created_at ? (
-          <span className="shrink-0 text-xs font-medium text-[#94A3B8]">
-            {formatMonthDay(row.created_at)} 신청
-          </span>
-        ) : null}
-      </div>
-
-      {/* 날짜 / 슬롯 (calendar_mode 분기는 formatDateRange 가 처리) */}
-      <div className="mt-3 flex items-center gap-2 text-sm font-semibold text-[#0F172A]">
-        <Calendar className="size-4 text-[#0A0A0A]" strokeWidth={2} />
-        {formatDateRange(row)}
-      </div>
-
-      {/* 손님 · 인원 */}
-      <div className="mt-1.5 flex items-center gap-2 text-sm text-[#475569]">
-        <Users className="size-4 text-[#94A3B8]" strokeWidth={2} />
-        {row.customer_name?.trim() || "손님"}
-        {row.guest_count ? ` · ${row.guest_count}명` : ""}
-      </div>
-
-      {/* 전화 뒷자리 (있으면) */}
-      {row.phone_last4 ? (
-        <div className="mt-1.5 flex items-center gap-2 text-sm text-[#475569]">
-          <Phone className="size-4 text-[#94A3B8]" strokeWidth={2} />
-          뒷자리 {row.phone_last4}
-        </div>
-      ) : null}
-
-      {/* 손님 메모 (있으면, 2줄 클램프) */}
-      {row.customer_message?.trim() ? (
-        <div className="mt-1.5 flex gap-2 text-sm text-[#475569]">
-          <MessageSquare className="mt-0.5 size-4 shrink-0 text-[#94A3B8]" strokeWidth={2} />
-          <p className="line-clamp-2 min-w-0 whitespace-pre-line">{row.customer_message}</p>
-        </div>
-      ) : null}
-
-      {/* 액션 — pending 만. 수락=검정 채움 / 거절=아웃라인. RPC 로직 무변경. */}
-      {isPending && onConfirm && onReject ? (
-        <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => onReject(row.reservation_id)}
-            disabled={acting}
-            className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#D4D4D4] bg-white px-4 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC] disabled:opacity-50"
-          >
-            <XCircle className="size-4" strokeWidth={2} />
-            거절
-          </button>
-          <button
-            type="button"
-            onClick={() => onConfirm(row.reservation_id)}
-            disabled={acting}
-            className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white hover:bg-[#171717] disabled:opacity-50"
-          >
-            <CheckCircle2 className="size-4" strokeWidth={2} />
-            확정
-          </button>
-        </div>
-      ) : null}
-    </li>
   );
 }

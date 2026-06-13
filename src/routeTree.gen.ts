@@ -41,10 +41,10 @@ import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
 import { Route as UserResultsShareUuidRouteImport } from './routes/_user/results.$shareUuid'
 import { Route as UserCouponClaim_codeRouteImport } from './routes/_user/coupon.$claim_code'
 import { Route as PartnerPartnerResultsRouteImport } from './routes/_partner/partner.results'
+import { Route as PartnerPartnerReservationsRouteImport } from './routes/_partner/partner.reservations'
 import { Route as PartnerPartnerRegisterRouteImport } from './routes/_partner/partner.register'
 import { Route as PartnerPartnerRedeemRouteImport } from './routes/_partner/partner.redeem'
 import { Route as PartnerPartnerCouponsRouteImport } from './routes/_partner/partner.coupons'
-import { Route as PartnerPartnerCampaignsRouteImport } from './routes/_partner/partner.campaigns'
 import { Route as PartnerPartnerCalendarRouteImport } from './routes/_partner/partner.calendar'
 import { Route as PartnerPartnerBillingRouteImport } from './routes/_partner/partner.billing'
 import { Route as AdminAdminTrendsRouteImport } from './routes/_admin/admin.trends'
@@ -214,6 +214,12 @@ const PartnerPartnerResultsRoute = PartnerPartnerResultsRouteImport.update({
   path: '/partner/results',
   getParentRoute: () => PartnerRoute,
 } as any)
+const PartnerPartnerReservationsRoute =
+  PartnerPartnerReservationsRouteImport.update({
+    id: '/partner/reservations',
+    path: '/partner/reservations',
+    getParentRoute: () => PartnerRoute,
+  } as any)
 const PartnerPartnerRegisterRoute = PartnerPartnerRegisterRouteImport.update({
   id: '/partner/register',
   path: '/partner/register',
@@ -227,11 +233,6 @@ const PartnerPartnerRedeemRoute = PartnerPartnerRedeemRouteImport.update({
 const PartnerPartnerCouponsRoute = PartnerPartnerCouponsRouteImport.update({
   id: '/partner/coupons',
   path: '/partner/coupons',
-  getParentRoute: () => PartnerRoute,
-} as any)
-const PartnerPartnerCampaignsRoute = PartnerPartnerCampaignsRouteImport.update({
-  id: '/partner/campaigns',
-  path: '/partner/campaigns',
   getParentRoute: () => PartnerRoute,
 } as any)
 const PartnerPartnerCalendarRoute = PartnerPartnerCalendarRouteImport.update({
@@ -322,10 +323,10 @@ export interface FileRoutesByFullPath {
   '/admin/trends': typeof AdminAdminTrendsRoute
   '/partner/billing': typeof PartnerPartnerBillingRoute
   '/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
-  '/partner/campaigns': typeof PartnerPartnerCampaignsRoute
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
+  '/partner/reservations': typeof PartnerPartnerReservationsRoute
   '/partner/results': typeof PartnerPartnerResultsRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
@@ -368,10 +369,10 @@ export interface FileRoutesByTo {
   '/admin/trends': typeof AdminAdminTrendsRoute
   '/partner/billing': typeof PartnerPartnerBillingRoute
   '/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
-  '/partner/campaigns': typeof PartnerPartnerCampaignsRoute
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
+  '/partner/reservations': typeof PartnerPartnerReservationsRoute
   '/partner/results': typeof PartnerPartnerResultsRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
@@ -418,10 +419,10 @@ export interface FileRoutesById {
   '/_admin/admin/trends': typeof AdminAdminTrendsRoute
   '/_partner/partner/billing': typeof PartnerPartnerBillingRoute
   '/_partner/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
-  '/_partner/partner/campaigns': typeof PartnerPartnerCampaignsRoute
   '/_partner/partner/coupons': typeof PartnerPartnerCouponsRoute
   '/_partner/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/_partner/partner/register': typeof PartnerPartnerRegisterRoute
+  '/_partner/partner/reservations': typeof PartnerPartnerReservationsRoute
   '/_partner/partner/results': typeof PartnerPartnerResultsRoute
   '/_user/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/_user/results/$shareUuid': typeof UserResultsShareUuidRoute
@@ -466,10 +467,10 @@ export interface FileRouteTypes {
     | '/admin/trends'
     | '/partner/billing'
     | '/partner/calendar'
-    | '/partner/campaigns'
     | '/partner/coupons'
     | '/partner/redeem'
     | '/partner/register'
+    | '/partner/reservations'
     | '/partner/results'
     | '/coupon/$claim_code'
     | '/results/$shareUuid'
@@ -512,10 +513,10 @@ export interface FileRouteTypes {
     | '/admin/trends'
     | '/partner/billing'
     | '/partner/calendar'
-    | '/partner/campaigns'
     | '/partner/coupons'
     | '/partner/redeem'
     | '/partner/register'
+    | '/partner/reservations'
     | '/partner/results'
     | '/coupon/$claim_code'
     | '/results/$shareUuid'
@@ -561,10 +562,10 @@ export interface FileRouteTypes {
     | '/_admin/admin/trends'
     | '/_partner/partner/billing'
     | '/_partner/partner/calendar'
-    | '/_partner/partner/campaigns'
     | '/_partner/partner/coupons'
     | '/_partner/partner/redeem'
     | '/_partner/partner/register'
+    | '/_partner/partner/reservations'
     | '/_partner/partner/results'
     | '/_user/coupon/$claim_code'
     | '/_user/results/$shareUuid'
@@ -828,6 +829,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PartnerPartnerResultsRouteImport
       parentRoute: typeof PartnerRoute
     }
+    '/_partner/partner/reservations': {
+      id: '/_partner/partner/reservations'
+      path: '/partner/reservations'
+      fullPath: '/partner/reservations'
+      preLoaderRoute: typeof PartnerPartnerReservationsRouteImport
+      parentRoute: typeof PartnerRoute
+    }
     '/_partner/partner/register': {
       id: '/_partner/partner/register'
       path: '/partner/register'
@@ -847,13 +855,6 @@ declare module '@tanstack/react-router' {
       path: '/partner/coupons'
       fullPath: '/partner/coupons'
       preLoaderRoute: typeof PartnerPartnerCouponsRouteImport
-      parentRoute: typeof PartnerRoute
-    }
-    '/_partner/partner/campaigns': {
-      id: '/_partner/partner/campaigns'
-      path: '/partner/campaigns'
-      fullPath: '/partner/campaigns'
-      preLoaderRoute: typeof PartnerPartnerCampaignsRouteImport
       parentRoute: typeof PartnerRoute
     }
     '/_partner/partner/calendar': {
@@ -975,10 +976,10 @@ const PartnerPartnerCalendarRouteWithChildren =
 interface PartnerRouteChildren {
   PartnerPartnerBillingRoute: typeof PartnerPartnerBillingRoute
   PartnerPartnerCalendarRoute: typeof PartnerPartnerCalendarRouteWithChildren
-  PartnerPartnerCampaignsRoute: typeof PartnerPartnerCampaignsRoute
   PartnerPartnerCouponsRoute: typeof PartnerPartnerCouponsRoute
   PartnerPartnerRedeemRoute: typeof PartnerPartnerRedeemRoute
   PartnerPartnerRegisterRoute: typeof PartnerPartnerRegisterRoute
+  PartnerPartnerReservationsRoute: typeof PartnerPartnerReservationsRoute
   PartnerPartnerResultsRoute: typeof PartnerPartnerResultsRoute
   PartnerPartnerIndexRoute: typeof PartnerPartnerIndexRoute
   PartnerPartnerProductsNewRoute: typeof PartnerPartnerProductsNewRoute
@@ -988,10 +989,10 @@ interface PartnerRouteChildren {
 const PartnerRouteChildren: PartnerRouteChildren = {
   PartnerPartnerBillingRoute: PartnerPartnerBillingRoute,
   PartnerPartnerCalendarRoute: PartnerPartnerCalendarRouteWithChildren,
-  PartnerPartnerCampaignsRoute: PartnerPartnerCampaignsRoute,
   PartnerPartnerCouponsRoute: PartnerPartnerCouponsRoute,
   PartnerPartnerRedeemRoute: PartnerPartnerRedeemRoute,
   PartnerPartnerRegisterRoute: PartnerPartnerRegisterRoute,
+  PartnerPartnerReservationsRoute: PartnerPartnerReservationsRoute,
   PartnerPartnerResultsRoute: PartnerPartnerResultsRoute,
   PartnerPartnerIndexRoute: PartnerPartnerIndexRoute,
   PartnerPartnerProductsNewRoute: PartnerPartnerProductsNewRoute,
