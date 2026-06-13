@@ -4,6 +4,12 @@
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  // 리모트(prod) 라우트와 일치시켜 deploy 시 라우트 삭제 경고/사고 방지.
+  //   app.drop.how = 커스텀 도메인, drop.how/* = 단축링크 apex(zone: drop.how).
+  "routes": [
+    { "pattern": "drop.how/*", "zone_name": "drop.how" },
+    { "pattern": "app.drop.how", "zone_name": "drop.how", "custom_domain": true }
+  ],
   "kv_namespaces": [{ "binding": "KV", "id": "0198b72016874f44b8a908f8a5216524" }],
   "observability": {
     "enabled": false,
