@@ -15,7 +15,9 @@ import {
   Phone,
   MessageSquare,
   MapPin,
+  ShoppingCart,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AiPriceComparisonCard, type PriceOfferRow } from "@/components/ai-price-comparison-card";
 import { ActionButton } from "@/components/ActionButton";
 import { ErrorMessage } from "@/components/ErrorMessage";
@@ -23,7 +25,7 @@ import {
   WIZARD_PRIMARY_BUTTON_CLASS,
   WIZARD_SECONDARY_BUTTON_CLASS,
 } from "@/components/create-wizard-button-styles";
-import { PUBLIC_DROP_CTAS } from "@/components/public-drop-ctas";
+import { PUBLIC_DROP_CTAS, type PublicDropCta } from "@/components/public-drop-ctas";
 import type { DropPurpose } from "@/lib/types";
 import {
   MOCK_RESERVATION_CAMPGROUND_INFO,
@@ -70,7 +72,17 @@ export interface InfoDropPageProps {
     priceKrw: number | null;
     buyUrl: string;
     imageUrl: string;
+    /** S2b — 자체업로드 상품. true 면 구매버튼/CTA 가 "주문 문의(tel:)" 로 분기. */
+    selfUpload?: boolean;
   };
+  /** ③ 카드 담기 — 담은(관련) 상품. 본체 source 와 무관, 별도 "관련 상품" 섹션. */
+  attachedProducts?: Array<{
+    refDropId: string;
+    refShareUuid: string | null;
+    name: string;
+    priceKrw: number | null;
+    imageUrl: string | null;
+  }>;
   local: {
     name: string;
     category: string;
@@ -548,6 +560,7 @@ export function InfoDropPage({
   brandGuess,
   priceOffers,
   commerce,
+  attachedProducts,
   local,
   creator,
   aiSummary,
@@ -598,8 +611,15 @@ export function InfoDropPage({
   // phase1-3: 전화번호 없는 매장 → phone/sms CTA 카드 숨김 (빈 tel: 노출 방지).
   // phase1 FIX: 활성 매장 쿠폰 없는 매장 → coupon/reserve-coupon CTA 카드 숨김
   //   (둘 다 funnelCoupon 기반 펀넬 시트 트리거이므로 funnelCoupon=null 이면 dead).
-  const ctasRaw = PUBLIC_DROP_CTAS[resolvedVariant] ?? PUBLIC_DROP_CTAS.info;
   const hasPhone = Boolean(local?.phone?.trim());
+  // 자체업로드(manual) 구매카드는 커머스 카드 자체의 [구매하기] + 하단 공유 블록
+  //   (링크복사/카톡)으로 충분 → 중간 CTA(가격비교/구매처보기 등) 전부 제거.
+  //   식별 = commerce.selfUpload(합성 source_url prefix). 외부 스크랩 상품(selfUpload=false)은
+  //   기존 purchase 세트(가격비교/구매처/공유) 그대로 보존.
+  const isSelfUploadPurchase = resolvedVariant === "purchase" && Boolean(commerce?.selfUpload);
+  const ctasRaw: PublicDropCta[] = isSelfUploadPurchase
+    ? []
+    : (PUBLIC_DROP_CTAS[resolvedVariant] ?? PUBLIC_DROP_CTAS.info);
   const hasFunnelCoupon = Boolean(funnelCoupon);
   const ctas = ctasRaw.filter((c) => {
     if ((c.id === "phone" || c.id === "sms") && !hasPhone) return false;
@@ -735,9 +755,12 @@ export function InfoDropPage({
               {safeMaker.name}
               <span className="font-medium text-text-muted">님이 보냈어요</span>
             </p>
-            <p className="text-xs font-medium tracking-ko text-text-subtle">
-              LinkDrop으로 공유된 영상
-            </p>
+            {/* selfUpload(자체업로드 상품)은 영상이 아니므로 "공유된 영상" 라벨 숨김. */}
+            {!commerce?.selfUpload && (
+              <p className="text-xs font-medium tracking-ko text-text-subtle">
+                LinkDrop으로 공유된 영상
+              </p>
+            )}
           </div>
           {(officialStatus === "official" || officialStatus === "user_shared") && (
             <div
@@ -791,70 +814,70 @@ export function InfoDropPage({
         {/* F2 커머스 — 영상 헤더(썸네일+원본영상 프레임) 숨김. 상품 카드가 이미지 보유.
             commerce 일 때만 숨기고, 영상/정보/쿠폰/예약 드롭은 그대로(회귀 없음). */}
         {!commerce && (
-        <section
-          className={cn(
-            "overflow-hidden rounded-2xl border border-border bg-bg",
-            // 쇼츠(9:16) 만 width cap → 자식 aspect-[9/16] w-full 이 부모 width 따라
-            // height 결정. 70vh × (9/16) ≈ 394px 폭이 viewport 높이 기준 cap.
-            // (영상 전달력 우선 — primary CTA sticky 바로 분리해 도달성 별도 확보.)
-            isShorts && "mx-auto w-full max-w-[calc(70vh*9/16)]",
-          )}
-        >
-          {canEmbed && parsedVideo ? (
-            <YouTubeLiteEmbed
-              videoId={parsedVideo.videoId}
-              thumbnailUrl={safeThumb}
-              title={safeTitle}
-              isShorts={isShorts}
-              durationLabel={safeDuration > 0 ? formatDuration(safeDuration) : undefined}
-              sourceLabel={videoSourceLabel}
-            />
-          ) : (
-            <div className="relative aspect-video w-full bg-surface">
-              <img src={safeThumb} alt={safeTitle} className="h-full w-full object-cover" />
-              <span className="absolute right-3 top-3 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-semibold text-white">
-                {videoSourceLabel}
-              </span>
-              {safeDuration > 0 && (
-                <span className="absolute bottom-3 left-3 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-medium tabular-nums text-white">
-                  {formatDuration(safeDuration)}
+          <section
+            className={cn(
+              "overflow-hidden rounded-2xl border border-border bg-bg",
+              // 쇼츠(9:16) 만 width cap → 자식 aspect-[9/16] w-full 이 부모 width 따라
+              // height 결정. 70vh × (9/16) ≈ 394px 폭이 viewport 높이 기준 cap.
+              // (영상 전달력 우선 — primary CTA sticky 바로 분리해 도달성 별도 확보.)
+              isShorts && "mx-auto w-full max-w-[calc(70vh*9/16)]",
+            )}
+          >
+            {canEmbed && parsedVideo ? (
+              <YouTubeLiteEmbed
+                videoId={parsedVideo.videoId}
+                thumbnailUrl={safeThumb}
+                title={safeTitle}
+                isShorts={isShorts}
+                durationLabel={safeDuration > 0 ? formatDuration(safeDuration) : undefined}
+                sourceLabel={videoSourceLabel}
+              />
+            ) : (
+              <div className="relative aspect-video w-full bg-surface">
+                <img src={safeThumb} alt={safeTitle} className="h-full w-full object-cover" />
+                <span className="absolute right-3 top-3 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-semibold text-white">
+                  {videoSourceLabel}
+                </span>
+                {safeDuration > 0 && (
+                  <span className="absolute bottom-3 left-3 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-medium tabular-nums text-white">
+                    {formatDuration(safeDuration)}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onWatchOriginal?.()}
+                  aria-label="영상 재생"
+                  className="absolute inset-0 flex items-center justify-center"
+                >
+                  <span className="flex size-16 items-center justify-center rounded-full bg-bg/95 shadow-soft">
+                    <Play
+                      className="ml-0.5 size-6 fill-text-strong text-text-strong"
+                      strokeWidth={2}
+                    />
+                  </span>
+                </button>
+              </div>
+            )}
+            <div className="space-y-2 p-4">
+              {!isReservation && (
+                <span
+                  className={cn(
+                    "inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold tracking-ko",
+                    PURPOSE_CHIP_CLASS[purposeLabel],
+                  )}
+                >
+                  {purposeLabel}
                 </span>
               )}
-              <button
-                type="button"
-                onClick={() => onWatchOriginal?.()}
-                aria-label="영상 재생"
-                className="absolute inset-0 flex items-center justify-center"
-              >
-                <span className="flex size-16 items-center justify-center rounded-full bg-bg/95 shadow-soft">
-                  <Play
-                    className="ml-0.5 size-6 fill-text-strong text-text-strong"
-                    strokeWidth={2}
-                  />
-                </span>
-              </button>
+              <h1 className="text-xl font-extrabold leading-snug tracking-ko text-text-strong">
+                {videoHeadline}
+              </h1>
+              {!isReservation && (
+                <p className="text-sm font-medium tracking-ko text-text-muted">{safeTitle}</p>
+              )}
+              <p className="text-xs font-medium text-text-subtle">{safeCreator.channelName}</p>
             </div>
-          )}
-          <div className="space-y-2 p-4">
-            {!isReservation && (
-              <span
-                className={cn(
-                  "inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold tracking-ko",
-                  PURPOSE_CHIP_CLASS[purposeLabel],
-                )}
-              >
-                {purposeLabel}
-              </span>
-            )}
-            <h1 className="text-xl font-extrabold leading-snug tracking-ko text-text-strong">
-              {videoHeadline}
-            </h1>
-            {!isReservation && (
-              <p className="text-sm font-medium tracking-ko text-text-muted">{safeTitle}</p>
-            )}
-            <p className="text-xs font-medium text-text-subtle">{safeCreator.channelName}</p>
-          </div>
-        </section>
+          </section>
         )}
 
         {makerMessage && (
@@ -863,8 +886,9 @@ export function InfoDropPage({
           </p>
         )}
 
-        {/* 3. AI 요약 — 예약 variant는 캘린더 흐름에 집중 */}
-        {!isReservation && (
+        {/* 3. AI 요약 — 예약 variant는 캘린더 흐름에 집중. selfUpload(자체업로드 상품)은
+            영상 요약 대상이 아니므로 숨김(순수 커머스 카드). */}
+        {!isReservation && !commerce?.selfUpload && (
           <section className="rounded-2xl border border-border bg-surface p-4">
             <div className="flex items-center gap-2">
               <Sparkles className="size-4 text-accent" strokeWidth={2} />
@@ -1030,7 +1054,11 @@ export function InfoDropPage({
             <section data-testid="variant-purchase" className="w-full max-w-full">
               <div className="overflow-hidden rounded-2xl border border-border bg-bg">
                 {commerce.imageUrl ? (
-                  <img src={commerce.imageUrl} alt="" className="aspect-[4/3] w-full object-cover" />
+                  <img
+                    src={commerce.imageUrl}
+                    alt=""
+                    className="aspect-[4/3] w-full object-cover"
+                  />
                 ) : null}
                 <div className="space-y-3 p-4">
                   <p className="text-base font-bold leading-snug tracking-ko text-text-strong">
@@ -1041,21 +1069,36 @@ export function InfoDropPage({
                       ? `${commerce.priceKrw.toLocaleString("ko-KR")}원`
                       : "가격 미정"}
                   </p>
-                  <ActionButton
-                    type="button"
-                    className="w-full"
-                    onClick={() => {
-                      if (
-                        typeof window !== "undefined" &&
-                        commerce.buyUrl &&
-                        commerce.buyUrl !== "#"
-                      ) {
-                        window.open(commerce.buyUrl, "_blank", "noopener,noreferrer");
-                      }
-                    }}
-                  >
-                    구매하기
-                  </ActionButton>
+                  {commerce.selfUpload ? (
+                    // 자체업로드 상품 — 1차 버튼 = 구매하기(장바구니). 결제는 임시(준비중 토스트).
+                    <ActionButton
+                      type="button"
+                      className="w-full gap-2"
+                      onClick={() => {
+                        // TODO: 토스 결제 연결
+                        toast("준비중입니다");
+                      }}
+                    >
+                      <ShoppingCart className="size-4" strokeWidth={2} />
+                      구매하기
+                    </ActionButton>
+                  ) : (
+                    <ActionButton
+                      type="button"
+                      className="w-full"
+                      onClick={() => {
+                        if (
+                          typeof window !== "undefined" &&
+                          commerce.buyUrl &&
+                          commerce.buyUrl !== "#"
+                        ) {
+                          window.open(commerce.buyUrl, "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                    >
+                      구매하기
+                    </ActionButton>
+                  )}
                 </div>
               </div>
             </section>
@@ -1072,6 +1115,57 @@ export function InfoDropPage({
               />
             </section>
           ))}
+
+        {/* ③ 관련 상품 — 담은 상품(attached). 본체 커머스/영상/쿠폰/예약 렌더와 독립.
+            탭 → 그 상품 자체 카드(/d/{refShareUuid}) 인앱 이동. 없으면 미표시. */}
+        {attachedProducts && attachedProducts.length > 0 && (
+          <section data-testid="related-products">
+            <h2 className="text-sm font-bold tracking-ko text-text-strong">관련 상품</h2>
+            <ul className="mt-3 space-y-2">
+              {attachedProducts.map((p) => {
+                const inner = (
+                  <>
+                    {p.imageUrl ? (
+                      <img
+                        src={p.imageUrl}
+                        alt=""
+                        className="size-14 shrink-0 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <span className="size-14 shrink-0 rounded-lg bg-surface" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold tracking-ko text-text-strong">
+                        {p.name}
+                      </p>
+                      <p className="text-xs font-medium tracking-ko text-text-muted">
+                        {p.priceKrw != null
+                          ? `${p.priceKrw.toLocaleString("ko-KR")}원`
+                          : "가격 미정"}
+                      </p>
+                    </div>
+                  </>
+                );
+                return (
+                  <li key={p.refDropId}>
+                    {p.refShareUuid ? (
+                      <a
+                        href={`/d/${p.refShareUuid}`}
+                        className="flex items-center gap-3 rounded-2xl border border-border bg-bg p-3 transition-colors hover:border-text-subtle"
+                      >
+                        {inner}
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-3 rounded-2xl border border-border bg-bg p-3 opacity-60">
+                        {inner}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         {resolvedVariant === "lead" && <ConsultationLeadForm partnerName={safeLocal.name} />}
 
@@ -1138,7 +1232,7 @@ export function InfoDropPage({
                   문자
                 </button>
               ) : null}
-              {Boolean(safeLocal.address?.trim() || safeLocal.name?.trim()) ? (
+              {safeLocal.address?.trim() || safeLocal.name?.trim() ? (
                 <button
                   type="button"
                   onClick={() => handleCtaClick("directions")}
@@ -1167,7 +1261,8 @@ export function InfoDropPage({
         <ErrorMessage message={shareError} />
 
         <div className="flex items-stretch gap-2" data-testid="share-block">
-          {videoSourceUrl ? (
+          {/* selfUpload(자체업로드 상품)은 영상 원본이 없으므로 create?url= LinkDrop 링크 숨김. */}
+          {videoSourceUrl && !commerce?.selfUpload ? (
             <a
               href={`/create?url=${encodeURIComponent(videoSourceUrl)}`}
               className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"

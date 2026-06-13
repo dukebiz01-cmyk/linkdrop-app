@@ -40,18 +40,19 @@ const PURPOSE_EN_TO_KO: Record<string, DropPurpose> = {
 
 function toDropPurpose(raw: string | undefined): DropPurpose | undefined {
   if (!raw) return undefined;
-  return PURPOSE_EN_TO_KO[raw] ?? (Object.values(PURPOSE_EN_TO_KO).includes(raw as DropPurpose)
-    ? (raw as DropPurpose)
-    : undefined);
+  return (
+    PURPOSE_EN_TO_KO[raw] ??
+    (Object.values(PURPOSE_EN_TO_KO).includes(raw as DropPurpose)
+      ? (raw as DropPurpose)
+      : undefined)
+  );
 }
 
 function str(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
-function toConfidence(
-  v: string | undefined,
-): "high" | "medium" | "low" | undefined {
+function toConfidence(v: string | undefined): "high" | "medium" | "low" | undefined {
   return v === "high" || v === "medium" || v === "low" ? v : undefined;
 }
 
@@ -145,6 +146,36 @@ function CreateWizardPage() {
       onComplete={async (data) => {
         // wizard 의 첫 카카오톡 공유/링크 복사 클릭 시 호출.
         // POST /api/drops 로 실제 저장하고 share_uuid + 공유 URL 을 반환한다.
+
+        // ③ 카드 담기 — blocks 일반화. 구매면 본체 product 블록(pos 0) 유지 후
+        //   담은 상품(attachedProducts)을 product 블록 N개로 이어붙인다(position 연속).
+        //   구매 아니면 담은 상품만(pos 0..N). create_drop_v2(p_blocks) 시그니처 무변경.
+        const blocks: Array<Record<string, unknown>> = [];
+        if (data.purpose === "구매") {
+          blocks.push({
+            block_kind: "product",
+            block_data: {
+              name: data.productName ?? null,
+              price_krw: data.priceKrw ?? null,
+              buy_url: data.video.url,
+            },
+            position: 0,
+          });
+        }
+        for (const p of data.attachedProducts ?? []) {
+          blocks.push({
+            block_kind: "product",
+            block_data: {
+              ref_drop_id: p.refDropId,
+              ref_share_uuid: p.refShareUuid,
+              name: p.name,
+              price_krw: p.priceKrw,
+              image_url: p.imageUrl,
+            },
+            position: blocks.length,
+          });
+        }
+
         const res = await fetch("/api/drops", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -154,26 +185,13 @@ function CreateWizardPage() {
             curator_message: data.makerMessage || null,
             // chunk1 1d — 탐색 카드에서 진입한 경우 본인 매장 자동 연결.
             ...(search.partner_id ? { partner_id: search.partner_id } : {}),
-            // F2 커머스(구매) — price_krw/category 는 content_sources 에 persist(Slice 1),
-            //   가격/상품명은 렌더용 product 블록으로도 운반(get_drop_detail 이 source.price_krw
-            //   를 노출하지 않으므로). 이미지/구매링크는 source(thumbnail_url/source_url) 사용.
+            // F2 커머스(구매) — price_krw/category 는 content_sources 에 persist(Slice 1).
+            //   가격/상품명은 렌더용 product 블록(blocks)으로도 운반.
             ...(data.purpose === "구매"
-              ? {
-                  price_krw: data.priceKrw ?? null,
-                  category: data.category ?? null,
-                  blocks: [
-                    {
-                      block_kind: "product",
-                      block_data: {
-                        name: data.productName ?? null,
-                        price_krw: data.priceKrw ?? null,
-                        buy_url: data.video.url,
-                      },
-                      position: 0,
-                    },
-                  ],
-                }
+              ? { price_krw: data.priceKrw ?? null, category: data.category ?? null }
               : {}),
+            // blocks: 구매 본체 + 담은 상품. 비어있지 않을 때만 전송.
+            ...(blocks.length > 0 ? { blocks } : {}),
           }),
         });
         const json = (await res.json()) as {

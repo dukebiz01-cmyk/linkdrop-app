@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import {
   PURPOSE_FLOW_CONFIG,
   type AiPreviewData,
+  type AttachedProduct,
   type ReservationDateItem,
   type ReservationSummary,
   type VideoInfo,
@@ -77,6 +78,7 @@ export function Step4DropPreview({
   videoInfo,
   reservation,
   labelDate,
+  attachedProducts,
 }: {
   purpose: DropPurpose;
   ai: AiPreviewData;
@@ -84,6 +86,8 @@ export function Step4DropPreview({
   reservation?: ReservationSummary;
   /** 예약 날짜 라벨 빌더 — 호출자가 reservationItemFullLabel 주입. */
   labelDate?: (item: ReservationDateItem) => string;
+  /** ③ 카드 담기 — 담은 상품 미리보기(있으면 1섹션). */
+  attachedProducts?: AttachedProduct[];
 }) {
   const flow = PURPOSE_FLOW_CONFIG[purpose];
 
@@ -171,6 +175,38 @@ export function Step4DropPreview({
               </span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ③ 카드 담기 — 담은 상품 미리보기(플랫 리스트, blocks.map 아님). 없으면 미표시. */}
+      {attachedProducts && attachedProducts.length > 0 && (
+        <div className="mt-4 space-y-2 rounded-2xl border border-border bg-surface p-4">
+          <p className="text-xs font-bold tracking-ko text-text-strong">
+            담은 상품 {attachedProducts.length}
+          </p>
+          <ul className="space-y-2">
+            {attachedProducts.map((p) => (
+              <li key={p.refDropId} className="flex items-center gap-3">
+                {p.imageUrl ? (
+                  <img
+                    src={p.imageUrl}
+                    alt=""
+                    className="size-12 shrink-0 rounded-lg object-cover"
+                  />
+                ) : (
+                  <span className="size-12 shrink-0 rounded-lg bg-bg" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold tracking-ko text-text-strong">
+                    {p.name}
+                  </p>
+                  <p className="text-xs font-medium tracking-ko text-text-muted">
+                    {p.priceKrw != null ? `${p.priceKrw.toLocaleString("ko-KR")}원` : "가격 미정"}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

@@ -10,6 +10,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { getSupabaseServer } from "@/lib/supabase-server.server";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { invokeEdge } from "@/lib/edge-invoke.server";
 
 const PROD_BASE = "https://app.drop.how";
@@ -27,6 +28,10 @@ type CreateDropBody = {
   /** Slice 1 커머스 — 구매 목적 시 상품 source 메타. 프론트 미전송이라 선택(null 허용). */
   price_krw?: number | null;
   category?: string | null;
+  /** S2b 자체업로드 — true 면 외부 스크랩 대신 직접 INSERT 경로. image_url/name/price_krw 사용. */
+  self_upload?: boolean;
+  image_url?: string;
+  name?: string;
 };
 
 export const Route = createFileRoute("/api/drops/")({
@@ -53,6 +58,130 @@ export const Route = createFileRoute("/api/drops/")({
 
           // 2. 입력
           const body = (await request.json()) as CreateDropBody;
+
+          // 2b. S2b 자체업로드(자체상품) 분기 — 외부 스크랩 경로와 완전 분리.
+          //   extract-url-metadata / AI quota / generate-summary 미사용. content_sources
+          //   직접 INSERT(서비스롤) → 구매 intent → product 블록 포함 create_drop_v2.
+          //   ⚠️ 아래 기존 구매(외부 URL 스크랩) 흐름은 일절 건드리지 않는다.
+          if (body.self_upload) {
+            const imageUrl = (body.image_url ?? "").trim();
+            const priceKrw =
+              typeof body.price_krw === "number" ? body.price_krw : Number(body.price_krw);
+            if (!imageUrl || !Number.isFinite(priceKrw) || priceKrw <= 0) {
+              return Response.json(
+                { error: "INVALID_INPUT", message: "상품 사진과 가격은 필수예요." },
+                { status: 400 },
+              );
+            }
+            const productName = (body.name ?? "").trim() || null;
+
+            // (1) content_sources 직접 INSERT — 서비스롤(RLS 우회). source_url=canonical_url=
+            //   합성 고유 URL(app.drop.how/p/{uuid}): NOT NULL 충족 + (provider,canonical_url)
+            //   유니크 회피 + self-upload 카드 식별자(prefix). 실제 구매링크 아님.
+            const syntheticUrl = `${PROD_BASE}/p/${crypto.randomUUID()}`;
+            const { data: srcRow, error: srcErr } = await supabaseAdmin
+              .from("content_sources")
+              .insert({
+                provider: "manual",
+                source_mode: "creator_registered",
+                source_url: syntheticUrl,
+                canonical_url: syntheticUrl,
+                title: productName,
+                thumbnail_url: imageUrl,
+                price_krw: priceKrw,
+                price_currency: "KRW",
+                registered_by_user_id: user.id,
+                extraction_method: "manual",
+              })
+              .select("id")
+              .single();
+            if (srcErr || !srcRow) {
+              return Response.json(
+                {
+                  error: "SOURCE_CREATE_FAILED",
+                  message: "상품을 저장하지 못했어요.",
+                  details: srcErr,
+                },
+                { status: 500 },
+              );
+            }
+            const selfSourceId = (srcRow as { id: string }).id;
+
+            // (2) intent_id = 구매 목적
+            const { data: buyIntents } = await supabase
+              .from("intent_types")
+              .select("id")
+              .eq("purpose", "구매")
+              .limit(1);
+            const selfIntentId = buyIntents?.[0]?.id;
+            if (!selfIntentId) {
+              return Response.json(
+                { error: "INVALID_PURPOSE", message: "구매 목적 설정을 찾을 수 없어요." },
+                { status: 400 },
+              );
+            }
+
+            // (3) share_code (실패해도 fallback 긴 URL)
+            const { data: selfShareCodeData } = await supabase.rpc("gen_share_code");
+            const selfShareCode = typeof selfShareCodeData === "string" ? selfShareCodeData : null;
+
+            // (4) create_drop_v2 — 가격/이름은 product 블록으로 운반(프론트가 blocks 포함).
+            //   비사업자 게이트(v7.4): approved partner 없으면 '구매' 거부 — 이 경로는
+            //   /partner/products/new(_partner 가드=approved owner) 뒤라 통과.
+            //   partner_id 는 RPC 본문이 owner→approved partner 로 자동 매핑(store.phone 연결).
+            const selfBlocks =
+              Array.isArray(body.blocks) && body.blocks.length > 0
+                ? body.blocks
+                : [
+                    {
+                      block_kind: "product",
+                      block_data: { name: productName ?? "", price_krw: priceKrw },
+                      position: 0,
+                    },
+                  ];
+            const { data: selfDropRes, error: selfDropErr } = await supabase.rpc("create_drop_v2", {
+              p_intent_id: selfIntentId,
+              p_source_id: selfSourceId,
+              p_blocks: selfBlocks,
+              p_curator_message: body.curator_message ?? null,
+              p_campaign_id: body.campaign_id ?? null,
+              p_share_code: selfShareCode,
+            });
+            if (selfDropErr || !selfDropRes) {
+              return Response.json(
+                {
+                  error: "DROP_CREATE_FAILED",
+                  message: "상품 카드를 만들지 못했어요.",
+                  details: selfDropErr,
+                },
+                { status: 500 },
+              );
+            }
+            const { info_drop_id: selfDropId, share_uuid: selfShareUuid } = selfDropRes as {
+              info_drop_id: string;
+              share_uuid: string;
+            };
+
+            return Response.json({
+              drop: {
+                id: selfDropId,
+                share_uuid: selfShareUuid,
+                purpose: "구매",
+                intent_id: selfIntentId,
+                source_id: selfSourceId,
+              },
+              source: {
+                id: selfSourceId,
+                title: productName,
+                thumbnail_url: imageUrl,
+                author_name: null,
+              },
+              shareable_url: selfShareCode
+                ? `https://drop.how/${selfShareCode}`
+                : `${PROD_BASE}/d/${selfShareUuid}`,
+            });
+          }
+
           if (!body.media_url || !body.purpose) {
             return Response.json(
               { error: "INVALID_INPUT", message: "영상 링크와 목적은 필수예요." },
@@ -100,7 +229,11 @@ export const Route = createFileRoute("/api/drops/")({
             );
             if (meta.error || !meta.data?.source_id) {
               return Response.json(
-                { error: "EXTRACT_META_FAILED", message: "상품 정보를 불러올 수 없어요.", details: meta.error },
+                {
+                  error: "EXTRACT_META_FAILED",
+                  message: "상품 정보를 불러올 수 없어요.",
+                  details: meta.error,
+                },
                 { status: 502 },
               );
             }
@@ -117,7 +250,11 @@ export const Route = createFileRoute("/api/drops/")({
             }>("extract-meta", { url: body.media_url }, jwt);
             if (meta.error || !meta.data) {
               return Response.json(
-                { error: "EXTRACT_META_FAILED", message: "영상 정보를 불러올 수 없어요.", details: meta.error },
+                {
+                  error: "EXTRACT_META_FAILED",
+                  message: "영상 정보를 불러올 수 없어요.",
+                  details: meta.error,
+                },
                 { status: 502 },
               );
             }
@@ -153,9 +290,7 @@ export const Route = createFileRoute("/api/drops/")({
 
           // 6. share_code 생성 (drop.how/{6자} 단축 URL용)
           //    실패해도 throw X — fallback 긴 URL 유지로 UX 차단 방지.
-          const { data: shareCodeData, error: shareCodeErr } = await supabase.rpc(
-            "gen_share_code",
-          );
+          const { data: shareCodeData, error: shareCodeErr } = await supabase.rpc("gen_share_code");
           if (shareCodeErr) {
             console.error("gen_share_code failed:", shareCodeErr);
           }

@@ -26,6 +26,17 @@ export interface AiPreviewData {
   suggestedShareText: string;
 }
 
+/** ③ 카드 담기 — 위저드에 담은 자체업로드 상품 1건(참조). get_my_products 행에서 매핑. */
+export interface AttachedProduct {
+  /** 참조하는 상품 드롭 id (info_drops.id) */
+  refDropId: string;
+  /** 참조 상품의 공개 카드 share_uuid (/d/{share_uuid}) */
+  refShareUuid: string;
+  name: string;
+  priceKrw: number | null;
+  imageUrl: string | null;
+}
+
 export type WizardSuggestionConfidence = "high" | "medium" | "low";
 
 export interface CreateDropWizardProps {
@@ -58,6 +69,8 @@ export interface CreateDropWizardProps {
     priceKrw?: number | null;
     productName?: string | null;
     category?: string | null;
+    /** ③ 카드 담기 — 위저드에서 담은 자체업로드 상품들(전 목적 공통). */
+    attachedProducts?: AttachedProduct[];
   }) => Promise<{ shareUuid: string; shareUrl: string }>;
 }
 

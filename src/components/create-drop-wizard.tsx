@@ -41,6 +41,7 @@ import { Step4DropPreview } from "@/components/create/Step4DropPreview";
 import { Step5PurposeShare } from "@/components/create/Step5Share";
 import { Step3Options } from "@/components/create/step3/Step3Options";
 import { Step3Commerce } from "@/components/create/step3/Step3Commerce";
+import { ProductAttachSection } from "@/components/create/step3/ProductAttachSection";
 import {
   aiPreviewFromPurpose,
   buildWizardShareData,
@@ -59,15 +60,11 @@ import {
 } from "@/components/create/step3/reservation-helpers";
 
 // 외부 consumer 호환 — reservation-helpers 의 4 함수 re-export.
-export {
-  encodeReservationDates,
-  normalizePlaceResult,
-  normalizeReservationUrl,
-  searchPlaces,
-};
+export { encodeReservationDates, normalizePlaceResult, normalizeReservationUrl, searchPlaces };
 import {
   PURPOSE_FLOW_CONFIG,
   type AiPreviewData,
+  type AttachedProduct,
   type CreateDropWizardProps,
   type LocalPartner,
   type PlaceCandidate,
@@ -158,7 +155,6 @@ const STEP5_SHARE_BY_PURPOSE: Record<DropPurpose, Step5ShareConfig> = {
   },
 };
 
-
 // =============================================================================
 // Step 5 — 공유 미리보기 (v0 WizardSharePreview 재사용)
 // =============================================================================
@@ -214,6 +210,8 @@ export function CreateDropWizard({
   const [commerceName, setCommerceName] = useState("");
   // v5.12 — 쿠폰 목적에서 메이커가 선택한 funnel coupon id. onComplete 시 전달.
   const [selectedFunnelCouponId, setSelectedFunnelCouponId] = useState<string | null>(null);
+  // ③ 카드 담기 — 위저드 Step 2 에서 담은 자체업로드 상품(전 목적 공통). onComplete 시 전달.
+  const [attachedProducts, setAttachedProducts] = useState<AttachedProduct[]>([]);
   const [aiPreview, setAiPreview] = useState<AiPreviewData | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
@@ -390,11 +388,7 @@ export function CreateDropWizard({
         return isHttpUrl(url.trim());
       }
       // 옛 Step 1 + Step 2 조건 합 — 영상 fetch 성공 + 목적 선택.
-      return (
-        parseVideoUrl(url.trim()) !== null &&
-        urlStatus === "success" &&
-        purpose !== null
-      );
+      return parseVideoUrl(url.trim()) !== null && urlStatus === "success" && purpose !== null;
     }
     if (step === 2) {
       // 옛 Step 3 의 목적별 통과 조건 그대로.
@@ -427,6 +421,7 @@ export function CreateDropWizard({
       priceKrw: purpose === "구매" && Number(commercePrice) > 0 ? Number(commercePrice) : null,
       productName: purpose === "구매" ? commerceName.trim() || null : null,
       category: purpose === "구매" ? "농수산물" : null,
+      attachedProducts,
     });
     savingRef.current = promise;
     try {
@@ -608,6 +603,11 @@ export function CreateDropWizard({
           onSelectCoupon={setSelectedFunnelCouponId}
         />
       )}
+      {/* ③ 카드 담기 — Step 2 목적 분기 "아래" 전 목적 공통. 위 목적별 입력
+          (Commerce/Options=예약 캘린더 포함) 레이아웃은 그대로 두고 추가만. */}
+      {step === 2 && purpose && (
+        <ProductAttachSection value={attachedProducts} onChange={setAttachedProducts} />
+      )}
       {/* 새 Step 3 = 옛 Step 4 + Step 5 병합 (미리보기 위, 공유 아래). */}
       {step === 3 && purpose && videoInfo && aiPreview && (
         <>
@@ -617,6 +617,7 @@ export function CreateDropWizard({
             videoInfo={videoInfo}
             reservation={purpose === "예약" ? buildReservationSummary(step3Fields) : undefined}
             labelDate={reservationItemFullLabel}
+            attachedProducts={attachedProducts}
           />
           <Step5PurposeShare
             data={buildWizardShareData(

@@ -12,7 +12,6 @@
 // chunk1 의 "내가 모은 콘텐츠" 경로에서 향후 별도 처리.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { env } from "cloudflare:workers";
 import { getSupabaseServer } from "@/lib/supabase-server.server";
 import { invokeEdge } from "@/lib/edge-invoke.server";
 import { getWorkerEnv } from "@/lib/worker-env.server";
@@ -23,8 +22,10 @@ type KVNamespaceLike = {
   put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
 };
 function getKV(): KVNamespaceLike | null {
-  // ALS 로 흘린 worker live env 우선, 없으면 cloudflare:workers env 폴백.
-  const wenv = getWorkerEnv() ?? env;
+  // worker live env 는 src/server.ts 가 ALS(workerEnvStore)로 흘려준다.
+  // (cloudflare:workers 정적 import 는 dev SSR 에서 resolve 불가 + 핸들러 컨텍스트
+  //  undefined 회색지대라 제거 — production 은 ALS 경로가 KV 포함 env 를 제공.)
+  const wenv = getWorkerEnv();
   const kv = (wenv as { KV?: KVNamespaceLike }).KV;
   return kv ?? null;
 }

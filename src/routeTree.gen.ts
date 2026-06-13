@@ -53,6 +53,8 @@ import { Route as AdminAdminRulesRouteImport } from './routes/_admin/admin.rules
 import { Route as AdminAdminExtractRouteImport } from './routes/_admin/admin.extract'
 import { Route as AdminAdminDefamationRouteImport } from './routes/_admin/admin.defamation'
 import { Route as AdminAdminCampaignsRouteImport } from './routes/_admin/admin.campaigns'
+import { Route as PartnerPartnerProductsIndexRouteImport } from './routes/_partner/partner.products.index'
+import { Route as PartnerPartnerProductsNewRouteImport } from './routes/_partner/partner.products.new'
 import { Route as PartnerPartnerCalendarDropIdRouteImport } from './routes/_partner/partner.calendar.$dropId'
 
 const TermsRoute = TermsRouteImport.update({
@@ -272,6 +274,18 @@ const AdminAdminCampaignsRoute = AdminAdminCampaignsRouteImport.update({
   path: '/admin/campaigns',
   getParentRoute: () => AdminRoute,
 } as any)
+const PartnerPartnerProductsIndexRoute =
+  PartnerPartnerProductsIndexRouteImport.update({
+    id: '/partner/products/',
+    path: '/partner/products/',
+    getParentRoute: () => PartnerRoute,
+  } as any)
+const PartnerPartnerProductsNewRoute =
+  PartnerPartnerProductsNewRouteImport.update({
+    id: '/partner/products/new',
+    path: '/partner/products/new',
+    getParentRoute: () => PartnerRoute,
+  } as any)
 const PartnerPartnerCalendarDropIdRoute =
   PartnerPartnerCalendarDropIdRouteImport.update({
     id: '/$dropId',
@@ -322,6 +336,8 @@ export interface FileRoutesByFullPath {
   '/api/discover/': typeof ApiDiscoverIndexRoute
   '/api/drops/': typeof ApiDropsIndexRoute
   '/partner/calendar/$dropId': typeof PartnerPartnerCalendarDropIdRoute
+  '/partner/products/new': typeof PartnerPartnerProductsNewRoute
+  '/partner/products/': typeof PartnerPartnerProductsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -366,6 +382,8 @@ export interface FileRoutesByTo {
   '/api/discover': typeof ApiDiscoverIndexRoute
   '/api/drops': typeof ApiDropsIndexRoute
   '/partner/calendar/$dropId': typeof PartnerPartnerCalendarDropIdRoute
+  '/partner/products/new': typeof PartnerPartnerProductsNewRoute
+  '/partner/products': typeof PartnerPartnerProductsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -414,6 +432,8 @@ export interface FileRoutesById {
   '/api/discover/': typeof ApiDiscoverIndexRoute
   '/api/drops/': typeof ApiDropsIndexRoute
   '/_partner/partner/calendar/$dropId': typeof PartnerPartnerCalendarDropIdRoute
+  '/_partner/partner/products/new': typeof PartnerPartnerProductsNewRoute
+  '/_partner/partner/products/': typeof PartnerPartnerProductsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -460,6 +480,8 @@ export interface FileRouteTypes {
     | '/api/discover/'
     | '/api/drops/'
     | '/partner/calendar/$dropId'
+    | '/partner/products/new'
+    | '/partner/products/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -504,6 +526,8 @@ export interface FileRouteTypes {
     | '/api/discover'
     | '/api/drops'
     | '/partner/calendar/$dropId'
+    | '/partner/products/new'
+    | '/partner/products'
   id:
     | '__root__'
     | '/'
@@ -551,6 +575,8 @@ export interface FileRouteTypes {
     | '/api/discover/'
     | '/api/drops/'
     | '/_partner/partner/calendar/$dropId'
+    | '/_partner/partner/products/new'
+    | '/_partner/partner/products/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -886,6 +912,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAdminCampaignsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/_partner/partner/products/': {
+      id: '/_partner/partner/products/'
+      path: '/partner/products'
+      fullPath: '/partner/products/'
+      preLoaderRoute: typeof PartnerPartnerProductsIndexRouteImport
+      parentRoute: typeof PartnerRoute
+    }
+    '/_partner/partner/products/new': {
+      id: '/_partner/partner/products/new'
+      path: '/partner/products/new'
+      fullPath: '/partner/products/new'
+      preLoaderRoute: typeof PartnerPartnerProductsNewRouteImport
+      parentRoute: typeof PartnerRoute
+    }
     '/_partner/partner/calendar/$dropId': {
       id: '/_partner/partner/calendar/$dropId'
       path: '/$dropId'
@@ -941,6 +981,8 @@ interface PartnerRouteChildren {
   PartnerPartnerRegisterRoute: typeof PartnerPartnerRegisterRoute
   PartnerPartnerResultsRoute: typeof PartnerPartnerResultsRoute
   PartnerPartnerIndexRoute: typeof PartnerPartnerIndexRoute
+  PartnerPartnerProductsNewRoute: typeof PartnerPartnerProductsNewRoute
+  PartnerPartnerProductsIndexRoute: typeof PartnerPartnerProductsIndexRoute
 }
 
 const PartnerRouteChildren: PartnerRouteChildren = {
@@ -952,6 +994,8 @@ const PartnerRouteChildren: PartnerRouteChildren = {
   PartnerPartnerRegisterRoute: PartnerPartnerRegisterRoute,
   PartnerPartnerResultsRoute: PartnerPartnerResultsRoute,
   PartnerPartnerIndexRoute: PartnerPartnerIndexRoute,
+  PartnerPartnerProductsNewRoute: PartnerPartnerProductsNewRoute,
+  PartnerPartnerProductsIndexRoute: PartnerPartnerProductsIndexRoute,
 }
 
 const PartnerRouteWithChildren =

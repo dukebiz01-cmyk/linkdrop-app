@@ -17,6 +17,7 @@ import {
   Share2,
   Inbox,
   Unlink,
+  Package,
 } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
@@ -575,6 +576,23 @@ function PartnerHome() {
               <p className="mt-0.5 text-xs text-[#64748B]">
                 가능한 날짜를 마킹해 손님에게 보여줘요
               </p>
+            </div>
+          </div>
+          <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
+        </Link>
+
+        {/* 판매 관리 — 자체업로드 상품 목록(S3a). */}
+        <Link
+          to="/partner/products"
+          className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-[#FAFAFA]">
+              <Package className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-[#0F172A]">판매 관리</p>
+              <p className="mt-0.5 text-xs text-[#64748B]">내 상품을 등록하고 관리해요</p>
             </div>
           </div>
           <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />

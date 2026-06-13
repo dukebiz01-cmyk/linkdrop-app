@@ -9,6 +9,11 @@ import type { DropViewVariant } from "@/lib/mock-data";
 
 const PROD_BASE = "https://app.drop.how";
 
+// S2b — 자체업로드 상품 식별자. api/drops 자체업로드 분기가 source_url 을 이 prefix 의
+//   합성 URL(app.drop.how/p/{uuid})로 박는다. 외부 스크랩 상품(provider=manual 이어도)은
+//   실제 외부 URL 이라 이 prefix 와 절대 겹치지 않음 → 카드 CTA 분기의 안전한 식별자.
+const SELF_UPLOAD_SOURCE_PREFIX = `${PROD_BASE}/p/`;
+
 /** get_drop_detail RPC 출력 형태 (v3.5 — maker/store, v5.2 — share_code, v5.6 — coupon). */
 export type DropDetailRpc = {
   share_uuid: string;
@@ -114,9 +119,7 @@ function toKeyPoints(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
 
-function toPriceOffers(
-  offers: DropDetailRpc["products"][number]["offers"],
-): PriceOfferRow[] {
+function toPriceOffers(offers: DropDetailRpc["products"][number]["offers"]): PriceOfferRow[] {
   let minTotal = Infinity;
   for (const o of offers) {
     const t = o.estimated_total_price ?? o.price;
@@ -145,22 +148,56 @@ function toPriceOffers(
 function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
   if (d.drop.purpose !== "구매") return undefined;
   const blocks = Array.isArray(d.blocks) ? d.blocks : [];
+  // ③ primary 본체 product 블록만 = block_data.ref_drop_id 없는 것. (ref_drop_id 있으면
+  //   "담은 상품"이라 메인 커머스 카드로 잡으면 안 됨 — 관련 상품 섹션으로 분리.)
   const pb = blocks.find(
     (b): b is { block_kind?: string; block_data?: Record<string, unknown> } =>
-      !!b && typeof b === "object" && (b as { block_kind?: string }).block_kind === "product",
+      !!b &&
+      typeof b === "object" &&
+      (b as { block_kind?: string }).block_kind === "product" &&
+      !(b as { block_data?: Record<string, unknown> }).block_data?.ref_drop_id,
   );
   const data = (pb?.block_data ?? {}) as { name?: unknown; price_krw?: unknown };
   const priceKrw = typeof data.price_krw === "number" ? data.price_krw : null;
   const name =
-    typeof data.name === "string" && data.name.trim()
-      ? data.name.trim()
-      : (d.source.title ?? "");
+    typeof data.name === "string" && data.name.trim() ? data.name.trim() : (d.source.title ?? "");
   return {
     name,
     priceKrw,
     buyUrl: d.source.source_url ?? "#",
     imageUrl: d.source.thumbnail_url ?? "",
+    // S2b — 합성 source_url prefix 면 자체업로드 상품 → 카드가 "주문 문의(tel:)" 로 분기.
+    selfUpload: (d.source.source_url ?? "").startsWith(SELF_UPLOAD_SOURCE_PREFIX),
   };
+}
+
+/**
+ * ③ 카드 담기 — 담은(관련) 상품 블록 → 관련 상품 리스트.
+ *   attached = block_kind='product' && block_data.ref_drop_id 있음(위저드가 담은 참조형).
+ *   목적 무관(정보/쿠폰/예약/구매 어디든 담을 수 있음). position 순. 없으면 undefined.
+ */
+function buildAttachedProducts(d: DropDetailRpc): InfoDropPageProps["attachedProducts"] {
+  const blocks = Array.isArray(d.blocks) ? d.blocks : [];
+  const items = blocks
+    .filter(
+      (b): b is { block_kind?: string; block_data?: Record<string, unknown>; position?: number } =>
+        !!b &&
+        typeof b === "object" &&
+        (b as { block_kind?: string }).block_kind === "product" &&
+        typeof (b as { block_data?: Record<string, unknown> }).block_data?.ref_drop_id === "string",
+    )
+    .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+    .map((b) => {
+      const bd = (b.block_data ?? {}) as Record<string, unknown>;
+      return {
+        refDropId: String(bd.ref_drop_id),
+        refShareUuid: typeof bd.ref_share_uuid === "string" ? bd.ref_share_uuid : null,
+        name: typeof bd.name === "string" && bd.name.trim() ? bd.name.trim() : "상품",
+        priceKrw: typeof bd.price_krw === "number" ? bd.price_krw : null,
+        imageUrl: typeof bd.image_url === "string" ? bd.image_url : null,
+      };
+    });
+  return items.length > 0 ? items : undefined;
 }
 
 /** get_drop_detail RPC 출력 → InfoDropPage props. */
@@ -188,6 +225,7 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     brandGuess: product?.brand_guess ?? undefined,
     priceOffers: product ? toPriceOffers(product.offers) : undefined,
     commerce: buildCommerce(d),
+    attachedProducts: buildAttachedProducts(d),
     local: {
       name: d.store?.name ?? "",
       category: d.store?.kind ?? "공유된 정보",
@@ -206,8 +244,6 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     keyPoints: toKeyPoints(d.drop.ai_key_points),
     // share_code(6자) 있으면 drop.how/{code} 단축 URL, 없으면 긴 URL fallback.
     // apex(drop.how) 하드코딩 — origin은 app.drop.how가 되어 단축 도메인을 못 거침.
-    shareUrl: d.share_code
-      ? `https://drop.how/${d.share_code}`
-      : `${PROD_BASE}/d/${d.share_uuid}`,
+    shareUrl: d.share_code ? `https://drop.how/${d.share_code}` : `${PROD_BASE}/d/${d.share_uuid}`,
   };
 }
