@@ -44,6 +44,7 @@ import { Route as PartnerPartnerResultsRouteImport } from './routes/_partner/par
 import { Route as PartnerPartnerReservationsRouteImport } from './routes/_partner/partner.reservations'
 import { Route as PartnerPartnerRegisterRouteImport } from './routes/_partner/partner.register'
 import { Route as PartnerPartnerRedeemRouteImport } from './routes/_partner/partner.redeem'
+import { Route as PartnerPartnerPromotionRouteImport } from './routes/_partner/partner.promotion'
 import { Route as PartnerPartnerCouponsRouteImport } from './routes/_partner/partner.coupons'
 import { Route as PartnerPartnerCalendarRouteImport } from './routes/_partner/partner.calendar'
 import { Route as PartnerPartnerBillingRouteImport } from './routes/_partner/partner.billing'
@@ -230,6 +231,11 @@ const PartnerPartnerRedeemRoute = PartnerPartnerRedeemRouteImport.update({
   path: '/partner/redeem',
   getParentRoute: () => PartnerRoute,
 } as any)
+const PartnerPartnerPromotionRoute = PartnerPartnerPromotionRouteImport.update({
+  id: '/partner/promotion',
+  path: '/partner/promotion',
+  getParentRoute: () => PartnerRoute,
+} as any)
 const PartnerPartnerCouponsRoute = PartnerPartnerCouponsRouteImport.update({
   id: '/partner/coupons',
   path: '/partner/coupons',
@@ -324,6 +330,7 @@ export interface FileRoutesByFullPath {
   '/partner/billing': typeof PartnerPartnerBillingRoute
   '/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
+  '/partner/promotion': typeof PartnerPartnerPromotionRoute
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
   '/partner/reservations': typeof PartnerPartnerReservationsRoute
@@ -370,6 +377,7 @@ export interface FileRoutesByTo {
   '/partner/billing': typeof PartnerPartnerBillingRoute
   '/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
+  '/partner/promotion': typeof PartnerPartnerPromotionRoute
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
   '/partner/reservations': typeof PartnerPartnerReservationsRoute
@@ -420,6 +428,7 @@ export interface FileRoutesById {
   '/_partner/partner/billing': typeof PartnerPartnerBillingRoute
   '/_partner/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
   '/_partner/partner/coupons': typeof PartnerPartnerCouponsRoute
+  '/_partner/partner/promotion': typeof PartnerPartnerPromotionRoute
   '/_partner/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/_partner/partner/register': typeof PartnerPartnerRegisterRoute
   '/_partner/partner/reservations': typeof PartnerPartnerReservationsRoute
@@ -468,6 +477,7 @@ export interface FileRouteTypes {
     | '/partner/billing'
     | '/partner/calendar'
     | '/partner/coupons'
+    | '/partner/promotion'
     | '/partner/redeem'
     | '/partner/register'
     | '/partner/reservations'
@@ -514,6 +524,7 @@ export interface FileRouteTypes {
     | '/partner/billing'
     | '/partner/calendar'
     | '/partner/coupons'
+    | '/partner/promotion'
     | '/partner/redeem'
     | '/partner/register'
     | '/partner/reservations'
@@ -563,6 +574,7 @@ export interface FileRouteTypes {
     | '/_partner/partner/billing'
     | '/_partner/partner/calendar'
     | '/_partner/partner/coupons'
+    | '/_partner/partner/promotion'
     | '/_partner/partner/redeem'
     | '/_partner/partner/register'
     | '/_partner/partner/reservations'
@@ -850,6 +862,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PartnerPartnerRedeemRouteImport
       parentRoute: typeof PartnerRoute
     }
+    '/_partner/partner/promotion': {
+      id: '/_partner/partner/promotion'
+      path: '/partner/promotion'
+      fullPath: '/partner/promotion'
+      preLoaderRoute: typeof PartnerPartnerPromotionRouteImport
+      parentRoute: typeof PartnerRoute
+    }
     '/_partner/partner/coupons': {
       id: '/_partner/partner/coupons'
       path: '/partner/coupons'
@@ -977,6 +996,7 @@ interface PartnerRouteChildren {
   PartnerPartnerBillingRoute: typeof PartnerPartnerBillingRoute
   PartnerPartnerCalendarRoute: typeof PartnerPartnerCalendarRouteWithChildren
   PartnerPartnerCouponsRoute: typeof PartnerPartnerCouponsRoute
+  PartnerPartnerPromotionRoute: typeof PartnerPartnerPromotionRoute
   PartnerPartnerRedeemRoute: typeof PartnerPartnerRedeemRoute
   PartnerPartnerRegisterRoute: typeof PartnerPartnerRegisterRoute
   PartnerPartnerReservationsRoute: typeof PartnerPartnerReservationsRoute
@@ -990,6 +1010,7 @@ const PartnerRouteChildren: PartnerRouteChildren = {
   PartnerPartnerBillingRoute: PartnerPartnerBillingRoute,
   PartnerPartnerCalendarRoute: PartnerPartnerCalendarRouteWithChildren,
   PartnerPartnerCouponsRoute: PartnerPartnerCouponsRoute,
+  PartnerPartnerPromotionRoute: PartnerPartnerPromotionRoute,
   PartnerPartnerRedeemRoute: PartnerPartnerRedeemRoute,
   PartnerPartnerRegisterRoute: PartnerPartnerRegisterRoute,
   PartnerPartnerReservationsRoute: PartnerPartnerReservationsRoute,

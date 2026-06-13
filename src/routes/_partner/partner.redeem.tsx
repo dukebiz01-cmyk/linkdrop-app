@@ -28,6 +28,26 @@ function friendlyError(message: string): string {
 
 function RedeemPage() {
   const { ownerUserId } = Route.useLoaderData();
+  return (
+    <main className="min-h-screen bg-[#F8FAFC] tracking-ko">
+      <header className="flex items-center gap-3 bg-white px-5 py-4 border-b border-[#F1F5F9]">
+        <Link
+          to="/partner"
+          className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-[#0F172A] hover:bg-[#F1F5F9]"
+          aria-label="뒤로"
+        >
+          <ArrowLeft className="size-5" strokeWidth={2} />
+        </Link>
+        <h1 className="text-lg font-bold text-[#0F172A]">쿠폰 사용 처리</h1>
+      </header>
+      <CouponRedeemView ownerUserId={ownerUserId} />
+      <Toaster richColors position="top-center" />
+    </main>
+  );
+}
+
+// 쿠폰 코드 처리 본문 — /partner/redeem 와 /partner/promotion(탭) 양쪽에서 재사용.
+export function CouponRedeemView({ ownerUserId }: { ownerUserId: string | null }) {
   const [claimCode, setClaimCode] = useState("");
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -72,73 +92,55 @@ function RedeemPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC] tracking-ko">
-      <header className="flex items-center gap-3 bg-white px-5 py-4 border-b border-[#F1F5F9]">
-        <Link
-          to="/partner"
-          className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-[#0F172A] hover:bg-[#F1F5F9]"
-          aria-label="뒤로"
-        >
-          <ArrowLeft className="size-5" strokeWidth={2} />
-        </Link>
-        <h1 className="text-lg font-bold text-[#0F172A]">쿠폰 사용 처리</h1>
-      </header>
+    <form onSubmit={handleRedeem} className="space-y-4 px-5 pt-5">
+      <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+        <div className="mb-4 flex items-center gap-2">
+          <Ticket className="size-4 text-[#0A0A0A]" strokeWidth={2} />
+          <h2 className="text-sm font-semibold text-[#0A0A0A]">쿠폰 코드 입력</h2>
+        </div>
 
-      <form onSubmit={handleRedeem} className="space-y-4 px-5 pt-5">
-        <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-          <div className="mb-4 flex items-center gap-2">
-            <Ticket className="size-4 text-[#0A0A0A]" strokeWidth={2} />
-            <h2 className="text-sm font-semibold text-[#0A0A0A]">쿠폰 코드 입력</h2>
-          </div>
+        <label htmlFor="claim-code" className="block text-sm font-semibold text-[#0F172A]">
+          손님이 보여주신 코드
+        </label>
+        <input
+          id="claim-code"
+          type="text"
+          inputMode="text"
+          autoComplete="off"
+          autoCapitalize="characters"
+          value={claimCode}
+          onChange={(e) => setClaimCode(e.target.value)}
+          placeholder="예: ABCD1234"
+          className="mt-2 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base font-semibold text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
+        />
+        <p className="mt-2 text-xs text-[#64748B]">
+          손님이 휴대폰에서 보여주신 코드를 그대로 입력해 주세요.
+        </p>
 
-          <label htmlFor="claim-code" className="block text-sm font-semibold text-[#0F172A]">
-            손님이 보여주신 코드
-          </label>
-          <input
-            id="claim-code"
-            type="text"
-            inputMode="text"
-            autoComplete="off"
-            autoCapitalize="characters"
-            value={claimCode}
-            onChange={(e) => setClaimCode(e.target.value)}
-            placeholder="예: ABCD1234"
-            className="mt-2 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base font-semibold text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
-          />
-          <p className="mt-2 text-xs text-[#64748B]">
-            손님이 휴대폰에서 보여주신 코드를 그대로 입력해 주세요.
-          </p>
+        <label htmlFor="amount" className="mt-5 block text-sm font-semibold text-[#0F172A]">
+          결제 금액 (원, 선택)
+        </label>
+        <input
+          id="amount"
+          type="text"
+          inputMode="numeric"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="예: 15000"
+          className="mt-2 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base font-semibold text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
+        />
+        <p className="mt-2 text-xs text-[#64748B]">
+          안 적으셔도 사용 처리는 돼요. 적어주시면 매출 집계에 도움이 돼요.
+        </p>
+      </section>
 
-          <label
-            htmlFor="amount"
-            className="mt-5 block text-sm font-semibold text-[#0F172A]"
-          >
-            결제 금액 (원, 선택)
-          </label>
-          <input
-            id="amount"
-            type="text"
-            inputMode="numeric"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="예: 15000"
-            className="mt-2 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base font-semibold text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
-          />
-          <p className="mt-2 text-xs text-[#64748B]">
-            안 적으셔도 사용 처리는 돼요. 적어주시면 매출 집계에 도움이 돼요.
-          </p>
-        </section>
-
-        <button
-          type="submit"
-          disabled={submitting || !claimCode.trim()}
-          className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {submitting ? "처리 중…" : "사용 처리하기"}
-        </button>
-      </form>
-
-      <Toaster richColors position="top-center" />
-    </main>
+      <button
+        type="submit"
+        disabled={submitting || !claimCode.trim()}
+        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {submitting ? "처리 중…" : "사용 처리하기"}
+      </button>
+    </form>
   );
 }

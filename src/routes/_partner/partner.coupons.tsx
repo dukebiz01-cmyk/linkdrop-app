@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/EmptyState";
 
 type CouponConditions = { min_amount?: number } | null;
 
-type CouponRow = {
+export type CouponRow = {
   id: string;
   title: string;
   coupon_type: string;
@@ -69,7 +69,41 @@ export const Route = createFileRoute("/_partner/partner/coupons")({
 function CouponsPage() {
   const data = Route.useLoaderData();
   const router = useRouter();
+  return (
+    <main className="min-h-screen bg-[#F8FAFC] tracking-ko pb-12">
+      <header className="bg-white px-5 py-4 border-b border-[#F1F5F9]">
+        <Link
+          to="/partner"
+          className="inline-flex items-center gap-1 text-xs text-[#64748B] hover:text-[#0F172A]"
+        >
+          <ArrowLeft className="size-3" strokeWidth={2} />
+          매장 홈
+        </Link>
+        <h1 className="mt-1 text-lg font-bold text-[#0F172A]">쿠폰 관리</h1>
+        <p className="mt-0.5 text-xs text-[#64748B]">손님에게 줄 할인·혜택 쿠폰을 만들어요</p>
+      </header>
+      <div className="px-5 pt-4">
+        <CouponManageView
+          partnerId={data.partnerId}
+          coupons={data.coupons}
+          onChanged={() => router.invalidate()}
+        />
+      </div>
+      <Toaster richColors position="top-center" />
+    </main>
+  );
+}
 
+// 쿠폰 만들기 + 발행 목록 본문 — /partner/coupons 와 /partner/promotion(탭) 양쪽에서 재사용.
+export function CouponManageView({
+  partnerId,
+  coupons,
+  onChanged,
+}: {
+  partnerId: string | null;
+  coupons: CouponRow[];
+  onChanged: () => void | Promise<void>;
+}) {
   const [title, setTitle] = useState("");
   // 혜택 종류: 'discount' (할인) | 'gift' (증정). 할인이면 percent/amount 서브 선택.
   const [benefitKind, setBenefitKind] = useState<"discount" | "gift">("discount");
@@ -81,8 +115,6 @@ function CouponsPage() {
   const [validUntil, setValidUntil] = useState("");
   const [totalCount, setTotalCount] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  const partnerId = data.partnerId;
 
   // Bug C — v5.13 toggle_coupon_active 호출 + 갱신.
   // FIX (인증 누락): DiscoverSection.handleRegister 와 동일 패턴 — RPC 호출 직전
@@ -103,15 +135,11 @@ function CouponsPage() {
     });
     if (error) {
       console.error("[partner.coupons] toggle failed:", error);
-      toast.error(
-        nextActive ? "활성으로 바꾸지 못했어요." : "비활성으로 바꾸지 못했어요.",
-      );
+      toast.error(nextActive ? "활성으로 바꾸지 못했어요." : "비활성으로 바꾸지 못했어요.");
       return;
     }
-    toast.success(
-      nextActive ? "쿠폰을 활성으로 바꿨어요." : "쿠폰을 비활성으로 바꿨어요.",
-    );
-    await router.invalidate();
+    toast.success(nextActive ? "쿠폰을 활성으로 바꿨어요." : "쿠폰을 비활성으로 바꿨어요.");
+    await onChanged();
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -161,10 +189,7 @@ function CouponsPage() {
         discount_unit: isGift ? null : couponType === "percent" ? "%" : "원",
         gift_item: isGift ? giftItemTrim : null,
         // 증정은 최소 사용 금액 개념 없음 — conditions 비움.
-        conditions:
-          !isGift && Number.isFinite(minNum) && minNum > 0
-            ? { min_amount: minNum }
-            : {},
+        conditions: !isGift && Number.isFinite(minNum) && minNum > 0 ? { min_amount: minNum } : {},
         valid_from: new Date().toISOString(),
         valid_until: noExpiry ? null : new Date(validUntil).toISOString(),
         is_active: true,
@@ -188,7 +213,7 @@ function CouponsPage() {
       setNoExpiry(true);
       setValidUntil("");
       setBenefitKind("discount");
-      await router.invalidate();
+      await onChanged();
     } catch (err) {
       console.error("[partner.coupons] unexpected:", err);
       toast.error("처리 중 문제가 생겼어요.");
@@ -198,306 +223,260 @@ function CouponsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC] tracking-ko pb-12">
-      <header className="bg-white px-5 py-4 border-b border-[#F1F5F9]">
-        <Link
-          to="/partner"
-          className="inline-flex items-center gap-1 text-xs text-[#64748B] hover:text-[#0F172A]"
-        >
-          <ArrowLeft className="size-3" strokeWidth={2} />
-          매장 홈
-        </Link>
-        <h1 className="mt-1 text-lg font-bold text-[#0F172A]">쿠폰 관리</h1>
-        <p className="mt-0.5 text-xs text-[#64748B]">
-          손님에게 줄 할인·혜택 쿠폰을 만들어요
-        </p>
-      </header>
+    <div className="space-y-4">
+      {/* 만들기 폼 */}
+      <form
+        onSubmit={handleSubmit}
+        className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-4"
+      >
+        <div className="flex items-center gap-2">
+          <span className="flex size-8 items-center justify-center rounded-xl bg-[#FAFAFA]">
+            <Sparkles className="size-4 text-[#0A0A0A]" strokeWidth={2} />
+          </span>
+          <h2 className="text-sm font-bold text-[#0F172A]">새 쿠폰 만들기</h2>
+        </div>
 
-      <div className="space-y-4 px-5 pt-4">
-        {/* 만들기 폼 */}
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-4"
-        >
-          <div className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-xl bg-[#FAFAFA]">
-              <Sparkles className="size-4 text-[#0A0A0A]" strokeWidth={2} />
-            </span>
-            <h2 className="text-sm font-bold text-[#0F172A]">새 쿠폰 만들기</h2>
-          </div>
+        {/* 쿠폰 이름 */}
+        <div className="space-y-2">
+          <label htmlFor="cp-title" className="block text-xs font-semibold text-[#0F172A]">
+            쿠폰 이름
+          </label>
+          <input
+            id="cp-title"
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="예: 첫 방문 환영 10% 할인"
+            maxLength={80}
+            className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+            required
+          />
+        </div>
 
-          {/* 쿠폰 이름 */}
-          <div className="space-y-2">
-            <label
-              htmlFor="cp-title"
-              className="block text-xs font-semibold text-[#0F172A]"
+        {/* 혜택 종류 — 할인 / 증정 */}
+        <div className="space-y-2">
+          <span className="block text-xs font-semibold text-[#0F172A]">혜택 종류</span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setBenefitKind("discount")}
+              className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
+                benefitKind === "discount"
+                  ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
+                  : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+              }`}
             >
-              쿠폰 이름
-            </label>
-            <input
-              id="cp-title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="예: 첫 방문 환영 10% 할인"
-              maxLength={80}
-              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
-              required
-            />
+              할인
+            </button>
+            <button
+              type="button"
+              onClick={() => setBenefitKind("gift")}
+              className={`min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 text-sm font-semibold ${
+                benefitKind === "gift"
+                  ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
+                  : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+              }`}
+            >
+              <Gift className="size-4" strokeWidth={2} />
+              증정
+            </button>
           </div>
+        </div>
 
-          {/* 혜택 종류 — 할인 / 증정 */}
-          <div className="space-y-2">
-            <span className="block text-xs font-semibold text-[#0F172A]">
-              혜택 종류
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setBenefitKind("discount")}
-                className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
-                  benefitKind === "discount"
-                    ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
-                    : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
-                }`}
-              >
-                할인
-              </button>
-              <button
-                type="button"
-                onClick={() => setBenefitKind("gift")}
-                className={`min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 text-sm font-semibold ${
-                  benefitKind === "gift"
-                    ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
-                    : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
-                }`}
-              >
-                <Gift className="size-4" strokeWidth={2} />
-                증정
-              </button>
-            </div>
-          </div>
-
-          {benefitKind === "discount" ? (
-            <>
-              {/* 할인 종류 — 퍼센트 / 금액 */}
-              <div className="space-y-2">
-                <span className="block text-xs font-semibold text-[#0F172A]">
-                  할인 종류
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCouponType("percent")}
-                    className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
-                      couponType === "percent"
-                        ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
-                        : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
-                    }`}
-                  >
-                    퍼센트 (%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCouponType("amount")}
-                    className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
-                      couponType === "amount"
-                        ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
-                        : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
-                    }`}
-                  >
-                    금액 (원)
-                  </button>
-                </div>
-              </div>
-
-              {/* 할인 값 */}
-              <div className="space-y-2">
-                <label
-                  htmlFor="cp-value"
-                  className="block text-xs font-semibold text-[#0F172A]"
-                >
-                  할인 값
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="cp-value"
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={couponType === "percent" ? 100 : undefined}
-                    value={discountValue}
-                    onChange={(e) => setDiscountValue(e.target.value)}
-                    placeholder={couponType === "percent" ? "10" : "3000"}
-                    className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
-                  />
-                  <span className="shrink-0 text-sm font-semibold text-[#64748B]">
-                    {couponType === "percent" ? "%" : "원"}
-                  </span>
-                </div>
-              </div>
-
-              {/* 최소 사용 금액 */}
-              <div className="space-y-2">
-                <label
-                  htmlFor="cp-min"
-                  className="block text-xs font-semibold text-[#0F172A]"
-                >
-                  최소 사용 금액{" "}
-                  <span className="font-medium text-[#94A3B8]">(선택)</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="cp-min"
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={minAmount}
-                    onChange={(e) => setMinAmount(e.target.value)}
-                    placeholder="예: 30000"
-                    className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
-                  />
-                  <span className="shrink-0 text-sm font-semibold text-[#64748B]">원</span>
-                </div>
-                <p className="text-[11px] text-[#94A3B8]">
-                  이 금액 이상 결제할 때만 쿠폰을 쓸 수 있어요
-                </p>
-              </div>
-            </>
-          ) : (
+        {benefitKind === "discount" ? (
+          <>
+            {/* 할인 종류 — 퍼센트 / 금액 */}
             <div className="space-y-2">
-              <label
-                htmlFor="cp-gift"
-                className="block text-xs font-semibold text-[#0F172A]"
-              >
-                무엇을 드릴까요?
+              <span className="block text-xs font-semibold text-[#0F172A]">할인 종류</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCouponType("percent")}
+                  className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
+                    couponType === "percent"
+                      ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
+                      : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+                  }`}
+                >
+                  퍼센트 (%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCouponType("amount")}
+                  className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
+                    couponType === "amount"
+                      ? "border-[#0A0A0A] bg-[#FAFAFA] text-[#0A0A0A]"
+                      : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+                  }`}
+                >
+                  금액 (원)
+                </button>
+              </div>
+            </div>
+
+            {/* 할인 값 */}
+            <div className="space-y-2">
+              <label htmlFor="cp-value" className="block text-xs font-semibold text-[#0F172A]">
+                할인 값
               </label>
-              <input
-                id="cp-gift"
-                type="text"
-                value={giftItem}
-                onChange={(e) => setGiftItem(e.target.value)}
-                placeholder="예: 장작 1박스"
-                maxLength={60}
-                className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  id="cp-value"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={couponType === "percent" ? 100 : undefined}
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  placeholder={couponType === "percent" ? "10" : "3000"}
+                  className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+                />
+                <span className="shrink-0 text-sm font-semibold text-[#64748B]">
+                  {couponType === "percent" ? "%" : "원"}
+                </span>
+              </div>
+            </div>
+
+            {/* 최소 사용 금액 */}
+            <div className="space-y-2">
+              <label htmlFor="cp-min" className="block text-xs font-semibold text-[#0F172A]">
+                최소 사용 금액 <span className="font-medium text-[#94A3B8]">(선택)</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="cp-min"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  placeholder="예: 30000"
+                  className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+                />
+                <span className="shrink-0 text-sm font-semibold text-[#64748B]">원</span>
+              </div>
               <p className="text-[11px] text-[#94A3B8]">
-                매장에서 직접 드릴 물건이에요. 손님은 코드로 받아가요.
+                이 금액 이상 결제할 때만 쿠폰을 쓸 수 있어요
               </p>
             </div>
-          )}
-
-          {/* 사용 기한 — Bug B: 선택 상태 검정 솔리드로 강화 */}
+          </>
+        ) : (
           <div className="space-y-2">
-            <span className="block text-xs font-semibold text-[#0F172A]">
-              사용 기한
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setNoExpiry(true)}
-                aria-pressed={noExpiry}
-                className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition-colors ${
-                  noExpiry
-                    ? "border-[#0A0A0A] bg-[#0A0A0A] text-white"
-                    : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
-                }`}
-              >
-                무기한
-              </button>
-              <button
-                type="button"
-                onClick={() => setNoExpiry(false)}
-                aria-pressed={!noExpiry}
-                className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition-colors ${
-                  !noExpiry
-                    ? "border-[#0A0A0A] bg-[#0A0A0A] text-white"
-                    : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
-                }`}
-              >
-                날짜 지정
-              </button>
-            </div>
-            {!noExpiry ? (
-              <input
-                type="date"
-                value={validUntil}
-                onChange={(e) => setValidUntil(e.target.value)}
-                className="mt-2 w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none"
-                required
-              />
-            ) : null}
-          </div>
-
-          {/* 발행 수량 */}
-          <div className="space-y-2">
-            <label
-              htmlFor="cp-count"
-              className="block text-xs font-semibold text-[#0F172A]"
-            >
-              발행 수량{" "}
-              <span className="font-medium text-[#94A3B8]">
-                (선택, 비우면 무제한)
-              </span>
+            <label htmlFor="cp-gift" className="block text-xs font-semibold text-[#0F172A]">
+              무엇을 드릴까요?
             </label>
-            <div className="flex items-center gap-2">
-              <input
-                id="cp-count"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                value={totalCount}
-                onChange={(e) => setTotalCount(e.target.value)}
-                placeholder="예: 100"
-                className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
-              />
-              <span className="shrink-0 text-sm font-semibold text-[#64748B]">장</span>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={submitting || !partnerId}
-            className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:opacity-50"
-          >
-            <Ticket className="size-4" strokeWidth={2} />
-            {submitting ? "만드는 중…" : "쿠폰 만들기"}
-          </button>
-
-          {!partnerId ? (
-            <p className="text-[11px] text-[#EF4444]">
-              매장 정보를 불러오지 못했어요. 새로고침해 주세요.
-            </p>
-          ) : null}
-        </form>
-
-        {/* 발급한 쿠폰 */}
-        <section>
-          <h2 className="mb-2 px-1 text-sm font-semibold text-[#0A0A0A]">
-            발행한 쿠폰 ({data.coupons.length})
-          </h2>
-          {data.coupons.length === 0 ? (
-            <EmptyState
-              title="발행한 쿠폰이 없어요"
-              description="위에서 첫 쿠폰을 만들어 보세요."
+            <input
+              id="cp-gift"
+              type="text"
+              value={giftItem}
+              onChange={(e) => setGiftItem(e.target.value)}
+              placeholder="예: 장작 1박스"
+              maxLength={60}
+              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
             />
-          ) : (
-            <ul className="space-y-3">
-              {data.coupons.map((c) => (
-                <li
-                  key={c.id}
-                  className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
-                >
-                  <CouponItem row={c} onToggle={handleToggleActive} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+            <p className="text-[11px] text-[#94A3B8]">
+              매장에서 직접 드릴 물건이에요. 손님은 코드로 받아가요.
+            </p>
+          </div>
+        )}
 
-      <Toaster richColors position="top-center" />
-    </main>
+        {/* 사용 기한 — Bug B: 선택 상태 검정 솔리드로 강화 */}
+        <div className="space-y-2">
+          <span className="block text-xs font-semibold text-[#0F172A]">사용 기한</span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setNoExpiry(true)}
+              aria-pressed={noExpiry}
+              className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition-colors ${
+                noExpiry
+                  ? "border-[#0A0A0A] bg-[#0A0A0A] text-white"
+                  : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+              }`}
+            >
+              무기한
+            </button>
+            <button
+              type="button"
+              onClick={() => setNoExpiry(false)}
+              aria-pressed={!noExpiry}
+              className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition-colors ${
+                !noExpiry
+                  ? "border-[#0A0A0A] bg-[#0A0A0A] text-white"
+                  : "border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+              }`}
+            >
+              날짜 지정
+            </button>
+          </div>
+          {!noExpiry ? (
+            <input
+              type="date"
+              value={validUntil}
+              onChange={(e) => setValidUntil(e.target.value)}
+              className="mt-2 w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none"
+              required
+            />
+          ) : null}
+        </div>
+
+        {/* 발행 수량 */}
+        <div className="space-y-2">
+          <label htmlFor="cp-count" className="block text-xs font-semibold text-[#0F172A]">
+            발행 수량 <span className="font-medium text-[#94A3B8]">(선택, 비우면 무제한)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="cp-count"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={totalCount}
+              onChange={(e) => setTotalCount(e.target.value)}
+              placeholder="예: 100"
+              className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+            />
+            <span className="shrink-0 text-sm font-semibold text-[#64748B]">장</span>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={submitting || !partnerId}
+          className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] disabled:opacity-50"
+        >
+          <Ticket className="size-4" strokeWidth={2} />
+          {submitting ? "만드는 중…" : "쿠폰 만들기"}
+        </button>
+
+        {!partnerId ? (
+          <p className="text-[11px] text-[#EF4444]">
+            매장 정보를 불러오지 못했어요. 새로고침해 주세요.
+          </p>
+        ) : null}
+      </form>
+
+      {/* 발급한 쿠폰 */}
+      <section>
+        <h2 className="mb-2 px-1 text-sm font-semibold text-[#0A0A0A]">
+          발행한 쿠폰 ({coupons.length})
+        </h2>
+        {coupons.length === 0 ? (
+          <EmptyState title="발행한 쿠폰이 없어요" description="위에서 첫 쿠폰을 만들어 보세요." />
+        ) : (
+          <ul className="space-y-3">
+            {coupons.map((c) => (
+              <li
+                key={c.id}
+                className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+              >
+                <CouponItem row={c} onToggle={handleToggleActive} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -511,11 +490,8 @@ function CouponItem({
   const isGift = row.coupon_type === "gift";
   const minAmount = row.conditions?.min_amount;
   const dv =
-    typeof row.discount_value === "string"
-      ? Number(row.discount_value)
-      : (row.discount_value ?? 0);
-  const unit =
-    row.discount_unit ?? (row.coupon_type === "percent" ? "%" : "원");
+    typeof row.discount_value === "string" ? Number(row.discount_value) : (row.discount_value ?? 0);
+  const unit = row.discount_unit ?? (row.coupon_type === "percent" ? "%" : "원");
   const isActive = !!row.is_active;
   const [pending, setPending] = useState(false);
 
@@ -532,9 +508,7 @@ function CouponItem({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="line-clamp-1 min-w-0 flex-1 text-sm font-bold text-[#0F172A]">
-          {row.title}
-        </p>
+        <p className="line-clamp-1 min-w-0 flex-1 text-sm font-bold text-[#0F172A]">{row.title}</p>
         {/* Bug C: 활성/비활성 토글 스위치 — 클릭 시 toggle_coupon_active RPC. */}
         <button
           type="button"
@@ -573,9 +547,7 @@ function CouponItem({
         <p className="text-sm text-[#475569]">
           {dv}
           {unit} 할인
-          {minAmount
-            ? ` · ${Number(minAmount).toLocaleString()}원 이상 결제 시`
-            : ""}
+          {minAmount ? ` · ${Number(minAmount).toLocaleString()}원 이상 결제 시` : ""}
         </p>
       )}
       <p className="text-xs text-[#64748B]">
