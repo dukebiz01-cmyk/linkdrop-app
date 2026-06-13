@@ -6,11 +6,9 @@ import {
   Users,
   CheckCircle2,
   XCircle,
-  Ticket,
   ChevronRight,
   Sparkles,
   BarChart3,
-  CalendarRange,
   Megaphone,
   Share2,
   Inbox,
@@ -449,7 +447,28 @@ function PartnerHome() {
           </section>
         ) : null}
 
-        {/* ① 이번 달 성과 */}
+        {/* 매장관리 4그룹 진입 (IA Phase 3) — 판매/매출/프로모션/예약.
+            명함·제휴 섹션은 위(4그룹 밖)에 그대로. coupons/redeem/calendar 딥링크는
+            각 그룹 페이지 안에서 도달(허브에선 직접 링크 안 함). */}
+
+        {/* 1. 판매관리 */}
+        <Link
+          to="/partner/products"
+          className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-[#FAFAFA]">
+              <Package className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-[#0F172A]">판매관리</p>
+              <p className="mt-0.5 text-xs text-[#64748B]">상품 목록·등록</p>
+            </div>
+          </div>
+          <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
+        </Link>
+
+        {/* 2. 매출관리 */}
         <Link
           to="/partner/results"
           search={{ range: 30 } as never}
@@ -460,52 +479,16 @@ function PartnerHome() {
               <BarChart3 className="size-5 text-[#0A0A0A]" strokeWidth={2} />
             </span>
             <div>
-              <p className="text-sm font-semibold text-[#0F172A]">이번 달 성과</p>
-              <p className="mt-0.5 text-xs text-[#64748B]">조회·예약·쿠폰 한 눈에 보기</p>
+              <p className="text-sm font-semibold text-[#0F172A]">매출관리</p>
+              <p className="mt-0.5 text-xs text-[#64748B]">매장 지표·정산</p>
             </div>
           </div>
           <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
         </Link>
 
-        {/* ② 예약 캘린더 (신규) */}
+        {/* 3. 프로모션관리 — 쿠폰 만들기/처리 탭(P2). 쿠폰 카드 2개를 흡수. */}
         <Link
-          to="/partner/calendar"
-          className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
-        >
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-[#FAFAFA]">
-              <CalendarRange className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-[#0F172A]">예약 캘린더</p>
-              <p className="mt-0.5 text-xs text-[#64748B]">
-                가능한 날짜를 마킹해 손님에게 보여줘요
-              </p>
-            </div>
-          </div>
-          <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
-        </Link>
-
-        {/* 판매 관리 — 자체업로드 상품 목록(S3a). */}
-        <Link
-          to="/partner/products"
-          className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
-        >
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-[#FAFAFA]">
-              <Package className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-[#0F172A]">판매 관리</p>
-              <p className="mt-0.5 text-xs text-[#64748B]">내 상품을 등록하고 관리해요</p>
-            </div>
-          </div>
-          <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
-        </Link>
-
-        {/* ③ 쿠폰 만들기 */}
-        <Link
-          to="/partner/coupons"
+          to="/partner/promotion"
           className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
         >
           <div className="flex items-center gap-3">
@@ -513,31 +496,14 @@ function PartnerHome() {
               <Sparkles className="size-5 text-[#D97706]" strokeWidth={2} />
             </span>
             <div>
-              <p className="text-sm font-semibold text-[#0F172A]">쿠폰 만들기</p>
-              <p className="mt-0.5 text-xs text-[#64748B]">할인·혜택 쿠폰을 새로 만들어요</p>
+              <p className="text-sm font-semibold text-[#0F172A]">프로모션관리</p>
+              <p className="mt-0.5 text-xs text-[#64748B]">쿠폰 만들기·처리</p>
             </div>
           </div>
           <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
         </Link>
 
-        {/* ④ 쿠폰 처리 (redeem) */}
-        <Link
-          to="/partner/redeem"
-          className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
-        >
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-[#FAFAFA]">
-              <Ticket className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-[#0F172A]">쿠폰 처리</p>
-              <p className="mt-0.5 text-xs text-[#64748B]">손님 쿠폰 코드를 입력해 주세요</p>
-            </div>
-          </div>
-          <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
-        </Link>
-
-        {/* 예약관리 — 들어온 예약 inbox 는 /partner/reservations 로 분리(Phase 1). */}
+        {/* 4. 예약관리 — 예약 inbox + 캘린더 링크(P1). 예약 캘린더 카드를 흡수. */}
         <Link
           to="/partner/reservations"
           className="flex w-full min-h-[44px] items-center justify-between rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:bg-[#FAFAFA]"
@@ -548,7 +514,7 @@ function PartnerHome() {
             </span>
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">예약관리</p>
-              <p className="mt-0.5 text-xs text-[#64748B]">들어온 예약을 확인하고 처리해요</p>
+              <p className="mt-0.5 text-xs text-[#64748B]">예약·캘린더</p>
             </div>
           </div>
           <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
