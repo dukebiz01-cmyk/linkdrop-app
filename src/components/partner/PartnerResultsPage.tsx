@@ -86,6 +86,21 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+// 준비중 섹션 — 실제 데이터/쿼리 없음. 매출 정산·상품별 전환 placeholder.
+function ComingSoonCard({ title, desc }: { title: string; desc: string }) {
+  return (
+    <section className="flex items-center justify-between gap-3 rounded-2xl border border-[#E5E5E5] bg-white px-4 py-4">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold tracking-ko text-[#0A0A0A]">{title}</p>
+        <p className="mt-0.5 text-xs font-medium tracking-ko text-[#737373]">{desc}</p>
+      </div>
+      <span className="shrink-0 rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[11px] font-semibold tracking-ko text-[#94A3B8]">
+        준비중
+      </span>
+    </section>
+  );
+}
+
 export function PartnerResultsPage({
   partnerName,
   partnerId,
@@ -127,9 +142,7 @@ export function PartnerResultsPage({
                   type="button"
                   onClick={() => onRangeChange(r.value)}
                   className={`min-h-[36px] rounded-lg px-3 text-xs font-semibold tracking-ko transition-colors ${
-                    active
-                      ? "bg-[#0A0A0A] text-white"
-                      : "text-[#525252] hover:bg-[#FAFAFA]"
+                    active ? "bg-[#0A0A0A] text-white" : "text-[#525252] hover:bg-[#FAFAFA]"
                   }`}
                   aria-pressed={active}
                 >
@@ -160,20 +173,14 @@ export function PartnerResultsPage({
             secondaryLabel="쿠폰 사용"
             secondaryValue={numFmt(m?.coupon_redeemed)}
           />
-          <MetricCard
-            primaryLabel="정산"
-            primaryValue={`${numFmt(m?.settlements)}건`}
-          />
+          <MetricCard primaryLabel="정산" primaryValue={`${numFmt(m?.settlements)}건`} />
         </section>
 
         {/* ② 상세 지표 (#16 네이버 클릭 ≠ 확정 분리) */}
         <section className="rounded-2xl border border-[#E5E5E5] bg-white px-4 py-2">
           <DetailRow label="전화 클릭" value={numFmt(m?.phone_clicks)} />
           <DetailRow label="네이버 예약 클릭" value={numFmt(m?.naver_handoff)} />
-          <DetailRow
-            label="내부 예약 클릭"
-            value={numFmt(m?.internal_reservation_clicks)}
-          />
+          <DetailRow label="내부 예약 클릭" value={numFmt(m?.internal_reservation_clicks)} />
           <DetailRow label="쿠폰 발급" value={numFmt(m?.coupon_claimed)} />
         </section>
 
@@ -189,7 +196,13 @@ export function PartnerResultsPage({
           />
         </section>
 
-        {/* ④ 개선 가이드 */}
+        {/* ④ 매출 정산 (준비중) — billing 스텁을 매출관리로 편입. */}
+        <ComingSoonCard title="매출 정산" desc="정산 내역·청구" />
+
+        {/* ⑤ 상품별 전환 (준비중) — D1 보류, placeholder(실제 쿼리 없음). */}
+        <ComingSoonCard title="상품별 전환" desc="상품별 조회·전환수" />
+
+        {/* ⑥ 개선 가이드 */}
         <PartnerGuideSection partnerId={partnerId} range={range} />
       </div>
     </main>
@@ -206,9 +219,10 @@ function Header({ partnerName }: { partnerName: string }) {
         <ArrowLeft className="size-3" strokeWidth={2} />
         매장 홈
       </Link>
-      <h1 className="mt-1 text-lg font-bold tracking-ko text-[#0A0A0A]">
-        {partnerName ? `${partnerName} 성과` : "매장 성과"}
-      </h1>
+      <h1 className="mt-1 text-lg font-bold tracking-ko text-[#0A0A0A]">매출관리</h1>
+      {partnerName ? (
+        <p className="mt-0.5 text-xs font-medium tracking-ko text-[#737373]">{partnerName}</p>
+      ) : null}
     </header>
   );
 }

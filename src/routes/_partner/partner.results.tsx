@@ -2,10 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
-import {
-  PartnerResultsPage,
-  type PartnerResults,
-} from "@/components/partner/PartnerResultsPage";
+import { PartnerResultsPage, type PartnerResults } from "@/components/partner/PartnerResultsPage";
 
 // #17: _partner.tsx 가 인증 + is_active_partner_owner 단독 담당. 자식 loader 는
 // graceful — session/userId throw 금지 (ERR_TOO_MANY_REDIRECTS 재발 방지).
@@ -26,7 +23,7 @@ function clampRange(raw: unknown): RangeDays {
 }
 
 export const Route = createFileRoute("/_partner/partner/results")({
-  head: () => ({ meta: [{ title: "매장 성과 — LinkDrop" }] }),
+  head: () => ({ meta: [{ title: "매출관리 — LinkDrop" }] }),
   validateSearch: (search: Record<string, unknown>): Search => ({
     range: clampRange(search.range),
   }),
