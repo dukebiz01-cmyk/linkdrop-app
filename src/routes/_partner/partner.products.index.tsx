@@ -9,6 +9,8 @@ import {
   ExternalLink,
   Image as ImageIcon,
   Loader2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { Toaster } from "@/components/ui/sonner";
@@ -59,6 +61,7 @@ function ProductsIndexPage() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,6 +119,38 @@ function ProductsIndexPage() {
       toast.success("공유 링크를 복사했어요.");
     } catch {
       toast.error("복사에 실패했어요.");
+    }
+  }
+
+  // 활성↔비활성 (D3, 소프트 비활성) — info_drops.status 를 published↔archived 토글.
+  //   세션 hydrate 후 클라 직접 UPDATE(drops_owner_modify RLS, owner-gated). status 만 patch.
+  //   범위 (a): 파트너 목록 표시(판매중/비공개)만 — 공개 /d(get_drop_detail) 무변경.
+  async function handleToggleActive(p: ProductRow) {
+    const next = p.status === "published" ? "archived" : "published";
+    setTogglingId(p.id);
+    try {
+      const supabase = getSupabase();
+      const { data: sess } = await supabase.auth.getSession();
+      if (!sess.session?.user.id) {
+        toast.error("로그인이 필요해요.");
+        return;
+      }
+      const { error: upErr } = await supabase
+        .from("info_drops")
+        .update({ status: next })
+        .eq("id", p.id);
+      if (upErr) {
+        console.error("[partner.products] status toggle failed:", upErr);
+        toast.error("상태 변경에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      toast.success(next === "archived" ? "비공개로 전환했어요." : "판매중으로 전환했어요.");
+      await load();
+    } catch (e) {
+      console.error("[partner.products] toggle unexpected:", e);
+      toast.error("처리 중 문제가 생겼어요.");
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -218,6 +253,22 @@ function ProductsIndexPage() {
                         ) : null}
                       </div>
                     </div>
+
+                    {/* 활성↔비활성 토글 (D3) — published↔archived. 되돌릴 수 있어 confirm 없음. */}
+                    <button
+                      type="button"
+                      onClick={() => void handleToggleActive(p)}
+                      disabled={togglingId === p.id}
+                      aria-label={isPublished ? "비공개로 전환" : "판매중으로 전환"}
+                      className="inline-flex h-8 shrink-0 items-center gap-1 self-start rounded-lg border border-[#E2E8F0] px-2 text-xs font-semibold text-[#64748B] hover:bg-[#FAFAFA] disabled:opacity-50"
+                    >
+                      {isPublished ? (
+                        <EyeOff className="size-3.5" strokeWidth={2} />
+                      ) : (
+                        <Eye className="size-3.5" strokeWidth={2} />
+                      )}
+                      {isPublished ? "숨기기" : "공개"}
+                    </button>
                   </div>
 
                   {/* 액션: 공유하기(주인공) + 카드보기 */}
