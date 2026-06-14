@@ -1,0 +1,4 @@
+{
+  "errorCount": 2,
+  "note": "Pre-existing tsc --noEmit errors at hook install (2026-06-15): src/routes/_user/me.tsx (senderNames), src/routes/index.tsx (onSearch). Guard C blocks only when the count exceeds this baseline. Lower this number as the debt is fixed; never raise it to mask new errors."
+}
