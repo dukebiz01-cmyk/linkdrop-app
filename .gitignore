@@ -27,7 +27,9 @@ dist-ssr
 scripts/tmp/
 
 # Local Claude Code session state
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 
 # v0.app integration source (extracted from zip, components merged into src/)
 linkdrop-v0-integration/
