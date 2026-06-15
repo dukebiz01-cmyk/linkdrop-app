@@ -8,6 +8,9 @@ import { ExploreSearchBar } from "@/components/explore/ExploreSearchBar";
 import { DiscoverSection } from "@/components/explore/DiscoverSection";
 import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 import { parseVideoUrl } from "@/lib/video-metadata";
+import { DropFeedCard } from "@/components/drop-feed-card";
+import { getDiscoverDrops } from "@/lib/feed-queries";
+import type { DropFeedItem } from "@/components/home-page";
 
 function extractYouTubeVideoIdFromThumb(thumb: string | null | undefined): string | null {
   if (!thumb) return null;
@@ -36,13 +39,15 @@ type ExploreLoaderData = {
   isBusiness: boolean;
   partnerId: string | null;
   sources: ContentSourceRow[];
+  // Slice 1 발견 피드 — info_drops status='published' 공개 카드 (getDiscoverDrops).
+  discoverDrops: DropFeedItem[];
 };
 
 export const Route = createFileRoute("/_user/explore")({
   head: () => ({ meta: [{ title: "탐색" }] }),
   loader: async (): Promise<ExploreLoaderData> => {
     const supabase = await getAuthClient();
-    const empty = { isBusiness: false, partnerId: null, sources: [] };
+    const empty = { isBusiness: false, partnerId: null, sources: [], discoverDrops: [] };
     if (!supabase) return empty;
     const { data: sess } = await supabase.auth.getSession();
     const uid = sess.session?.user.id ?? null;
@@ -72,17 +77,22 @@ export const Route = createFileRoute("/_user/explore")({
       .order("created_at", { ascending: false })
       .limit(100);
 
+    // Slice 1 — 공개 발견 피드(info_drops status='published'). 기존 plumbing 재사용.
+    //   실패해도 빈 배열 graceful — "내가 모은 콘텐츠" 흐름은 영향 없음.
+    const discoverDrops = await getDiscoverDrops(supabase);
+
     return {
       isBusiness: Boolean(isBusiness),
       partnerId: partner?.id ?? null,
       sources: (rows ?? []) as ContentSourceRow[],
+      discoverDrops,
     };
   },
   component: ExplorePage,
 });
 
 function ExplorePage() {
-  const { isBusiness, partnerId, sources } = Route.useLoaderData();
+  const { isBusiness, partnerId, sources, discoverDrops } = Route.useLoaderData();
   const navigate = useNavigate();
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -129,6 +139,11 @@ function ExplorePage() {
     });
   }
 
+  // Slice 1 — 발견 카드 탭 → 수신 화면(/d) 재사용. 신규 라우트 없음.
+  function handleOpenDrop(shareUuid: string) {
+    navigate({ to: "/d/$shareUuid", params: { shareUuid } });
+  }
+
   async function handleRemove(sourceId: string) {
     if (typeof window === "undefined") return;
     const ok = window.confirm("내 콘텐츠에서 뺄까요? 만든 카드는 영향 없어요");
@@ -158,9 +173,27 @@ function ExplorePage() {
       <header className="mb-6">
         <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">탐색</h1>
         <p className="mt-2 text-sm font-medium tracking-ko text-[#737373]">
-          모아둔 콘텐츠로 바로 카드를 만들어요.
+          공개된 카드를 둘러보고, 모아둔 콘텐츠로 바로 카드를 만들어요.
         </p>
       </header>
+
+      {/* Slice 1 — 발견 피드(공개 published 카드). 기존 DropFeedCard 재사용,
+          카드 탭 → /d 수신 화면. 비어 있으면 섹션 자체를 숨김(빈 박스 방지). */}
+      {discoverDrops.length > 0 ? (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-bold tracking-ko text-[#0A0A0A]">발견</h2>
+          <div className="space-y-3">
+            {discoverDrops.map((drop) => (
+              <DropFeedCard
+                key={drop.shareUuid}
+                {...drop}
+                onClick={() => handleOpenDrop(drop.shareUuid)}
+                onCtaClick={() => handleOpenDrop(drop.shareUuid)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <ExploreSearchBar value={query} onChange={setQuery} />
 
