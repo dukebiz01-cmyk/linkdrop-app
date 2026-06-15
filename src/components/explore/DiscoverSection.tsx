@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
 import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 
-type DiscoverCandidate = {
+export type DiscoverCandidate = {
   provider: "youtube";
   source_url: string;
   source_id: string;
@@ -36,10 +36,14 @@ export function DiscoverSection({
   partnerId,
   onRegistered,
   isBusiness = false,
+  onImport,
 }: {
   partnerId: string | null;
   onRegistered: () => void;
   isBusiness?: boolean;
+  /** STEP1-fix: 만들기 '가져오기' 모드 — 후보 등록(claim) 후 이 콜백으로 위저드 prefill 진입.
+   *  미지정(explore 등록 모드)이면 기존처럼 '등록됨' 배지로 끝. */
+  onImport?: (candidate: DiscoverCandidate) => void;
 }) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -176,6 +180,11 @@ export function DiscoverSection({
         toast.error(`담지 못했어요: ${upsertErr.message}`);
         return;
       }
+      // 가져오기 모드 — claim 후 위저드 prefill 로 합류(아래 토스트/배지 흐름 생략).
+      if (onImport) {
+        onImport(c);
+        return;
+      }
       setClaimedIds((prev) => {
         const next = new Set(prev);
         next.add(c.source_id);
@@ -296,16 +305,22 @@ export function DiscoverSection({
                     <button
                       type="button"
                       onClick={() => void handleRegister(c)}
-                      disabled={isBusy || isRegistered}
+                      disabled={isBusy || (!onImport && isRegistered)}
                       className="mt-1 inline-flex h-9 min-h-[36px] w-fit items-center justify-center gap-1 rounded-lg bg-[#0A0A0A] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#171717] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
                     >
-                      {isRegistered ? (
+                      {isBusy ? (
+                        onImport ? (
+                          "가져오는 중…"
+                        ) : (
+                          "등록 중…"
+                        )
+                      ) : onImport ? (
+                        "가져오기"
+                      ) : isRegistered ? (
                         <>
                           <Check className="size-3.5" strokeWidth={2.5} />
                           등록됨
                         </>
-                      ) : isBusy ? (
-                        "등록 중…"
                       ) : (
                         "등록"
                       )}
