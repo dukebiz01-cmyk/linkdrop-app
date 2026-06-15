@@ -148,46 +148,58 @@ async function youtubeSearch(keyword: string): Promise<NormalizedCandidate[]> {
 // Naver 어댑터 — 뉴스/블로그 검색 (썸네일 없음 → null). 키 없으면 skip.
 // ============================================================
 async function naverSearch(type: "news" | "blog", keyword: string): Promise<NormalizedCandidate[]> {
+  // [진단] env 존재 여부만(키 값 자체는 절대 로깅 X — boolean).
+  console.log("[naver] env:", { id: !!NAVER_CLIENT_ID, secret: !!NAVER_CLIENT_SECRET });
   if (!NAVER_CLIENT_ID || !NAVER_CLIENT_SECRET) return [];
   const url = new URL(`https://openapi.naver.com/v1/search/${type}.json`);
   url.searchParams.set("query", keyword);
   url.searchParams.set("sort", "sim");
   url.searchParams.set("display", "10");
-  const res = await fetch(url.toString(), {
-    headers: {
-      "X-Naver-Client-Id": NAVER_CLIENT_ID,
-      "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-    },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`NAVER_${type.toUpperCase()}_FAILED status=${res.status} body=${body.slice(0, 200)}`);
-  }
-  const json = await res.json();
-  const items = (json.items ?? []) as Array<{
-    title?: string;
-    link?: string;
-    description?: string;
-    bloggername?: string;
-    pubDate?: string;
-    postdate?: string;
-  }>;
-  const provider = type === "news" ? "naver_news" : "naver_blog";
-  const out: NormalizedCandidate[] = [];
-  for (const it of items) {
-    if (!it.link) continue;
-    out.push({
-      provider,
-      source_id: it.link,
-      canonical_url: it.link,
-      title: stripHtml(it.title ?? ""),
-      thumbnail_url: null,
-      author_name: type === "blog" ? (it.bloggername ?? null) : null,
-      published_at: (type === "blog" ? it.postdate : it.pubDate) ?? null,
-      snippet: stripHtml(it.description ?? ""),
+  try {
+    // [진단] 호출 URL(쿼리만, 키는 헤더라 미포함).
+    console.log("[naver] url:", url.toString());
+    const res = await fetch(url.toString(), {
+      headers: {
+        "X-Naver-Client-Id": NAVER_CLIENT_ID,
+        "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
+      },
     });
+    console.log("[naver] status:", res.status);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error("[naver] body:", body);
+      throw new Error(`NAVER_${type.toUpperCase()}_FAILED status=${res.status} body=${body.slice(0, 200)}`);
+    }
+    const json = await res.json();
+    const items = (json.items ?? []) as Array<{
+      title?: string;
+      link?: string;
+      description?: string;
+      bloggername?: string;
+      pubDate?: string;
+      postdate?: string;
+    }>;
+    const provider = type === "news" ? "naver_news" : "naver_blog";
+    const out: NormalizedCandidate[] = [];
+    for (const it of items) {
+      if (!it.link) continue;
+      out.push({
+        provider,
+        source_id: it.link,
+        canonical_url: it.link,
+        title: stripHtml(it.title ?? ""),
+        thumbnail_url: null,
+        author_name: type === "blog" ? (it.bloggername ?? null) : null,
+        published_at: (type === "blog" ? it.postdate : it.pubDate) ?? null,
+        snippet: stripHtml(it.description ?? ""),
+      });
+    }
+    return out;
+  } catch (e) {
+    // [진단] 어댑터 throw 원인. 기존 동작 보존 — rethrow(상위 allSettled 가 errors 처리).
+    console.error("[naver] threw:", String(e));
+    throw e;
   }
-  return out;
 }
 
 const ADAPTERS: SearchAdapter[] = [
@@ -270,6 +282,13 @@ Deno.serve(async (req) => {
     errors[ADAPTERS[i].provider] = String(reason?.message ?? reason);
     console.warn(`[discover] ${ADAPTERS[i].provider} 실패(skip):`, reason);
     return [];
+  });
+
+  // [진단] 어댑터별 결과 개수(ADAPTERS 순서 = youtube, naver_news, naver_blog).
+  console.log("[dispatch] counts:", {
+    youtube: perProvider[0]?.length ?? 0,
+    naver_news: perProvider[1]?.length ?? 0,
+    naver_blog: perProvider[2]?.length ?? 0,
   });
 
   const merged = interleave(perProvider);
