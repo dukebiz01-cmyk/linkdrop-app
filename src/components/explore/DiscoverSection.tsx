@@ -293,8 +293,9 @@ export function DiscoverSection({
           {candidates.map((c) => {
             const isRegistered = claimedIds.has(c.source_id);
             const isBusy = registeringId === c.source_id;
-            const description = extractDescription(c.raw_meta);
-            const meta = PROVIDER_META[c.provider];
+            const description = extractDescription(c.raw_meta ?? {});
+            // 런타임 방어 — API provider 가 예상 밖/누락이어도 크래시 금지(YouTube 폴백).
+            const meta = PROVIDER_META[c.provider] ?? PROVIDER_META.youtube;
             const ProviderIcon = meta.Icon;
             const isNaver = c.provider !== "youtube";
             return (
