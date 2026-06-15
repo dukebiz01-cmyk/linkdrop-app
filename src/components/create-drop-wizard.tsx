@@ -44,6 +44,7 @@ import { Step3Options } from "@/components/create/step3/Step3Options";
 import { Step3Commerce } from "@/components/create/step3/Step3Commerce";
 import { ProductAttachSection } from "@/components/create/step3/ProductAttachSection";
 import { VideoAttachSection } from "@/components/create/step3/VideoAttachSection";
+import { PurposeMessageCard } from "@/components/create/step3/PurposeMessageCard";
 import {
   aiPreviewFromPurpose,
   buildWizardShareData,
@@ -657,70 +658,100 @@ export function CreateDropWizard({
           onChange={setAttachedVideos}
         />
       )}
-      {/* 새 Step 3 = 옛 Step 4 + Step 5 병합 (미리보기 위, 공유 아래). */}
-      {step === 3 && purpose && videoInfo && aiPreview && (
-        <>
-          <Step4DropPreview
-            purpose={purpose}
-            ai={aiForPreview!}
-            videoInfo={videoInfo}
-            reservation={purpose === "예약" ? buildReservationSummary(step3Fields) : undefined}
-            labelDate={reservationItemFullLabel}
-            attachedProducts={attachedProducts}
-          />
-          {!studioMode && purpose !== "구매" ? (
-            // quick-path 미리보기 — 한 줄(사람이 직접 작성, AI 미작성) + [바로 보내기]/[스튜디오에서 다듬기].
-            <section className="space-y-5 px-6 pb-10 pt-4">
-              <div>
-                <label
-                  htmlFor="wizard-oneline"
-                  className="text-sm font-bold tracking-ko text-text-strong"
-                >
-                  받는 사람에게 한마디
-                </label>
-                <textarea
-                  id="wizard-oneline"
-                  value={step3Fields.shareMessage}
-                  onChange={(e) =>
-                    setStep3Fields((prev) => ({ ...prev, shareMessage: e.target.value }))
-                  }
-                  rows={2}
-                  placeholder="예: 이거 보고 바로 예약했어 ㅎㅎ"
-                  className="mt-2 w-full resize-none rounded-lg border border-border bg-white px-3 py-2.5 text-sm tracking-ko text-text-strong placeholder:text-text-subtle focus:border-[#0A0A0A] focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-2">
-                {shareFeedback ? (
-                  <p className="text-sm font-medium tracking-ko text-text-muted">{shareFeedback}</p>
+      {/* Step 3 미리보기 — quick: 실제 카드(가짜 요약 없음)+한마디+2버튼 / studio·커머스: 기존 보존. */}
+      {step === 3 &&
+        purpose &&
+        videoInfo &&
+        aiPreview &&
+        (!studioMode && purpose !== "구매" ? (
+          <section className="space-y-5 px-6 pb-10 pt-4">
+            {/* WYSIWYG — 받는 사람이 볼 모습: 출처(oEmbed)+목적 배지+버튼 CTA(목적 기본). 정적 가짜 요약 없음. */}
+            <div>
+              <p className="text-sm font-bold tracking-ko text-text-strong">미리보기</p>
+              <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-bg shadow-soft">
+                {videoInfo.thumbnailUrl ? (
+                  <div className="relative aspect-video w-full bg-surface">
+                    <img
+                      src={videoInfo.thumbnailUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
                 ) : null}
-                <ErrorMessage message={shareError} />
-                <ActionButton
-                  type="button"
-                  disabled={!step3Fields.shareMessage.trim()}
-                  onClick={handleKakaoShare}
-                  className={WIZARD_PRIMARY_BUTTON_CLASS}
-                >
-                  바로 보내기
-                </ActionButton>
-                {!step3Fields.shareMessage.trim() ? (
-                  <p className="text-center text-xs font-medium tracking-ko text-text-subtle">
-                    한 줄을 입력하면 보낼 수 있어요
+                <div className="space-y-3 p-4">
+                  <span
+                    className={cn(
+                      "inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold tracking-ko",
+                      PURPOSE_FLOW_CONFIG[purpose].chipClass,
+                    )}
+                  >
+                    {PURPOSE_FLOW_CONFIG[purpose].badge}
+                  </span>
+                  <p className="text-base font-bold tracking-ko text-text-strong">
+                    {videoInfo.title}
                   </p>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStudioMode(true);
-                    setStep(2);
-                  }}
-                  className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-border bg-white px-4 text-sm font-semibold tracking-ko text-text-strong transition-colors hover:border-text-muted"
-                >
-                  스튜디오에서 다듬기
-                </button>
+                  {videoInfo.channelName ? (
+                    <p className="text-xs font-medium tracking-ko text-text-muted">
+                      {videoInfo.channelName}
+                    </p>
+                  ) : null}
+                  <div className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold tracking-ko text-white">
+                    {STEP5_SHARE_BY_PURPOSE[purpose].cta ?? "보러 가기"}
+                  </div>
+                </div>
               </div>
-            </section>
-          ) : (
+              <p className="mt-2 text-xs font-medium tracking-ko text-text-subtle">
+                요약은 보낼 때 자동으로 정리돼요.
+              </p>
+            </div>
+
+            {/* 한 줄 — PurposeMessageCard 재사용(사람 작성, AI 미작성). curator_message 연결. */}
+            <PurposeMessageCard
+              fields={step3Fields}
+              onFieldsChange={(patch) => setStep3Fields((prev) => ({ ...prev, ...patch }))}
+            />
+
+            {/* 2버튼 — [바로 보내기](한 줄 채움일 때만) / [스튜디오에서 다듬기]. */}
+            <div className="space-y-2">
+              {shareFeedback ? (
+                <p className="text-sm font-medium tracking-ko text-text-muted">{shareFeedback}</p>
+              ) : null}
+              <ErrorMessage message={shareError} />
+              <ActionButton
+                type="button"
+                disabled={!step3Fields.shareMessage.trim()}
+                onClick={handleKakaoShare}
+                className={WIZARD_PRIMARY_BUTTON_CLASS}
+              >
+                바로 보내기
+              </ActionButton>
+              {!step3Fields.shareMessage.trim() ? (
+                <p className="text-center text-xs font-medium tracking-ko text-text-subtle">
+                  한 줄을 입력하면 보낼 수 있어요
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setStudioMode(true);
+                  setStep(2);
+                }}
+                className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-border bg-white px-4 text-sm font-semibold tracking-ko text-text-strong transition-colors hover:border-text-muted"
+              >
+                스튜디오에서 다듬기
+              </button>
+            </div>
+          </section>
+        ) : (
+          <>
+            <Step4DropPreview
+              purpose={purpose}
+              ai={aiForPreview!}
+              videoInfo={videoInfo}
+              reservation={purpose === "예약" ? buildReservationSummary(step3Fields) : undefined}
+              labelDate={reservationItemFullLabel}
+              attachedProducts={attachedProducts}
+            />
             <Step5PurposeShare
               data={buildWizardShareData(
                 videoInfo,
@@ -736,9 +767,8 @@ export function CreateDropWizard({
               shareError={shareError}
               shareFeedback={shareFeedback}
             />
-          )}
-        </>
-      )}
+          </>
+        ))}
 
       {/* sticky CTA — Step 1·2 만. Step 3 은 자체 공유 UI. 예약 Step 2 는 자체
           in-flow CTA(캘린더) 쓰므로 sticky 제외 (옛 step 3 예약 패턴 그대로). */}
