@@ -84,6 +84,15 @@ export interface InfoDropPageProps {
     priceKrw: number | null;
     imageUrl: string | null;
   }>;
+  /** Slice2 멀티영상 — primary 외 담은 추가 영상(video 블록). 없으면 미렌더. */
+  attachedVideos?: Array<{
+    provider: string;
+    sourceId: string;
+    sourceUrl: string;
+    title: string | null;
+    thumbnailUrl: string | null;
+    authorName: string | null;
+  }>;
   local: {
     name: string;
     category: string;
@@ -562,6 +571,7 @@ export function InfoDropPage({
   priceOffers,
   commerce,
   attachedProducts,
+  attachedVideos,
   local,
   creator,
   aiSummary,
@@ -1247,6 +1257,45 @@ export function InfoDropPage({
             </section>
           )}
       </div>
+
+      {/* Slice2 멀티영상 — primary 외 담은 영상 리스트(썸네일 → 원본 열기). 기능 위주(라벨 폴리시 추후). */}
+      {attachedVideos && attachedVideos.length > 0 ? (
+        <section className="mx-auto w-full max-w-[480px] px-6 pt-4">
+          <h2 className="mb-3 text-sm font-bold tracking-ko text-text-strong">함께 담은 영상</h2>
+          <ul className="space-y-3">
+            {attachedVideos.map((v) => (
+              <li key={v.sourceId || v.sourceUrl}>
+                <a
+                  href={v.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-2 transition-colors hover:border-[#D4D4D4]"
+                >
+                  <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-[#F5F5F5]">
+                    {v.thumbnailUrl ? (
+                      <img src={v.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-[#A3A3A3]">
+                        <Play className="size-5" strokeWidth={2} />
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-sm font-bold tracking-ko text-[#0A0A0A]">
+                      {v.title || "담은 영상"}
+                    </p>
+                    {v.authorName ? (
+                      <p className="mt-0.5 truncate text-xs font-medium tracking-ko text-[#737373]">
+                        {v.authorName}
+                      </p>
+                    ) : null}
+                  </div>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {/* v7.2 5a — 하단 공유 블록 (모든 드롭 공통).
             [LinkDrop][링크 복사][친구에게 보내기] 가로 3 버튼.

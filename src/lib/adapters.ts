@@ -200,6 +200,40 @@ function buildAttachedProducts(d: DropDetailRpc): InfoDropPageProps["attachedPro
   return items.length > 0 ? items : undefined;
 }
 
+/**
+ * Slice2 멀티영상 — block_kind='video' 블록 → 추가 영상 리스트(primary 외).
+ *   position 순. 없으면 undefined. (primary 영상은 source_id → videoThumbnailUrl 로 별도 렌더.)
+ */
+function buildAttachedVideos(d: DropDetailRpc): InfoDropPageProps["attachedVideos"] {
+  const blocks = Array.isArray(d.blocks) ? d.blocks : [];
+  const items = blocks
+    .filter(
+      (b): b is { block_kind?: string; block_data?: Record<string, unknown>; position?: number } =>
+        !!b &&
+        typeof b === "object" &&
+        (b as { block_kind?: string }).block_kind === "video",
+    )
+    .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+    .map((b) => {
+      const bd = (b.block_data ?? {}) as Record<string, unknown>;
+      return {
+        provider: typeof bd.provider === "string" ? bd.provider : "youtube",
+        sourceId: typeof bd.source_id === "string" ? bd.source_id : "",
+        sourceUrl:
+          typeof bd.source_url === "string"
+            ? bd.source_url
+            : typeof bd.canonical_url === "string"
+              ? bd.canonical_url
+              : "",
+        title: typeof bd.title === "string" ? bd.title : null,
+        thumbnailUrl: typeof bd.thumbnail_url === "string" ? bd.thumbnail_url : null,
+        authorName: typeof bd.author_name === "string" ? bd.author_name : null,
+      };
+    })
+    .filter((v) => v.sourceUrl);
+  return items.length > 0 ? items : undefined;
+}
+
 /** get_drop_detail RPC 출력 → InfoDropPage props. */
 export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
   const product = d.products?.[0];
@@ -226,6 +260,7 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     priceOffers: product ? toPriceOffers(product.offers) : undefined,
     commerce: buildCommerce(d),
     attachedProducts: buildAttachedProducts(d),
+    attachedVideos: buildAttachedVideos(d),
     local: {
       name: d.store?.name ?? "",
       category: d.store?.kind ?? "공유된 정보",
