@@ -19,8 +19,13 @@ export const Route = createFileRoute("/_user")({
 
 // focused 화면 — 공통 nav 숨김 (D0 짤림 방지 + 화면 집중도).
 // results·coupon 은 자체 화면이 풀높이 + 자체 CTA 가 있어 nav 가 겹친다.
+// create-wizard(Slice 2) = 전체화면 위저드 — 자체 닫기/이전 헤더가 있어 nav 숨김.
 function shouldHideNav(pathname: string): boolean {
-  return pathname.startsWith("/results") || pathname.startsWith("/coupon");
+  return (
+    pathname.startsWith("/results") ||
+    pathname.startsWith("/coupon") ||
+    pathname.startsWith("/create-wizard")
+  );
 }
 
 function UserLayout() {

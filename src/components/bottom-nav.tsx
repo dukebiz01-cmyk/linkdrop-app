@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, Search, PlusCircle, User } from "lucide-react";
+import { Home, Compass, Plus, User } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -35,14 +35,14 @@ const TABS: NavTab[] = [
   {
     id: "explore",
     label: "탐색",
-    Icon: Search,
+    Icon: Compass,
     to: "/explore",
     match: (p) => p.startsWith("/explore"),
   },
   {
     id: "create",
     label: "만들기",
-    Icon: PlusCircle,
+    Icon: Plus,
     to: "/create-wizard",
     match: (p) => p.startsWith("/create"),
   },
@@ -73,7 +73,21 @@ export function BottomNav() {
             const iconStroke = active ? 2.25 : 1.75;
             const labelWeight = active ? "font-bold" : "font-medium";
 
-            const content = (
+            // 만들기 = 1차 액션 강조: 검정 채운 원(36px) 안에 흰 Plus. 다른 탭보다
+            // 시각적으로 무겁게 — active 상태와 무관하게 항상 강조. 라벨 "만들기" 유지.
+            const isCreate = tab.id === "create";
+            const content = isCreate ? (
+              <>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0A0A0A] transition-transform duration-150 group-active:scale-90">
+                  <tab.Icon className="h-5 w-5 text-white" strokeWidth={2.25} />
+                </span>
+                <span
+                  className={`text-[11px] tracking-ko transition-colors ${labelColor} ${labelWeight}`}
+                >
+                  {tab.label}
+                </span>
+              </>
+            ) : (
               <>
                 {active ? (
                   <span className="absolute top-0 h-[3px] w-8 rounded-full bg-[#0A0A0A]" />
