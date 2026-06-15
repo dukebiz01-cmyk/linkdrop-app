@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Search, ChevronDown, ChevronUp } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { DiscoverSection } from "@/components/explore/DiscoverSection";
 
@@ -14,7 +13,6 @@ import { DiscoverSection } from "@/components/explore/DiscoverSection";
 export function MyContentPicker({ purposeEn }: { purposeEn?: string }) {
   const navigate = useNavigate();
   const [partnerId, setPartnerId] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
 
   // partner_id — /api/discover 키워드 보강 + 위저드 매장 자동연결용. 손님은 null.
   useEffect(() => {
@@ -54,35 +52,15 @@ export function MyContentPicker({ purposeEn }: { purposeEn?: string }) {
     });
   }
 
+  // 가져오기 검색(DiscoverSection)을 기본 노출 — 토글 제거(엔진 가시화). 직접 입력칸은 아래 유지.
   return (
     <section className="px-6 pt-4">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="flex min-h-[44px] w-full items-center justify-between rounded-2xl border border-border bg-white px-4 py-3 text-sm font-bold tracking-ko text-text-strong transition-colors hover:border-text-muted"
-        aria-expanded={expanded}
-      >
-        <span className="inline-flex items-center gap-2">
-          <Search className="size-4" strokeWidth={2} />
-          영상 검색해서 가져오기
-        </span>
-        {expanded ? (
-          <ChevronUp className="size-4 text-text-muted" strokeWidth={2} />
-        ) : (
-          <ChevronDown className="size-4 text-text-muted" strokeWidth={2} />
-        )}
-      </button>
-
-      {expanded ? (
-        <div className="mt-2">
-          <DiscoverSection
-            partnerId={partnerId}
-            isBusiness={Boolean(partnerId)}
-            onRegistered={() => {}}
-            onImport={handleImport}
-          />
-        </div>
-      ) : null}
+      <DiscoverSection
+        partnerId={partnerId}
+        isBusiness={Boolean(partnerId)}
+        onRegistered={() => {}}
+        onImport={handleImport}
+      />
     </section>
   );
 }
