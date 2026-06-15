@@ -554,17 +554,11 @@ export function CreateDropWizard({
         />
       </div>
 
-      {/* phase1 A — 새 Step 1: 영상 입력 + 목적 선택 한 화면. */}
+      {/* Slice 3 — 목적-first: 목적 그리드 먼저, 목적 선택 후 링크 입력 노출.
+          링크 라벨/플레이스홀더는 Step1UrlInput 이 purpose(구매=상품/그 외=영상)로
+          기존 분기 — 새 입력 분기 추가 없음. */}
       {step === 1 && (
         <>
-          <Step1UrlInput
-            value={url}
-            onChange={setUrl}
-            status={urlStatus}
-            videoInfo={videoInfo}
-            metadataFetchedBy={metadataFetchedBy}
-            purpose={purpose ?? undefined}
-          />
           <Step2PurposeSelect
             selected={purpose}
             onSelect={handlePurposeSelect}
@@ -573,6 +567,16 @@ export function CreateDropWizard({
             isPurposePrefilled={isPurposePrefilled}
             isBusiness={isBusiness}
           />
+          {purpose && (
+            <Step1UrlInput
+              value={url}
+              onChange={setUrl}
+              status={urlStatus}
+              videoInfo={videoInfo}
+              metadataFetchedBy={metadataFetchedBy}
+              purpose={purpose ?? undefined}
+            />
+          )}
         </>
       )}
       {/* F2 커머스(구매) — 옛 Step3 generic 대신 가격/상품명 전용 Step. */}

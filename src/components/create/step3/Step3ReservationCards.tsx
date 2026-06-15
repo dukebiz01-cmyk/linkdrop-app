@@ -1012,7 +1012,7 @@ export function Step3ReservationCards({
           {perDateLinkOpen && (
             <div className="mt-2 rounded-2xl border border-border bg-surface p-4">
               <p className="text-xs font-medium leading-relaxed tracking-ko text-text-muted">
-                날짜마다 다른 예약 링크가 필요하면 Drop을 만든 뒤 수정에서 날짜별로 연결할 수
+                날짜마다 다른 예약 링크가 필요하면 카드를 만든 뒤 수정에서 날짜별로 연결할 수
                 있어요. 지금은 위에서 고른 한 곳으로 모든 날짜가 연결됩니다.
               </p>
             </div>

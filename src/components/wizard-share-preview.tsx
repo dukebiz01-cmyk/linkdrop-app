@@ -229,7 +229,7 @@ export function WizardSharePreview({
           className={cn(WIZARD_PRIMARY_BUTTON_CLASS, "gap-2")}
         >
           <MessageCircle className="size-5" strokeWidth={2} />
-          {kakaoLoading ? "공유 준비 중…" : "카카오톡으로 공유하기"}
+          {kakaoLoading ? "보내는 중…" : "친구에게 보내기"}
         </ActionButton>
         <button
           type="button"

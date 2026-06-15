@@ -45,11 +45,11 @@ const WIZARD_PURPOSES: {
 ];
 
 const PURPOSE_CONFIRM_HEADLINE: Record<DropPurpose, string> = {
-  정보: "정보 Drop으로 만들게요",
-  쿠폰: "쿠폰 Drop으로 만들게요",
-  예약: "예약 Drop으로 만들게요",
-  구매: "구매 Drop으로 만들게요",
-  상담: "상담 Drop으로 만들게요",
+  정보: "정보 카드로 만들게요",
+  쿠폰: "쿠폰 카드로 만들게요",
+  예약: "예약 카드로 만들게요",
+  구매: "구매 카드로 만들게요",
+  상담: "상담 카드로 만들게요",
 };
 
 const PURPOSE_CONFIRM_DETAIL: Record<DropPurpose, string> = {
@@ -209,7 +209,7 @@ export function Step2PurposeSelect({
               {purposeDiffers && (
                 <p className="text-xs font-medium leading-relaxed tracking-ko text-text-subtle">
                   AI는 {suggestedConfig.label}을 추천했지만, 선택한 {selectedConfig.label} 기준으로
-                  Drop을 만듭니다.
+                  카드를 만듭니다.
                 </p>
               )}
             </div>
@@ -263,7 +263,7 @@ export function Step2PurposeSelect({
       <StepBadge n={1} />
       <CardShell config={purposeCardConfig}>
         <h1 className="mt-3 text-2xl font-extrabold leading-snug tracking-ko text-text-strong">
-          이 Drop의 목적을 선택하세요
+          이 카드의 목적을 선택하세요
         </h1>
 
         <div className="mt-8">
