@@ -11,9 +11,8 @@ const BUSINESS_INFO: InfoRow[] = [
   { label: "대표자", value: "이현민" },
   { label: "사업자등록번호", value: "125-86-19781" },
   { label: "사업장 주소", value: "경기도 평택시 용죽2로 30, 상가동 지하1층 B04호" },
-  // ⚠️ Duke 입력 — 아래 두 값을 실제 고객문의 메일/전화번호로 교체.
-  { label: "이메일", value: "[Duke 입력 — 고객문의 메일]" },
-  { label: "고객문의", value: "[Duke 입력 — 전화번호]" },
+  { label: "이메일", value: "dukebiz01@gmail.com" },
+  { label: "고객문의", value: "010-8605-1108" },
 ];
 
 export const Route = createFileRoute("/business-info")({
