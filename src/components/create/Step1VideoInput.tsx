@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import {
   AlertCircle,
   Clipboard,
+  Compass,
   Link as LinkIcon,
   Loader2,
   X,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Input } from "@/components/ui/input";
 import { StepBadge } from "@/components/create/StepBadge";
 import type { VideoInfo } from "@/components/create/types";
@@ -107,6 +109,17 @@ export function Step1UrlInput({
             <Clipboard className="size-5" strokeWidth={2} />
           </button>
         </div>
+
+        {/* 연결 — 직접 붙여넣기 외 두 번째 소스(탐색) 가시화. 입력/prefill 로직 무관. */}
+        {!isCommerce && (
+          <Link
+            to="/explore"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-medium tracking-ko text-[#737373] underline-offset-2 transition-colors hover:text-[#525252] hover:underline"
+          >
+            <Compass className="size-3.5" strokeWidth={2} />
+            탐색에서 둘러보기
+          </Link>
+        )}
 
         {status === "idle" && !value && (
           <p className="mt-4 rounded-lg border border-border bg-surface p-4 text-sm font-medium tracking-ko text-text-muted">

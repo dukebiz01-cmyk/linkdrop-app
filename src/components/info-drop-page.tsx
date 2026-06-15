@@ -7,6 +7,7 @@ import {
   Copy,
   MessageCircle,
   Check,
+  Plus,
   Sparkles,
   ShieldCheck,
   Flag,
@@ -1262,15 +1263,16 @@ export function InfoDropPage({
         <ErrorMessage message={shareError} />
 
         <div className="flex items-stretch gap-2" data-testid="share-block">
-          {/* selfUpload(자체업로드 상품)은 영상 원본이 없으므로 create?url= LinkDrop 링크 숨김. */}
+          {/* 연결 — '이 영상으로 만들기' = /create-wizard?url= prefill 진입(위저드 자동 메타fetch).
+              selfUpload(자체업로드 상품)은 영상 원본이 없어 숨김. */}
           {videoSourceUrl && !commerce?.selfUpload ? (
             <a
-              href={`/create?url=${encodeURIComponent(videoSourceUrl)}`}
+              href={`/create-wizard?url=${encodeURIComponent(videoSourceUrl)}`}
               className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
-              aria-label="LinkDrop"
+              aria-label="이 영상으로 만들기"
             >
-              <Sparkles className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-              LinkDrop
+              <Plus className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+              이 영상으로 만들기
             </a>
           ) : null}
           <button
