@@ -227,6 +227,9 @@ export function CreateDropWizard({
   const [attachedProducts, setAttachedProducts] = useState<AttachedProduct[]>([]);
   // Slice2 멀티영상 — primary 외 추가 영상 누적(검색→담기 push, navigate 아님).
   const [attachedVideos, setAttachedVideos] = useState<AttachedVideo[]>([]);
+  // quick-path — 기본 = Step1 후 미리보기 직행. [스튜디오에서 다듬기] 누르면 studioMode=true
+  //   로 수동 카드화(Step2) 진입. studio 재진입 미리보기는 단일 [보내기](2버튼 아님).
+  const [studioMode, setStudioMode] = useState(false);
   const [aiPreview, setAiPreview] = useState<AiPreviewData | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
@@ -378,18 +381,28 @@ export function CreateDropWizard({
       onClose?.();
       return;
     }
+    // quick 미리보기(스튜디오 미진입)에서 뒤로 = Step1 (Step2 를 스킵했으므로).
+    if (step === 3 && !studioMode) {
+      setStep(1);
+      return;
+    }
     setStep((s) => (s - 1) as StepNum);
   }
 
-  // phase1 A: 3스텝 흐름 — Step 1(영상+목적) → Step 2(디테일) → Step 3(미리보기+공유).
+  // quick-path: Step1(영상+목적) → 미리보기 직행. 수동 카드화(Step2)는 [다듬기] 시에만.
+  //   커머스(구매)는 가격(Step2 Commerce)이 필수라 항상 Step2 경유(단일 보내기).
   function handleNext() {
     if (step === 1) {
-      setStep(2);
+      if (!purpose) return;
+      if (purpose === "구매") {
+        setStep(2);
+        return;
+      }
+      setAiPreview(buildAiPreview(purpose));
+      setStep(3);
       return;
     }
     if (step === 2 && purpose) {
-      // 옛 Step 3→4 전환의 AI preview build 시점 그대로 (Step 2 의 디테일 입력
-      // 완료 후 미리보기 진입 시점).
       setAiPreview(buildAiPreview(purpose));
       setStep(3);
       return;
@@ -655,21 +668,75 @@ export function CreateDropWizard({
             labelDate={reservationItemFullLabel}
             attachedProducts={attachedProducts}
           />
-          <Step5PurposeShare
-            data={buildWizardShareData(
-              videoInfo,
-              purpose,
-              aiForPreview!.title,
-              step3Fields.shareMessage.trim() || undefined,
-              purpose === "예약" ? buildReservationSummary(step3Fields) : undefined,
-            )}
-            shareUrl={realShare?.shareUrl ?? mockShareUrl}
-            onKakaoShare={handleKakaoShare}
-            onCopyLink={handleCopyLink}
-            onGoHome={handleGoHome}
-            shareError={shareError}
-            shareFeedback={shareFeedback}
-          />
+          {!studioMode && purpose !== "구매" ? (
+            // quick-path 미리보기 — 한 줄(사람이 직접 작성, AI 미작성) + [바로 보내기]/[스튜디오에서 다듬기].
+            <section className="space-y-5 px-6 pb-10 pt-4">
+              <div>
+                <label
+                  htmlFor="wizard-oneline"
+                  className="text-sm font-bold tracking-ko text-text-strong"
+                >
+                  받는 사람에게 한마디
+                </label>
+                <textarea
+                  id="wizard-oneline"
+                  value={step3Fields.shareMessage}
+                  onChange={(e) =>
+                    setStep3Fields((prev) => ({ ...prev, shareMessage: e.target.value }))
+                  }
+                  rows={2}
+                  placeholder="예: 이거 보고 바로 예약했어 ㅎㅎ"
+                  className="mt-2 w-full resize-none rounded-lg border border-border bg-white px-3 py-2.5 text-sm tracking-ko text-text-strong placeholder:text-text-subtle focus:border-[#0A0A0A] focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                {shareFeedback ? (
+                  <p className="text-sm font-medium tracking-ko text-text-muted">{shareFeedback}</p>
+                ) : null}
+                <ErrorMessage message={shareError} />
+                <ActionButton
+                  type="button"
+                  disabled={!step3Fields.shareMessage.trim()}
+                  onClick={handleKakaoShare}
+                  className={WIZARD_PRIMARY_BUTTON_CLASS}
+                >
+                  바로 보내기
+                </ActionButton>
+                {!step3Fields.shareMessage.trim() ? (
+                  <p className="text-center text-xs font-medium tracking-ko text-text-subtle">
+                    한 줄을 입력하면 보낼 수 있어요
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStudioMode(true);
+                    setStep(2);
+                  }}
+                  className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border border-border bg-white px-4 text-sm font-semibold tracking-ko text-text-strong transition-colors hover:border-text-muted"
+                >
+                  스튜디오에서 다듬기
+                </button>
+              </div>
+            </section>
+          ) : (
+            <Step5PurposeShare
+              data={buildWizardShareData(
+                videoInfo,
+                purpose,
+                aiForPreview!.title,
+                step3Fields.shareMessage.trim() || undefined,
+                purpose === "예약" ? buildReservationSummary(step3Fields) : undefined,
+              )}
+              shareUrl={realShare?.shareUrl ?? mockShareUrl}
+              onKakaoShare={handleKakaoShare}
+              onCopyLink={handleCopyLink}
+              onGoHome={handleGoHome}
+              shareError={shareError}
+              shareFeedback={shareFeedback}
+            />
+          )}
         </>
       )}
 
