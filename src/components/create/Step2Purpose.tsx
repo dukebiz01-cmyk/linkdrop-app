@@ -115,12 +115,8 @@ export function PurposePickerGrid({
                 AI 추천
               </span>
             )}
-            {!showSuggestedBadge && !suggestedPurpose && item.aiRecommended && (
-              <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-ko text-accent">
-                <Sparkles className="size-3" strokeWidth={2} />
-                AI 추천
-              </span>
-            )}
+            {/* quick-path §4 — '근거 없는' 기본 AI 추천 배지 제거. 실제 suggest-purpose
+                결과(suggestedPurpose)가 있을 때만 위 showSuggestedBadge 로 노출. */}
             <span
               aria-hidden
               className={cn(
