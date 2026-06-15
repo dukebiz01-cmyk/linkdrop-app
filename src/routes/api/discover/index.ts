@@ -26,6 +26,9 @@ function getKV(): KVNamespaceLike | null {
   // (cloudflare:workers 정적 import 는 dev SSR 에서 resolve 불가 + 핸들러 컨텍스트
   //  undefined 회색지대라 제거 — production 은 ALS 경로가 KV 포함 env 를 제공.)
   const wenv = getWorkerEnv();
+  // dev(SSR)에서는 ALS 미적재로 wenv=null → (null).KV 역참조 TypeError 방지.
+  //   null이면 캐시·RL 스킵(fail-open), 검색은 Edge 로 진행. prod 는 wenv 정상이라 무변경.
+  if (!wenv) return null;
   const kv = (wenv as { KV?: KVNamespaceLike }).KV;
   return kv ?? null;
 }
