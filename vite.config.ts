@@ -12,4 +12,9 @@ export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
+  // dev 포트 8080 고정. strictPort:true = 8080 점유 시 다른 포트로 silent 드리프트
+  //   (8082 등) 하지 않고 에러로 멈춤 → 카카오 도메인 매칭 안정화.
+  vite: {
+    server: { port: 8080, strictPort: true },
+  },
 });
