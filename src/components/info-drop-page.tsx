@@ -1248,7 +1248,8 @@ export function InfoDropPage({
       </div>
 
       {/* v7.2 5a — 하단 공유 블록 (모든 드롭 공통).
-            [LinkDrop][링크 복사][카카오톡 공유] 균일 가로 3 버튼.
+            [LinkDrop][링크 복사][친구에게 보내기] 가로 3 버튼.
+            Slice 1: '친구에게 보내기'(= 기존 카카오 재공유) 1차 강조(검정 fill).
             본문 small 카톡·"나도 이런 정보..." 텍스트 링크·sticky 카톡 분기
             전부 통합. 60대 친화 큰 터치, #15 검정 미니멀, 이모지 X. */}
       <section className="mx-auto w-full max-w-[480px] space-y-3 px-6 pt-4">
@@ -1281,14 +1282,16 @@ export function InfoDropPage({
             <Copy className="size-5 text-[#0A0A0A]" strokeWidth={2} />
             링크 복사
           </button>
+          {/* Slice 1 — 받은 사람의 재공유(루프 닫기) 1차 액션. 동작은 기존
+              onKakaoShare(=ld_create_share_edge_v3 재공유) 그대로. 검정 fill 로 강조. */}
           <button
             type="button"
             onClick={handleKakao}
-            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
-            aria-label="카카오톡 공유"
+            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl bg-[#0A0A0A] px-2 py-2 text-xs font-bold tracking-ko text-white hover:bg-[#171717]"
+            aria-label="친구에게 보내기"
           >
-            <MessageCircle className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-            카카오톡 공유
+            <MessageCircle className="size-5 text-white" strokeWidth={2} />
+            친구에게 보내기
           </button>
         </div>
 
