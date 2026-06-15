@@ -37,6 +37,18 @@ export interface AttachedProduct {
   imageUrl: string | null;
 }
 
+/** Slice2 멀티영상 — 카드에 담은 추가 영상(primary 외). 검색 후보(DiscoverCandidate)에서 매핑.
+ *  provider 보존 = 멀티-provider ready. sourceId = dedup 키(플랫폼 video id). */
+export interface AttachedVideo {
+  provider: string;
+  sourceId: string;
+  sourceUrl: string;
+  canonicalUrl: string;
+  title: string | null;
+  thumbnailUrl: string | null;
+  authorName: string | null;
+}
+
 export type WizardSuggestionConfidence = "high" | "medium" | "low";
 
 export interface CreateDropWizardProps {
@@ -71,6 +83,8 @@ export interface CreateDropWizardProps {
     category?: string | null;
     /** ③ 카드 담기 — 위저드에서 담은 자체업로드 상품들(전 목적 공통). */
     attachedProducts?: AttachedProduct[];
+    /** Slice2 멀티영상 — primary 외 추가 영상(video 블록으로 적재). */
+    attachedVideos?: AttachedVideo[];
   }) => Promise<{ shareUuid: string; shareUrl: string }>;
 }
 

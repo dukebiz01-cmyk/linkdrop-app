@@ -178,6 +178,24 @@ function CreateWizardPage() {
             position: blocks.length,
           });
         }
+        // Slice2 멀티영상 — primary 외 추가 영상을 video 블록으로 이어붙인다(position 연속).
+        //   create_drop_v2 가 block_kind='video' 를 화이트리스트 없이 그대로 insert(실측 확인).
+        //   video_start/end_seconds 는 타임링크 추후 → 미전송(RPC NULL 처리).
+        for (const v of data.attachedVideos ?? []) {
+          blocks.push({
+            block_kind: "video",
+            block_data: {
+              provider: v.provider,
+              source_id: v.sourceId,
+              source_url: v.sourceUrl,
+              canonical_url: v.canonicalUrl,
+              title: v.title,
+              thumbnail_url: v.thumbnailUrl,
+              author_name: v.authorName,
+            },
+            position: blocks.length,
+          });
+        }
 
         const res = await fetch("/api/drops", {
           method: "POST",

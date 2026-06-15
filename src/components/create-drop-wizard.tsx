@@ -43,6 +43,7 @@ import { Step5PurposeShare } from "@/components/create/Step5Share";
 import { Step3Options } from "@/components/create/step3/Step3Options";
 import { Step3Commerce } from "@/components/create/step3/Step3Commerce";
 import { ProductAttachSection } from "@/components/create/step3/ProductAttachSection";
+import { VideoAttachSection } from "@/components/create/step3/VideoAttachSection";
 import {
   aiPreviewFromPurpose,
   buildWizardShareData,
@@ -66,6 +67,7 @@ import {
   PURPOSE_FLOW_CONFIG,
   type AiPreviewData,
   type AttachedProduct,
+  type AttachedVideo,
   type CreateDropWizardProps,
   type LocalPartner,
   type PlaceCandidate,
@@ -223,6 +225,8 @@ export function CreateDropWizard({
   const [selectedFunnelCouponId, setSelectedFunnelCouponId] = useState<string | null>(null);
   // ③ 카드 담기 — 위저드 Step 2 에서 담은 자체업로드 상품(전 목적 공통). onComplete 시 전달.
   const [attachedProducts, setAttachedProducts] = useState<AttachedProduct[]>([]);
+  // Slice2 멀티영상 — primary 외 추가 영상 누적(검색→담기 push, navigate 아님).
+  const [attachedVideos, setAttachedVideos] = useState<AttachedVideo[]>([]);
   const [aiPreview, setAiPreview] = useState<AiPreviewData | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
@@ -433,6 +437,7 @@ export function CreateDropWizard({
       productName: purpose === "구매" ? commerceName.trim() || null : null,
       category: purpose === "구매" ? "농수산물" : null,
       attachedProducts,
+      attachedVideos,
     });
     savingRef.current = promise;
     try {
@@ -624,6 +629,18 @@ export function CreateDropWizard({
           (Commerce/Options=예약 캘린더 포함) 레이아웃은 그대로 두고 추가만. */}
       {step === 2 && purpose && (
         <ProductAttachSection value={attachedProducts} onChange={setAttachedProducts} />
+      )}
+      {/* Slice2 멀티영상 담기 — primary(대표) + 추가 영상 N. 커머스(상품 URL)는 제외. */}
+      {step === 2 && purpose && purpose !== "구매" && (
+        <VideoAttachSection
+          primary={
+            videoInfo ? { title: videoInfo.title, thumbnailUrl: videoInfo.thumbnailUrl } : null
+          }
+          primarySourceId={parseVideoUrl(url.trim())?.videoId ?? null}
+          isBusiness={isBusiness}
+          value={attachedVideos}
+          onChange={setAttachedVideos}
+        />
       )}
       {/* 새 Step 3 = 옛 Step 4 + Step 5 병합 (미리보기 위, 공유 아래). */}
       {step === 3 && purpose && videoInfo && aiPreview && (
