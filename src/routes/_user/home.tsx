@@ -1,129 +1,156 @@
-import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { HomePageV3 } from "@/components/home-page-v3";
 import { getAuthClient } from "@/lib/auth-context";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  RoleHome,
+  type MerchantHomeData,
+  type HomeGuide,
+  type HomeReservation,
+  type HomeProposal,
+} from "@/components/home/RoleHome";
 
-// phase1 B: 비지니스 게이팅. me.tsx:117 동일 패턴 (is_active_partner_owner RPC).
-type HomeLoaderData = { isBusiness: boolean };
+// Slice 4a — 역할 홈. 기존 만들기 폼(HomePageV3)을 역할 랜딩 + 다이제스트로 교체.
+//   isBusiness(is_active_partner_owner) 유지 + partnerId(partners owner_user_id) 추가.
+//   상인일 때만 병렬 로드: 오늘의 AI(guide_history 최신 1행 — 재계산 없음) /
+//   새 예약(get_partner_reservations, pending 상위) / 제안(maker_connections pending).
+//   유저 데이터(곧 쓸 혜택·구독 새 카드)는 4b. HomePageV3 파일은 미사용 보존(롤백 안전).
+
+type HomeLoaderData = {
+  isBusiness: boolean;
+  merchant: MerchantHomeData | null;
+};
+
+const RESERVATION_LIMIT = 3;
+const PROPOSAL_LIMIT = 3;
+
+// get_partner_reservations 반환 행 중 홈에서 쓰는 필드만.
+type ReservationRpcRow = {
+  reservation_id: string;
+  status: string | null;
+  customer_name: string | null;
+  reserved_date: string | null;
+  time_slot: string | null;
+  check_in_date: string | null;
+  check_out_date: string | null;
+};
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const y = String(d.getFullYear()).slice(2);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}.${m}.${day}`;
+}
+
+// partner.reservations.tsx 의 formatDateRange 와 동일 규칙(홈 표시용 축약).
+function reservationDateLabel(r: ReservationRpcRow): string {
+  if (r.check_in_date && r.check_out_date) {
+    return `${formatDate(r.check_in_date)} ~ ${formatDate(r.check_out_date)}`;
+  }
+  if (r.reserved_date) {
+    return `${formatDate(r.reserved_date)}${r.time_slot ? ` ${r.time_slot}` : ""}`;
+  }
+  return "날짜 미정";
+}
 
 export const Route = createFileRoute("/_user/home")({
   head: () => ({ meta: [{ title: "홈" }] }),
   loader: async (): Promise<HomeLoaderData> => {
+    const base: HomeLoaderData = { isBusiness: false, merchant: null };
     const supabase = await getAuthClient();
-    if (!supabase) return { isBusiness: false };
+    if (!supabase) return base;
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData.session?.user.id ?? null;
-    if (!userId) return { isBusiness: false };
-    const { data: isBusiness } = await supabase.rpc("is_active_partner_owner", {
+    if (!userId) return base;
+
+    const { data: isBusinessRaw } = await supabase.rpc("is_active_partner_owner", {
       _user_id: userId,
     });
-    return { isBusiness: Boolean(isBusiness) };
+    const isBusiness = Boolean(isBusinessRaw);
+    if (!isBusiness) return { isBusiness, merchant: null };
+
+    // partner 행 — 명함/식별용 (기존 partner.index 패턴).
+    const { data: partner } = await supabase
+      .from("partners")
+      .select("id, display_name, partner_kind, address, verification_status")
+      .eq("owner_user_id", userId)
+      .maybeSingle();
+    if (!partner?.id) return { isBusiness, merchant: null };
+    const partnerId = partner.id;
+
+    // 병렬: 오늘의 AI(캐시 SELECT) / 새 예약(RPC) / 제안(pending).
+    const [guideRes, reservationRes, proposalRes] = await Promise.all([
+      supabase
+        .from("guide_history")
+        .select("diagnosis, prescriptions, snapshot_at")
+        .eq("partner_id", partnerId)
+        .order("snapshot_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase.rpc("get_partner_reservations", { p_partner_id: partnerId }),
+      supabase
+        .from("maker_connections")
+        .select(
+          "id, requester:partners!maker_connections_requester_partner_id_fkey(display_name)",
+        )
+        .eq("target_partner_id", partnerId)
+        .eq("status", "pending"),
+    ]);
+
+    // 오늘의 AI — guide_history 최신 스냅샷(diagnosis/prescriptions jsonb).
+    const guideRow = guideRes.data as { diagnosis: unknown; prescriptions: unknown } | null;
+    const guide: HomeGuide = guideRow
+      ? ({
+          diagnosis: guideRow.diagnosis,
+          prescriptions: guideRow.prescriptions,
+        } as unknown as HomeGuide)
+      : null;
+
+    // 새 예약 — pending 만, 최근순 상위 N (partner.reservations.tsx 와 동일 status 필터).
+    const reservationRows = (reservationRes.data as ReservationRpcRow[] | null) ?? [];
+    const newReservations: HomeReservation[] = reservationRows
+      .filter((r) => r.status === "pending")
+      .slice(0, RESERVATION_LIMIT)
+      .map((r) => ({
+        reservationId: r.reservation_id,
+        customerName: r.customer_name,
+        dateLabel: reservationDateLabel(r),
+      }));
+
+    // 제안 — maker_connections pending(요청자 임베드) 상위 N.
+    type ProposalRaw = { id: string; requester: { display_name: string } | null };
+    const proposals: HomeProposal[] = ((proposalRes.data as ProposalRaw[] | null) ?? [])
+      .filter((p) => p.requester)
+      .slice(0, PROPOSAL_LIMIT)
+      .map((p) => ({ connectionId: p.id, name: p.requester!.display_name }));
+
+    const merchant: MerchantHomeData = {
+      partnerName: partner.display_name ?? "",
+      partnerKind: partner.partner_kind ?? null,
+      address: partner.address ?? null,
+      tier: partner.verification_status === "approved" ? "biz" : "pb",
+      guide,
+      newReservations,
+      proposals,
+    };
+
+    return { isBusiness, merchant };
   },
   component: HomeRoute,
 });
 
-// v0 home-page-v3 의 3 purpose id → /create-wizard validateSearch.purpose (영문).
-// create-wizard 의 PURPOSE_EN_TO_KO 가 한국어 DropPurpose 로 변환 (info→정보 /
-// coupon→쿠폰 / purchase→구매). reservation_benefit 은 PURPOSE_EN_TO_KO 키에
-// 없어 'coupon' 으로 매핑(혜택·예약 묶음 의도).
-const V0_PURPOSE_TO_EN: Record<string, string> = {
-  info: "info",
-  reservation_benefit: "coupon",
-  purchase: "purchase",
-};
-
 function HomeRoute() {
   const navigate = useNavigate();
-  const { isBusiness } = Route.useLoaderData();
-  // 손님이 잠긴 "혜택·예약" 카드를 탭하면 사업자 등록 유도 시트를 띄운다.
-  const [showBizUpsell, setShowBizUpsell] = useState(false);
+  const { isBusiness, merchant } = Route.useLoaderData();
 
-  // phase1-#1 마무리: home-page-v3 내장 nav 제거됨 → CSS 숨김 셀렉터 불필요.
-  // 공통 BottomNav (v0 검정 4탭, URL 파생 active) 가 _user.tsx 에서 별도 렌더.
-  // phase1 B: isBusiness=true 만 [혜택·예약] 카드 노출.
   return (
-    <div>
-      <HomePageV3
-        isBusiness={isBusiness}
-        onLockedBenefitTap={() => setShowBizUpsell(true)}
-        onCreateDrop={(url, purpose) => {
-          const en = purpose ? V0_PURPOSE_TO_EN[purpose] : undefined;
-          void navigate({
-            to: "/create-wizard",
-            search: {
-              url,
-              ...(en ? { purpose: en } : {}),
-            } as never,
-          });
-        }}
-        onViewDrop={() => {
-          // dropId (info_drops.id) → share_uuid 매핑 미구현 — /me 로 이동
-          // (사용자가 "성과 보기"로 share_uuid 기반 진입). 별도 유닛.
-          void navigate({ to: "/me" });
-        }}
-        onViewAllDrops={() => {
-          void navigate({ to: "/me" });
-        }}
-        onTabChange={(tab) => {
-          if (tab === "home") return;
-          if (tab === "create") {
-            void navigate({ to: "/create-wizard" });
-            return;
-          }
-          if (tab === "me") {
-            void navigate({ to: "/me" });
-            return;
-          }
-          // explore: 라우트 미존재 — no-op (별도 유닛에서 라우트 신설 시 연결)
-        }}
-        onGoStore={() => {
-          // 사업자(isBusiness=true)만 상단 Store 아이콘 노출 → 내 매장으로.
-          void navigate({ to: "/partner" });
-        }}
-        onNotifications={() => {
-          // 알림 라우트 미존재 — no-op
-        }}
-      />
-
-      <Dialog open={showBizUpsell} onOpenChange={setShowBizUpsell}>
-        <DialogContent className="w-[90vw] max-w-sm rounded-2xl border border-[#E5E5E5] bg-white p-6">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold tracking-ko text-[#0A0A0A]">
-              사업자 전용 카드예요
-            </DialogTitle>
-            <DialogDescription className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-[#737373]">
-              사업자로 등록하면 쿠폰·예약·산지직송 판매 카드를 만들 수 있어요.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-4 flex-col gap-2 sm:flex-col">
-            <button
-              type="button"
-              onClick={() => {
-                setShowBizUpsell(false);
-                void navigate({ to: "/partner/register" });
-              }}
-              className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#0A0A0A] px-5 text-sm font-semibold tracking-ko text-white transition-colors hover:bg-[#171717]"
-            >
-              사업자 등록하기
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowBizUpsell(false)}
-              className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl px-5 text-sm font-medium tracking-ko text-[#A3A3A3] transition-colors hover:text-[#525252]"
-            >
-              닫기
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+    <RoleHome
+      isBusiness={isBusiness}
+      merchant={merchant}
+      onCreate={() => void navigate({ to: "/create-wizard" })}
+      onGoResults={() => void navigate({ to: "/partner/results" })}
+      onGoReservations={() => void navigate({ to: "/partner/reservations" })}
+      onGoProposals={() => void navigate({ to: "/partner" })}
+    />
   );
 }
