@@ -62,6 +62,112 @@ const PURPOSE_CTA: Record<DropPurpose, string> = {
 };
 
 /**
+ * 카카오톡 대화창 말풍선 형태의 피드 카드 미리보기(친구가 카톡에서 볼 모습).
+ * Step5(스튜디오/구매)와 quick 미리보기가 공유. 발송 CTA 없음 — 순수 미리보기.
+ * makerMessage 가 한 줄(라이브) — 입력이 바뀌면 description 도 실시간 반영된다.
+ */
+export function KakaoBubblePreview({
+  data,
+  shareUrl,
+}: {
+  data: WizardSharePreviewData;
+  shareUrl: string;
+}) {
+  const description = [data.purpose, data.partnerName, data.makerMessage?.trim()]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-soft">
+      <div className="flex items-center justify-between border-b border-border bg-bg px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FEE500]">
+            <MessageCircle className="h-4 w-4 text-[#3C1E1E]" strokeWidth={2} />
+          </span>
+          <span className="text-sm font-semibold tracking-ko text-text-strong">카카오톡</span>
+        </div>
+        <span className="rounded-md bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-ko text-text-muted">
+          미리보기
+        </span>
+      </div>
+
+      <div className="p-4">
+        <div className="overflow-hidden rounded-lg border border-border bg-bg">
+          {data.video.thumbnailUrl && (
+            <div className="relative aspect-video w-full bg-surface">
+              <img src={data.video.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+              <span className="absolute bottom-2 right-2 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-medium tabular-nums text-white">
+                {data.video.duration}
+              </span>
+            </div>
+          )}
+          <div className="space-y-2 p-4">
+            <span
+              className={cn(
+                "inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold tracking-ko",
+                PURPOSE_CHIP[data.purpose],
+              )}
+            >
+              {data.purpose}
+            </span>
+            <p className="text-base font-bold tracking-ko text-text-strong">{data.aiTitle}</p>
+            {description && (
+              <p className="line-clamp-2 text-sm font-medium tracking-ko text-text-muted">
+                {description}
+              </p>
+            )}
+            <p className="text-xs font-medium text-text-subtle">{data.video.channelName}</p>
+            {data.reservation?.placeName && (
+              <p className="text-xs font-semibold tracking-ko text-text-strong">
+                {data.reservation.placeName}
+              </p>
+            )}
+            {data.reservation && data.reservation.dates.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-intent-success/30 bg-intent-success-bg p-3">
+                <p className="text-xs font-bold tracking-ko text-text-strong">예약 가능 날짜</p>
+                <ul className="space-y-2">
+                  {data.reservation.dates.slice(0, 2).map((d, i) => (
+                    <li key={`${d.main}-${i}`}>
+                      <p className="text-xs font-semibold tracking-ko text-text-strong">{d.main}</p>
+                      {d.event && (
+                        <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
+                          {d.event}
+                        </p>
+                      )}
+                      {d.memo && (
+                        <p className="mt-1 text-[11px] font-medium tracking-ko text-text-subtle">
+                          {d.memo}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {data.reservation.dates.length > 2 && (
+                  <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+                    외 {data.reservation.dates.length - 2}개 더 보기
+                  </p>
+                )}
+              </div>
+            )}
+            {/* 받는 사람 화면의 목적별 행동(CTA) preview — 작은 라벨, 실제 버튼 아님.
+                예약 목적에서 버튼 연결이 없으면 받는 사람 화면에 버튼이 없으므로 숨긴다. */}
+            {!(data.reservation && !data.reservation.hasReserveButton) && (
+              <div>
+                <span className="inline-flex items-center rounded-lg border border-border bg-surface px-2 py-1 text-xs font-semibold tracking-ko text-text-strong">
+                  {PURPOSE_CTA[data.purpose]}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <p className="mt-3 truncate font-mono text-xs text-text-subtle">{shareUrl}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
  * 카카오톡 대화창에 보이는 말풍선 형태의 공유 미리보기 + 공유 CTA.
  * WHY: Step 5에서 “보내기 전에 친구 화면”을 보여주면 이탈률이 줄어든다 (v3 UX 원칙).
  */
@@ -77,14 +183,6 @@ export function WizardSharePreview({
 }: WizardSharePreviewProps) {
   const [kakaoLoading, setKakaoLoading] = useState(false);
   const [copyLoading, setCopyLoading] = useState(false);
-
-  const description = [
-    data.purpose,
-    data.partnerName,
-    data.makerMessage?.trim(),
-  ]
-    .filter(Boolean)
-    .join(" · ");
 
   async function handleKakao() {
     setKakaoLoading(true);
@@ -117,99 +215,8 @@ export function WizardSharePreview({
         </p>
 
         {/* Kakao-style feed card mock — 받는 사람이 카톡에서 보게 될 모습 미리보기. */}
-        <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-surface shadow-soft">
-          <div className="flex items-center justify-between border-b border-border bg-bg px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FEE500]">
-                <MessageCircle className="h-4 w-4 text-[#3C1E1E]" strokeWidth={2} />
-              </span>
-              <span className="text-sm font-semibold tracking-ko text-text-strong">카카오톡</span>
-            </div>
-            <span className="rounded-md bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-ko text-text-muted">
-              미리보기
-            </span>
-          </div>
-
-          <div className="p-4">
-            <div className="overflow-hidden rounded-lg border border-border bg-bg">
-              {data.video.thumbnailUrl && (
-                <div className="relative aspect-video w-full bg-surface">
-                  <img
-                    src={data.video.thumbnailUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                  <span className="absolute bottom-2 right-2 rounded-lg bg-black/70 px-2 py-0.5 text-xs font-medium tabular-nums text-white">
-                    {data.video.duration}
-                  </span>
-                </div>
-              )}
-              <div className="space-y-2 p-4">
-                <span
-                  className={cn(
-                    "inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold tracking-ko",
-                    PURPOSE_CHIP[data.purpose],
-                  )}
-                >
-                  {data.purpose}
-                </span>
-                <p className="text-base font-bold tracking-ko text-text-strong">{data.aiTitle}</p>
-                {description && (
-                  <p className="line-clamp-2 text-sm font-medium tracking-ko text-text-muted">
-                    {description}
-                  </p>
-                )}
-                <p className="text-xs font-medium text-text-subtle">{data.video.channelName}</p>
-                {data.reservation?.placeName && (
-                  <p className="text-xs font-semibold tracking-ko text-text-strong">
-                    {data.reservation.placeName}
-                  </p>
-                )}
-                {data.reservation && data.reservation.dates.length > 0 && (
-                  <div className="space-y-2 rounded-lg border border-intent-success/30 bg-intent-success-bg p-3">
-                    <p className="text-xs font-bold tracking-ko text-text-strong">
-                      예약 가능 날짜
-                    </p>
-                    <ul className="space-y-2">
-                      {data.reservation.dates.slice(0, 2).map((d, i) => (
-                        <li key={`${d.main}-${i}`}>
-                          <p className="text-xs font-semibold tracking-ko text-text-strong">
-                            {d.main}
-                          </p>
-                          {d.event && (
-                            <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
-                              {d.event}
-                            </p>
-                          )}
-                          {d.memo && (
-                            <p className="mt-1 text-[11px] font-medium tracking-ko text-text-subtle">
-                              {d.memo}
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    {data.reservation.dates.length > 2 && (
-                      <p className="text-[11px] font-medium tracking-ko text-text-subtle">
-                        외 {data.reservation.dates.length - 2}개 더 보기
-                      </p>
-                    )}
-                  </div>
-                )}
-                {/* 받는 사람 화면의 목적별 행동(CTA) preview — 작은 라벨, 실제 버튼 아님.
-                    예약 목적에서 버튼 연결이 없으면 받는 사람 화면에 버튼이 없으므로 숨긴다. */}
-                {!(data.reservation && !data.reservation.hasReserveButton) && (
-                  <div>
-                    <span className="inline-flex items-center rounded-lg border border-border bg-surface px-2 py-1 text-xs font-semibold tracking-ko text-text-strong">
-                      {PURPOSE_CTA[data.purpose]}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <p className="mt-3 truncate font-mono text-xs text-text-subtle">{shareUrl}</p>
-          </div>
+        <div className="mt-8">
+          <KakaoBubblePreview data={data} shareUrl={shareUrl} />
         </div>
 
         {shareFeedback && (

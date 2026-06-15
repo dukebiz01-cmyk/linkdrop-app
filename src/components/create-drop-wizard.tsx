@@ -44,7 +44,8 @@ import { Step3Options } from "@/components/create/step3/Step3Options";
 import { Step3Commerce } from "@/components/create/step3/Step3Commerce";
 import { ProductAttachSection } from "@/components/create/step3/ProductAttachSection";
 import { VideoAttachSection } from "@/components/create/step3/VideoAttachSection";
-import { PurposeMessageCard } from "@/components/create/step3/PurposeMessageCard";
+import { PURPOSE_MESSAGE_PLACEHOLDER } from "@/components/create/step3/PurposeMessageCard";
+import { KakaoBubblePreview } from "@/components/wizard-share-preview";
 import {
   aiPreviewFromPurpose,
   buildWizardShareData,
@@ -231,6 +232,8 @@ export function CreateDropWizard({
   // quick-path — 기본 = Step1 후 미리보기 직행. [스튜디오에서 다듬기] 누르면 studioMode=true
   //   로 수동 카드화(Step2) 진입. studio 재진입 미리보기는 단일 [보내기](2버튼 아님).
   const [studioMode, setStudioMode] = useState(false);
+  // quick 한 줄 — '예시' 탭 시 입력칸에 복사 후 포커스(편집 시작점). 발송값은 사람이 확정.
+  const oneLineRef = useRef<HTMLTextAreaElement>(null);
   const [aiPreview, setAiPreview] = useState<AiPreviewData | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
@@ -665,51 +668,57 @@ export function CreateDropWizard({
         aiPreview &&
         (!studioMode && purpose !== "구매" ? (
           <section className="space-y-5 px-6 pb-10 pt-4">
-            {/* WYSIWYG — 받는 사람이 볼 모습: 출처(oEmbed)+목적 배지+버튼 CTA(목적 기본). 정적 가짜 요약 없음. */}
+            {/* 카톡 말풍선 — 친구가 카톡서 볼 첫 인상. 아래 한 줄 입력이 라이브로 반영(makerMessage). */}
             <div>
               <p className="text-sm font-bold tracking-ko text-text-strong">미리보기</p>
-              <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-bg shadow-soft">
-                {videoInfo.thumbnailUrl ? (
-                  <div className="relative aspect-video w-full bg-surface">
-                    <img
-                      src={videoInfo.thumbnailUrl}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                ) : null}
-                <div className="space-y-3 p-4">
-                  <span
-                    className={cn(
-                      "inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold tracking-ko",
-                      PURPOSE_FLOW_CONFIG[purpose].chipClass,
-                    )}
-                  >
-                    {PURPOSE_FLOW_CONFIG[purpose].badge}
-                  </span>
-                  <p className="text-base font-bold tracking-ko text-text-strong">
-                    {videoInfo.title}
-                  </p>
-                  {videoInfo.channelName ? (
-                    <p className="text-xs font-medium tracking-ko text-text-muted">
-                      {videoInfo.channelName}
-                    </p>
-                  ) : null}
-                  <div className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold tracking-ko text-white">
-                    {STEP5_SHARE_BY_PURPOSE[purpose].cta ?? "보러 가기"}
-                  </div>
-                </div>
+              <div className="mt-3">
+                <KakaoBubblePreview
+                  data={buildWizardShareData(
+                    videoInfo,
+                    purpose,
+                    videoInfo.title,
+                    step3Fields.shareMessage.trim() || undefined,
+                  )}
+                  shareUrl={realShare?.shareUrl ?? mockShareUrl}
+                />
               </div>
               <p className="mt-2 text-xs font-medium tracking-ko text-text-subtle">
                 요약은 보낼 때 자동으로 정리돼요.
               </p>
             </div>
 
-            {/* 한 줄 — PurposeMessageCard 재사용(사람 작성, AI 미작성). curator_message 연결. */}
-            <PurposeMessageCard
-              fields={step3Fields}
-              onFieldsChange={(patch) => setStep3Fields((prev) => ({ ...prev, ...patch }))}
-            />
+            {/* 한 줄 — 기본 빈 입력(사람 몫). '예시'는 영감으로만(복사+포커스 → 편집 시작점). */}
+            <div>
+              <label
+                htmlFor="wizard-oneline"
+                className="text-sm font-bold tracking-ko text-text-strong"
+              >
+                친구에게 한마디
+              </label>
+              <textarea
+                id="wizard-oneline"
+                ref={oneLineRef}
+                value={step3Fields.shareMessage}
+                onChange={(e) =>
+                  setStep3Fields((prev) => ({ ...prev, shareMessage: e.target.value.slice(0, 200) }))
+                }
+                rows={2}
+                placeholder="친구한테 한 마디…"
+                className="mt-2 w-full resize-none rounded-lg border border-border bg-white px-3 py-2.5 text-sm tracking-ko text-text-strong placeholder:text-text-subtle focus:border-[#0A0A0A] focus:outline-none"
+              />
+              {!step3Fields.shareMessage.trim() ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep3Fields((prev) => ({ ...prev, shareMessage: PURPOSE_MESSAGE_PLACEHOLDER }));
+                    requestAnimationFrame(() => oneLineRef.current?.focus());
+                  }}
+                  className="mt-2 inline-flex max-w-full items-center gap-1 truncate rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium tracking-ko text-text-muted transition-colors hover:bg-bg"
+                >
+                  예시: {PURPOSE_MESSAGE_PLACEHOLDER}
+                </button>
+              ) : null}
+            </div>
 
             {/* 2버튼 — [바로 보내기](한 줄 채움일 때만) / [스튜디오에서 다듬기]. */}
             <div className="space-y-2">
