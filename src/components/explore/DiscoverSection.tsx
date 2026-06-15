@@ -206,7 +206,7 @@ export function DiscoverSection({
 
   return (
     <section className="mt-6">
-      <h2 className="mb-3 text-sm font-bold tracking-ko text-[#0A0A0A]">콘텐츠 자동 찾기</h2>
+      <h2 className="mb-3 text-sm font-bold tracking-ko text-[#0A0A0A]">영상 검색해서 가져오기</h2>
       <div className="flex gap-2">
         <div className="flex h-12 min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] px-4 transition-colors focus-within:border-[#0A0A0A]">
           <Search className="h-[18px] w-[18px] shrink-0 text-[#A3A3A3]" strokeWidth={2} />

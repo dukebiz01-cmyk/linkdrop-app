@@ -179,7 +179,7 @@ export function Step2PurposeSelect({
   if (isPurposePrefilled && selected && selectedConfig) {
     const SelectedIcon = selectedConfig.icon;
     return (
-      <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
+      <main className="overflow-y-auto px-6 pb-6 pt-2">
         <StepBadge n={1} />
         <CardShell config={purposeCardConfig}>
           <h1 className="mt-3 text-2xl font-extrabold leading-snug tracking-ko text-text-strong">
@@ -259,14 +259,14 @@ export function Step2PurposeSelect({
   }
 
   return (
-    <main className="flex-1 overflow-y-auto px-6 pb-32 pt-2">
+    <main className="overflow-y-auto px-6 pb-6 pt-2">
       <StepBadge n={1} />
       <CardShell config={purposeCardConfig}>
         <h1 className="mt-3 text-2xl font-extrabold leading-snug tracking-ko text-text-strong">
           이 카드의 목적을 선택하세요
         </h1>
 
-        <div className="mt-8">
+        <div className="mt-6">
           <PurposePickerGrid
             selected={selected}
             onSelect={onSelect}
@@ -275,10 +275,6 @@ export function Step2PurposeSelect({
             isBusiness={isBusiness}
           />
         </div>
-
-        <p className="mt-6 text-xs font-medium leading-relaxed tracking-ko text-text-muted">
-          선택한 목적에 따라 AI가 요약, 버튼, 공유 문구를 다르게 추천합니다.
-        </p>
       </CardShell>
     </main>
   );

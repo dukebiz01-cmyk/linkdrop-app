@@ -559,9 +559,8 @@ export function CreateDropWizard({
         <span className="flex-1 text-center text-sm font-bold tracking-ko text-[#111111]">
           카드 만들기
         </span>
-        <span className="w-16 text-right text-xs font-semibold tracking-ko text-[#525252]">
-          Step {step}/3
-        </span>
+        {/* Step n/3 텍스트 제거 — 아래 진행 바가 단일 단계 표시. 가운데 정렬 유지용 spacer. */}
+        <span className="w-16" aria-hidden />
       </header>
       <div className="h-1 w-full bg-[#E2E8F0]" aria-hidden>
         <div
@@ -584,7 +583,10 @@ export function CreateDropWizard({
           />
           {purpose && (
             <>
-              {purpose !== "구매" && <MyContentPicker purposeEn={PURPOSE_KO_TO_EN[purpose]} />}
+              {/* 영상 미선택 시에만 검색(가져오기) 노출 — 선택되면 '선택된 영상'으로 정리. */}
+              {purpose !== "구매" && !videoInfo && (
+                <MyContentPicker purposeEn={PURPOSE_KO_TO_EN[purpose]} />
+              )}
               <Step1UrlInput
                 value={url}
                 onChange={setUrl}
