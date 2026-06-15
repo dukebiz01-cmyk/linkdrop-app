@@ -1,11 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { getAuthClient } from "@/lib/auth-context";
+import { getFollowedMakerDrops } from "@/lib/feed-queries";
+import { getCouponDisplayStatus } from "@/lib/coupon-status";
 import {
   RoleHome,
   type MerchantHomeData,
   type HomeGuide,
   type HomeReservation,
   type HomeProposal,
+  type UserHomeData,
+  type HomeCoupon,
 } from "@/components/home/RoleHome";
 
 // Slice 4a — 역할 홈. 기존 만들기 폼(HomePageV3)을 역할 랜딩 + 다이제스트로 교체.
@@ -17,10 +21,22 @@ import {
 type HomeLoaderData = {
   isBusiness: boolean;
   merchant: MerchantHomeData | null;
+  user: UserHomeData | null;
 };
 
 const RESERVATION_LIMIT = 3;
 const PROPOSAL_LIMIT = 3;
+const COUPON_LIMIT = 3;
+const FOLLOWED_DROP_LIMIT = 6;
+
+// get_my_wallet 반환 행 중 홈의 "곧 쓸 혜택"에 쓰는 필드만.
+type WalletRow = {
+  status: string | null;
+  used_at: string | null;
+  expires_at: string | null;
+  claim_code: string;
+  coupon_title: string | null;
+};
 
 // get_partner_reservations 반환 행 중 홈에서 쓰는 필드만.
 type ReservationRpcRow = {
@@ -56,7 +72,7 @@ function reservationDateLabel(r: ReservationRpcRow): string {
 export const Route = createFileRoute("/_user/home")({
   head: () => ({ meta: [{ title: "홈" }] }),
   loader: async (): Promise<HomeLoaderData> => {
-    const base: HomeLoaderData = { isBusiness: false, merchant: null };
+    const base: HomeLoaderData = { isBusiness: false, merchant: null, user: null };
     const supabase = await getAuthClient();
     if (!supabase) return base;
     const { data: sessionData } = await supabase.auth.getSession();
@@ -67,7 +83,35 @@ export const Route = createFileRoute("/_user/home")({
       _user_id: userId,
     });
     const isBusiness = Boolean(isBusinessRaw);
-    if (!isBusiness) return { isBusiness, merchant: null };
+
+    // 유저(비사업자) 홈 — 곧 쓸 혜택(get_my_wallet → expiring) + 구독 메이커 새 카드.
+    if (!isBusiness) {
+      const [walletRes, followedDrops] = await Promise.all([
+        supabase.rpc("get_my_wallet"),
+        getFollowedMakerDrops(supabase, userId),
+      ]);
+      const walletRows = (walletRes.data as WalletRow[] | null) ?? [];
+      const expiringCoupons: HomeCoupon[] = walletRows
+        .filter(
+          (r) =>
+            getCouponDisplayStatus({
+              status: r.status,
+              used_at: r.used_at,
+              expires_at: r.expires_at,
+            }) === "expiring",
+        )
+        .slice(0, COUPON_LIMIT)
+        .map((r) => ({
+          claimCode: r.claim_code,
+          title: r.coupon_title?.trim() || "혜택",
+          expiresAt: r.expires_at,
+        }));
+      return {
+        isBusiness,
+        merchant: null,
+        user: { expiringCoupons, followedDrops: followedDrops.slice(0, FOLLOWED_DROP_LIMIT) },
+      };
+    }
 
     // partner 행 — 명함/식별용 (기존 partner.index 패턴).
     const { data: partner } = await supabase
@@ -75,7 +119,7 @@ export const Route = createFileRoute("/_user/home")({
       .select("id, display_name, partner_kind, address, verification_status")
       .eq("owner_user_id", userId)
       .maybeSingle();
-    if (!partner?.id) return { isBusiness, merchant: null };
+    if (!partner?.id) return { isBusiness, merchant: null, user: null };
     const partnerId = partner.id;
 
     // 병렬: 오늘의 AI(캐시 SELECT) / 새 예약(RPC) / 제안(pending).
@@ -134,23 +178,28 @@ export const Route = createFileRoute("/_user/home")({
       proposals,
     };
 
-    return { isBusiness, merchant };
+    return { isBusiness, merchant, user: null };
   },
   component: HomeRoute,
 });
 
 function HomeRoute() {
   const navigate = useNavigate();
-  const { isBusiness, merchant } = Route.useLoaderData();
+  const { isBusiness, merchant, user } = Route.useLoaderData();
 
   return (
     <RoleHome
       isBusiness={isBusiness}
       merchant={merchant}
+      user={user}
       onCreate={() => void navigate({ to: "/create-wizard" })}
       onGoResults={() => void navigate({ to: "/partner/results" })}
       onGoReservations={() => void navigate({ to: "/partner/reservations" })}
       onGoProposals={() => void navigate({ to: "/partner" })}
+      onOpenCoupon={(claimCode) =>
+        void navigate({ to: "/me", search: { claimed: claimCode } })
+      }
+      onOpenDrop={(shareUuid) => void navigate({ to: "/d/$shareUuid", params: { shareUuid } })}
     />
   );
 }

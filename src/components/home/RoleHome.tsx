@@ -1,5 +1,7 @@
-import { Sparkles, Calendar, Users, Plus, ChevronRight, ArrowRight } from "lucide-react";
+import { Sparkles, Calendar, Users, Plus, ChevronRight, ArrowRight, Ticket } from "lucide-react";
 import { StoreProfileCard } from "@/components/partner/StoreProfileCard";
+import { DropFeedCard } from "@/components/drop-feed-card";
+import type { DropFeedItem } from "@/components/home-page";
 
 // Slice 4a — 역할 홈 골격. 만들기 폼(HomePageV3) 대체: 홈 = 역할 랜딩 + 다이제스트.
 //   창작 기능은 만들기 탭(/create-wizard)로 일원화 — 홈엔 "카드 만들기" CTA만.
@@ -34,6 +36,22 @@ export type MerchantHomeData = {
   newReservations: HomeReservation[];
   proposals: HomeProposal[];
 };
+
+// Slice 4b — 유저(비사업자) 홈 데이터.
+export type HomeCoupon = { claimCode: string; title: string; expiresAt: string | null };
+export type UserHomeData = {
+  expiringCoupons: HomeCoupon[];
+  followedDrops: DropFeedItem[];
+};
+
+function expiryLabel(iso: string | null): string {
+  if (!iso) return "곧 만료";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "곧 만료";
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${m}.${day}까지`;
+}
 
 const SEVERITY_RANK: Record<GuideDiagnosis["severity"], number> = {
   high: 3,
@@ -135,28 +153,99 @@ function CreateCardCta({ onCreate }: { onCreate: () => void }) {
 export function RoleHome({
   isBusiness,
   merchant,
+  user,
   onCreate,
   onGoResults,
   onGoReservations,
   onGoProposals,
+  onOpenCoupon,
+  onOpenDrop,
 }: {
   isBusiness: boolean;
   merchant: MerchantHomeData | null;
+  user: UserHomeData | null;
   onCreate: () => void;
   onGoResults: () => void;
   onGoReservations: () => void;
   onGoProposals: () => void;
+  onOpenCoupon: (claimCode: string) => void;
+  onOpenDrop: (shareUuid: string) => void;
 }) {
-  // 유저 홈(비사업자) — 4b 에서 곧 쓸 혜택·구독 새 카드로 채움. 4a 는 placeholder.
+  // 유저 홈(비사업자) — 곧 쓸 혜택 + 구독 메이커 새 카드. 상인은 아래 merchant 홈.
   if (!isBusiness || !merchant) {
+    const coupons = user?.expiringCoupons ?? [];
+    const followedDrops = user?.followedDrops ?? [];
+    const bothEmpty = coupons.length === 0 && followedDrops.length === 0;
     return (
-      <div className="mx-auto max-w-md px-6 pt-6">
-        <header className="mb-6">
+      <div className="mx-auto max-w-md space-y-6 px-6 pt-6 pb-4">
+        <header>
           <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">홈</h1>
-          <p className="mt-2 text-sm font-medium tracking-ko text-[#737373]">
-            영상 링크 하나로 카드를 만들어 친구에게 보내보세요.
+          <p className="mt-1 text-sm font-medium tracking-ko text-[#737373]">
+            곧 쓸 혜택과 구독한 메이커의 새 카드를 모았어요.
           </p>
         </header>
+
+        {/* 1. 곧 쓸 혜택 (있으면) */}
+        {coupons.length > 0 ? (
+          <section>
+            <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
+              <Ticket className="size-4" strokeWidth={2} />곧 쓸 혜택 {coupons.length}
+            </h2>
+            <ul className="space-y-2">
+              {coupons.map((c) => (
+                <li
+                  key={c.claimCode}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-[#E5E5E5] bg-white px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold tracking-ko text-[#0A0A0A]">
+                      {c.title}
+                    </p>
+                    <p className="mt-0.5 text-xs font-medium tracking-ko text-[#737373]">
+                      {expiryLabel(c.expiresAt)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onOpenCoupon(c.claimCode)}
+                    className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg bg-[#0A0A0A] px-3 text-sm font-semibold tracking-ko text-white transition-colors hover:bg-[#171717]"
+                  >
+                    사용하기
+                    <ChevronRight className="size-4" strokeWidth={2} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {/* 2. 구독 메이커 새 카드 (있으면) */}
+        {followedDrops.length > 0 ? (
+          <section>
+            <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
+              <Sparkles className="size-4" strokeWidth={2} />구독한 메이커 새 카드
+            </h2>
+            <div className="space-y-3">
+              {followedDrops.map((drop) => (
+                <DropFeedCard
+                  key={drop.shareUuid}
+                  {...drop}
+                  onClick={() => onOpenDrop(drop.shareUuid)}
+                  onCtaClick={() => onOpenDrop(drop.shareUuid)}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {/* 둘 다 비면 가벼운 안내 */}
+        {bothEmpty ? (
+          <p className="rounded-2xl border border-[#E5E5E5] bg-white p-5 text-sm font-medium leading-relaxed tracking-ko text-[#737373]">
+            영상 링크 하나로 카드를 만들어 친구에게 보내보세요.
+          </p>
+        ) : null}
+
+        {/* 3. 카드 만들기 CTA (항상) */}
         <CreateCardCta onCreate={onCreate} />
       </div>
     );

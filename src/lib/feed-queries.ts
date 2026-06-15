@@ -142,6 +142,37 @@ export async function getDiscoverDrops(client: SupabaseClient): Promise<DropFeed
     .filter((x): x is DropFeedItem => x !== null);
 }
 
+// Slice 4b — 구독(maker_follows active) 한 메이커들의 published 카드.
+//   getDiscoverDrops 와 동일 join(content_sources/intent_types/share_events) +
+//   adaptDiscoverRow 매핑. 차이는 info_drops.partner_id 를 팔로우한 partner 로만 필터.
+export async function getFollowedMakerDrops(
+  client: SupabaseClient,
+  userId: string,
+): Promise<DropFeedItem[]> {
+  const { data: follows, error: fErr } = await client
+    .from("maker_follows")
+    .select("followed_partner_id")
+    .eq("follower_user_id", userId)
+    .eq("status", "active");
+  if (fErr || !follows) return [];
+  const partnerIds = (follows as { followed_partner_id: string }[])
+    .map((f) => f.followed_partner_id)
+    .filter(Boolean);
+  if (partnerIds.length === 0) return [];
+
+  const { data, error } = await client
+    .from("info_drops")
+    .select(DISCOVER_SELECT)
+    .eq("status", "published")
+    .in("partner_id", partnerIds)
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(10);
+  if (error || !data) return [];
+  return (data as unknown as InfoDropDiscoverRow[])
+    .map(adaptDiscoverRow)
+    .filter((x): x is DropFeedItem => x !== null);
+}
+
 export async function getSentDrops(
   client: SupabaseClient,
   userId: string,
