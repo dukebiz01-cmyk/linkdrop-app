@@ -134,6 +134,9 @@ function CreateWizardPage() {
 
   return (
     <CreateDropWizard
+      // 가져오기/외부 진입(?source_id=·?url=) 시 prefill 을 새로 적용하려면 remount 필요
+      // (위저드 내부 url state 는 initial* prop 변경을 무시하므로). 내부 입력 중엔 search 불변 → 안정.
+      key={search.source_id ?? search.url ?? "fresh"}
       isBusiness={isBusiness}
       initialUrl={resolvedInitialUrl}
       initialMetadata={resolvedInitialMetadata}

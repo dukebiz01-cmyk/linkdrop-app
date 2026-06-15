@@ -36,6 +36,7 @@ import type { DropPurpose } from "@/lib/types";
 import { WIZARD_PRIMARY_BUTTON_CLASS } from "@/components/create-wizard-button-styles";
 import { cn } from "@/lib/utils";
 import { Step1UrlInput } from "@/components/create/Step1VideoInput";
+import { MyContentPicker } from "@/components/create/MyContentPicker";
 import { Step2PurposeSelect } from "@/components/create/Step2Purpose";
 import { Step4DropPreview } from "@/components/create/Step4DropPreview";
 import { Step5PurposeShare } from "@/components/create/Step5Share";
@@ -103,6 +104,16 @@ export type {
   WizardSuggestionConfidence,
 };
 export { PURPOSE_FLOW_CONFIG, StepBadge };
+
+// 가져오기(MyContentPicker) navigate 시 목적 보존용 — 한국어 DropPurpose → 영문(route purpose).
+// create-wizard.tsx PURPOSE_EN_TO_KO 의 역매핑.
+const PURPOSE_KO_TO_EN: Record<DropPurpose, string> = {
+  정보: "info",
+  쿠폰: "coupon",
+  예약: "reservation",
+  구매: "purchase",
+  상담: "lead",
+};
 
 // =============================================================================
 // Types
@@ -554,9 +565,8 @@ export function CreateDropWizard({
         />
       </div>
 
-      {/* Slice 3 — 목적-first: 목적 그리드 먼저, 목적 선택 후 링크 입력 노출.
-          링크 라벨/플레이스홀더는 Step1UrlInput 이 purpose(구매=상품/그 외=영상)로
-          기존 분기 — 새 입력 분기 추가 없음. */}
+      {/* 목적-first + 입력 2경로: 목적 선택 후 [내 콘텐츠에서 가져오기](위) + 직접 입력(아래).
+          가져오기는 비커머스에서만(커머스=상품 URL, 별도 트랙). 직접 입력 = 기존 Step1UrlInput. */}
       {step === 1 && (
         <>
           <Step2PurposeSelect
@@ -568,14 +578,17 @@ export function CreateDropWizard({
             isBusiness={isBusiness}
           />
           {purpose && (
-            <Step1UrlInput
-              value={url}
-              onChange={setUrl}
-              status={urlStatus}
-              videoInfo={videoInfo}
-              metadataFetchedBy={metadataFetchedBy}
-              purpose={purpose ?? undefined}
-            />
+            <>
+              {purpose !== "구매" && <MyContentPicker purposeEn={PURPOSE_KO_TO_EN[purpose]} />}
+              <Step1UrlInput
+                value={url}
+                onChange={setUrl}
+                status={urlStatus}
+                videoInfo={videoInfo}
+                metadataFetchedBy={metadataFetchedBy}
+                purpose={purpose ?? undefined}
+              />
+            </>
           )}
         </>
       )}
