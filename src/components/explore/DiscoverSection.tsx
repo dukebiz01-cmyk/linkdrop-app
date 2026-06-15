@@ -1,11 +1,15 @@
 import { useState } from "react";
-import { Search, Sparkles, Check, AlertCircle } from "lucide-react";
+import { Search, Sparkles, Check, AlertCircle, Youtube, Newspaper, PenLine } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
 import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 
+// G1 — 멀티소스 검색 후보. provider 확장(YouTube + Naver 뉴스/블로그).
+export type DiscoverProvider = "youtube" | "naver_news" | "naver_blog";
+
 export type DiscoverCandidate = {
-  provider: "youtube";
+  provider: DiscoverProvider;
   source_url: string;
   source_id: string;
   canonical_url: string;
@@ -14,6 +18,15 @@ export type DiscoverCandidate = {
   author_name: string | null;
   duration_sec: number | null;
   raw_meta: Record<string, unknown>;
+  published_at?: string | null;
+  snippet?: string | null;
+};
+
+// provider 배지 — 작은 라벨 + Lucide 라인 아이콘(블랙 미니멀).
+const PROVIDER_META: Record<DiscoverProvider, { label: string; Icon: LucideIcon }> = {
+  youtube: { label: "YouTube", Icon: Youtube },
+  naver_news: { label: "네이버 뉴스", Icon: Newspaper },
+  naver_blog: { label: "네이버 블로그", Icon: PenLine },
 };
 
 type DiscoverResponse = {
@@ -137,6 +150,8 @@ export function DiscoverSection({
   }
 
   async function handleRegister(c: DiscoverCandidate) {
+    // G1 — Naver 등 비-YouTube 가져오기는 아직 미지원(버튼 비활성). 방어적 차단.
+    if (c.provider !== "youtube") return;
     setRegisteringId(c.source_id);
     try {
       const supabase = getSupabase();
@@ -269,27 +284,32 @@ export function DiscoverSection({
             const isRegistered = claimedIds.has(c.source_id);
             const isBusy = registeringId === c.source_id;
             const description = extractDescription(c.raw_meta);
+            const meta = PROVIDER_META[c.provider];
+            const ProviderIcon = meta.Icon;
+            const isNaver = c.provider !== "youtube";
             return (
               <li key={`${c.provider}|${c.source_id}`}>
                 <article className="flex w-full items-center gap-3 rounded-2xl border border-[#E5E5E5] bg-white p-3">
                   <button
                     type="button"
                     onClick={() => openEmbed(c)}
-                    aria-label="영상 재생"
+                    aria-label="콘텐츠 열기"
                     className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-[#F5F5F5] transition-opacity hover:opacity-90"
                   >
                     {c.thumbnail_url ? (
                       <img src={c.thumbnail_url} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-[#A3A3A3]">
-                        <Search className="size-5" strokeWidth={2} />
+                        <ProviderIcon className="size-5" strokeWidth={2} />
                       </div>
                     )}
-                    <span className="absolute left-1 top-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-semibold tracking-ko text-white">
-                      유튜브
-                    </span>
                   </button>
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    {/* G1 provider 배지 — 작은 라벨 + 라인 아이콘. */}
+                    <span className="inline-flex w-fit items-center gap-1 rounded-md bg-[#F5F5F5] px-1.5 py-0.5 text-[10px] font-semibold tracking-ko text-[#525252]">
+                      <ProviderIcon className="size-3" strokeWidth={2} />
+                      {meta.label}
+                    </span>
                     <button
                       type="button"
                       onClick={() => openEmbed(c)}
@@ -312,10 +332,12 @@ export function DiscoverSection({
                     <button
                       type="button"
                       onClick={() => void handleRegister(c)}
-                      disabled={isBusy || (!onImport && isRegistered)}
+                      disabled={isNaver || isBusy || (!onImport && isRegistered)}
                       className="mt-1 inline-flex h-9 min-h-[36px] w-fit items-center justify-center gap-1 rounded-lg bg-[#0A0A0A] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#171717] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
                     >
-                      {isBusy ? (
+                      {isNaver ? (
+                        "곧 지원"
+                      ) : isBusy ? (
                         onImport ? (
                           "가져오는 중…"
                         ) : (
