@@ -176,11 +176,18 @@ export function DiscoverSection({
           { onConflict: "provider,source_id", ignoreDuplicates: false },
         );
       if (upsertErr) {
-        console.error("[discover] claim upsert failed:", upsertErr);
-        toast.error(`담지 못했어요: ${upsertErr.message}`);
-        return;
+        // 가져오기 모드 — claim 은 best-effort. 기존 행 등 RLS(403)로 막혀도 import 진행
+        //   (위저드가 ?url= 에서 oembed 로 소스 해석 → source_url 만 있으면 됨). RLS 무변경.
+        if (onImport) {
+          console.warn("[discover] claim 실패(무시, import 진행):", upsertErr.message);
+        } else {
+          // 등록(explore) 모드 — claim 이 목적이므로 실패는 에러 표시 후 중단.
+          console.error("[discover] claim upsert failed:", upsertErr);
+          toast.error(`담지 못했어요: ${upsertErr.message}`);
+          return;
+        }
       }
-      // 가져오기 모드 — claim 후 위저드 prefill 로 합류(아래 토스트/배지 흐름 생략).
+      // 가져오기 모드 — claim(성공/실패 무관) 후 위저드 prefill 로 합류.
       if (onImport) {
         onImport(c);
         return;
