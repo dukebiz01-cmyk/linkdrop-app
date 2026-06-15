@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as BusinessInfoRouteImport } from './routes/business-info'
 import { Route as UserRouteImport } from './routes/_user'
 import { Route as PartnerRouteImport } from './routes/_partner'
 import { Route as AdminRouteImport } from './routes/_admin'
@@ -65,6 +66,11 @@ const TermsRoute = TermsRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BusinessInfoRoute = BusinessInfoRouteImport.update({
+  id: '/business-info',
+  path: '/business-info',
   getParentRoute: () => rootRouteImport,
 } as any)
 const UserRoute = UserRouteImport.update({
@@ -296,6 +302,7 @@ const PartnerPartnerCalendarDropIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/business-info': typeof BusinessInfoRoute
   '/login': typeof LoginRoute
   '/terms': typeof TermsRoute
   '/create': typeof UserCreateRoute
@@ -342,6 +349,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/business-info': typeof BusinessInfoRoute
   '/login': typeof LoginRoute
   '/terms': typeof TermsRoute
   '/create': typeof UserCreateRoute
@@ -392,6 +400,7 @@ export interface FileRoutesById {
   '/_admin': typeof AdminRouteWithChildren
   '/_partner': typeof PartnerRouteWithChildren
   '/_user': typeof UserRouteWithChildren
+  '/business-info': typeof BusinessInfoRoute
   '/login': typeof LoginRoute
   '/terms': typeof TermsRoute
   '/_user/create': typeof UserCreateRoute
@@ -440,6 +449,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/business-info'
     | '/login'
     | '/terms'
     | '/create'
@@ -486,6 +496,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/business-info'
     | '/login'
     | '/terms'
     | '/create'
@@ -535,6 +546,7 @@ export interface FileRouteTypes {
     | '/_admin'
     | '/_partner'
     | '/_user'
+    | '/business-info'
     | '/login'
     | '/terms'
     | '/_user/create'
@@ -585,6 +597,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   PartnerRoute: typeof PartnerRouteWithChildren
   UserRoute: typeof UserRouteWithChildren
+  BusinessInfoRoute: typeof BusinessInfoRoute
   LoginRoute: typeof LoginRoute
   TermsRoute: typeof TermsRoute
   AllianceSlugRoute: typeof AllianceSlugRoute
@@ -617,6 +630,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/business-info': {
+      id: '/business-info'
+      path: '/business-info'
+      fullPath: '/business-info'
+      preLoaderRoute: typeof BusinessInfoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_user': {
@@ -1033,6 +1053,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   PartnerRoute: PartnerRouteWithChildren,
   UserRoute: UserRouteWithChildren,
+  BusinessInfoRoute: BusinessInfoRoute,
   LoginRoute: LoginRoute,
   TermsRoute: TermsRoute,
   AllianceSlugRoute: AllianceSlugRoute,
