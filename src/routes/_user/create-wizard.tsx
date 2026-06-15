@@ -178,12 +178,12 @@ function CreateWizardPage() {
             position: blocks.length,
           });
         }
-        // Slice2 멀티영상 — primary 외 추가 영상을 video 블록으로 이어붙인다(position 연속).
-        //   create_drop_v2 가 block_kind='video' 를 화이트리스트 없이 그대로 insert(실측 확인).
+        // G2 멀티소스 — primary 외 추가 콘텐츠를 영상=video / 글=article 블록으로 이어붙인다.
+        //   create_drop_v2 는 block_kind 를 enum 캐스팅(article 은 옵션 A DDL 로 enum 에 추가됨).
         //   video_start/end_seconds 는 타임링크 추후 → 미전송(RPC NULL 처리).
         for (const v of data.attachedVideos ?? []) {
           blocks.push({
-            block_kind: "video",
+            block_kind: v.type === "article" ? "article" : "video",
             block_data: {
               provider: v.provider,
               source_id: v.sourceId,
@@ -192,6 +192,7 @@ function CreateWizardPage() {
               title: v.title,
               thumbnail_url: v.thumbnailUrl,
               author_name: v.authorName,
+              ...(v.snippet ? { snippet: v.snippet } : {}),
             },
             position: blocks.length,
           });

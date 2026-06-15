@@ -50,6 +50,7 @@ export function DiscoverSection({
   onRegistered,
   isBusiness = false,
   onImport,
+  allowNonVideo = false,
 }: {
   partnerId: string | null;
   onRegistered: () => void;
@@ -57,6 +58,8 @@ export function DiscoverSection({
   /** STEP1-fix: 만들기 '가져오기' 모드 — 후보 등록(claim) 후 이 콜백으로 위저드 prefill 진입.
    *  미지정(explore 등록 모드)이면 기존처럼 '등록됨' 배지로 끝. */
   onImport?: (candidate: DiscoverCandidate) => void;
+  /** G2: true 면 비-YouTube(Naver 글) [가져오기]도 활성(첨부 경로). 기본 false = '곧 지원'. */
+  allowNonVideo?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -75,7 +78,14 @@ export function DiscoverSection({
   } | null>(null);
 
   function openEmbed(c: DiscoverCandidate) {
-    if (c.provider !== "youtube" || !c.source_id) {
+    // G2 — 글(Naver 등)은 인앱 임베드 대신 원문 링크 새 탭.
+    if (c.provider !== "youtube") {
+      if (typeof window !== "undefined" && c.canonical_url) {
+        window.open(c.canonical_url, "_blank", "noopener,noreferrer");
+      }
+      return;
+    }
+    if (!c.source_id) {
       toast.info("이 영상은 인앱 재생을 지원하지 않아요.");
       return;
     }
@@ -150,8 +160,8 @@ export function DiscoverSection({
   }
 
   async function handleRegister(c: DiscoverCandidate) {
-    // G1 — Naver 등 비-YouTube 가져오기는 아직 미지원(버튼 비활성). 방어적 차단.
-    if (c.provider !== "youtube") return;
+    // G2 — 비-YouTube(Naver 글)는 allowNonVideo(첨부 경로)에서만 가져오기 허용. 그 외 차단.
+    if (c.provider !== "youtube" && !allowNonVideo) return;
     setRegisteringId(c.source_id);
     try {
       const supabase = getSupabase();
@@ -332,10 +342,10 @@ export function DiscoverSection({
                     <button
                       type="button"
                       onClick={() => void handleRegister(c)}
-                      disabled={isNaver || isBusy || (!onImport && isRegistered)}
+                      disabled={(isNaver && !allowNonVideo) || isBusy || (!onImport && isRegistered)}
                       className="mt-1 inline-flex h-9 min-h-[36px] w-fit items-center justify-center gap-1 rounded-lg bg-[#0A0A0A] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#171717] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
                     >
-                      {isNaver ? (
+                      {isNaver && !allowNonVideo ? (
                         "곧 지원"
                       ) : isBusy ? (
                         onImport ? (

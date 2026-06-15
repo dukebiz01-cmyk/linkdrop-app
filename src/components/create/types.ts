@@ -37,9 +37,11 @@ export interface AttachedProduct {
   imageUrl: string | null;
 }
 
-/** Slice2 멀티영상 — 카드에 담은 추가 영상(primary 외). 검색 후보(DiscoverCandidate)에서 매핑.
- *  provider 보존 = 멀티-provider ready. sourceId = dedup 키(플랫폼 video id). */
+/** G2 멀티소스 — 카드에 담은 추가 콘텐츠(primary 외). 검색 후보(DiscoverCandidate)에서 매핑.
+ *  type: 영상='video'(YouTube) / 글='article'(Naver 뉴스·블로그). provider 보존 = 멀티-provider.
+ *  sourceId = dedup 키(영상=videoId, 글=link). (이름은 호환 위해 AttachedVideo 유지.) */
 export interface AttachedVideo {
+  type: "video" | "article";
   provider: string;
   sourceId: string;
   sourceUrl: string;
@@ -47,6 +49,7 @@ export interface AttachedVideo {
   title: string | null;
   thumbnailUrl: string | null;
   authorName: string | null;
+  snippet?: string | null;
 }
 
 export type WizardSuggestionConfidence = "high" | "medium" | "low";

@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Check,
   Plus,
+  FileText,
   Sparkles,
   ShieldCheck,
   Flag,
@@ -86,12 +87,14 @@ export interface InfoDropPageProps {
   }>;
   /** Slice2 멀티영상 — primary 외 담은 추가 영상(video 블록). 없으면 미렌더. */
   attachedVideos?: Array<{
+    type: "video" | "article";
     provider: string;
     sourceId: string;
     sourceUrl: string;
     title: string | null;
     thumbnailUrl: string | null;
     authorName: string | null;
+    snippet?: string | null;
   }>;
   local: {
     name: string;
@@ -1258,41 +1261,60 @@ export function InfoDropPage({
           )}
       </div>
 
-      {/* Slice2 멀티영상 — primary 외 담은 영상 리스트(썸네일 → 원본 열기). 기능 위주(라벨 폴리시 추후). */}
+      {/* G2 멀티소스 — primary 외 담은 콘텐츠(영상=링크, 글=링크 카드). 원문 새 탭. */}
       {attachedVideos && attachedVideos.length > 0 ? (
         <section className="mx-auto w-full max-w-[480px] px-6 pt-4">
-          <h2 className="mb-3 text-sm font-bold tracking-ko text-text-strong">함께 담은 영상</h2>
+          <h2 className="mb-3 text-sm font-bold tracking-ko text-text-strong">함께 담은 콘텐츠</h2>
           <ul className="space-y-3">
-            {attachedVideos.map((v) => (
-              <li key={v.sourceId || v.sourceUrl}>
-                <a
-                  href={v.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-2 transition-colors hover:border-[#D4D4D4]"
-                >
-                  <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-[#F5F5F5]">
-                    {v.thumbnailUrl ? (
-                      <img src={v.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center text-[#A3A3A3]">
-                        <Play className="size-5" strokeWidth={2} />
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-sm font-bold tracking-ko text-[#0A0A0A]">
-                      {v.title || "담은 영상"}
-                    </p>
-                    {v.authorName ? (
-                      <p className="mt-0.5 truncate text-xs font-medium tracking-ko text-[#737373]">
-                        {v.authorName}
+            {attachedVideos.map((v) => {
+              const isArticle = v.type === "article";
+              const sourceLabel =
+                v.authorName?.trim() ||
+                (v.provider === "naver_news"
+                  ? "네이버 뉴스"
+                  : v.provider === "naver_blog"
+                    ? "네이버 블로그"
+                    : "");
+              return (
+                <li key={v.sourceId || v.sourceUrl}>
+                  <a
+                    href={v.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-2 transition-colors hover:border-[#D4D4D4]"
+                  >
+                    <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-[#F5F5F5]">
+                      {v.thumbnailUrl ? (
+                        <img src={v.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center text-[#A3A3A3]">
+                          {isArticle ? (
+                            <FileText className="size-5" strokeWidth={2} />
+                          ) : (
+                            <Play className="size-5" strokeWidth={2} />
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm font-bold tracking-ko text-[#0A0A0A]">
+                        {v.title || (isArticle ? "담은 글" : "담은 영상")}
                       </p>
-                    ) : null}
-                  </div>
-                </a>
-              </li>
-            ))}
+                      {sourceLabel ? (
+                        <p className="mt-0.5 truncate text-xs font-medium tracking-ko text-[#737373]">
+                          {sourceLabel}
+                        </p>
+                      ) : null}
+                      {isArticle && v.snippet ? (
+                        <p className="mt-0.5 line-clamp-1 text-[11px] font-medium tracking-ko text-[#A3A3A3]">
+                          {v.snippet}
+                        </p>
+                      ) : null}
+                    </div>
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}

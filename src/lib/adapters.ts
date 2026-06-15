@@ -201,7 +201,7 @@ function buildAttachedProducts(d: DropDetailRpc): InfoDropPageProps["attachedPro
 }
 
 /**
- * Slice2 멀티영상 — block_kind='video' 블록 → 추가 영상 리스트(primary 외).
+ * G2 멀티소스 — block_kind='video'(영상) + 'article'(글) 블록 → 함께 담은 콘텐츠 리스트(primary 외).
  *   position 순. 없으면 undefined. (primary 영상은 source_id → videoThumbnailUrl 로 별도 렌더.)
  */
 function buildAttachedVideos(d: DropDetailRpc): InfoDropPageProps["attachedVideos"] {
@@ -211,12 +211,15 @@ function buildAttachedVideos(d: DropDetailRpc): InfoDropPageProps["attachedVideo
       (b): b is { block_kind?: string; block_data?: Record<string, unknown>; position?: number } =>
         !!b &&
         typeof b === "object" &&
-        (b as { block_kind?: string }).block_kind === "video",
+        ((b as { block_kind?: string }).block_kind === "video" ||
+          (b as { block_kind?: string }).block_kind === "article"),
     )
     .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
     .map((b) => {
       const bd = (b.block_data ?? {}) as Record<string, unknown>;
+      const isArticle = (b as { block_kind?: string }).block_kind === "article";
       return {
+        type: (isArticle ? "article" : "video") as "video" | "article",
         provider: typeof bd.provider === "string" ? bd.provider : "youtube",
         sourceId: typeof bd.source_id === "string" ? bd.source_id : "",
         sourceUrl:
@@ -228,6 +231,7 @@ function buildAttachedVideos(d: DropDetailRpc): InfoDropPageProps["attachedVideo
         title: typeof bd.title === "string" ? bd.title : null,
         thumbnailUrl: typeof bd.thumbnail_url === "string" ? bd.thumbnail_url : null,
         authorName: typeof bd.author_name === "string" ? bd.author_name : null,
+        snippet: typeof bd.snippet === "string" ? bd.snippet : null,
       };
     })
     .filter((v) => v.sourceUrl);

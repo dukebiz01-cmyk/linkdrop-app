@@ -3660,6 +3660,7 @@ export type Database = {
         | "discuss"
         | "similar"
         | "campaign_info"
+        | "article"
       campaign_status: "draft" | "active" | "paused" | "ended" | "cancelled"
       claim_status: "issued" | "used" | "expired" | "cancelled"
       conversion_type:
