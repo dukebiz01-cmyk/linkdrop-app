@@ -148,16 +148,12 @@ async function youtubeSearch(keyword: string): Promise<NormalizedCandidate[]> {
 // Naver 어댑터 — 뉴스/블로그 검색 (썸네일 없음 → null). 키 없으면 skip.
 // ============================================================
 async function naverSearch(type: "news" | "blog", keyword: string): Promise<NormalizedCandidate[]> {
-  // [진단] env 존재 여부만(키 값 자체는 절대 로깅 X — boolean).
-  console.log("[naver] env:", { id: !!NAVER_CLIENT_ID, secret: !!NAVER_CLIENT_SECRET });
   if (!NAVER_CLIENT_ID || !NAVER_CLIENT_SECRET) return [];
   const url = new URL(`https://openapi.naver.com/v1/search/${type}.json`);
   url.searchParams.set("query", keyword);
   url.searchParams.set("sort", "sim");
   url.searchParams.set("display", "10");
   try {
-    // [진단] 호출 URL(쿼리만, 키는 헤더라 미포함).
-    console.log("[naver] url:", url.toString());
     // FIX v2 — 키 값 *중간*에 박힌 비ASCII(BOM·제로폭공백 U+200B·개행·한글 등)까지 제거.
     //   .trim()(앞뒤만)으론 부족 → 인쇄 가능 ASCII(공백 제외, \x21-\x7E) 외 전부 제거.
     //   네이버 키는 영숫자(ASCII)라 안전. ByteString(0~255) 위반 원천 차단.
@@ -170,10 +166,8 @@ async function naverSearch(type: "news" | "blog", keyword: string): Promise<Norm
         "X-Naver-Client-Secret": secret,
       },
     });
-    console.log("[naver] status:", res.status);
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.error("[naver] body:", body);
       throw new Error(`NAVER_${type.toUpperCase()}_FAILED status=${res.status} body=${body.slice(0, 200)}`);
     }
     const json = await res.json();
@@ -202,8 +196,7 @@ async function naverSearch(type: "news" | "blog", keyword: string): Promise<Norm
     }
     return out;
   } catch (e) {
-    // [진단] 어댑터 throw 원인. 기존 동작 보존 — rethrow(상위 allSettled 가 errors 처리).
-    console.error("[naver] threw:", String(e));
+    // 어댑터 throw 는 상위 allSettled 가 errors 로 처리 — rethrow 로 전파 보존.
     throw e;
   }
 }
@@ -288,13 +281,6 @@ Deno.serve(async (req) => {
     errors[ADAPTERS[i].provider] = String(reason?.message ?? reason);
     console.warn(`[discover] ${ADAPTERS[i].provider} 실패(skip):`, reason);
     return [];
-  });
-
-  // [진단] 어댑터별 결과 개수(ADAPTERS 순서 = youtube, naver_news, naver_blog).
-  console.log("[dispatch] counts:", {
-    youtube: perProvider[0]?.length ?? 0,
-    naver_news: perProvider[1]?.length ?? 0,
-    naver_blog: perProvider[2]?.length ?? 0,
   });
 
   const merged = interleave(perProvider);
