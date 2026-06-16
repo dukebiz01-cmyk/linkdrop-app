@@ -158,10 +158,14 @@ async function naverSearch(type: "news" | "blog", keyword: string): Promise<Norm
   try {
     // [진단] 호출 URL(쿼리만, 키는 헤더라 미포함).
     console.log("[naver] url:", url.toString());
+    // FIX — 키 값에 BOM(U+FEFF)·공백·개행 등 비가시 문자가 섞이면 fetch 헤더(ByteString)
+    //   구성이 throw. 헤더 구성 직전에 trim 으로 제거(헤더 값 sanitize).
+    const id = (NAVER_CLIENT_ID ?? "").trim();
+    const secret = (NAVER_CLIENT_SECRET ?? "").trim();
     const res = await fetch(url.toString(), {
       headers: {
-        "X-Naver-Client-Id": NAVER_CLIENT_ID,
-        "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
+        "X-Naver-Client-Id": id,
+        "X-Naver-Client-Secret": secret,
       },
     });
     console.log("[naver] status:", res.status);
