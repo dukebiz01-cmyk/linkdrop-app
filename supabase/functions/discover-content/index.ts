@@ -158,10 +158,12 @@ async function naverSearch(type: "news" | "blog", keyword: string): Promise<Norm
   try {
     // [진단] 호출 URL(쿼리만, 키는 헤더라 미포함).
     console.log("[naver] url:", url.toString());
-    // FIX — 키 값에 BOM(U+FEFF)·공백·개행 등 비가시 문자가 섞이면 fetch 헤더(ByteString)
-    //   구성이 throw. 헤더 구성 직전에 trim 으로 제거(헤더 값 sanitize).
-    const id = (NAVER_CLIENT_ID ?? "").trim();
-    const secret = (NAVER_CLIENT_SECRET ?? "").trim();
+    // FIX v2 — 키 값 *중간*에 박힌 비ASCII(BOM·제로폭공백 U+200B·개행·한글 등)까지 제거.
+    //   .trim()(앞뒤만)으론 부족 → 인쇄 가능 ASCII(공백 제외, \x21-\x7E) 외 전부 제거.
+    //   네이버 키는 영숫자(ASCII)라 안전. ByteString(0~255) 위반 원천 차단.
+    const clean = (s: string | undefined) => (s ?? "").replace(/[^\x21-\x7E]/g, "");
+    const id = clean(NAVER_CLIENT_ID);
+    const secret = clean(NAVER_CLIENT_SECRET);
     const res = await fetch(url.toString(), {
       headers: {
         "X-Naver-Client-Id": id,
