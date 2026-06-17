@@ -22,10 +22,12 @@ import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as ApiSuggestPurposeRouteImport } from './routes/api/suggest-purpose'
 import { Route as ApiPriceCompareRouteImport } from './routes/api/price-compare'
 import { Route as ApiOembedRouteImport } from './routes/api/oembed'
+import { Route as ApiGeneratePromoCopyRouteImport } from './routes/api/generate-promo-copy'
 import { Route as ApiEventsRouteImport } from './routes/api/events'
 import { Route as ApiConsultationsRouteImport } from './routes/api/consultations'
 import { Route as ApiAbuseReportsRouteImport } from './routes/api/abuse-reports'
 import { Route as AllianceSlugRouteImport } from './routes/alliance.$slug'
+import { Route as UserStudioRouteImport } from './routes/_user/studio'
 import { Route as UserProfileRouteImport } from './routes/_user/profile'
 import { Route as UserMeRouteImport } from './routes/_user/me'
 import { Route as UserInboxRouteImport } from './routes/_user/inbox'
@@ -37,6 +39,7 @@ import { Route as ApiDropsIndexRouteImport } from './routes/api/drops/index'
 import { Route as ApiDiscoverIndexRouteImport } from './routes/api/discover/index'
 import { Route as PartnerPartnerIndexRouteImport } from './routes/_partner/partner.index'
 import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index'
+import { Route as ApiProductsCopyRouteImport } from './routes/api/products/copy'
 import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
 import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
 import { Route as UserResultsShareUuidRouteImport } from './routes/_user/results.$shareUuid'
@@ -56,6 +59,7 @@ import { Route as AdminAdminDefamationRouteImport } from './routes/_admin/admin.
 import { Route as AdminAdminCampaignsRouteImport } from './routes/_admin/admin.campaigns'
 import { Route as PartnerPartnerProductsIndexRouteImport } from './routes/_partner/partner.products.index'
 import { Route as PartnerPartnerProductsNewRouteImport } from './routes/_partner/partner.products.new'
+import { Route as PartnerPartnerProductsCopyRouteImport } from './routes/_partner/partner.products.copy'
 import { Route as PartnerPartnerCalendarDropIdRouteImport } from './routes/_partner/partner.calendar.$dropId'
 
 const TermsRoute = TermsRouteImport.update({
@@ -120,6 +124,11 @@ const ApiOembedRoute = ApiOembedRouteImport.update({
   path: '/api/oembed',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGeneratePromoCopyRoute = ApiGeneratePromoCopyRouteImport.update({
+  id: '/api/generate-promo-copy',
+  path: '/api/generate-promo-copy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiEventsRoute = ApiEventsRouteImport.update({
   id: '/api/events',
   path: '/api/events',
@@ -139,6 +148,11 @@ const AllianceSlugRoute = AllianceSlugRouteImport.update({
   id: '/alliance/$slug',
   path: '/alliance/$slug',
   getParentRoute: () => rootRouteImport,
+} as any)
+const UserStudioRoute = UserStudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => UserRoute,
 } as any)
 const UserProfileRoute = UserProfileRouteImport.update({
   id: '/profile',
@@ -194,6 +208,11 @@ const AdminAdminIndexRoute = AdminAdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
   getParentRoute: () => AdminRoute,
+} as any)
+const ApiProductsCopyRoute = ApiProductsCopyRouteImport.update({
+  id: '/api/products/copy',
+  path: '/api/products/copy',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDropsShareCodeRoute = ApiDropsShareCodeRouteImport.update({
   id: '/api/drops/$shareCode',
@@ -293,6 +312,12 @@ const PartnerPartnerProductsNewRoute =
     path: '/partner/products/new',
     getParentRoute: () => PartnerRoute,
   } as any)
+const PartnerPartnerProductsCopyRoute =
+  PartnerPartnerProductsCopyRouteImport.update({
+    id: '/partner/products/copy',
+    path: '/partner/products/copy',
+    getParentRoute: () => PartnerRoute,
+  } as any)
 const PartnerPartnerCalendarDropIdRoute =
   PartnerPartnerCalendarDropIdRouteImport.update({
     id: '/$dropId',
@@ -312,10 +337,12 @@ export interface FileRoutesByFullPath {
   '/inbox': typeof UserInboxRoute
   '/me': typeof UserMeRoute
   '/profile': typeof UserProfileRoute
+  '/studio': typeof UserStudioRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
   '/api/events': typeof ApiEventsRoute
+  '/api/generate-promo-copy': typeof ApiGeneratePromoCopyRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
   '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
@@ -339,11 +366,13 @@ export interface FileRoutesByFullPath {
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/products/copy': typeof ApiProductsCopyRoute
   '/admin/': typeof AdminAdminIndexRoute
   '/partner/': typeof PartnerPartnerIndexRoute
   '/api/discover/': typeof ApiDiscoverIndexRoute
   '/api/drops/': typeof ApiDropsIndexRoute
   '/partner/calendar/$dropId': typeof PartnerPartnerCalendarDropIdRoute
+  '/partner/products/copy': typeof PartnerPartnerProductsCopyRoute
   '/partner/products/new': typeof PartnerPartnerProductsNewRoute
   '/partner/products/': typeof PartnerPartnerProductsIndexRoute
 }
@@ -359,10 +388,12 @@ export interface FileRoutesByTo {
   '/inbox': typeof UserInboxRoute
   '/me': typeof UserMeRoute
   '/profile': typeof UserProfileRoute
+  '/studio': typeof UserStudioRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
   '/api/events': typeof ApiEventsRoute
+  '/api/generate-promo-copy': typeof ApiGeneratePromoCopyRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
   '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
@@ -386,11 +417,13 @@ export interface FileRoutesByTo {
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/products/copy': typeof ApiProductsCopyRoute
   '/admin': typeof AdminAdminIndexRoute
   '/partner': typeof PartnerPartnerIndexRoute
   '/api/discover': typeof ApiDiscoverIndexRoute
   '/api/drops': typeof ApiDropsIndexRoute
   '/partner/calendar/$dropId': typeof PartnerPartnerCalendarDropIdRoute
+  '/partner/products/copy': typeof PartnerPartnerProductsCopyRoute
   '/partner/products/new': typeof PartnerPartnerProductsNewRoute
   '/partner/products': typeof PartnerPartnerProductsIndexRoute
 }
@@ -410,10 +443,12 @@ export interface FileRoutesById {
   '/_user/inbox': typeof UserInboxRoute
   '/_user/me': typeof UserMeRoute
   '/_user/profile': typeof UserProfileRoute
+  '/_user/studio': typeof UserStudioRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
   '/api/events': typeof ApiEventsRoute
+  '/api/generate-promo-copy': typeof ApiGeneratePromoCopyRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
   '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
@@ -437,11 +472,13 @@ export interface FileRoutesById {
   '/_user/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/products/copy': typeof ApiProductsCopyRoute
   '/_admin/admin/': typeof AdminAdminIndexRoute
   '/_partner/partner/': typeof PartnerPartnerIndexRoute
   '/api/discover/': typeof ApiDiscoverIndexRoute
   '/api/drops/': typeof ApiDropsIndexRoute
   '/_partner/partner/calendar/$dropId': typeof PartnerPartnerCalendarDropIdRoute
+  '/_partner/partner/products/copy': typeof PartnerPartnerProductsCopyRoute
   '/_partner/partner/products/new': typeof PartnerPartnerProductsNewRoute
   '/_partner/partner/products/': typeof PartnerPartnerProductsIndexRoute
 }
@@ -459,10 +496,12 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/me'
     | '/profile'
+    | '/studio'
     | '/alliance/$slug'
     | '/api/abuse-reports'
     | '/api/consultations'
     | '/api/events'
+    | '/api/generate-promo-copy'
     | '/api/oembed'
     | '/api/price-compare'
     | '/api/suggest-purpose'
@@ -486,11 +525,13 @@ export interface FileRouteTypes {
     | '/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/products/copy'
     | '/admin/'
     | '/partner/'
     | '/api/discover/'
     | '/api/drops/'
     | '/partner/calendar/$dropId'
+    | '/partner/products/copy'
     | '/partner/products/new'
     | '/partner/products/'
   fileRoutesByTo: FileRoutesByTo
@@ -506,10 +547,12 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/me'
     | '/profile'
+    | '/studio'
     | '/alliance/$slug'
     | '/api/abuse-reports'
     | '/api/consultations'
     | '/api/events'
+    | '/api/generate-promo-copy'
     | '/api/oembed'
     | '/api/price-compare'
     | '/api/suggest-purpose'
@@ -533,11 +576,13 @@ export interface FileRouteTypes {
     | '/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/products/copy'
     | '/admin'
     | '/partner'
     | '/api/discover'
     | '/api/drops'
     | '/partner/calendar/$dropId'
+    | '/partner/products/copy'
     | '/partner/products/new'
     | '/partner/products'
   id:
@@ -556,10 +601,12 @@ export interface FileRouteTypes {
     | '/_user/inbox'
     | '/_user/me'
     | '/_user/profile'
+    | '/_user/studio'
     | '/alliance/$slug'
     | '/api/abuse-reports'
     | '/api/consultations'
     | '/api/events'
+    | '/api/generate-promo-copy'
     | '/api/oembed'
     | '/api/price-compare'
     | '/api/suggest-purpose'
@@ -583,11 +630,13 @@ export interface FileRouteTypes {
     | '/_user/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/products/copy'
     | '/_admin/admin/'
     | '/_partner/partner/'
     | '/api/discover/'
     | '/api/drops/'
     | '/_partner/partner/calendar/$dropId'
+    | '/_partner/partner/products/copy'
     | '/_partner/partner/products/new'
     | '/_partner/partner/products/'
   fileRoutesById: FileRoutesById
@@ -604,6 +653,7 @@ export interface RootRouteChildren {
   ApiAbuseReportsRoute: typeof ApiAbuseReportsRoute
   ApiConsultationsRoute: typeof ApiConsultationsRoute
   ApiEventsRoute: typeof ApiEventsRoute
+  ApiGeneratePromoCopyRoute: typeof ApiGeneratePromoCopyRoute
   ApiOembedRoute: typeof ApiOembedRoute
   ApiPriceCompareRoute: typeof ApiPriceCompareRoute
   ApiSuggestPurposeRoute: typeof ApiSuggestPurposeRoute
@@ -612,6 +662,7 @@ export interface RootRouteChildren {
   DTestRoute: typeof DTestRoute
   ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
   ApiDropsShareCodeRoute: typeof ApiDropsShareCodeRoute
+  ApiProductsCopyRoute: typeof ApiProductsCopyRoute
   ApiDiscoverIndexRoute: typeof ApiDiscoverIndexRoute
   ApiDropsIndexRoute: typeof ApiDropsIndexRoute
 }
@@ -709,6 +760,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOembedRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/generate-promo-copy': {
+      id: '/api/generate-promo-copy'
+      path: '/api/generate-promo-copy'
+      fullPath: '/api/generate-promo-copy'
+      preLoaderRoute: typeof ApiGeneratePromoCopyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/events': {
       id: '/api/events'
       path: '/api/events'
@@ -736,6 +794,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/alliance/$slug'
       preLoaderRoute: typeof AllianceSlugRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_user/studio': {
+      id: '/_user/studio'
+      path: '/studio'
+      fullPath: '/studio'
+      preLoaderRoute: typeof UserStudioRouteImport
+      parentRoute: typeof UserRoute
     }
     '/_user/profile': {
       id: '/_user/profile'
@@ -813,6 +878,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminAdminIndexRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/api/products/copy': {
+      id: '/api/products/copy'
+      path: '/api/products/copy'
+      fullPath: '/api/products/copy'
+      preLoaderRoute: typeof ApiProductsCopyRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/drops/$shareCode': {
       id: '/api/drops/$shareCode'
@@ -947,6 +1019,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PartnerPartnerProductsNewRouteImport
       parentRoute: typeof PartnerRoute
     }
+    '/_partner/partner/products/copy': {
+      id: '/_partner/partner/products/copy'
+      path: '/partner/products/copy'
+      fullPath: '/partner/products/copy'
+      preLoaderRoute: typeof PartnerPartnerProductsCopyRouteImport
+      parentRoute: typeof PartnerRoute
+    }
     '/_partner/partner/calendar/$dropId': {
       id: '/_partner/partner/calendar/$dropId'
       path: '/$dropId'
@@ -1002,6 +1081,7 @@ interface PartnerRouteChildren {
   PartnerPartnerReservationsRoute: typeof PartnerPartnerReservationsRoute
   PartnerPartnerResultsRoute: typeof PartnerPartnerResultsRoute
   PartnerPartnerIndexRoute: typeof PartnerPartnerIndexRoute
+  PartnerPartnerProductsCopyRoute: typeof PartnerPartnerProductsCopyRoute
   PartnerPartnerProductsNewRoute: typeof PartnerPartnerProductsNewRoute
   PartnerPartnerProductsIndexRoute: typeof PartnerPartnerProductsIndexRoute
 }
@@ -1015,6 +1095,7 @@ const PartnerRouteChildren: PartnerRouteChildren = {
   PartnerPartnerReservationsRoute: PartnerPartnerReservationsRoute,
   PartnerPartnerResultsRoute: PartnerPartnerResultsRoute,
   PartnerPartnerIndexRoute: PartnerPartnerIndexRoute,
+  PartnerPartnerProductsCopyRoute: PartnerPartnerProductsCopyRoute,
   PartnerPartnerProductsNewRoute: PartnerPartnerProductsNewRoute,
   PartnerPartnerProductsIndexRoute: PartnerPartnerProductsIndexRoute,
 }
@@ -1030,6 +1111,7 @@ interface UserRouteChildren {
   UserInboxRoute: typeof UserInboxRoute
   UserMeRoute: typeof UserMeRoute
   UserProfileRoute: typeof UserProfileRoute
+  UserStudioRoute: typeof UserStudioRoute
   UserCouponClaim_codeRoute: typeof UserCouponClaim_codeRoute
   UserResultsShareUuidRoute: typeof UserResultsShareUuidRoute
 }
@@ -1042,6 +1124,7 @@ const UserRouteChildren: UserRouteChildren = {
   UserInboxRoute: UserInboxRoute,
   UserMeRoute: UserMeRoute,
   UserProfileRoute: UserProfileRoute,
+  UserStudioRoute: UserStudioRoute,
   UserCouponClaim_codeRoute: UserCouponClaim_codeRoute,
   UserResultsShareUuidRoute: UserResultsShareUuidRoute,
 }
@@ -1060,6 +1143,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAbuseReportsRoute: ApiAbuseReportsRoute,
   ApiConsultationsRoute: ApiConsultationsRoute,
   ApiEventsRoute: ApiEventsRoute,
+  ApiGeneratePromoCopyRoute: ApiGeneratePromoCopyRoute,
   ApiOembedRoute: ApiOembedRoute,
   ApiPriceCompareRoute: ApiPriceCompareRoute,
   ApiSuggestPurposeRoute: ApiSuggestPurposeRoute,
@@ -1068,6 +1152,7 @@ const rootRouteChildren: RootRouteChildren = {
   DTestRoute: DTestRoute,
   ApiCouponsClaimRoute: ApiCouponsClaimRoute,
   ApiDropsShareCodeRoute: ApiDropsShareCodeRoute,
+  ApiProductsCopyRoute: ApiProductsCopyRoute,
   ApiDiscoverIndexRoute: ApiDiscoverIndexRoute,
   ApiDropsIndexRoute: ApiDropsIndexRoute,
 }
