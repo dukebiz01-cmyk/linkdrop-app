@@ -157,7 +157,9 @@ type FollowRow = {
 };
 
 // 쿠폰 지갑 상태 필터 — 사용 가능(usable=available+expiring) / 곧 만료 / 사용 완료 / 만료.
-type CouponFilter = "available" | "expiring" | "used" | "expired";
+// A안 — 필터는 3탭(사용가능/사용완료/만료지남). '곧 만료'(expiring)는 독립 탭이 아니라
+//   '사용가능' 탭 안에서 카드 배지로만 구분(getCouponDisplayStatus 재사용).
+type CouponFilter = "available" | "used" | "expired";
 
 type MePageData = {
   userId: string | null;
@@ -371,8 +373,6 @@ function couponFilterEmptyText(f: CouponFilter): string {
   switch (f) {
     case "available":
       return "쓸 수 있는 혜택이 없어요.";
-    case "expiring":
-      return "곧 만료되는 혜택이 없어요.";
     case "used":
       return "사용 완료한 혜택이 없어요.";
     case "expired":
@@ -602,7 +602,7 @@ function MePage() {
             <p className="mt-1 text-sm font-medium text-[#64748B]">
               쓸 수 있는 혜택 {usableCount}개
               {expiringCount > 0 ? (
-                <span className="font-semibold text-[#B45309]"> · 곧 만료 {expiringCount}개</span>
+                <span className="font-semibold"> · 곧 만료 {expiringCount}개</span>
               ) : null}
             </p>
           </div>
@@ -613,9 +613,8 @@ function MePage() {
               {(
                 [
                   { key: "available", label: "사용 가능", count: usableCount },
-                  { key: "expiring", label: "곧 만료", count: expiringCount },
                   { key: "used", label: "사용 완료", count: usedCount },
-                  { key: "expired", label: "만료", count: expiredCount },
+                  { key: "expired", label: "만료 지남", count: expiredCount },
                 ] as const
               ).map((chip) => {
                 const selected = couponFilter === chip.key;
@@ -1126,7 +1125,7 @@ function CouponStatusBadge({ status }: { status: CouponDisplayStatus }) {
     status === "available"
       ? "bg-[#ECFDF5] text-[#059669]"
       : status === "expiring"
-        ? "bg-[#FFFBEB] text-[#B45309]"
+        ? "bg-[#0A0A0A] text-white" // A안 — 곧 만료 배지 = 블랙 미니멀(신규 색·빨강 없음)
         : "bg-[#F5F5F5] text-[#94A3B8]";
   return (
     <span
