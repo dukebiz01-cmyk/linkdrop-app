@@ -859,33 +859,6 @@ export function InfoDropPage({
           </p>
         )}
 
-        {/* 3. AI 요약 — 예약 variant는 캘린더 흐름에 집중. selfUpload(자체업로드 상품)은
-            영상 요약 대상이 아니므로 숨김(순수 커머스 카드). */}
-        {!isReservation && !commerce?.selfUpload && (
-          <section className="rounded-2xl border border-border bg-surface p-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-accent" strokeWidth={2} />
-              <h2 className="text-sm font-bold tracking-ko text-text-strong">AI 요약</h2>
-            </div>
-            <p className="mt-3 text-base font-semibold leading-relaxed tracking-ko text-text-strong">
-              {summaryLine}
-            </p>
-            {points.length > 0 && (
-              <ul className="mt-4 space-y-2 border-t border-border pt-4">
-                {points.map((point) => (
-                  <li
-                    key={point}
-                    className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-strong"
-                  >
-                    <Check className="mt-0.5 size-4 shrink-0 text-accent" strokeWidth={2} />
-                    {point}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
-
         {/* 예약 드롭 = [예약가능 캘린더 | 예약하기 | 쿠폰] 3탭 (기존).
             v7.2 쿠폰 드롭 = [쿠폰 | 예약가능 캘린더] 2탭. 정보/구매/상담 진입 X. */}
         {showReservationCalendar &&
@@ -1082,6 +1055,33 @@ export function InfoDropPage({
               </div>
             );
           })()}
+
+        {/* 3. AI 요약 — CC#3 progressive disclosure: 핵심(영상·혜택·예약) 아래로 이동(부가).
+            예약 variant는 캘린더 흐름에 집중, selfUpload(자체업로드 상품)은 숨김(게이트 그대로). */}
+        {!isReservation && !commerce?.selfUpload && (
+          <section className="rounded-2xl border border-border bg-surface p-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="size-4 text-accent" strokeWidth={2} />
+              <h2 className="text-sm font-bold tracking-ko text-text-strong">AI 요약</h2>
+            </div>
+            <p className="mt-3 text-base font-semibold leading-relaxed tracking-ko text-text-strong">
+              {summaryLine}
+            </p>
+            {points.length > 0 && (
+              <ul className="mt-4 space-y-2 border-t border-border pt-4">
+                {points.map((point) => (
+                  <li
+                    key={point}
+                    className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-strong"
+                  >
+                    <Check className="mt-0.5 size-4 shrink-0 text-accent" strokeWidth={2} />
+                    {point}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
         {resolvedVariant === "purchase" &&
           (commerce ? (
