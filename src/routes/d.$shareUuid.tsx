@@ -505,6 +505,9 @@ function DropPage() {
         officialStatus="user_shared"
         dropId={detail.drop.id}
         initialSlots={slots}
+        // CC#2 (b) 캘린더 mode seam — 현재 date_range 고정.
+        // TODO: 추후 partner.business_type/partner_kind 로 date_time_slot(미용·레스토랑 등) 판정.
+        calendarMode="date_range"
         funnelCoupon={
           funnelCoupon
             ? {

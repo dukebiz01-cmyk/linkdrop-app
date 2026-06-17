@@ -177,6 +177,8 @@ export interface ReservationCalendarPageProps {
   readOnly?: boolean;
   /** Phase 1 통합 — 예약 확인 버튼 라벨. 교집합 시 "예약 문의하고 쿠폰 받기". 기본 "예약하기". */
   reserveCtaLabel?: string;
+  /** CC#2 (b) — 캘린더 모드 seam. date_range 만 구현, date_time_slot 은 분기점만(기본 date_range). */
+  calendarMode?: "date_range" | "date_time_slot";
   className?: string;
 }
 
@@ -482,6 +484,7 @@ export function ReservationCalendarPage(props: ReservationCalendarPageProps) {
         makerAvailableDates={props.makerAvailableDates ?? []}
         partnerSlotEntries={props.partnerSlotEntries}
         reserveCtaLabel={props.reserveCtaLabel}
+        calendarMode={props.calendarMode}
         onCheckAvailability={props.onCheckAvailability}
         onSecondaryAction={props.onSecondaryAction}
         className={props.className}
@@ -496,6 +499,7 @@ function EditableReservationCard({
   makerAvailableDates = [],
   partnerSlotEntries,
   reserveCtaLabel,
+  calendarMode = "date_range",
   onCheckAvailability,
   onSecondaryAction,
   className,
@@ -590,7 +594,12 @@ function EditableReservationCard({
         날짜를 두 번 눌러 체크인·체크아웃을 선택하세요
       </p>
 
-      <div className="w-full max-w-full overflow-hidden rounded-2xl border border-border bg-bg p-4">
+      {/* CC#2 (b) mode seam — data-calendar-mode 로 모드 노출. 현재 date_range 만 구현.
+          TODO(date_time_slot): 시간슬롯(slot_time) 선택 UI 분기. 현재는 date_range(range)로 폴백. */}
+      <div
+        data-calendar-mode={calendarMode}
+        className="w-full max-w-full overflow-hidden rounded-2xl border border-border bg-bg p-4"
+      >
         <Calendar
           mode="range"
           selected={calendarRange}
@@ -743,6 +752,7 @@ function ReadOnlyReservationCard({
   makerAvailableDates,
   partnerSlotEntries,
   reserveCtaLabel,
+  calendarMode = "date_range",
   onCheckAvailability,
   onSecondaryAction,
   className,
@@ -751,6 +761,7 @@ function ReadOnlyReservationCard({
   partnerSlotEntries?: Array<{ date: Date; available: number }>;
   makerAvailableDates: ReservationDateItem[];
   reserveCtaLabel?: string;
+  calendarMode?: "date_range" | "date_time_slot";
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
   className?: string;
@@ -806,7 +817,9 @@ function ReadOnlyReservationCard({
     <div className={cn("w-full max-w-full space-y-4", className)}>
       <CampgroundInfoCard info={campgroundInfo} />
 
+      {/* CC#2 (b) mode seam — TODO(date_time_slot): 시간슬롯 분기. 현재 date_range 만. */}
       <div
+        data-calendar-mode={calendarMode}
         className="w-full max-w-full overflow-hidden rounded-2xl border border-border bg-bg p-4"
         aria-label="메이커가 확정한 예약 가능 날짜 (재공유 · 읽기 전용)"
       >

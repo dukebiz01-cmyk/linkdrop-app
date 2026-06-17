@@ -158,6 +158,8 @@ export interface InfoDropPageProps {
   partnerId?: string | null;
   /** P3 — SSR loader 가 미리 가져온 슬롯 행. 주어지면(빈 배열 포함) 클라 fetch 스킵. */
   initialSlots?: SlotAvailableRow[];
+  /** CC#2 (b) 캘린더 mode seam — 현재 date_range 만 구현. date_time_slot 은 분기점만(기본 date_range). */
+  calendarMode?: "date_range" | "date_time_slot";
   /** H1-d funnel — drop 의 partner active coupon (있으면). null/undefined 면 CTA 미노출.
    *  U1: 카드 표시용 conditions/valid_until 추가. id/title 외 옵셔널. */
   funnelCoupon?: {
@@ -319,6 +321,8 @@ function ReservationCalendarClient(props: {
   initialSlots?: SlotAvailableRow[];
   /** Phase 1 통합 — 예약 CTA 라벨(교집합 시 "예약 문의하고 쿠폰 받기"). 기본 "예약하기". */
   reserveCtaLabel?: string;
+  /** CC#2 (b) — 캘린더 모드. date_range 만 구현, date_time_slot 은 분기점만. */
+  calendarMode?: "date_range" | "date_time_slot";
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
 }) {
@@ -367,12 +371,15 @@ function ReservationCalendarClient(props: {
 
   // Phase A — Date[] 대신 {date, available} 보존. 캘린더 셀에 "남은 N자리"
   // 라벨을 위한 데이터. RPC available 컬럼 그대로 통과.
+  // CC#2 (b) — date_range: 날짜 단위 집계. date_time_slot 은 분기점만(미구현 → date_range 폴백).
   const partnerSlotEntries = useMemo(() => {
+    // TODO(date_time_slot): props.calendarMode === "date_time_slot" 시 slot_time 별
+    //   시간 슬롯 entries(slot_time 칩)로 분기. 현재는 date_range 만 구현 → 날짜 단위 폴백.
     return partnerSlots.map((r) => {
       const [y, m, d] = r.slot_date.split("-").map(Number);
       return { date: new Date(y, m - 1, d), available: r.available };
     });
-  }, [partnerSlots]);
+  }, [partnerSlots, props.calendarMode]);
 
   if (!mounted) {
     return (
@@ -393,6 +400,7 @@ function ReservationCalendarClient(props: {
         partnerSlotEntries={partnerSlotEntries}
         readOnly={props.readOnly}
         reserveCtaLabel={props.reserveCtaLabel}
+        calendarMode={props.calendarMode}
         className="mx-0 mt-0 w-full max-w-full"
         onCheckAvailability={props.onCheckAvailability}
         onSecondaryAction={props.onSecondaryAction}
@@ -616,6 +624,7 @@ export function InfoDropPage({
   dropId,
   partnerId,
   initialSlots,
+  calendarMode = "date_range",
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   const parsedVideo = videoSourceUrl ? parseVideoUrl(videoSourceUrl) : null;
@@ -977,6 +986,7 @@ export function InfoDropPage({
                 initialSlots={initialSlots}
                 readOnly={isReshare}
                 reserveCtaLabel={reserveCtaLabel}
+                calendarMode={calendarMode}
                 onCheckAvailability={(selection) => {
                   // A안 직접예약 — 캘린더 [예약하기] = 인앱 신청 시트. 선택한 날짜·인원을
                   // 부모(d.$shareUuid)로 올려 prefill + 로그인 게이트 + 시트 오픈.
