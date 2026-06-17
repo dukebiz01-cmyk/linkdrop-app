@@ -409,87 +409,10 @@ function ReservationCalendarClient(props: {
   );
 }
 
-// 예약 드롭 카드 탭 — [예약가능 캘린더 | 예약하기 | 쿠폰]. 정보 드롭은 기존 세로
-// 구조 유지(이 컴포넌트 미사용). 빌링·자동차감 X 고지 = "예약하기" 탭에 1줄.
-// v7.2 — 쿠폰 드롭 진입 (variant="coupon") 시 [쿠폰 | 예약가능 캘린더] 2탭.
-//        예약하기 탭 제외, 기본 선택 = 쿠폰. 주 액션은 sticky "예약하고 쿠폰
-//        받기" 가 가져감 (탭 안 별도 액션 없음).
-type ReservationTabKey = "calendar" | "reserve" | "coupon";
-
-function ReservationCardTabs({
-  variant,
-  hasCoupon,
-  calendarPanel,
-  reservePanel,
-  couponPanel,
-}: {
-  variant: "reservation" | "coupon";
-  hasCoupon: boolean;
-  calendarPanel: React.ReactNode;
-  reservePanel: React.ReactNode;
-  couponPanel: React.ReactNode | null;
-}) {
-  // variant 별 탭 구성. coupon 은 [쿠폰][캘린더] 2탭 + 기본 쿠폰.
-  // reservation 은 [캘린더][예약하기] + hasCoupon ? 쿠폰 (기존 동작 유지).
-  const tabs: { key: ReservationTabKey; label: string }[] =
-    variant === "coupon"
-      ? [
-          { key: "coupon", label: "쿠폰" },
-          { key: "calendar", label: "예약가능 캘린더" },
-        ]
-      : [
-          { key: "calendar", label: "예약가능 캘린더" },
-          { key: "reserve", label: "예약하기" },
-          ...(hasCoupon ? [{ key: "coupon" as const, label: "쿠폰" }] : []),
-        ];
-
-  const initialTab: ReservationTabKey = variant === "coupon" ? "coupon" : "calendar";
-  const [tab, setTab] = useState<ReservationTabKey>(initialTab);
-
-  // reservation 변형에서 hasCoupon 이 false 가 되면 coupon 탭을 calendar 로
-  // 되돌림. coupon 변형은 쿠폰 탭이 기본이라 영향 없음.
-  useEffect(() => {
-    if (variant === "reservation" && !hasCoupon && tab === "coupon") setTab("calendar");
-  }, [hasCoupon, tab, variant]);
-
-  return (
-    <section data-testid="reservation-tabs" className="space-y-4">
-      <div
-        role="tablist"
-        aria-label="예약 카드 탭"
-        className="flex gap-2 rounded-2xl border border-border bg-surface p-1"
-      >
-        {tabs.map((t) => {
-          const active = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              data-testid={`reservation-tab-${t.key}`}
-              onClick={() => setTab(t.key)}
-              className={cn(
-                "flex-1 min-h-[44px] rounded-xl px-3 py-2 text-sm font-bold tracking-ko transition-colors",
-                active
-                  ? "bg-[#0A0A0A] text-white"
-                  : "bg-transparent text-text-muted hover:text-text-strong",
-              )}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      <div role="tabpanel" data-testid={`reservation-tabpanel-${tab}`} className="space-y-4">
-        {tab === "calendar" && calendarPanel}
-        {tab === "reserve" && reservePanel}
-        {tab === "coupon" && couponPanel}
-      </div>
-    </section>
-  );
-}
+// CC#2 (a) — ReservationCardTabs(예약 카드 탭) 제거. 탭은 표시-전환 state(useState tab
+//   + hasCoupon 변동 시 coupon→calendar 리셋 effect)만 보유했고 라우팅·데이터 로직은 없었음.
+//   탭→세로 스택으로 전환하면서 두 탭 콘텐츠(쿠폰 패널·캘린더)와 variant 별 구성을 모두 보존.
+//   (혜택·이벤트 합성 섹션 + 캘린더 + 예약하기 스택은 본문 showReservationCalendar 블록 참고.)
 
 // WHY: 무로그인 lead 수집 — submitConsultationLead RPC는 Step 5 이후 연동.
 function ConsultationLeadForm({ partnerName }: { partnerName: string }) {
@@ -1087,15 +1010,63 @@ export function InfoDropPage({
               </div>
             ) : null;
 
+            // CC#2 (a) — 진행 이벤트 요약(makerAvailableDates 의 eventTitle/eventDescription).
+            //   캘린더 내부 상세 리스트 카드(reservation-calendar-page)는 데이터·소스 그대로 유지.
+            //   여기선 "진행 이벤트" 요약만 병치(merge 아님). 둘은 독립 소스.
+            const eventItems = (reservationDates ?? []).filter(
+              (d) => Boolean(d.eventTitle?.trim()) || Boolean(d.eventDescription?.trim()),
+            );
+            const hasEvents = eventItems.length > 0;
+
+            // CC#2 (a) — "예약하면 받는 혜택 / 진행 이벤트" 합성 섹션.
+            //   혜택 = funnelCoupon(기존 couponPanel 재사용) · 이벤트 = makerAvailableDates 요약.
+            //   두 소스 독립 → 조건부 병치(쿠폰만/이벤트만/둘 다 모두 정상, 둘 다 없으면 미렌더).
+            const benefitEventSection =
+              funnelCoupon || hasEvents ? (
+                <section data-testid="benefit-event-section" className="space-y-3">
+                  {funnelCoupon ? (
+                    <div className="space-y-2">
+                      <h2 className="text-sm font-bold tracking-ko text-text-strong">
+                        예약하면 받는 혜택
+                      </h2>
+                      {couponPanel}
+                    </div>
+                  ) : null}
+                  {hasEvents ? (
+                    <div className="space-y-2">
+                      <h2 className="text-sm font-bold tracking-ko text-text-strong">진행 이벤트</h2>
+                      <ul className="space-y-2">
+                        {eventItems.map((item) => (
+                          <li
+                            key={item.id}
+                            className="rounded-2xl border border-[#E2E8F0] bg-white p-4"
+                          >
+                            {item.eventTitle?.trim() ? (
+                              <p className="text-sm font-bold tracking-ko text-[#0F172A]">
+                                {item.eventTitle}
+                              </p>
+                            ) : null}
+                            {item.eventDescription?.trim() ? (
+                              <p className="mt-1 text-xs font-medium tracking-ko text-[#64748B]">
+                                {item.eventDescription}
+                              </p>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null;
+
+            // CC#2 (a) 탭 → 스택. ReservationCardTabs(표시-전환 state 만 보유, 라우팅·데이터
+            //   로직 없음) 제거하고 패널을 세로 스택으로 보존. variant 별 구성 유지:
+            //   coupon = [혜택·이벤트][캘린더] / reservation = [혜택·이벤트][캘린더][예약하기].
             return (
-              <div className="space-y-3">
-                <ReservationCardTabs
-                  variant={isCoupon ? "coupon" : "reservation"}
-                  hasCoupon={Boolean(funnelCoupon)}
-                  calendarPanel={calendarPanel}
-                  reservePanel={reservePanel}
-                  couponPanel={couponPanel}
-                />
+              <div className="space-y-4">
+                {benefitEventSection}
+                {calendarPanel}
+                {!isCoupon ? reservePanel : null}
                 {/* Phase 1 통합(가-2) — 교집합에서 sticky "쿠폰 받기" 대신 보조 "쿠폰만 받기".
                     예약 없이 claim_coupon 만(기존 onReserveAndClaim 경로 그대로). */}
                 {isCombined && onReserveAndClaim ? (
