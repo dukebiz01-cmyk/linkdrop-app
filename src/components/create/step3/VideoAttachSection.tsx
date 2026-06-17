@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Film, FileText, Plus, X, ChevronDown, ChevronUp } from "lucide-react";
 import { StepBadge } from "@/components/create/StepBadge";
 import { DiscoverSection } from "@/components/explore/DiscoverSection";
+import { AiContentSuggestions } from "@/components/create/step3/AiContentSuggestions";
 import type { AttachedVideo } from "@/components/create/types";
 
 // G2 멀티소스 담기 — primary 영상 1(읽기 전용) + 추가 콘텐츠 N(영상/글).
@@ -13,12 +14,15 @@ export function VideoAttachSection({
   primary,
   primarySourceId,
   isBusiness,
+  partnerId,
   value,
   onChange,
 }: {
   primary: { title: string; thumbnailUrl: string } | null;
   primarySourceId: string | null;
   isBusiness?: boolean;
+  /** 이 드롭이 타깃하는 매장 — AI 추천 키워드 매장 신호(없으면 워커 first-approved 폴백). */
+  partnerId?: string | null;
   value: AttachedVideo[];
   onChange: (next: AttachedVideo[]) => void;
 }) {
@@ -134,6 +138,16 @@ export function VideoAttachSection({
         ))}
       </ul>
 
+      {/* 3-A AI 추천 콘텐츠 — 대표 영상 제목 기반 자동 제안(직접 검색 위). 빈 제목/결과/실패 시 숨김. */}
+      <AiContentSuggestions
+        topic={primary?.title ?? ""}
+        partnerId={partnerId ?? null}
+        excludeSourceIds={[primarySourceId, ...value.map((v) => v.sourceId)].filter(
+          (id): id is string => Boolean(id),
+        )}
+        onImport={handleImport}
+      />
+
       {/* + 영상 더 담기 — 검색 토글 */}
       <button
         type="button"
@@ -142,7 +156,8 @@ export function VideoAttachSection({
         aria-expanded={searchOpen}
       >
         <span className="inline-flex items-center gap-2">
-          <Plus className="size-4" strokeWidth={2} />콘텐츠 더 담기
+          <Plus className="size-4" strokeWidth={2} />
+          콘텐츠 더 담기
         </span>
         {searchOpen ? (
           <ChevronUp className="size-4 text-text-muted" strokeWidth={2} />

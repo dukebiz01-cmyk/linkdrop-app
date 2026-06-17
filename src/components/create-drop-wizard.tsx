@@ -43,6 +43,7 @@ import { Step5PurposeShare } from "@/components/create/Step5Share";
 import { Step3Options } from "@/components/create/step3/Step3Options";
 import { Step3Commerce } from "@/components/create/step3/Step3Commerce";
 import { ProductAttachSection } from "@/components/create/step3/ProductAttachSection";
+import { ProductPromoSection } from "@/components/create/step3/ProductPromoSection";
 import { VideoAttachSection } from "@/components/create/step3/VideoAttachSection";
 import { PURPOSE_MESSAGE_PLACEHOLDER } from "@/components/create/step3/PurposeMessageCard";
 import { KakaoBubblePreview } from "@/components/wizard-share-preview";
@@ -70,6 +71,7 @@ import {
   type AiPreviewData,
   type AttachedProduct,
   type AttachedVideo,
+  type PromoCard,
   type CreateDropWizardProps,
   type LocalPartner,
   type PlaceCandidate,
@@ -190,6 +192,7 @@ export function CreateDropWizard({
   initialSuggestedPurpose,
   initialSuggestionConfidence,
   initialMetadata,
+  initialPartnerId,
   onClose,
   onComplete,
 }: CreateDropWizardProps) {
@@ -227,6 +230,8 @@ export function CreateDropWizard({
   const [selectedFunnelCouponId, setSelectedFunnelCouponId] = useState<string | null>(null);
   // ③ 카드 담기 — 위저드 Step 2 에서 담은 자체업로드 상품(전 목적 공통). onComplete 시 전달.
   const [attachedProducts, setAttachedProducts] = useState<AttachedProduct[]>([]);
+  // B 상품 홍보 카드(MVP 1개). onComplete 시 is_promo product 블록으로 적재.
+  const [promoCard, setPromoCard] = useState<PromoCard | null>(null);
   // Slice2 멀티영상 — primary 외 추가 영상 누적(검색→담기 push, navigate 아님).
   const [attachedVideos, setAttachedVideos] = useState<AttachedVideo[]>([]);
   // quick-path — 기본 = Step1 후 미리보기 직행. [스튜디오에서 다듬기] 누르면 studioMode=true
@@ -455,6 +460,7 @@ export function CreateDropWizard({
       category: purpose === "구매" ? "농수산물" : null,
       attachedProducts,
       attachedVideos,
+      promoCard,
     });
     savingRef.current = promise;
     try {
@@ -644,10 +650,15 @@ export function CreateDropWizard({
           onSelectCoupon={setSelectedFunnelCouponId}
         />
       )}
-      {/* ③ 카드 담기 — Step 2 목적 분기 "아래" 전 목적 공통. 위 목적별 입력
-          (Commerce/Options=예약 캘린더 포함) 레이아웃은 그대로 두고 추가만. */}
-      {step === 2 && purpose && (
+      {/* ③ 카드 담기 — 구매(커머스) 목적 전용. 다른 목적(정보/쿠폰/예약/상담)에선 미렌더 —
+          섹션 내부 <Link to="/partner/products/*"> 풀-네비게이션이 위저드 state 를 날리는
+          동선 누수 차단. 커머스 누수(모달+복귀)는 커머스 리뉴얼에서 별도 처리. */}
+      {step === 2 && purpose === "구매" && (
         <ProductAttachSection value={attachedProducts} onChange={setAttachedProducts} />
+      )}
+      {/* B 상품 홍보 카드 — 상품 1개 + AI/수동 카피. 구매 목적 전용(위와 동일 사유). */}
+      {step === 2 && purpose === "구매" && (
+        <ProductPromoSection value={promoCard} onChange={setPromoCard} />
       )}
       {/* Slice2 멀티영상 담기 — primary(대표) + 추가 영상 N. 커머스(상품 URL)는 제외. */}
       {step === 2 && purpose && purpose !== "구매" && (
@@ -657,6 +668,7 @@ export function CreateDropWizard({
           }
           primarySourceId={parseVideoUrl(url.trim())?.videoId ?? null}
           isBusiness={isBusiness}
+          partnerId={initialPartnerId ?? null}
           value={attachedVideos}
           onChange={setAttachedVideos}
         />

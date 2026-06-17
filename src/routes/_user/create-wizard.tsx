@@ -145,6 +145,8 @@ function CreateWizardPage() {
       initialSuggestionConfidence={toConfidence(search.confidence)}
       initialPlatform={search.platform}
       initialSourceId={search.source_id}
+      // ② AI 추천 매장 신호 — 이 드롭이 타깃하는 매장(탐색 진입 시 자동 연결).
+      initialPartnerId={search.partner_id}
       onClose={() => navigate({ to: "/home" })}
       onComplete={async (data) => {
         // wizard 의 첫 카카오톡 공유/링크 복사 클릭 시 호출.
@@ -166,6 +168,9 @@ function CreateWizardPage() {
           });
         }
         for (const p of data.attachedProducts ?? []) {
+          // 나-2 — 저장 카피 스냅샷도 block_data 에 동봉(있을 때만). is_promo 없음(일반 상품).
+          const points = (p.sellingPoints ?? []).map((s) => s.trim()).filter(Boolean);
+          const headline = (p.headline ?? "").trim();
           blocks.push({
             block_kind: "product",
             block_data: {
@@ -174,6 +179,27 @@ function CreateWizardPage() {
               name: p.name,
               price_krw: p.priceKrw,
               image_url: p.imageUrl,
+              ...(headline ? { headline } : {}),
+              ...(points.length > 0 ? { selling_points: points } : {}),
+            },
+            position: blocks.length,
+          });
+        }
+        // B 상품 홍보 카드 — block_kind="product"(enum 재사용) + is_promo:true 로 구분.
+        //   "관련 상품"(is_promo 없음)과 같은 enum, block_data 키로만 분기 → DDL 0.
+        if (data.promoCard) {
+          const pc = data.promoCard;
+          blocks.push({
+            block_kind: "product",
+            block_data: {
+              ref_drop_id: pc.refDropId,
+              ref_share_uuid: pc.refShareUuid,
+              name: pc.name,
+              price_krw: pc.priceKrw,
+              image_url: pc.imageUrl,
+              headline: pc.headline,
+              selling_points: pc.sellingPoints,
+              is_promo: true,
             },
             position: blocks.length,
           });

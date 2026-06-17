@@ -23,7 +23,8 @@ export type DiscoverCandidate = {
 };
 
 // provider 배지 — 작은 라벨 + Lucide 라인 아이콘(블랙 미니멀).
-const PROVIDER_META: Record<DiscoverProvider, { label: string; Icon: LucideIcon }> = {
+//   3-A AI 추천 카드에서도 재사용(동일 배지) → export.
+export const PROVIDER_META: Record<DiscoverProvider, { label: string; Icon: LucideIcon }> = {
   youtube: { label: "YouTube", Icon: Youtube },
   naver_news: { label: "네이버 뉴스", Icon: Newspaper },
   naver_blog: { label: "네이버 블로그", Icon: PenLine },

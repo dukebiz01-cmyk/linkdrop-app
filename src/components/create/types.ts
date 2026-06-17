@@ -35,6 +35,21 @@ export interface AttachedProduct {
   name: string;
   priceKrw: number | null;
   imageUrl: string | null;
+  /** 나-2 — 상품 메인 블록에 저장된 카피 스냅샷(있으면 관련 상품 컴팩트 렌더에 노출). */
+  headline?: string;
+  sellingPoints?: string[];
+}
+
+/** B 상품 홍보 카드 — 업주 상품 1개 + AI(또는 수동) 헤드라인·셀링포인트. block_kind="product"
+ *  + block_data.is_promo:true 로 적재(기존 "관련 상품"과 구분, DDL 0). MVP = 드롭당 1개. */
+export interface PromoCard {
+  refDropId: string;
+  refShareUuid: string;
+  name: string;
+  priceKrw: number | null;
+  imageUrl: string | null;
+  headline: string;
+  sellingPoints: string[];
 }
 
 /** G2 멀티소스 — 카드에 담은 추가 콘텐츠(primary 외). 검색 후보(DiscoverCandidate)에서 매핑.
@@ -64,6 +79,8 @@ export interface CreateDropWizardProps {
   initialSuggestionConfidence?: WizardSuggestionConfidence;
   initialPlatform?: string;
   initialSourceId?: string;
+  /** 이 드롭이 타깃하는 매장(탐색 진입 시 자동 연결된 partner). AI 추천 키워드 매장 신호. */
+  initialPartnerId?: string;
   /** Home sessionStorage draft — Step 1 즉시 preview */
   initialMetadata?: VideoMetadata | null;
   onClose?: () => void;
@@ -88,6 +105,8 @@ export interface CreateDropWizardProps {
     attachedProducts?: AttachedProduct[];
     /** Slice2 멀티영상 — primary 외 추가 영상(video 블록으로 적재). */
     attachedVideos?: AttachedVideo[];
+    /** B 상품 홍보 카드(MVP 1개). 있으면 is_promo product 블록으로 적재. */
+    promoCard?: PromoCard | null;
   }) => Promise<{ shareUuid: string; shareUrl: string }>;
 }
 
