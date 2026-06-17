@@ -855,6 +855,7 @@ function CouponClaimCard({
   active = false,
   innerRef,
   businessLabels,
+  senderNames,
   userId,
 }: {
   row: CouponClaimRow;
