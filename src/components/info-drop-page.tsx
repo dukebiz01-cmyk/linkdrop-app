@@ -3,6 +3,12 @@ import { getSupabase } from "@/lib/supabase";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Play,
   Copy,
   MessageCircle,
@@ -1007,7 +1013,9 @@ export function InfoDropPage({
                   ) : null}
                   {hasEvents ? (
                     <div className="space-y-2">
-                      <h2 className="text-sm font-bold tracking-ko text-text-strong">진행 이벤트</h2>
+                      <h2 className="text-sm font-bold tracking-ko text-text-strong">
+                        진행 이벤트
+                      </h2>
                       <ul className="space-y-2">
                         {eventItems.map((item) => (
                           <li
@@ -1059,28 +1067,38 @@ export function InfoDropPage({
         {/* 3. AI 요약 — CC#3 progressive disclosure: 핵심(영상·혜택·예약) 아래로 이동(부가).
             예약 variant는 캘린더 흐름에 집중, selfUpload(자체업로드 상품)은 숨김(게이트 그대로). */}
         {!isReservation && !commerce?.selfUpload && (
-          <section className="rounded-2xl border border-border bg-surface p-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-accent" strokeWidth={2} />
-              <h2 className="text-sm font-bold tracking-ko text-text-strong">AI 요약</h2>
-            </div>
-            <p className="mt-3 text-base font-semibold leading-relaxed tracking-ko text-text-strong">
-              {summaryLine}
-            </p>
-            {points.length > 0 && (
-              <ul className="mt-4 space-y-2 border-t border-border pt-4">
-                {points.map((point) => (
-                  <li
-                    key={point}
-                    className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-strong"
-                  >
-                    <Check className="mt-0.5 size-4 shrink-0 text-accent" strokeWidth={2} />
-                    {point}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <Accordion
+            type="single"
+            collapsible
+            className="rounded-2xl border border-border bg-surface px-4"
+          >
+            <AccordionItem value="ai-summary" className="border-b-0">
+              <AccordionTrigger className="hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <Sparkles className="size-4 text-accent" strokeWidth={2} />
+                  <span className="text-sm font-bold tracking-ko text-text-strong">영상 요약</span>
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <p className="text-base font-semibold leading-relaxed tracking-ko text-text-strong">
+                  {summaryLine}
+                </p>
+                {points.length > 0 && (
+                  <ul className="mt-4 space-y-2 border-t border-border pt-4">
+                    {points.map((point) => (
+                      <li
+                        key={point}
+                        className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-strong"
+                      >
+                        <Check className="mt-0.5 size-4 shrink-0 text-accent" strokeWidth={2} />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         )}
 
         {resolvedVariant === "purchase" &&
@@ -1377,58 +1395,74 @@ export function InfoDropPage({
       {/* G2 멀티소스 — primary 외 담은 콘텐츠(영상=링크, 글=링크 카드). 원문 새 탭. */}
       {attachedVideos && attachedVideos.length > 0 ? (
         <section className="mx-auto w-full max-w-[480px] px-6 pt-4">
-          <h2 className="mb-3 text-sm font-bold tracking-ko text-text-strong">함께 담은 콘텐츠</h2>
-          <ul className="space-y-3">
-            {attachedVideos.map((v) => {
-              const isArticle = v.type === "article";
-              const sourceLabel =
-                v.authorName?.trim() ||
-                (v.provider === "naver_news"
-                  ? "네이버 뉴스"
-                  : v.provider === "naver_blog"
-                    ? "네이버 블로그"
-                    : "");
-              return (
-                <li key={v.sourceId || v.sourceUrl}>
-                  <a
-                    href={v.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-2 transition-colors hover:border-[#D4D4D4]"
-                  >
-                    <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-[#F5F5F5]">
-                      {v.thumbnailUrl ? (
-                        <img src={v.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-[#A3A3A3]">
-                          {isArticle ? (
-                            <FileText className="size-5" strokeWidth={2} />
-                          ) : (
-                            <Play className="size-5" strokeWidth={2} />
-                          )}
-                        </span>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="line-clamp-2 text-sm font-bold tracking-ko text-[#0A0A0A]">
-                        {v.title || (isArticle ? "담은 글" : "담은 영상")}
-                      </p>
-                      {sourceLabel ? (
-                        <p className="mt-0.5 truncate text-xs font-medium tracking-ko text-[#737373]">
-                          {sourceLabel}
-                        </p>
-                      ) : null}
-                      {isArticle && v.snippet ? (
-                        <p className="mt-0.5 line-clamp-1 text-[11px] font-medium tracking-ko text-[#A3A3A3]">
-                          {v.snippet}
-                        </p>
-                      ) : null}
-                    </div>
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
+          <Accordion
+            type="single"
+            collapsible
+            className="rounded-2xl border border-border bg-surface px-4"
+          >
+            <AccordionItem value="related-content" className="border-b-0">
+              <AccordionTrigger className="hover:no-underline">
+                <span className="text-sm font-bold tracking-ko text-text-strong">관련 콘텐츠</span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <ul className="space-y-3">
+                  {attachedVideos.map((v) => {
+                    const isArticle = v.type === "article";
+                    const sourceLabel =
+                      v.authorName?.trim() ||
+                      (v.provider === "naver_news"
+                        ? "네이버 뉴스"
+                        : v.provider === "naver_blog"
+                          ? "네이버 블로그"
+                          : "");
+                    return (
+                      <li key={v.sourceId || v.sourceUrl}>
+                        <a
+                          href={v.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-2 transition-colors hover:border-[#D4D4D4]"
+                        >
+                          <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-[#F5F5F5]">
+                            {v.thumbnailUrl ? (
+                              <img
+                                src={v.thumbnailUrl}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <span className="flex h-full w-full items-center justify-center text-[#A3A3A3]">
+                                {isArticle ? (
+                                  <FileText className="size-5" strokeWidth={2} />
+                                ) : (
+                                  <Play className="size-5" strokeWidth={2} />
+                                )}
+                              </span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="line-clamp-2 text-sm font-bold tracking-ko text-[#0A0A0A]">
+                              {v.title || (isArticle ? "담은 글" : "담은 영상")}
+                            </p>
+                            {sourceLabel ? (
+                              <p className="mt-0.5 truncate text-xs font-medium tracking-ko text-[#737373]">
+                                {sourceLabel}
+                              </p>
+                            ) : null}
+                            {isArticle && v.snippet ? (
+                              <p className="mt-0.5 line-clamp-1 text-[11px] font-medium tracking-ko text-[#A3A3A3]">
+                                {v.snippet}
+                              </p>
+                            ) : null}
+                          </div>
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </section>
       ) : null}
 
@@ -1455,8 +1489,7 @@ export function InfoDropPage({
               className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
               aria-label="이 영상으로 만들기"
             >
-              <Plus className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-              이 영상으로 만들기
+              <Plus className="size-5 text-[#0A0A0A]" strokeWidth={2} />이 영상으로 만들기
             </a>
           ) : null}
           <button
