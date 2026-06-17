@@ -4,6 +4,11 @@ import { toast } from "sonner";
 import { ArrowLeft, ImagePlus, Package, Loader2, CheckCircle2 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { Toaster } from "@/components/ui/sonner";
+import {
+  ProductCopyEditor,
+  EMPTY_PRODUCT_COPY,
+  type ProductCopyValue,
+} from "@/components/create/ProductCopyEditor";
 
 // S2 — 매장관리 상품등록(프론트만). 사진을 'product-images' 버킷({uid}/...)에 업로드해
 //   public URL 까지 확보하는 것을 증명한다. content_sources/drops 저장 연결은 다음 슬라이스.
@@ -56,6 +61,8 @@ function ProductNewPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  // 나-1 — 상품 카피(headline/selling_points). 비우면 저장 시 키 생략(회귀 0).
+  const [copy, setCopy] = useState<ProductCopyValue>(EMPTY_PRODUCT_COPY);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -131,6 +138,9 @@ function ProductNewPage() {
           image_url: uploadedUrl,
           name: productName,
           price_krw: priceNum,
+          // 나-1 — 카피 동봉(서버가 메인 product 블록 block_data 에 머지). 빈 값은 서버에서 생략.
+          headline: copy.headline.trim(),
+          selling_points: copy.sellingPoints.map((s) => s.trim()).filter(Boolean),
           blocks: [
             {
               block_kind: "product",
@@ -280,6 +290,14 @@ function ProductNewPage() {
               <span className="shrink-0 text-sm font-semibold text-[#64748B]">원</span>
             </div>
           </div>
+
+          {/* 나-1 — 홍보 문구(선택). 상품명·가격·메모 기반 AI 카피 + 수동 수정. */}
+          <ProductCopyEditor
+            productName={name}
+            priceKrw={Number.isFinite(Number(price)) && Number(price) > 0 ? Number(price) : null}
+            value={copy}
+            onChange={setCopy}
+          />
 
           <button
             type="submit"

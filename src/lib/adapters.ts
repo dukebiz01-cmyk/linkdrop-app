@@ -157,10 +157,22 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
       (b as { block_kind?: string }).block_kind === "product" &&
       !(b as { block_data?: Record<string, unknown> }).block_data?.ref_drop_id,
   );
-  const data = (pb?.block_data ?? {}) as { name?: unknown; price_krw?: unknown };
+  const data = (pb?.block_data ?? {}) as {
+    name?: unknown;
+    price_krw?: unknown;
+    headline?: unknown;
+    selling_points?: unknown;
+  };
   const priceKrw = typeof data.price_krw === "number" ? data.price_krw : null;
   const name =
     typeof data.name === "string" && data.name.trim() ? data.name.trim() : (d.source.title ?? "");
+  // 나-2 — 상품 메인 블록(self)에 저장된 카피(나-1). 있으면 상품 /d 페이지에 리치 표시.
+  const headline = typeof data.headline === "string" ? data.headline.trim() : "";
+  const sellingPoints = Array.isArray(data.selling_points)
+    ? (data.selling_points as unknown[])
+        .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        .map((s) => s.trim())
+    : [];
   return {
     name,
     priceKrw,
@@ -168,6 +180,8 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     imageUrl: d.source.thumbnail_url ?? "",
     // S2b — 합성 source_url prefix 면 자체업로드 상품 → 카드가 "주문 문의(tel:)" 로 분기.
     selfUpload: (d.source.source_url ?? "").startsWith(SELF_UPLOAD_SOURCE_PREFIX),
+    ...(headline ? { headline } : {}),
+    ...(sellingPoints.length > 0 ? { sellingPoints } : {}),
   };
 }
 
@@ -184,17 +198,66 @@ function buildAttachedProducts(d: DropDetailRpc): InfoDropPageProps["attachedPro
         !!b &&
         typeof b === "object" &&
         (b as { block_kind?: string }).block_kind === "product" &&
-        typeof (b as { block_data?: Record<string, unknown> }).block_data?.ref_drop_id === "string",
+        typeof (b as { block_data?: Record<string, unknown> }).block_data?.ref_drop_id ===
+          "string" &&
+        // B 홍보 카드(is_promo)는 buildPromoCards 로 분리 — 관련 상품 리스트에선 제외(회귀 0).
+        (b as { block_data?: Record<string, unknown> }).block_data?.is_promo !== true,
     )
     .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
     .map((b) => {
       const bd = (b.block_data ?? {}) as Record<string, unknown>;
+      // 나-2 — 담을 때 동봉된 카피 스냅샷(있으면 컴팩트 렌더에 헤드라인 태그라인).
+      const sp = Array.isArray(bd.selling_points)
+        ? (bd.selling_points as unknown[])
+            .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+            .map((s) => s.trim())
+        : [];
       return {
         refDropId: String(bd.ref_drop_id),
         refShareUuid: typeof bd.ref_share_uuid === "string" ? bd.ref_share_uuid : null,
         name: typeof bd.name === "string" && bd.name.trim() ? bd.name.trim() : "상품",
         priceKrw: typeof bd.price_krw === "number" ? bd.price_krw : null,
         imageUrl: typeof bd.image_url === "string" ? bd.image_url : null,
+        ...(typeof bd.headline === "string" && bd.headline.trim()
+          ? { headline: bd.headline.trim() }
+          : {}),
+        ...(sp.length > 0 ? { sellingPoints: sp } : {}),
+      };
+    });
+  return items.length > 0 ? items : undefined;
+}
+
+/**
+ * B 상품 홍보 카드 — block_kind='product' && block_data.is_promo===true → 리치 홍보 카드.
+ *   기존 "관련 상품"(is_promo 없음)과 같은 enum, block_data 키로만 구분. position 순.
+ *   ref_drop_id 없는(=본체 커머스) 블록은 제외. 없으면 undefined.
+ */
+function buildPromoCards(d: DropDetailRpc): InfoDropPageProps["promoCards"] {
+  const blocks = Array.isArray(d.blocks) ? d.blocks : [];
+  const items = blocks
+    .filter(
+      (b): b is { block_kind?: string; block_data?: Record<string, unknown>; position?: number } =>
+        !!b &&
+        typeof b === "object" &&
+        (b as { block_kind?: string }).block_kind === "product" &&
+        (b as { block_data?: Record<string, unknown> }).block_data?.is_promo === true,
+    )
+    .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+    .map((b) => {
+      const bd = (b.block_data ?? {}) as Record<string, unknown>;
+      const sp = Array.isArray(bd.selling_points)
+        ? (bd.selling_points as unknown[]).filter(
+            (s): s is string => typeof s === "string" && s.trim().length > 0,
+          )
+        : [];
+      return {
+        refDropId: typeof bd.ref_drop_id === "string" ? bd.ref_drop_id : null,
+        refShareUuid: typeof bd.ref_share_uuid === "string" ? bd.ref_share_uuid : null,
+        name: typeof bd.name === "string" && bd.name.trim() ? bd.name.trim() : "상품",
+        priceKrw: typeof bd.price_krw === "number" ? bd.price_krw : null,
+        imageUrl: typeof bd.image_url === "string" ? bd.image_url : null,
+        headline: typeof bd.headline === "string" ? bd.headline.trim() : "",
+        sellingPoints: sp.map((s) => s.trim()),
       };
     });
   return items.length > 0 ? items : undefined;
@@ -264,6 +327,7 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     priceOffers: product ? toPriceOffers(product.offers) : undefined,
     commerce: buildCommerce(d),
     attachedProducts: buildAttachedProducts(d),
+    promoCards: buildPromoCards(d),
     attachedVideos: buildAttachedVideos(d),
     local: {
       name: d.store?.name ?? "",

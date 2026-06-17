@@ -9,7 +9,7 @@ import type { AttachedProduct } from "@/components/create/types";
 //   목록 = get_my_products() RPC(인증 세션 — 클라이언트 전용). 활성 상품만 추가 가능.
 //   상태는 위저드 소유 → value/onChange props.
 
-// get_my_products() 반환 행.
+// get_my_products() 반환 행. (v7.7 — headline/selling_points 추가)
 type ProductRow = {
   drop_id: string;
   share_code: string | null;
@@ -18,10 +18,21 @@ type ProductRow = {
   price_krw: number | null;
   image_url: string | null;
   is_active: boolean | null;
+  headline: string | null;
+  selling_points: string[] | null;
 };
 
 function priceLabel(krw: number | null): string {
   return krw != null ? `${Number(krw).toLocaleString("ko-KR")}원` : "가격 미정";
+}
+
+// jsonb selling_points → 깔끔한 string[]. (RPC 가 jsonb 배열/널 반환)
+function toPoints(v: unknown): string[] {
+  return Array.isArray(v)
+    ? v
+        .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        .map((s) => s.trim())
+    : [];
 }
 
 export function ProductAttachSection({
@@ -73,6 +84,9 @@ export function ProductAttachSection({
 
   function handleAdd(r: ProductRow) {
     if (attachedIds.has(r.drop_id) || !r.share_uuid) return;
+    // 나-2 — 저장 카피 스냅샷도 함께 운반(있을 때만). 관련 상품 컴팩트 렌더용.
+    const headline = r.headline?.trim() || "";
+    const sellingPoints = toPoints(r.selling_points);
     onChange([
       ...value,
       {
@@ -81,6 +95,8 @@ export function ProductAttachSection({
         name: r.name?.trim() || "이름 없는 상품",
         priceKrw: r.price_krw,
         imageUrl: r.image_url,
+        ...(headline ? { headline } : {}),
+        ...(sellingPoints.length > 0 ? { sellingPoints } : {}),
       },
     ]);
   }

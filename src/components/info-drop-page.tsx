@@ -18,6 +18,7 @@ import {
   MessageSquare,
   MapPin,
   ShoppingCart,
+  Package,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AiPriceComparisonCard, type PriceOfferRow } from "@/components/ai-price-comparison-card";
@@ -76,6 +77,9 @@ export interface InfoDropPageProps {
     imageUrl: string;
     /** S2b — 자체업로드 상품. true 면 구매버튼/CTA 가 "주문 문의(tel:)" 로 분기. */
     selfUpload?: boolean;
+    /** 나-2 — 상품 메인 블록 저장 카피(나-1). 있으면 상품 /d 페이지에 리치 표시. */
+    headline?: string;
+    sellingPoints?: string[];
   };
   /** ③ 카드 담기 — 담은(관련) 상품. 본체 source 와 무관, 별도 "관련 상품" 섹션. */
   attachedProducts?: Array<{
@@ -84,6 +88,19 @@ export interface InfoDropPageProps {
     name: string;
     priceKrw: number | null;
     imageUrl: string | null;
+    /** 나-2 — 담을 때 동봉된 카피 스냅샷. 컴팩트 렌더에 헤드라인 태그라인으로만. */
+    headline?: string;
+    sellingPoints?: string[];
+  }>;
+  /** B 상품 홍보 카드 — 큰 이미지 + 헤드라인 + 셀링포인트 + 구매버튼(리치). "관련 상품"보다 상단·강조. */
+  promoCards?: Array<{
+    refDropId: string | null;
+    refShareUuid: string | null;
+    name: string;
+    priceKrw: number | null;
+    imageUrl: string | null;
+    headline: string;
+    sellingPoints: string[];
   }>;
   /** Slice2 멀티영상 — primary 외 담은 추가 영상(video 블록). 없으면 미렌더. */
   attachedVideos?: Array<{
@@ -574,6 +591,7 @@ export function InfoDropPage({
   priceOffers,
   commerce,
   attachedProducts,
+  promoCards,
   attachedVideos,
   local,
   creator,
@@ -1083,6 +1101,28 @@ export function InfoDropPage({
                       ? `${commerce.priceKrw.toLocaleString("ko-KR")}원`
                       : "가격 미정"}
                   </p>
+                  {/* 나-2 — 상품 저장 카피(나-1). 있으면 헤드라인+셀링포인트 리치 표시(없으면 회귀 0). */}
+                  {commerce.headline ? (
+                    <p className="text-base font-bold leading-snug tracking-ko text-text-strong">
+                      {commerce.headline}
+                    </p>
+                  ) : null}
+                  {commerce.sellingPoints && commerce.sellingPoints.length > 0 ? (
+                    <ul className="space-y-1.5">
+                      {commerce.sellingPoints.map((sp, i) => (
+                        <li
+                          key={i}
+                          className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-muted"
+                        >
+                          <Check
+                            className="mt-0.5 size-4 shrink-0 text-text-strong"
+                            strokeWidth={2.5}
+                          />
+                          <span>{sp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {commerce.selfUpload ? (
                     // 자체업로드 상품 — 1차 버튼 = 구매하기(장바구니). 결제는 임시(준비중 토스트).
                     <ActionButton
@@ -1130,6 +1170,70 @@ export function InfoDropPage({
             </section>
           ))}
 
+        {/* B 상품 홍보 카드 — 리치(큰 이미지 + 헤드라인 + 셀링포인트 + 구매버튼). "관련 상품"보다 상단·강조.
+            업주 1인칭 홍보물. 탭/구매 → 그 상품 카드(/d/{refShareUuid}). 없으면 미표시. */}
+        {promoCards && promoCards.length > 0 && (
+          <section data-testid="promo-cards" className="space-y-4">
+            {promoCards.map((p, i) => (
+              <article
+                key={p.refDropId ?? `promo-${i}`}
+                className="overflow-hidden rounded-2xl border border-border bg-bg"
+              >
+                {p.imageUrl ? (
+                  <img
+                    src={p.imageUrl}
+                    alt=""
+                    className="aspect-square w-full object-cover sm:aspect-[4/3]"
+                  />
+                ) : (
+                  <div className="flex aspect-square w-full items-center justify-center bg-surface sm:aspect-[4/3]">
+                    <Package className="size-10 text-text-subtle" strokeWidth={1.5} />
+                  </div>
+                )}
+                <div className="p-4">
+                  {p.headline ? (
+                    <h2 className="text-lg font-extrabold leading-snug tracking-ko text-text-strong">
+                      {p.headline}
+                    </h2>
+                  ) : (
+                    <h2 className="text-lg font-extrabold leading-snug tracking-ko text-text-strong">
+                      {p.name}
+                    </h2>
+                  )}
+                  <p className="mt-1 text-sm font-bold tracking-ko text-text-strong">
+                    {p.priceKrw != null ? `${p.priceKrw.toLocaleString("ko-KR")}원` : "가격 미정"}
+                  </p>
+                  {p.sellingPoints.length > 0 && (
+                    <ul className="mt-3 space-y-1.5">
+                      {p.sellingPoints.map((sp, j) => (
+                        <li
+                          key={j}
+                          className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-muted"
+                        >
+                          <Check
+                            className="mt-0.5 size-4 shrink-0 text-text-strong"
+                            strokeWidth={2.5}
+                          />
+                          <span>{sp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {p.refShareUuid && (
+                    <a
+                      href={`/d/${p.refShareUuid}`}
+                      data-testid="promo-buy"
+                      className={`mt-4 ${WIZARD_PRIMARY_BUTTON_CLASS}`}
+                    >
+                      상품 보러가기
+                    </a>
+                  )}
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
+
         {/* ③ 관련 상품 — 담은 상품(attached). 본체 커머스/영상/쿠폰/예약 렌더와 독립.
             탭 → 그 상품 자체 카드(/d/{refShareUuid}) 인앱 이동. 없으면 미표시. */}
         {attachedProducts && attachedProducts.length > 0 && (
@@ -1152,6 +1256,12 @@ export function InfoDropPage({
                       <p className="truncate text-sm font-semibold tracking-ko text-text-strong">
                         {p.name}
                       </p>
+                      {/* 나-2 — 저장 카피 헤드라인을 짧은 태그라인으로(컴팩트). 없으면 미표시(회귀 0). */}
+                      {p.headline ? (
+                        <p className="truncate text-xs font-medium tracking-ko text-text-subtle">
+                          {p.headline}
+                        </p>
+                      ) : null}
                       <p className="text-xs font-medium tracking-ko text-text-muted">
                         {p.priceKrw != null
                           ? `${p.priceKrw.toLocaleString("ko-KR")}원`

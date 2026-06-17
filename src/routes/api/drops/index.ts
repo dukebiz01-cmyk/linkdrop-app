@@ -32,6 +32,9 @@ type CreateDropBody = {
   self_upload?: boolean;
   image_url?: string;
   name?: string;
+  /** 나-1 상품 카피 — 메인 product 블록 block_data 에 머지(headline/selling_points). 자체업로드 전용. */
+  headline?: string;
+  selling_points?: string[];
 };
 
 export const Route = createFileRoute("/api/drops/")({
@@ -139,6 +142,31 @@ export const Route = createFileRoute("/api/drops/")({
                       position: 0,
                     },
                   ];
+            // 나-1 — 카피(headline/selling_points)를 메인 product 블록(self, ref_drop_id 없음)
+            //   block_data 에 머지. 카피 없으면 키 생략(회귀 0). selling_points = jsonb 배열.
+            const selfHeadline = (body.headline ?? "").trim();
+            const selfPoints = Array.isArray(body.selling_points)
+              ? body.selling_points
+                  .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+                  .map((s) => s.trim())
+                  .slice(0, 5)
+              : [];
+            if (selfHeadline || selfPoints.length > 0) {
+              const arr = selfBlocks as Array<{
+                block_kind?: string;
+                block_data?: Record<string, unknown>;
+              }>;
+              const target =
+                arr.find((b) => b?.block_kind === "product" && !b.block_data?.ref_drop_id) ??
+                arr[0];
+              if (target) {
+                target.block_data = {
+                  ...(target.block_data ?? {}),
+                  ...(selfHeadline ? { headline: selfHeadline } : {}),
+                  ...(selfPoints.length > 0 ? { selling_points: selfPoints } : {}),
+                };
+              }
+            }
             const { data: selfDropRes, error: selfDropErr } = await supabase.rpc("create_drop_v2", {
               p_intent_id: selfIntentId,
               p_source_id: selfSourceId,

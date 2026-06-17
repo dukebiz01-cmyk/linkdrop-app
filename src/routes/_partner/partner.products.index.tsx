@@ -11,6 +11,7 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  Megaphone,
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { Toaster } from "@/components/ui/sonner";
@@ -282,6 +283,15 @@ function ProductsIndexPage() {
                       <Share2 className="size-4" strokeWidth={2} />
                       공유하기
                     </button>
+                    {/* 나-1 — 상품 홍보 카피(headline/selling_points) 편집 진입 */}
+                    <Link
+                      to="/partner/products/copy"
+                      search={{ drop_id: p.id }}
+                      className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-[#E2E8F0] px-4 py-2.5 text-sm font-medium text-[#0F172A] hover:bg-[#FAFAFA]"
+                    >
+                      <Megaphone className="size-4" strokeWidth={2} />
+                      홍보 카피
+                    </Link>
                     {shareUuid ? (
                       <a
                         href={`${APP_BASE}/d/${shareUuid}`}
