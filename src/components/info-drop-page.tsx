@@ -1072,7 +1072,7 @@ export function InfoDropPage({
                   </p>
                 </div>
                 <p className="text-xs font-medium tracking-ko text-text-muted">
-                  예약 확정 시 쿠폰을 받을 수 있어요.
+                  예약을 신청하면 쿠폰이 지갑에 담겨요.
                 </p>
               </div>
             ) : null;
