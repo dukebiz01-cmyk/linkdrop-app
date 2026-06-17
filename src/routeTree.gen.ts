@@ -16,6 +16,7 @@ import { Route as UserRouteImport } from './routes/_user'
 import { Route as PartnerRouteImport } from './routes/_partner'
 import { Route as AdminRouteImport } from './routes/_admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RClaim_codeRouteImport } from './routes/r.$claim_code'
 import { Route as DTestRouteImport } from './routes/d.test'
 import { Route as DShareUuidRouteImport } from './routes/d.$shareUuid'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
@@ -92,6 +93,11 @@ const AdminRoute = AdminRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RClaim_codeRoute = RClaim_codeRouteImport.update({
+  id: '/r/$claim_code',
+  path: '/r/$claim_code',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DTestRoute = DTestRouteImport.update({
@@ -349,6 +355,7 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
+  '/r/$claim_code': typeof RClaim_codeRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
   '/admin/defamation': typeof AdminAdminDefamationRoute
   '/admin/extract': typeof AdminAdminExtractRoute
@@ -400,6 +407,7 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
+  '/r/$claim_code': typeof RClaim_codeRoute
   '/admin/campaigns': typeof AdminAdminCampaignsRoute
   '/admin/defamation': typeof AdminAdminDefamationRoute
   '/admin/extract': typeof AdminAdminExtractRoute
@@ -455,6 +463,7 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/d/$shareUuid': typeof DShareUuidRoute
   '/d/test': typeof DTestRoute
+  '/r/$claim_code': typeof RClaim_codeRoute
   '/_admin/admin/campaigns': typeof AdminAdminCampaignsRoute
   '/_admin/admin/defamation': typeof AdminAdminDefamationRoute
   '/_admin/admin/extract': typeof AdminAdminExtractRoute
@@ -508,6 +517,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/d/$shareUuid'
     | '/d/test'
+    | '/r/$claim_code'
     | '/admin/campaigns'
     | '/admin/defamation'
     | '/admin/extract'
@@ -559,6 +569,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/d/$shareUuid'
     | '/d/test'
+    | '/r/$claim_code'
     | '/admin/campaigns'
     | '/admin/defamation'
     | '/admin/extract'
@@ -613,6 +624,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/d/$shareUuid'
     | '/d/test'
+    | '/r/$claim_code'
     | '/_admin/admin/campaigns'
     | '/_admin/admin/defamation'
     | '/_admin/admin/extract'
@@ -660,6 +672,7 @@ export interface RootRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
   DShareUuidRoute: typeof DShareUuidRoute
   DTestRoute: typeof DTestRoute
+  RClaim_codeRoute: typeof RClaim_codeRoute
   ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
   ApiDropsShareCodeRoute: typeof ApiDropsShareCodeRoute
   ApiProductsCopyRoute: typeof ApiProductsCopyRoute
@@ -716,6 +729,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/r/$claim_code': {
+      id: '/r/$claim_code'
+      path: '/r/$claim_code'
+      fullPath: '/r/$claim_code'
+      preLoaderRoute: typeof RClaim_codeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/d/test': {
@@ -1150,6 +1170,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
   DShareUuidRoute: DShareUuidRoute,
   DTestRoute: DTestRoute,
+  RClaim_codeRoute: RClaim_codeRoute,
   ApiCouponsClaimRoute: ApiCouponsClaimRoute,
   ApiDropsShareCodeRoute: ApiDropsShareCodeRoute,
   ApiProductsCopyRoute: ApiProductsCopyRoute,
