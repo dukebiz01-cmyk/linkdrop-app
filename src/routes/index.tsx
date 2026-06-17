@@ -57,7 +57,6 @@ function IndexHomePage() {
             if (tab === "home") return;
             goLogin();
           }}
-          onSearch={() => goLogin()}
           onNotifications={() => goLogin()}
         />
         {/* 공개(비로그인) 푸터 — 사업자 정보 도달점(Kakao 심사/전상법). HomePageV3(v0)는 미수정. */}
