@@ -56,6 +56,12 @@ const RL_CAP_GUEST = 20;
 type DiscoverBody = {
   keyword?: string;
   partner_id?: string;
+  // 3-A 큐레이션 제안 — true 면 매장 보강(buildEnhancedQuery) 생략하고 키워드를
+  //   토픽 그대로 검색한다. 미지정(기존 호출자)이면 동작 무변경. 매장 토큰 오염 방지.
+  topic?: boolean;
+  // 3-A 키워드 교체 — "store" 면 keyword 무시하고 로그인 메이커의 매장(display_name + 지역)
+  //   으로 키워드를 파생해 검색한다. 매장 없으면 storeResolved:false 로 즉시 반환(클라가 제목 폴백).
+  keywordSource?: "store";
 };
 
 type DiscoverCandidate = {
@@ -179,23 +185,31 @@ export const Route = createFileRoute("/api/discover/")({
 
           // 3. 입력
           const body = (await request.json()) as DiscoverBody;
-          const raw = (body.keyword ?? "").trim();
-          if (!raw) {
-            return Response.json(
-              { error: "MISSING_KEYWORD", message: "검색어를 입력해 주세요." },
-              { status: 400 },
-            );
-          }
-          if (raw.length > 80) {
-            return Response.json(
-              { error: "KEYWORD_TOO_LONG", message: "검색어가 너무 길어요." },
-              { status: 400 },
-            );
+          const storeMode = body.keywordSource === "store";
+          const rawInput = (body.keyword ?? "").trim();
+          // store 모드는 키워드를 매장 데이터에서 파생 → keyword 미요구.
+          if (!storeMode) {
+            if (!rawInput) {
+              return Response.json(
+                { error: "MISSING_KEYWORD", message: "검색어를 입력해 주세요." },
+                { status: 400 },
+              );
+            }
+            if (rawInput.length > 80) {
+              return Response.json(
+                { error: "KEYWORD_TOO_LONG", message: "검색어가 너무 길어요." },
+                { status: 400 },
+              );
+            }
           }
 
           // 4. partner 조회 (body.partner_id 우선, 없으면 첫 approved)
+          //   - store 모드(3-A 키워드): 매장명+지역 파생을 위해 항상 조회.
+          //   - topic 모드(3-A AI 추천): 매장 보강 끔 → partner=null(영상 제목 오염 방지).
+          //   - 기본(직접 검색): 기존대로 조회(매장 보강). 회귀 0.
+          const resolvePartner = storeMode || !body.topic;
           let partner: PartnerRow | null = null;
-          if (body.partner_id) {
+          if (resolvePartner && body.partner_id) {
             const { data } = await supabase
               .from("partners")
               .select("id, display_name, address, metadata")
@@ -205,7 +219,7 @@ export const Route = createFileRoute("/api/discover/")({
               .maybeSingle();
             partner = (data as PartnerRow | null) ?? null;
           }
-          if (!partner) {
+          if (resolvePartner && !partner) {
             const { data } = await supabase
               .from("partners")
               .select("id, display_name, address, metadata")
@@ -217,9 +231,33 @@ export const Route = createFileRoute("/api/discover/")({
             partner = (data as PartnerRow | null) ?? null;
           }
 
-          // 5. 보강 키워드
+          // 5. 검색 키워드 결정
           const isBusiness = partner != null;
-          const enhancedQuery = buildEnhancedQuery(raw, partner);
+          let rawQuery = rawInput;
+          let enhancedQuery: string;
+          if (storeMode) {
+            // 3-A: 매장명 + 지역(시/군/구) 키워드. 영상 제목 노이즈 회피.
+            //   매장/매장명 없으면 storeResolved:false → 클라가 제목 폴백으로 전환.
+            const storeName = (partner?.display_name ?? "").trim();
+            if (!partner || !storeName) {
+              return Response.json({
+                rawQuery: "",
+                enhancedQuery: "",
+                candidates: [],
+                stats: { yt: 0, kept: 0 },
+                storeResolved: false,
+                cached: false,
+              });
+            }
+            const region = pickRegionToken(partner.address);
+            const kw = [storeName, region].filter(Boolean).join(" ");
+            enhancedQuery =
+              kw.length > ENHANCED_MAX_LEN ? kw.slice(0, ENHANCED_MAX_LEN).trim() : kw;
+            rawQuery = enhancedQuery;
+          } else {
+            // topic 모드면 partner=null → raw 패스스루. 기본이면 매장 보강(기존 동작).
+            enhancedQuery = buildEnhancedQuery(rawInput, partner);
+          }
 
           // 쿼터 보호 (KV). 모든 KV 호출은 fail-open — 장애 시 검색을 죽이지 않는다.
           const kv = getKV();
@@ -235,7 +273,11 @@ export const Route = createFileRoute("/api/discover/")({
                 stats: DiscoverStats;
               } | null;
               if (cached) {
-                return Response.json({ ...cached, cached: true });
+                return Response.json({
+                  ...cached,
+                  ...(storeMode ? { storeResolved: true } : {}),
+                  cached: true,
+                });
               }
             } catch (e) {
               console.warn("[discover] KV cache get failed (fail-open):", e);
@@ -286,7 +328,7 @@ export const Route = createFileRoute("/api/discover/")({
           }
 
           const payload = {
-            rawQuery: raw,
+            rawQuery,
             enhancedQuery,
             candidates: edge.data.candidates ?? [],
             stats: edge.data.stats ?? { yt: 0, kept: 0 },
@@ -307,7 +349,11 @@ export const Route = createFileRoute("/api/discover/")({
           }
 
           // h. 응답
-          return Response.json({ ...payload, cached: false });
+          return Response.json({
+            ...payload,
+            ...(storeMode ? { storeResolved: true } : {}),
+            cached: false,
+          });
         } catch (e) {
           return Response.json(
             {
