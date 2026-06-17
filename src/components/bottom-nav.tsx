@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, Compass, Plus, User } from "lucide-react";
+import { Home, Compass, Sparkles, User } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -13,13 +13,13 @@ import { Toaster } from "@/components/ui/sonner";
  * focused 화면(`/results`/`/coupon`)은 _user.tsx 가 shouldHideNav 로 미렌더.
  */
 
-type NavId = "home" | "explore" | "create" | "me";
+type NavId = "home" | "explore" | "studio" | "me";
 
 type NavTab = {
   id: NavId;
   label: string;
   Icon: typeof Home;
-  to?: "/" | "/explore" | "/create-wizard" | "/me";
+  to?: "/" | "/explore" | "/studio" | "/me";
   match: (pathname: string) => boolean;
   placeholder?: string; // 라우트 미존재 시 toast 메시지
 };
@@ -40,11 +40,11 @@ const TABS: NavTab[] = [
     match: (p) => p.startsWith("/explore"),
   },
   {
-    id: "create",
-    label: "만들기",
-    Icon: Plus,
-    to: "/create-wizard",
-    match: (p) => p.startsWith("/create"),
+    id: "studio",
+    label: "스튜디오",
+    Icon: Sparkles,
+    to: "/studio",
+    match: (p) => p.startsWith("/studio"),
   },
   {
     id: "me",
@@ -73,10 +73,10 @@ export function BottomNav() {
             const iconStroke = active ? 2.25 : 1.75;
             const labelWeight = active ? "font-bold" : "font-medium";
 
-            // 만들기 = 1차 액션 강조: 검정 채운 원(36px) 안에 흰 Plus. 다른 탭보다
-            // 시각적으로 무겁게 — active 상태와 무관하게 항상 강조. 라벨 "만들기" 유지.
-            const isCreate = tab.id === "create";
-            const content = isCreate ? (
+            // 스튜디오 = 1차 액션 강조: 검정 채운 원(36px) 안에 흰 아이콘. 다른 탭보다
+            // 시각적으로 무겁게 — active 상태와 무관하게 항상 강조. 라벨 "스튜디오".
+            const isStudio = tab.id === "studio";
+            const content = isStudio ? (
               <>
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0A0A0A] transition-transform duration-150 group-active:scale-90">
                   <tab.Icon className="h-5 w-5 text-white" strokeWidth={2.25} />
