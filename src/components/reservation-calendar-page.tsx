@@ -175,6 +175,8 @@ export interface ReservationCalendarPageProps {
    * URL 마커 없음) 는 기존 편집 가능 UI 를 그대로 사용.
    */
   readOnly?: boolean;
+  /** Phase 1 통합 — 예약 확인 버튼 라벨. 교집합 시 "예약 문의하고 쿠폰 받기". 기본 "예약하기". */
+  reserveCtaLabel?: string;
   className?: string;
 }
 
@@ -479,6 +481,7 @@ export function ReservationCalendarPage(props: ReservationCalendarPageProps) {
         campgroundInfo={props.campgroundInfo ?? MOCK_RESERVATION_CAMPGROUND_INFO}
         makerAvailableDates={props.makerAvailableDates ?? []}
         partnerSlotEntries={props.partnerSlotEntries}
+        reserveCtaLabel={props.reserveCtaLabel}
         onCheckAvailability={props.onCheckAvailability}
         onSecondaryAction={props.onSecondaryAction}
         className={props.className}
@@ -492,6 +495,7 @@ function EditableReservationCard({
   campgroundInfo = MOCK_RESERVATION_CAMPGROUND_INFO,
   makerAvailableDates = [],
   partnerSlotEntries,
+  reserveCtaLabel,
   onCheckAvailability,
   onSecondaryAction,
   className,
@@ -721,7 +725,7 @@ function EditableReservationCard({
           setCheckFeedback(`${dateLine} · ${stayLine} 조건으로 예약 가능 여부를 확인합니다.`);
         }}
       >
-        예약하기
+        {reserveCtaLabel ?? "예약하기"}
       </button>
 
       {checkFeedback && (
@@ -738,6 +742,7 @@ function ReadOnlyReservationCard({
   campgroundInfo,
   makerAvailableDates,
   partnerSlotEntries,
+  reserveCtaLabel,
   onCheckAvailability,
   onSecondaryAction,
   className,
@@ -745,6 +750,7 @@ function ReadOnlyReservationCard({
   campgroundInfo: ReservationCampgroundInfo;
   partnerSlotEntries?: Array<{ date: Date; available: number }>;
   makerAvailableDates: ReservationDateItem[];
+  reserveCtaLabel?: string;
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
   className?: string;
@@ -891,7 +897,7 @@ function ReadOnlyReservationCard({
           onCheckAvailability?.(readonlySelection);
         }}
       >
-        예약하기
+        {reserveCtaLabel ?? "예약하기"}
       </button>
     </div>
   );

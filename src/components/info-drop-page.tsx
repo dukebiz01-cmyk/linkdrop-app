@@ -317,6 +317,8 @@ function ReservationCalendarClient(props: {
   partnerId?: string | null;
   /** P3 — SSR loader 가 미리 가져온 슬롯. 주어지면 클라 fetch 스킵하고 이 값으로 초기화. */
   initialSlots?: SlotAvailableRow[];
+  /** Phase 1 통합 — 예약 CTA 라벨(교집합 시 "예약 문의하고 쿠폰 받기"). 기본 "예약하기". */
+  reserveCtaLabel?: string;
   onCheckAvailability?: (selection: ReservationSelection) => void;
   onSecondaryAction?: (action: ReservationSecondaryAction) => void;
 }) {
@@ -390,6 +392,7 @@ function ReservationCalendarClient(props: {
         makerAvailableDates={props.makerAvailableDates}
         partnerSlotEntries={partnerSlotEntries}
         readOnly={props.readOnly}
+        reserveCtaLabel={props.reserveCtaLabel}
         className="mx-0 mt-0 w-full max-w-full"
         onCheckAvailability={props.onCheckAvailability}
         onSecondaryAction={props.onSecondaryAction}
@@ -663,6 +666,11 @@ export function InfoDropPage({
   const isCoupon = resolvedVariant === "coupon";
   // 예약 캘린더(ReservationCalendarClient)가 실제로 렌더되는 드롭인지. 쿠폰 게이팅 범위 한정용.
   const showReservationCalendar = isReservation || (isCoupon && Boolean(partnerId));
+  // Phase 1 통합 CTA — 쿠폰 있음 && 예약 컨텍스트 있음(교집합)일 때만 예약+쿠폰 단일 CTA.
+  //   단일타입(쿠폰만 / 예약만)은 isCombined=false → 기존 흐름(sticky 쿠폰받기 / 예약하기) 그대로.
+  const hasReservationDates = Array.isArray(reservationDates) && reservationDates.length > 0;
+  const isCombined = hasFunnelCoupon && (isReservation || hasReservationDates);
+  const reserveCtaLabel = isCombined ? "예약 문의하고 쿠폰 받기" : "예약하기";
   const reservationGuide = MOCK_RESERVATION_SECTION_GUIDE;
   const videoHeadline = isReservation ? safeTitle : pageCopy.sectionTitle;
   const safeThumb = videoThumbnailUrl?.trim() || "";
@@ -759,7 +767,8 @@ export function InfoDropPage({
   }
 
   // v7.2 — sticky 바는 funnelCoupon 있을 때만 표시. 없으면 본문 pb 축소.
-  const hasStickyBar = Boolean(funnelCoupon && onReserveAndClaim);
+  // Phase 1 통합 — 교집합(isCombined)은 sticky 제거(보조 "쿠폰만 받기"로 대체) → pb 도 축소.
+  const hasStickyBar = Boolean(funnelCoupon && onReserveAndClaim && !isCombined);
 
   return (
     <div
@@ -949,8 +958,6 @@ export function InfoDropPage({
             v7.2 쿠폰 드롭 = [쿠폰 | 예약가능 캘린더] 2탭. 정보/구매/상담 진입 X. */}
         {showReservationCalendar &&
           (() => {
-            const hasReservationDates =
-              Array.isArray(reservationDates) && reservationDates.length > 0;
             const isGift = funnelCoupon?.coupon_type === "gift";
             const giftItem = funnelCoupon?.gift_item?.trim() || "";
 
@@ -969,6 +976,7 @@ export function InfoDropPage({
                 partnerId={partnerId}
                 initialSlots={initialSlots}
                 readOnly={isReshare}
+                reserveCtaLabel={reserveCtaLabel}
                 onCheckAvailability={(selection) => {
                   // A안 직접예약 — 캘린더 [예약하기] = 인앱 신청 시트. 선택한 날짜·인원을
                   // 부모(d.$shareUuid)로 올려 prefill + 로그인 게이트 + 시트 오픈.
@@ -1003,7 +1011,7 @@ export function InfoDropPage({
                     onClick={() => onReservationRequest?.()}
                     className={WIZARD_PRIMARY_BUTTON_CLASS}
                   >
-                    예약하기
+                    {reserveCtaLabel}
                   </ActionButton>
                 ) : (
                   <div className="space-y-2">
@@ -1014,7 +1022,7 @@ export function InfoDropPage({
                       aria-disabled
                       className={WIZARD_PRIMARY_BUTTON_CLASS}
                     >
-                      예약하기
+                      {reserveCtaLabel}
                     </ActionButton>
                     <p className="text-xs font-medium tracking-ko text-text-muted">
                       예약 신청을 받을 수 없는 드롭이에요.
@@ -1070,13 +1078,27 @@ export function InfoDropPage({
             ) : null;
 
             return (
-              <ReservationCardTabs
-                variant={isCoupon ? "coupon" : "reservation"}
-                hasCoupon={Boolean(funnelCoupon)}
-                calendarPanel={calendarPanel}
-                reservePanel={reservePanel}
-                couponPanel={couponPanel}
-              />
+              <div className="space-y-3">
+                <ReservationCardTabs
+                  variant={isCoupon ? "coupon" : "reservation"}
+                  hasCoupon={Boolean(funnelCoupon)}
+                  calendarPanel={calendarPanel}
+                  reservePanel={reservePanel}
+                  couponPanel={couponPanel}
+                />
+                {/* Phase 1 통합(가-2) — 교집합에서 sticky "쿠폰 받기" 대신 보조 "쿠폰만 받기".
+                    예약 없이 claim_coupon 만(기존 onReserveAndClaim 경로 그대로). */}
+                {isCombined && onReserveAndClaim ? (
+                  <button
+                    type="button"
+                    data-testid="cta-coupon-only"
+                    onClick={onReserveAndClaim}
+                    className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-bold tracking-ko text-[#0A0A0A] hover:bg-[#FAFAFA]"
+                  >
+                    쿠폰만 받기
+                  </button>
+                ) : null}
+              </div>
             );
           })()}
 
@@ -1497,7 +1519,7 @@ export function InfoDropPage({
       {/* v7.2 5b — sticky 하단 바: funnelCoupon + onReserveAndClaim 있을
             때만 단일 액션. 카카오톡 공유는 위 공유 블록으로 이전 (sticky 미사용).
             정보/구매/상담 드롭 = sticky 없음. */}
-      {funnelCoupon && onReserveAndClaim ? (
+      {funnelCoupon && onReserveAndClaim && !isCombined ? (
         <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#E5E7EB] bg-white">
           <div className="mx-auto w-full max-w-[480px] px-6 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
             <button
