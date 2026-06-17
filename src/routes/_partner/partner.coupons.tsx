@@ -398,7 +398,11 @@ export function CouponManageView({
             </button>
             <button
               type="button"
-              onClick={() => setNoExpiry(false)}
+              onClick={() => {
+                setNoExpiry(false);
+                // 토글 시 빈값이면 미래(오늘+30일)로 프리필 → "기한 지정 가능" 명확화.
+                if (!validUntil) setValidUntil(kstDateStr(30));
+              }}
               aria-pressed={!noExpiry}
               className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition-colors ${
                 !noExpiry
@@ -413,6 +417,7 @@ export function CouponManageView({
             <input
               type="date"
               value={validUntil}
+              min={kstDateStr()} /* 오늘(KST) 이전 날짜 선택 방지 */
               onChange={(e) => setValidUntil(e.target.value)}
               className="mt-2 w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none"
               required
@@ -555,6 +560,13 @@ function CouponItem({
         {row.total_count ? ` · ${row.total_count}장 한정` : ""}
       </p>
     </div>
+  );
+}
+
+// KST(Asia/Seoul) 기준 "YYYY-MM-DD" — offsetDays 만큼 더한 날짜(date input min/프리필용).
+function kstDateStr(offsetDays = 0): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(
+    new Date(Date.now() + offsetDays * 86_400_000),
   );
 }
 
