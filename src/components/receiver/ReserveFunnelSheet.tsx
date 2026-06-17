@@ -5,24 +5,31 @@ import { getSupabase } from "@/lib/supabase";
 
 /**
  * 직접예약 (인앱 예약 신청) 시트 — A안. 네이버로 내보내지 않고 /d 안에서 예약 *신청*.
- * 신청 = 리드 캡처(확정·결제·정산 없음). 쿠폰과 분리(claim_coupon 호출 안 함).
+ * 신청 = 리드 캡처(확정·결제·정산 없음).
+ *
+ * Phase 1 통합 CTA — funnelCoupon 이 주어지면(쿠폰+예약 교집합 드롭), 예약 성공 직후
+ *   같은 핸들러에서 claim_coupon 을 best-effort 로 이어 호출한다. 쿠폰 없으면(단일 예약
+ *   드롭) 기존대로 claim 미호출 — 회귀 0. 트랜잭션 원자성(단일 RPC)은 Phase 2.
  *
  * 흐름 (4 step):
  *   1. form  — (캘린더에서 prefill된) 날짜·인원 + 이름·전화·메시지
- *   2. submitting — upsert_visitor → create_reservation_anon
- *   3. done  — "예약 신청이 접수되었어요" (확정 아님 — 매장 확인 후 연락)
- *   4. error — 에러 화면 (재시도). 23505=이미 진행 중인 예약 안내.
+ *   2. submitting — upsert_visitor → create_reservation_anon (→ funnelCoupon 시 claim_coupon)
+ *   3. done  — "예약 신청이 접수되었어요" (+ 쿠폰 결합 시 지갑 안내). 확정 아님.
+ *   4. error — 에러 화면 (재시도). 23505=이미 진행 중인 예약 안내(단일 예약일 때만).
  *
  * 인자:
  *   - shareUuid: 현재 share_event 의 share_uuid (share_events.id 조회용)
  *   - dropId: info_drops.id
- *   - userId: 로그인한 catcher_user_id (A안 로그인 강제)
+ *   - userId: 로그인한 catcher_user_id (A안 로그인 강제 · claim_coupon 의 p_catcher_user_id)
  *   - initialCheckIn/Out/GuestCount: 캘린더 선택값 prefill (이중입력 방지, 수정 가능)
+ *   - funnelCoupon: 결합 발급할 쿠폰(id/title). null 이면 예약만(기존 동작).
+ *   - onClaimed: 쿠폰 발급 시도 후 콜백(성공 여부). 부모 OAuth 복귀 자동발급 중복 방지용.
  *
  * RPC:
  *   - create_reservation_anon(SECURITY DEFINER): reservations INSERT + reservation_contacts
  *     + reservation_notifications + slot current_bookings +1 (소프트홀드). partner_id 는
  *     info_drops 에서 자동 추출. reward 미발생(gross=0).
+ *   - claim_coupon(멱등 UNIQUE(coupon_id, share_event_id, catcher_user_id)): funnelCoupon 시 best-effort.
  */
 
 type Props = {
@@ -34,7 +41,14 @@ type Props = {
   initialCheckIn?: string;
   initialCheckOut?: string;
   initialGuestCount?: number;
+  /** Phase 1 통합 — 결합 발급할 쿠폰. null/미지정이면 예약만(기존 동작). */
+  funnelCoupon?: { id: string; title: string } | null;
+  /** 쿠폰 발급 시도 후 콜백(true=성공). 부모의 ?coupon=1 자동발급 중복 방지. */
+  onClaimed?: (claimed: boolean) => void;
 };
+
+// done 화면 쿠폰 표시 상태 — none=결합 아님(예약 단일) / claimed=발급됨 / failed=발급 실패(나중에).
+type CouponDoneStatus = "none" | "claimed" | "failed";
 
 type Step = "form" | "submitting" | "done" | "error";
 
@@ -80,6 +94,8 @@ export function ReserveFunnelSheet({
   initialCheckIn,
   initialCheckOut,
   initialGuestCount,
+  funnelCoupon,
+  onClaimed,
 }: Props) {
   const [step, setStep] = useState<Step>("form");
   const [checkIn, setCheckIn] = useState("");
@@ -91,12 +107,17 @@ export function ReserveFunnelSheet({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   // 23505(이미 진행 중) = 실패 아니라 중복 가드 → ErrorBody 제목 분기용.
   const [errorIsDup, setErrorIsDup] = useState(false);
+  // done 화면 분기 — 쿠폰 결합 발급 결과 + 예약이 이미 있던 케이스(23505).
+  const [couponStatus, setCouponStatus] = useState<CouponDoneStatus>("none");
+  const [resvDup, setResvDup] = useState(false);
 
   useEffect(() => {
     if (open) {
       setStep("form");
       setErrorMsg(null);
       setErrorIsDup(false);
+      setCouponStatus("none");
+      setResvDup(false);
       // 캘린더 선택값 prefill (이중입력 방지). 연락처(이름/전화/메시지)는 매 오픈 초기화.
       setCheckIn(initialCheckIn ?? "");
       setCheckOut(initialCheckOut ?? "");
@@ -199,26 +220,56 @@ export function ReserveFunnelSheet({
         //   (drop당 1인 1활성예약) abuse 방어. RPC 가 DEFAULT NULL 이라 안전.
         p_catcher_user_id: userId ?? null,
       });
+      let reservationDup = false;
       if (resErr) {
-        console.error("[ReserveFunnel] create_reservation_anon failed:", resErr);
-        // A4-2 — partial UNIQUE(uq_reservations_active_catcher) 위반 시 정직 안내.
-        // 같은 catcher 가 같은 drop 에 활성(pending/confirmed) 예약을 이미 가짐 →
-        // "실패" 가 아니라 "이미 진행 중" 으로 사실대로.
+        // A4-2 — partial UNIQUE(uq_reservations_active_catcher) 위반.
+        // 같은 catcher 가 같은 drop 에 활성(pending/confirmed) 예약을 이미 가짐.
         const errCode = (resErr as { code?: string } | null)?.code;
         const errMsg = (resErr as { message?: string } | null)?.message ?? "";
         const isCatcherDup =
           errCode === "23505" || errMsg.includes("uq_reservations_active_catcher");
-        setErrorIsDup(isCatcherDup);
-        setErrorMsg(
-          isCatcherDup
-            ? "이미 진행 중인 예약이 있어요. 예약 내역을 확인해 주세요."
-            : "예약 문의 전송에 실패했어요. 잠시 후 다시 시도해 주세요.",
-        );
-        setStep("error");
-        return;
+        // Phase 1 통합 — 쿠폰 결합 드롭에서 이미 활성 예약(23505)이면 예약은 스킵하고
+        //   쿠폰만 발급 시도(아래). 단일 예약 드롭(funnelCoupon 없음)이면 기존대로 정직 안내.
+        if (isCatcherDup && funnelCoupon) {
+          reservationDup = true;
+        } else {
+          console.error("[ReserveFunnel] create_reservation_anon failed:", resErr);
+          setErrorIsDup(isCatcherDup);
+          setErrorMsg(
+            isCatcherDup
+              ? "이미 진행 중인 예약이 있어요. 예약 내역을 확인해 주세요."
+              : "예약 문의 전송에 실패했어요. 잠시 후 다시 시도해 주세요.",
+          );
+          setStep("error");
+          return;
+        }
       }
 
-      // 쿠폰과 분리(디커플링) — 예약 신청은 claim_coupon 호출 안 함. 리드 캡처까지만.
+      // Phase 1 통합 — 예약 결합 쿠폰 best-effort 발급. 예약 성공/중복(23505) 직후 호출.
+      //   claim_coupon 은 멱등(UNIQUE) — 실패해도 done 으로 진행("나중에 지갑에서").
+      //   funnelCoupon 없으면(단일 예약) 호출 안 함 = 기존 디커플링 동작 보존.
+      let nextCouponStatus: CouponDoneStatus = "none";
+      if (funnelCoupon) {
+        nextCouponStatus = "failed";
+        try {
+          const { error: claimErr } = await supabase.rpc("claim_coupon", {
+            p_coupon_id: funnelCoupon.id,
+            p_share_event_id: shareEventId,
+            p_catcher_user_id: userId,
+          });
+          if (claimErr) {
+            console.error("[ReserveFunnel] claim_coupon failed (best-effort):", claimErr);
+          } else {
+            nextCouponStatus = "claimed";
+          }
+        } catch (claimEx) {
+          console.error("[ReserveFunnel] claim_coupon unexpected (best-effort):", claimEx);
+        }
+        onClaimed?.(nextCouponStatus === "claimed");
+      }
+
+      setCouponStatus(nextCouponStatus);
+      setResvDup(reservationDup);
       setStep("done");
     } catch (e) {
       console.error("[ReserveFunnel] unexpected:", e);
@@ -254,7 +305,11 @@ export function ReserveFunnelSheet({
             <p className="text-sm font-semibold text-[#0F172A]">예약 신청을 보내고 있어요…</p>
           </div>
         ) : step === "done" ? (
-          <DoneBody onClose={() => onOpenChange(false)} />
+          <DoneBody
+            onClose={() => onOpenChange(false)}
+            couponStatus={couponStatus}
+            resvDup={resvDup}
+          />
         ) : (
           <ErrorBody errorMsg={errorMsg} isDup={errorIsDup} onRetry={() => setStep("form")} />
         )}
@@ -391,7 +446,17 @@ function FormBody(props: {
   );
 }
 
-function DoneBody({ onClose }: { onClose: () => void }) {
+function DoneBody({
+  onClose,
+  couponStatus,
+  resvDup,
+}: {
+  onClose: () => void;
+  couponStatus: CouponDoneStatus;
+  resvDup: boolean;
+}) {
+  // 23505(이미 활성 예약) 결합 케이스 = 신규 접수 아님 → 제목만 정직하게 분기.
+  const headline = resvDup ? "이미 예약 신청돼 있어요" : "예약 신청이 접수되었어요";
   return (
     <div className="space-y-5 pt-2">
       <div className="flex justify-center">
@@ -400,9 +465,17 @@ function DoneBody({ onClose }: { onClose: () => void }) {
         </span>
       </div>
       <div className="text-center">
-        <h2 className="text-lg font-bold text-[#0F172A]">예약 신청이 접수되었어요</h2>
+        <h2 className="text-lg font-bold text-[#0F172A]">{headline}</h2>
         <p className="mt-2 text-sm text-[#475569]">매장에서 확인 후 연락드려요.</p>
         <p className="mt-1 text-xs text-[#94A3B8]">신청만으로는 예약이 확정되지 않아요.</p>
+        {/* Phase 1 통합 — 쿠폰 결합 발급 결과 안내. none(단일 예약)이면 회귀 0(미표시). */}
+        {couponStatus === "claimed" ? (
+          <p className="mt-3 text-sm font-semibold text-[#059669]">쿠폰이 지갑에 담겼어요.</p>
+        ) : couponStatus === "failed" ? (
+          <p className="mt-3 text-sm font-medium text-[#475569]">
+            쿠폰은 잠시 후 지갑에서 확인해 주세요.
+          </p>
+        ) : null}
       </div>
       <button
         type="button"
