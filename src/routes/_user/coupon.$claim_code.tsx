@@ -15,6 +15,9 @@ import { getAuthClient } from "@/lib/auth-context";
 import { getCouponDisplayStatus } from "@/lib/coupon-status";
 import { Toaster } from "@/components/ui/sonner";
 
+// 앱 본체 도메인(고정). QR/외부 링크는 origin 아닌 이 도메인 사용(adapters.ts PROD_BASE 와 동일).
+const PROD_BASE = "https://app.drop.how";
+
 /**
  * /coupon/$claim_code — 쿠폰 상세 기프티콘 (phase1-2).
  *
@@ -206,7 +209,9 @@ function CouponDetailView({ data, onBack }: { data: CouponDetailData; onBack: ()
             {isActive ? (
               <div className="mb-5 flex justify-center">
                 <div className="rounded-2xl bg-white p-4">
-                  <QRCodeSVG value={data.claim_code} size={176} level="M" />
+                  {/* B3 — value=URL(/r/{claim_code}): 아무 카메라로 찍으면 /r 확인·처리 페이지 오픈.
+                      도메인 고정(window/origin 금지, 단축링크 규칙과 동일). */}
+                  <QRCodeSVG value={`${PROD_BASE}/r/${data.claim_code}`} size={176} level="M" />
                 </div>
               </div>
             ) : null}
