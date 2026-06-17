@@ -10,6 +10,7 @@ import {
   Home as HomeIcon,
   MapPin,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getCouponDisplayStatus } from "@/lib/coupon-status";
 import { Toaster } from "@/components/ui/sonner";
@@ -198,8 +199,17 @@ function CouponDetailView({ data, onBack }: { data: CouponDetailData; onBack: ()
             <span className="absolute right-[-35px] top-1/2 h-[26px] w-[26px] -translate-y-1/2 rounded-full bg-[#EAEEF4]" />
           </div>
 
-          {/* 하단 — 쿠폰 번호 + 복사 */}
+          {/* 하단 — (사용 가능 시) QR + 쿠폰 번호 + 복사 */}
           <div className="px-[22px] pb-6 pt-[18px]">
+            {/* 2a 손님 QR — 직원 스캔용. 값=claim_code(코드 표시와 동일 소스).
+                isActive(사용가능/곧만료)일 때만. 흑백 기본(fg/bg 미지정) → 스캔 대비 최대. */}
+            {isActive ? (
+              <div className="mb-5 flex justify-center">
+                <div className="rounded-2xl bg-white p-4">
+                  <QRCodeSVG value={data.claim_code} size={176} level="M" />
+                </div>
+              </div>
+            ) : null}
             <p className="mb-2 text-sm font-semibold text-[#64748B]">쿠폰 번호</p>
             <CouponCodeRow code={data.claim_code} disabled={isDim} />
           </div>
