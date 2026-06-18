@@ -86,6 +86,15 @@ export function CampgroundInfoCard({ info }: { info: ReservationCampgroundInfo }
           <p className="border-t border-border pt-3 text-xs font-medium leading-relaxed tracking-ko text-text-subtle">
             {info.sourceLabel} · {info.sourceNote}
           </p>
+          {/* 펼친 콘텐츠 하단 접기 — 긴 시설 정보를 스크롤한 뒤에도 닫기 수단 확보(상단 토글 보조). */}
+          <button
+            type="button"
+            data-testid="campground-facilities-collapse"
+            onClick={() => setShowDetails(false)}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border bg-surface text-sm font-bold tracking-ko text-text-muted transition-colors hover:border-text-muted hover:text-text-strong"
+          >
+            접기
+          </button>
         </div>
       )}
     </section>
