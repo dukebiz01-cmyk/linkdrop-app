@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
+import { startKakaoLogin } from "@/lib/oauth-kakao";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -17,6 +25,7 @@ import {
   FileText,
   Sparkles,
   ShieldCheck,
+  Bell,
   Flag,
   Ticket,
   Gift,
@@ -556,6 +565,87 @@ export function InfoDropPage({
   calendarMode = "date_range",
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
+  // 트랙 D §50 — 매장(partnerId) 구독. me.tsx handleSubscribe 패턴 재사용(maker_follows, 스키마 0).
+  const [subscriberUserId, setSubscriberUserId] = useState<string | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+
+  // 로그인 유저 + 현재 매장 구독 여부 로드. partnerId(=매장) 있을 때만 조회.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const supabase = getSupabase();
+      const { data: sess } = await supabase.auth.getSession();
+      const uid = sess.session?.user.id ?? null;
+      if (cancelled) return;
+      setSubscriberUserId(uid);
+      if (!uid || !partnerId) {
+        setIsSubscribed(false);
+        return;
+      }
+      // me.tsx 와 동일 방식: maker_follows(active) 조회. types.ts 스테일 → untyped .from().
+      const { data: row } = await supabase
+        .from("maker_follows")
+        .select("followed_partner_id")
+        .eq("follower_user_id", uid)
+        .eq("followed_partner_id", partnerId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!cancelled) setIsSubscribed(Boolean(row));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [partnerId]);
+
+  // 구독 버튼 — 로그인 필요. 미로그인 → 카카오 OAuth(현재 드롭 복귀), 로그인 → §50 동의 팝업.
+  function handleSubscribeClick() {
+    if (!partnerId) return;
+    if (!subscriberUserId) {
+      const next =
+        typeof window !== "undefined" ? window.location.pathname + window.location.search : "/";
+      void startKakaoLogin(next);
+      return;
+    }
+    setConsentChecked(false);
+    setSubscribeOpen(true);
+  }
+
+  // 동의 완료 → maker_follows upsert(active + consent_at). me.tsx handleSubscribe 와 동일 패턴.
+  async function handleSubscribeConfirm() {
+    if (!partnerId || !subscriberUserId || !consentChecked || subscribing) return;
+    setSubscribing(true);
+    try {
+      const { error } = await getSupabase()
+        .from("maker_follows")
+        .upsert(
+          {
+            follower_user_id: subscriberUserId,
+            followed_partner_id: partnerId,
+            source: "drop_card",
+            consent_at: new Date().toISOString(),
+            status: "active",
+          },
+          { onConflict: "follower_user_id,followed_partner_id" },
+        );
+      if (error) {
+        console.error("[info-drop-page] subscribe failed:", error);
+        toast.error("구독에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      setIsSubscribed(true);
+      setSubscribeOpen(false);
+      toast.success("구독했어요.");
+    } catch (e) {
+      console.error("[info-drop-page] subscribe unexpected:", e);
+      toast.error("처리 중 문제가 생겼어요.");
+    } finally {
+      setSubscribing(false);
+    }
+  }
+
   const parsedVideo = videoSourceUrl ? parseVideoUrl(videoSourceUrl) : null;
   const canEmbed = parsedVideo?.platform === "youtube";
   const isShorts = /\/shorts\//i.test(videoSourceUrl ?? "");
@@ -764,6 +854,30 @@ export function InfoDropPage({
             </div>
           )}
         </div>
+        {/* 트랙 D §50 — 매장 구독. partnerId(매장) 있을 때만. 이미 구독중이면 "구독중" 표시. */}
+        {partnerId ? (
+          <div className="mt-3">
+            {isSubscribed ? (
+              <span
+                data-testid="subscribe-state"
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-bold tracking-ko text-text-muted"
+              >
+                <Bell className="size-4" strokeWidth={2} />
+                구독중
+              </span>
+            ) : (
+              <button
+                type="button"
+                data-testid="subscribe-button"
+                onClick={handleSubscribeClick}
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-3 text-sm font-bold tracking-ko text-white hover:bg-[#171717]"
+              >
+                <Bell className="size-4" strokeWidth={2} />
+                소식 받기
+              </button>
+            )}
+          </div>
+        ) : null}
       </header>
 
       <div className="space-y-6 px-6" data-testid={`variant-${resolvedVariant}`}>
@@ -1522,7 +1636,7 @@ export function InfoDropPage({
           <button
             type="button"
             onClick={() => setIsReportSheetOpen(true)}
-            className="inline-flex items-center gap-1 bg-transparent text-[11px] text-[#A3A3A3] hover:text-[#525252]"
+            className="inline-flex items-center gap-1 bg-transparent text-[11px] text-[#525252] underline underline-offset-2 hover:text-[#0A0A0A]"
           >
             <Flag size={11} strokeWidth={2} />
             문제 신고
@@ -1552,6 +1666,60 @@ export function InfoDropPage({
         onClose={() => setIsReportSheetOpen(false)}
         dropId={dropId}
       />
+
+      {/* 트랙 D §50 — 매장 구독 동의 팝업. 필수 동의 체크 게이트 + (광고)/무료 수신거부 안내. */}
+      {partnerId ? (
+        <Dialog open={subscribeOpen} onOpenChange={setSubscribeOpen}>
+          <DialogContent className="max-w-[400px] rounded-2xl tracking-ko">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-text-strong">
+                {safeMaker.name} 소식 구독
+              </DialogTitle>
+              <DialogDescription className="text-sm font-medium text-text-muted">
+                거부해도 예약·쿠폰 등 서비스 이용엔 영향이 없어요.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3">
+              <label className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-strong">
+                <input
+                  type="checkbox"
+                  checked={consentChecked}
+                  onChange={(e) => setConsentChecked(e.target.checked)}
+                  className="mt-0.5 size-4 shrink-0 rounded border-border accent-[#0A0A0A]"
+                />
+                <span>
+                  <span className="font-bold">[필수]</span> 광고성 정보(소식·쿠폰) 수신에
+                  동의합니다.
+                </span>
+              </label>
+              <p className="text-[11px] leading-relaxed tracking-ko text-text-subtle">
+                (광고) 구독하면 {safeMaker.name}의 소식·혜택을 받아요. 수신거부는 언제든 마이페이지
+                &gt; 구독한 메이커에서 무료로 가능해요.
+              </p>
+            </div>
+
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setSubscribeOpen(false)}
+                className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-2xl border border-border bg-white px-4 text-sm font-bold tracking-ko text-text-strong hover:bg-surface"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                data-testid="subscribe-confirm"
+                disabled={!consentChecked || subscribing}
+                onClick={handleSubscribeConfirm}
+                className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-2xl bg-[#0A0A0A] px-4 text-sm font-bold tracking-ko text-white hover:bg-[#171717] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {subscribing ? "처리 중…" : "동의하고 구독"}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
