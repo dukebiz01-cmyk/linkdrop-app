@@ -1,4 +1,4 @@
-// generate-summary — 영상 메타 + 목적 → AI 요약 + 핵심포인트 5개 (Claude Haiku 4.5)
+// generate-summary — 영상 메타 + 목적 → AI 요약 + 핵심포인트 5개 (Claude Sonnet 4.6)
 //
 // POST { source_id, purpose, user_id, drop_id? }
 // → { ai_summary, ai_key_points, cached, ai_generation_id }
@@ -22,7 +22,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
 });
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-sonnet-4-6";
 const USD_TO_KRW = 1400;
 const CACHE_TTL_DAYS = 30;
 const GENERATION_TYPE = "summary";
@@ -46,7 +46,7 @@ function costKrw(inTok: number, outTok: number): number {
 
 // v2 — 손님(수신자) 관점 + 영상·매장·시기 맥락 반영. 옛 v1 캐시는
 //      PROMPT_VERSION 매치 미스로 자연 만료(30 일). backfill 별도.
-const PROMPT_VERSION = "v2";
+const PROMPT_VERSION = "v3";
 
 const SYSTEM_PROMPT = `너는 LinkDrop의 영상 요약 AI야.
 이 요약은 카카오톡으로 링크를 받은 손님(수신자)이 읽어.
@@ -54,10 +54,12 @@ const SYSTEM_PROMPT = `너는 LinkDrop의 영상 요약 AI야.
 
 핵심 원칙:
 1. 손님(받는 사람)이 주어. "당신이 받는/가는/알게 되는" 느낌. "손님 모으기", "혜택 제공" 같은 업주·판매자 표현 절대 금지.
-2. 영상·매장의 맥락을 반영: 시기(계절·시간대), 장소(지역), 대상(가족·1인·연인·친구)을 정보에서 추정해 톤에 자연스럽게 녹여. 받는 시점에 맞는 권유 (예: 여름 캠핑 영상이면 "이 더위에 가기 좋아요").
+2. 맥락 추정은 "시기(계절·시간대)·대상(가족·1인·연인·친구)·용도" 에만 적용해 톤에 자연스럽게 녹여 (예: 여름 캠핑 영상이면 "이 더위에 가기 좋아요"). 추정은 톤·분위기 수준까지만.
 3. 친구가 친구에게 추천하는 말투. 친근하고 자연스럽게.
 4. 어려운 단어 금지 (어르신도 이해).
 5. AI 추정임을 드러내 (단정형 금지, "~인 것 같아요" 톤).
+6. [고유명사 가드] 매장명·지명·상호·고유 명칭 등 고유명사는 입력(제목·설명·매장 정보)에 나온 표기를 "그대로만" 사용해. 한 글자도 새로 만들거나 바꾸지 마 (비슷한 다른 이름으로 대체 금지). 입력에 없는 고유명사는 아예 쓰지 마.
+7. [추정 금지 대상] 고유명사·구체 시설(화장실·취사장·수영장 등)·수치·구체 사실은 추정·창작 금지. 입력에 명시된 것만 사용하고, 입력에 없으면 언급하지 마.
 
 목적별 강조 (모두 손님 시점):
 - 정보: 이 영상에서 손님이 알게 될 핵심 + 따라 하기 좋은 팁
@@ -65,6 +67,10 @@ const SYSTEM_PROMPT = `너는 LinkDrop의 영상 요약 AI야.
 - 예약: 예약할 때 고려할 점 + 시기·인원·분위기 추천 포인트
 - 구매: 살 때 도움 될 비교 포인트 + 어떤 사람에게 맞나
 - 상담: 어떤 고민이 있을 때 문의하면 좋은가 + 무엇을 기대할 수 있나
+
+불릿(ai_key_points) 규칙:
+- "받는 사람이 이 영상으로 얻는 것 / 할 수 있는 것" 중심의 효용 표현으로 써 ("~할 수 있어요 / ~파악하기 좋아요 / ~확인해 보세요" framing).
+- 입력에 근거 없는 특정 시설·수치·고유명사·사실을 "단정"하지 마 ("화장실 있음", "Y가 ~다" 같은 사실 단정은 입력에 명시됐을 때만).
 
 응답 형식 (JSON only, 코드블록·설명 없이 JSON 만):
 {
