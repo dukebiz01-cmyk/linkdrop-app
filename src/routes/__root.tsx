@@ -4,11 +4,17 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { BusinessFooter } from "@/components/business-footer";
+
+// 로그인 앱 경로 — 여기선 사업자 푸터를 숨긴다(하단 BottomNav 충돌 회피).
+// 그 외(공개 경로: / · /d/ · /r · /alliance · /terms · /business-info · /privacy 등)에만 노출.
+const APP_PREFIXES = ["/home", "/explore", "/me", "/create", "/studio", "/partner", "/admin"];
 
 function NotFoundComponent() {
   return (
@@ -115,10 +121,14 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // 공개(비로그인) 경로에서만 사업자 푸터 — 카카오 비즈 심사·전상법 §10 도달점.
+  const isApp = APP_PREFIXES.some((p) => pathname.startsWith(p));
 
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
+      {!isApp && <BusinessFooter />}
     </QueryClientProvider>
   );
 }

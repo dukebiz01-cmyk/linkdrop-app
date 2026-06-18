@@ -9,7 +9,9 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TosRouteImport } from './routes/tos'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as BusinessInfoRouteImport } from './routes/business-info'
 import { Route as UserRouteImport } from './routes/_user'
@@ -64,9 +66,19 @@ import { Route as PartnerPartnerProductsNewRouteImport } from './routes/_partner
 import { Route as PartnerPartnerProductsCopyRouteImport } from './routes/_partner/partner.products.copy'
 import { Route as PartnerPartnerCalendarDropIdRouteImport } from './routes/_partner/partner.calendar.$dropId'
 
+const TosRoute = TosRouteImport.update({
+  id: '/tos',
+  path: '/tos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -341,7 +353,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/business-info': typeof BusinessInfoRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
+  '/tos': typeof TosRoute
   '/create': typeof UserCreateRoute
   '/create-builder': typeof UserCreateBuilderRoute
   '/create-wizard': typeof UserCreateWizardRoute
@@ -394,7 +408,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/business-info': typeof BusinessInfoRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
+  '/tos': typeof TosRoute
   '/create': typeof UserCreateRoute
   '/create-builder': typeof UserCreateBuilderRoute
   '/create-wizard': typeof UserCreateWizardRoute
@@ -451,7 +467,9 @@ export interface FileRoutesById {
   '/_user': typeof UserRouteWithChildren
   '/business-info': typeof BusinessInfoRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
+  '/tos': typeof TosRoute
   '/_user/create': typeof UserCreateRoute
   '/_user/create-builder': typeof UserCreateBuilderRoute
   '/_user/create-wizard': typeof UserCreateWizardRoute
@@ -506,7 +524,9 @@ export interface FileRouteTypes {
     | '/'
     | '/business-info'
     | '/login'
+    | '/privacy'
     | '/terms'
+    | '/tos'
     | '/create'
     | '/create-builder'
     | '/create-wizard'
@@ -559,7 +579,9 @@ export interface FileRouteTypes {
     | '/'
     | '/business-info'
     | '/login'
+    | '/privacy'
     | '/terms'
+    | '/tos'
     | '/create'
     | '/create-builder'
     | '/create-wizard'
@@ -615,7 +637,9 @@ export interface FileRouteTypes {
     | '/_user'
     | '/business-info'
     | '/login'
+    | '/privacy'
     | '/terms'
+    | '/tos'
     | '/_user/create'
     | '/_user/create-builder'
     | '/_user/create-wizard'
@@ -672,7 +696,9 @@ export interface RootRouteChildren {
   UserRoute: typeof UserRouteWithChildren
   BusinessInfoRoute: typeof BusinessInfoRoute
   LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
   TermsRoute: typeof TermsRoute
+  TosRoute: typeof TosRoute
   AllianceSlugRoute: typeof AllianceSlugRoute
   ApiAbuseReportsRoute: typeof ApiAbuseReportsRoute
   ApiConsultationsRoute: typeof ApiConsultationsRoute
@@ -694,11 +720,25 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tos': {
+      id: '/tos'
+      path: '/tos'
+      fullPath: '/tos'
+      preLoaderRoute: typeof TosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -1179,7 +1219,9 @@ const rootRouteChildren: RootRouteChildren = {
   UserRoute: UserRouteWithChildren,
   BusinessInfoRoute: BusinessInfoRoute,
   LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
   TermsRoute: TermsRoute,
+  TosRoute: TosRoute,
   AllianceSlugRoute: AllianceSlugRoute,
   ApiAbuseReportsRoute: ApiAbuseReportsRoute,
   ApiConsultationsRoute: ApiConsultationsRoute,

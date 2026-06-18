@@ -571,6 +571,9 @@ export function InfoDropPage({
   const [subscribeOpen, setSubscribeOpen] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
+  // 구독 관리 팝업(옵션 A) — "구독중" 칩 탭 시 오픈. 하단 수신거부(unfollow) 진입점.
+  const [manageOpen, setManageOpen] = useState(false);
+  const [unsubscribing, setUnsubscribing] = useState(false);
 
   // 로그인 유저 + 현재 매장 구독 여부 로드. partnerId(=매장) 있을 때만 조회.
   useEffect(() => {
@@ -643,6 +646,32 @@ export function InfoDropPage({
       toast.error("처리 중 문제가 생겼어요.");
     } finally {
       setSubscribing(false);
+    }
+  }
+
+  // 수신거부(구독 취소) → maker_follows status='unfollowed'. me.tsx handleUnsubscribe 와 동일 패턴.
+  async function handleUnsubscribe() {
+    if (!partnerId || !subscriberUserId || unsubscribing) return;
+    setUnsubscribing(true);
+    try {
+      const { error } = await getSupabase()
+        .from("maker_follows")
+        .update({ status: "unfollowed" })
+        .eq("follower_user_id", subscriberUserId)
+        .eq("followed_partner_id", partnerId);
+      if (error) {
+        console.error("[info-drop-page] unsubscribe failed:", error);
+        toast.error("수신거부 처리에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      setIsSubscribed(false);
+      setManageOpen(false);
+      toast.success("수신거부 처리됐어요.");
+    } catch (e) {
+      console.error("[info-drop-page] unsubscribe unexpected:", e);
+      toast.error("처리 중 문제가 생겼어요.");
+    } finally {
+      setUnsubscribing(false);
     }
   }
 
@@ -858,13 +887,15 @@ export function InfoDropPage({
         {partnerId ? (
           <div className="mt-3">
             {isSubscribed ? (
-              <span
+              <button
+                type="button"
                 data-testid="subscribe-state"
-                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-bold tracking-ko text-text-muted"
+                onClick={() => setManageOpen(true)}
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-bold tracking-ko text-text-muted transition-colors hover:border-text-muted hover:text-text-strong"
               >
                 <Bell className="size-4" strokeWidth={2} />
                 구독중
-              </span>
+              </button>
             ) : (
               <button
                 type="button"
@@ -1694,8 +1725,8 @@ export function InfoDropPage({
                 </span>
               </label>
               <p className="text-[11px] leading-relaxed tracking-ko text-text-subtle">
-                (광고) 구독하면 {safeMaker.name}의 소식·혜택을 받아요. 수신거부는 언제든 마이페이지
-                &gt; 구독한 메이커에서 무료로 가능해요.
+                구독하시면 {safeMaker.name}의 다양한 혜택·쿠폰·이벤트를 받아보실 수 있어요.
+                수신거부는 언제든 마이페이지 &gt; 구독한 메이커에서 무료로 가능해요.
               </p>
             </div>
 
@@ -1715,6 +1746,41 @@ export function InfoDropPage({
                 className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-2xl bg-[#0A0A0A] px-4 text-sm font-bold tracking-ko text-white hover:bg-[#171717] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {subscribing ? "처리 중…" : "동의하고 구독"}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {/* 트랙 D — 구독 관리 팝업(옵션 A). "구독중" 칩 탭 시 오픈. 하단 수신거부. */}
+      {partnerId ? (
+        <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+          <DialogContent className="max-w-[400px] rounded-2xl tracking-ko">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-text-strong">
+                {safeMaker.name} 소식 구독 중
+              </DialogTitle>
+              <DialogDescription className="text-sm font-medium text-text-muted">
+                {safeMaker.name}의 소식·혜택을 받고 있어요.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-2 space-y-2">
+              <button
+                type="button"
+                data-testid="unsubscribe-button"
+                disabled={unsubscribing}
+                onClick={handleUnsubscribe}
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-border bg-white px-4 text-sm font-bold tracking-ko text-text-strong transition-colors hover:border-text-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {unsubscribing ? "처리 중…" : "수신거부(구독 취소)"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setManageOpen(false)}
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl bg-[#0A0A0A] px-4 text-sm font-bold tracking-ko text-white hover:bg-[#171717]"
+              >
+                닫기
               </button>
             </div>
           </DialogContent>

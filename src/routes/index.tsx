@@ -59,15 +59,7 @@ function IndexHomePage() {
           }}
           onNotifications={() => goLogin()}
         />
-        {/* 공개(비로그인) 푸터 — 사업자 정보 도달점(Kakao 심사/전상법). HomePageV3(v0)는 미수정. */}
-        <footer className="px-6 pb-8 pt-2 text-center">
-          <a
-            href="/business-info"
-            className="text-xs font-medium tracking-ko text-[#A3A3A3] underline-offset-2 transition-colors hover:text-[#525252] hover:underline"
-          >
-            사업자 정보
-          </a>
-        </footer>
+        {/* 사업자 푸터는 __root 글로벌 BusinessFooter(공개 경로)로 이전 — 중복 제거. */}
       </div>
       <BottomNav />
     </>
