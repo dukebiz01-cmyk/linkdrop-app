@@ -111,6 +111,11 @@ export const Route = createFileRoute("/_user/create-wizard")({
       prefillMetadata,
     };
   },
+  // 진입 깜빡임 해소 — beforeLoad(getSession) + loader(is_active_partner_owner RPC) 대기 동안
+  //   이전 라우트(/home 등)가 mount 유지되는 걸 막는다. pendingMs:0 = 즉시 pending 표시,
+  //   pendingComponent = 기존 위저드 스켈레톤(monochrome). 이 라우트에만 적용(전역 X).
+  pendingMs: 0,
+  pendingComponent: () => <CreateDropWizard variant="skeleton" />,
   component: CreateWizardPage,
 });
 
