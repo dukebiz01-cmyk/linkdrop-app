@@ -35,6 +35,7 @@ import { Route as UserInboxRouteImport } from './routes/_user/inbox'
 import { Route as UserHomeRouteImport } from './routes/_user/home'
 import { Route as UserExploreRouteImport } from './routes/_user/explore'
 import { Route as UserCreateWizardRouteImport } from './routes/_user/create-wizard'
+import { Route as UserCreateBuilderRouteImport } from './routes/_user/create-builder'
 import { Route as UserCreateRouteImport } from './routes/_user/create'
 import { Route as ApiDropsIndexRouteImport } from './routes/api/drops/index'
 import { Route as ApiDiscoverIndexRouteImport } from './routes/api/discover/index'
@@ -190,6 +191,11 @@ const UserCreateWizardRoute = UserCreateWizardRouteImport.update({
   path: '/create-wizard',
   getParentRoute: () => UserRoute,
 } as any)
+const UserCreateBuilderRoute = UserCreateBuilderRouteImport.update({
+  id: '/create-builder',
+  path: '/create-builder',
+  getParentRoute: () => UserRoute,
+} as any)
 const UserCreateRoute = UserCreateRouteImport.update({
   id: '/create',
   path: '/create',
@@ -337,6 +343,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/terms': typeof TermsRoute
   '/create': typeof UserCreateRoute
+  '/create-builder': typeof UserCreateBuilderRoute
   '/create-wizard': typeof UserCreateWizardRoute
   '/explore': typeof UserExploreRoute
   '/home': typeof UserHomeRoute
@@ -389,6 +396,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/terms': typeof TermsRoute
   '/create': typeof UserCreateRoute
+  '/create-builder': typeof UserCreateBuilderRoute
   '/create-wizard': typeof UserCreateWizardRoute
   '/explore': typeof UserExploreRoute
   '/home': typeof UserHomeRoute
@@ -445,6 +453,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/terms': typeof TermsRoute
   '/_user/create': typeof UserCreateRoute
+  '/_user/create-builder': typeof UserCreateBuilderRoute
   '/_user/create-wizard': typeof UserCreateWizardRoute
   '/_user/explore': typeof UserExploreRoute
   '/_user/home': typeof UserHomeRoute
@@ -499,6 +508,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/terms'
     | '/create'
+    | '/create-builder'
     | '/create-wizard'
     | '/explore'
     | '/home'
@@ -551,6 +561,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/terms'
     | '/create'
+    | '/create-builder'
     | '/create-wizard'
     | '/explore'
     | '/home'
@@ -606,6 +617,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/terms'
     | '/_user/create'
+    | '/_user/create-builder'
     | '/_user/create-wizard'
     | '/_user/explore'
     | '/_user/home'
@@ -862,6 +874,13 @@ declare module '@tanstack/react-router' {
       path: '/create-wizard'
       fullPath: '/create-wizard'
       preLoaderRoute: typeof UserCreateWizardRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/create-builder': {
+      id: '/_user/create-builder'
+      path: '/create-builder'
+      fullPath: '/create-builder'
+      preLoaderRoute: typeof UserCreateBuilderRouteImport
       parentRoute: typeof UserRoute
     }
     '/_user/create': {
@@ -1125,6 +1144,7 @@ const PartnerRouteWithChildren =
 
 interface UserRouteChildren {
   UserCreateRoute: typeof UserCreateRoute
+  UserCreateBuilderRoute: typeof UserCreateBuilderRoute
   UserCreateWizardRoute: typeof UserCreateWizardRoute
   UserExploreRoute: typeof UserExploreRoute
   UserHomeRoute: typeof UserHomeRoute
@@ -1138,6 +1158,7 @@ interface UserRouteChildren {
 
 const UserRouteChildren: UserRouteChildren = {
   UserCreateRoute: UserCreateRoute,
+  UserCreateBuilderRoute: UserCreateBuilderRoute,
   UserCreateWizardRoute: UserCreateWizardRoute,
   UserExploreRoute: UserExploreRoute,
   UserHomeRoute: UserHomeRoute,
