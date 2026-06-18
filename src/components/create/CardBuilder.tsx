@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Check, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,9 @@ export type BuilderComplete = (data: {
 // 잠금 결정 = 4목적(정보/쿠폰/예약/구매). PURPOSE_FLOW_CONFIG 순회 금지("상담" 누출 방지).
 const PURPOSES: DropPurpose[] = ["정보", "쿠폰", "예약", "구매"];
 
+// SSR 경고 회피 — 클라이언트만 layout effect(점프 전 복원), 서버는 no-op effect.
+const useIsoLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : useEffect;
+
 export function CardBuilder({ onComplete }: { onComplete?: BuilderComplete }) {
   const [url, setUrl] = useState("");
   const [urlStatus, setUrlStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -43,6 +46,8 @@ export function CardBuilder({ onComplete }: { onComplete?: BuilderComplete }) {
   const [publishError, setPublishError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const savingRef = useRef<Promise<{ shareUuid: string; shareUrl: string }> | null>(null);
+  // 칩 탭 시 핀 미리보기 reshape(높이 변화)로 페이지가 점프하지 않도록 스크롤 위치 보존용.
+  const pendingScrollRef = useRef<number | null>(null);
 
   // URL → videoInfo (create-drop-wizard.tsx 의 URL useEffect 패턴 그대로, 공유 헬퍼만 사용).
   useEffect(() => {
@@ -78,6 +83,21 @@ export function CardBuilder({ onComplete }: { onComplete?: BuilderComplete }) {
   }, [url]);
 
   const ai = useMemo(() => aiPreviewFromPurpose(purpose), [purpose]);
+
+  // 칩 탭 = 목적만 변경 + 현재 스크롤 위치 캡처. 미리보기 reshape(=핀 높이 변화)로 인한 점프 방지.
+  function selectPurpose(next: DropPurpose) {
+    if (next === purpose) return;
+    pendingScrollRef.current = typeof window !== "undefined" ? window.scrollY : null;
+    setPurpose(next);
+  }
+
+  // 목적 변경으로 핀 높이가 바뀐 뒤(페인트 전) 원래 스크롤로 복원 → 페이지 점프 제거.
+  useIsoLayoutEffect(() => {
+    if (pendingScrollRef.current != null) {
+      window.scrollTo(0, pendingScrollRef.current);
+      pendingScrollRef.current = null;
+    }
+  }, [purpose]);
 
   // 발행 가능 = 영상 있음 && 정보 목적(이번 단계). 그 외 목적·소스는 다음 단계.
   const canPublish = Boolean(videoInfo) && purpose === "정보";
@@ -172,7 +192,7 @@ export function CardBuilder({ onComplete }: { onComplete?: BuilderComplete }) {
                   key={p}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => setPurpose(p)}
+                  onClick={() => selectPurpose(p)}
                   className={cn(
                     "inline-flex min-h-[36px] items-center rounded-full px-3 py-1.5 text-sm font-bold tracking-ko transition-colors",
                     active
