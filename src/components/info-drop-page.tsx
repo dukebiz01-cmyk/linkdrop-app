@@ -1705,10 +1705,10 @@ export function InfoDropPage({
           <DialogContent className="max-w-[400px] rounded-2xl tracking-ko">
             <DialogHeader>
               <DialogTitle className="text-base font-bold text-text-strong">
-                {safeMaker.name} 소식 구독
+                {safeLocal.name} 소식 구독
               </DialogTitle>
               <DialogDescription className="text-sm font-medium text-text-muted">
-                거부해도 예약·쿠폰 등 서비스 이용엔 영향이 없어요.
+                구독을 하시면 예약·쿠폰 등 다양한 혜택을 받아 보실 수 있어요
               </DialogDescription>
             </DialogHeader>
 
@@ -1726,7 +1726,7 @@ export function InfoDropPage({
                 </span>
               </label>
               <p className="text-[11px] leading-relaxed tracking-ko text-text-subtle">
-                구독하시면 {safeMaker.name}의 다양한 혜택·쿠폰·이벤트를 받아보실 수 있어요.
+                구독하시면 {safeLocal.name}의 다양한 혜택·쿠폰·이벤트를 받아보실 수 있어요.
                 수신거부는 언제든 마이페이지 &gt; 구독한 메이커에서 무료로 가능해요.
               </p>
             </div>
@@ -1759,10 +1759,10 @@ export function InfoDropPage({
           <DialogContent className="max-w-[400px] rounded-2xl tracking-ko">
             <DialogHeader>
               <DialogTitle className="text-base font-bold text-text-strong">
-                {safeMaker.name} 소식 구독 중
+                {safeLocal.name} 소식 구독 중
               </DialogTitle>
               <DialogDescription className="text-sm font-medium text-text-muted">
-                {safeMaker.name}의 소식·혜택을 받고 있어요.
+                {safeLocal.name}의 소식·혜택을 받고 있어요.
               </DialogDescription>
             </DialogHeader>
 
