@@ -4,7 +4,6 @@ import type { DateRange } from "react-day-picker";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { WIZARD_SECONDARY_BUTTON_CLASS } from "@/components/create-wizard-button-styles";
 import {
-  MOCK_RESERVATION_CAMPGROUND_INFO,
   MOCK_RESERVATION_DEFAULTS,
   type ReservationCampgroundInfo,
 } from "@/lib/mock-data";
@@ -22,8 +21,8 @@ export type {
 
 /**
  * 캠핑장 정보 카드 데이터. name 만 필수 — 실매장 드롭은 store.name 만 전달해
- * 매장명만 노출하고 시설(목 출처) UI 는 숨긴다. 목 경로(MOCK_RESERVATION_CAMPGROUND_INFO)는
- * 전체 필드를 채워 그대로 표시(구조적으로 호환).
+ * 매장명만 노출하고 시설(목 출처) UI 는 숨긴다. campgroundInfo 자체가 없거나
+ * name 이 비면 카드를 렌더하지 않는다(가짜 기본값 없음).
  */
 export type CampgroundInfoCardData = Pick<ReservationCampgroundInfo, "name"> &
   Partial<ReservationCampgroundInfo>;
@@ -507,7 +506,7 @@ export function ReservationCalendarPage(props: ReservationCalendarPageProps) {
   if (props.readOnly) {
     return (
       <ReadOnlyReservationCard
-        campgroundInfo={props.campgroundInfo ?? MOCK_RESERVATION_CAMPGROUND_INFO}
+        campgroundInfo={props.campgroundInfo}
         makerAvailableDates={props.makerAvailableDates ?? []}
         partnerSlotEntries={props.partnerSlotEntries}
         reserveCtaLabel={props.reserveCtaLabel}
@@ -522,7 +521,7 @@ export function ReservationCalendarPage(props: ReservationCalendarPageProps) {
 }
 
 function EditableReservationCard({
-  campgroundInfo = MOCK_RESERVATION_CAMPGROUND_INFO,
+  campgroundInfo,
   makerAvailableDates = [],
   partnerSlotEntries,
   reserveCtaLabel,
@@ -615,7 +614,7 @@ function EditableReservationCard({
 
   return (
     <div className={cn("w-full max-w-full space-y-4", className)}>
-      <CampgroundInfoCard info={campgroundInfo} />
+      {campgroundInfo?.name ? <CampgroundInfoCard info={campgroundInfo} /> : null}
 
       <p className="text-xs font-medium tracking-ko text-text-subtle">
         날짜를 두 번 눌러 체크인·체크아웃을 선택하세요
@@ -784,7 +783,7 @@ function ReadOnlyReservationCard({
   onSecondaryAction,
   className,
 }: {
-  campgroundInfo: CampgroundInfoCardData;
+  campgroundInfo?: CampgroundInfoCardData;
   partnerSlotEntries?: Array<{ date: Date; available: number }>;
   makerAvailableDates: ReservationDateItem[];
   reserveCtaLabel?: string;
@@ -842,7 +841,7 @@ function ReadOnlyReservationCard({
 
   return (
     <div className={cn("w-full max-w-full space-y-4", className)}>
-      <CampgroundInfoCard info={campgroundInfo} />
+      {campgroundInfo?.name ? <CampgroundInfoCard info={campgroundInfo} /> : null}
 
       {/* CC#2 (b) mode seam — TODO(date_time_slot): 시간슬롯 분기. 현재 date_range 만. */}
       <div

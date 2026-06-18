@@ -410,6 +410,7 @@ function ReservationCalendarClient(props: {
     <section data-testid="variant-reservation" className="w-full max-w-full">
       <ReservationCalendarPage
         partnerName={props.partnerName}
+        campgroundInfo={props.campgroundInfo}
         makerAvailableDates={props.makerAvailableDates}
         partnerSlotEntries={partnerSlotEntries}
         readOnly={props.readOnly}
