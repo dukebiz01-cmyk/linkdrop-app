@@ -1,7 +1,8 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { HomePageV3 } from "@/components/home-page-v3";
 import { BottomNav } from "@/components/bottom-nav";
-import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
+import { isSupabaseConfigured } from "@/lib/supabase";
+import { getAuthClient } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -22,7 +23,11 @@ export const Route = createFileRoute("/")({
   }),
   beforeLoad: async () => {
     if (!isSupabaseConfigured) return;
-    const { data } = await getSupabase().auth.getSession();
+    // isomorphic 클라 — SSR(서버)에서도 세션을 읽어 랜딩 렌더 전에 /home redirect → flash 제거.
+    //   (브라우저 전용 getSupabase()는 SSR에 document 없어 session=null → 클라에서야 redirect되어 깜빡임.)
+    const supabase = await getAuthClient();
+    if (!supabase) return;
+    const { data } = await supabase.auth.getSession();
     if (data.session) {
       throw redirect({ to: "/home" });
     }
