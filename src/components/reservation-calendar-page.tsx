@@ -20,7 +20,15 @@ export type {
   ReservationCampgroundFacilityGroup,
 } from "@/lib/mock-data";
 
-export function CampgroundInfoCard({ info }: { info: ReservationCampgroundInfo }) {
+/**
+ * 캠핑장 정보 카드 데이터. name 만 필수 — 실매장 드롭은 store.name 만 전달해
+ * 매장명만 노출하고 시설(목 출처) UI 는 숨긴다. 목 경로(MOCK_RESERVATION_CAMPGROUND_INFO)는
+ * 전체 필드를 채워 그대로 표시(구조적으로 호환).
+ */
+export type CampgroundInfoCardData = Pick<ReservationCampgroundInfo, "name"> &
+  Partial<ReservationCampgroundInfo>;
+
+export function CampgroundInfoCard({ info }: { info: CampgroundInfoCardData }) {
   const [showDetails, setShowDetails] = useState(false);
 
   return (
@@ -34,68 +42,78 @@ export function CampgroundInfoCard({ info }: { info: ReservationCampgroundInfo }
       <p className="mt-2 text-base font-extrabold leading-snug tracking-ko text-text-strong">
         {info.name}
       </p>
-      <p className="mt-1 text-sm font-medium tracking-ko text-text-muted">
-        {info.region} · {info.concept}
-      </p>
+      {(info.region || info.concept) && (
+        <p className="mt-1 text-sm font-medium tracking-ko text-text-muted">
+          {[info.region, info.concept].filter(Boolean).join(" · ")}
+        </p>
+      )}
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {info.highlightBadges.map((badge) => (
-          <span
-            key={badge}
-            className="inline-flex max-w-full rounded-lg border border-border bg-bg px-2 py-1 text-xs font-semibold tracking-ko text-text-strong"
-          >
-            {badge}
-          </span>
-        ))}
-      </div>
-
-      <button
-        type="button"
-        aria-expanded={showDetails}
-        data-testid="campground-facilities-toggle"
-        className={cn(
-          WIZARD_SECONDARY_BUTTON_CLASS,
-          "mt-3 h-11 min-h-[44px] text-sm font-bold",
-        )}
-        onClick={() => setShowDetails((open) => !open)}
-      >
-        {showDetails ? "시설 정보 닫기" : "시설 정보 보기"}
-      </button>
-
-      {showDetails && (
-        <div
-          data-testid="campground-facilities-detail"
-          className="mt-3 w-full max-w-full space-y-4 rounded-xl border border-border bg-bg p-3"
-        >
-          {info.facilityGroups.map((group) => (
-            <div key={group.title}>
-              <p className="text-xs font-bold tracking-ko text-text-strong">{group.title}</p>
-              <ul className="mt-2 space-y-1.5">
-                {group.items.map((item) => (
-                  <li
-                    key={`${group.title}-${item.label}`}
-                    className="text-sm font-medium tracking-ko text-text-strong"
-                  >
-                    <span className="text-text-muted">{item.label}</span>
-                    <span className="text-text-strong">: {item.value}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+      {info.highlightBadges && info.highlightBadges.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {info.highlightBadges.map((badge) => (
+            <span
+              key={badge}
+              className="inline-flex max-w-full rounded-lg border border-border bg-bg px-2 py-1 text-xs font-semibold tracking-ko text-text-strong"
+            >
+              {badge}
+            </span>
           ))}
-          <p className="border-t border-border pt-3 text-xs font-medium leading-relaxed tracking-ko text-text-subtle">
-            {info.sourceLabel} · {info.sourceNote}
-          </p>
-          {/* 펼친 콘텐츠 하단 접기 — 긴 시설 정보를 스크롤한 뒤에도 닫기 수단 확보(상단 토글 보조). */}
+        </div>
+      )}
+
+      {info.facilityGroups && info.facilityGroups.length > 0 && (
+        <>
           <button
             type="button"
-            data-testid="campground-facilities-collapse"
-            onClick={() => setShowDetails(false)}
-            className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border bg-surface text-sm font-bold tracking-ko text-text-muted transition-colors hover:border-text-muted hover:text-text-strong"
+            aria-expanded={showDetails}
+            data-testid="campground-facilities-toggle"
+            className={cn(
+              WIZARD_SECONDARY_BUTTON_CLASS,
+              "mt-3 h-11 min-h-[44px] text-sm font-bold",
+            )}
+            onClick={() => setShowDetails((open) => !open)}
           >
-            접기
+            {showDetails ? "시설 정보 닫기" : "시설 정보 보기"}
           </button>
-        </div>
+
+          {showDetails && (
+            <div
+              data-testid="campground-facilities-detail"
+              className="mt-3 w-full max-w-full space-y-4 rounded-xl border border-border bg-bg p-3"
+            >
+              {info.facilityGroups.map((group) => (
+                <div key={group.title}>
+                  <p className="text-xs font-bold tracking-ko text-text-strong">{group.title}</p>
+                  <ul className="mt-2 space-y-1.5">
+                    {group.items.map((item) => (
+                      <li
+                        key={`${group.title}-${item.label}`}
+                        className="text-sm font-medium tracking-ko text-text-strong"
+                      >
+                        <span className="text-text-muted">{item.label}</span>
+                        <span className="text-text-strong">: {item.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              {(info.sourceLabel || info.sourceNote) && (
+                <p className="border-t border-border pt-3 text-xs font-medium leading-relaxed tracking-ko text-text-subtle">
+                  {[info.sourceLabel, info.sourceNote].filter(Boolean).join(" · ")}
+                </p>
+              )}
+              {/* 펼친 콘텐츠 하단 접기 — 긴 시설 정보를 스크롤한 뒤에도 닫기 수단 확보(상단 토글 보조). */}
+              <button
+                type="button"
+                data-testid="campground-facilities-collapse"
+                onClick={() => setShowDetails(false)}
+                className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border bg-surface text-sm font-bold tracking-ko text-text-muted transition-colors hover:border-text-muted hover:text-text-strong"
+              >
+                접기
+              </button>
+            </div>
+          )}
+        </>
       )}
     </section>
   );
@@ -166,7 +184,7 @@ export type ReservationSecondaryAction = "phone" | "sms" | "directions";
 
 export interface ReservationCalendarPageProps {
   partnerName: string;
-  campgroundInfo?: ReservationCampgroundInfo;
+  campgroundInfo?: CampgroundInfoCardData;
   /** 메이커가 Create Wizard 에서 보낸 예약 가능 날짜 — 달력 마킹·상세 목록용. */
   makerAvailableDates?: ReservationDateItem[];
   /**
@@ -766,7 +784,7 @@ function ReadOnlyReservationCard({
   onSecondaryAction,
   className,
 }: {
-  campgroundInfo: ReservationCampgroundInfo;
+  campgroundInfo: CampgroundInfoCardData;
   partnerSlotEntries?: Array<{ date: Date; available: number }>;
   makerAvailableDates: ReservationDateItem[];
   reserveCtaLabel?: string;

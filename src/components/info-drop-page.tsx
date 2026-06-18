@@ -46,13 +46,12 @@ import {
 import { PUBLIC_DROP_CTAS, type PublicDropCta } from "@/components/public-drop-ctas";
 import type { DropPurpose } from "@/lib/types";
 import {
-  MOCK_RESERVATION_CAMPGROUND_INFO,
   MOCK_RESERVATION_SECTION_GUIDE,
   type DropViewVariant,
-  type ReservationCampgroundInfo,
 } from "@/lib/mock-data";
 import {
   ReservationCalendarPage,
+  type CampgroundInfoCardData,
   type ReservationSecondaryAction,
   type ReservationSelection,
 } from "@/components/reservation-calendar-page";
@@ -327,7 +326,7 @@ type SlotAvailableRow = {
  */
 function ReservationCalendarClient(props: {
   partnerName: string;
-  campgroundInfo?: ReservationCampgroundInfo;
+  campgroundInfo?: CampgroundInfoCardData;
   makerAvailableDates?: ReservationDateItem[];
   readOnly?: boolean;
   /** v7.1 — 매장별 슬롯 가용일. partnerId 있으면 get_available_slots 호출해 modifier 로 표시. */
@@ -825,7 +824,9 @@ export function InfoDropPage({
 
   // v7.2 — sticky 바는 funnelCoupon 있을 때만 표시. 없으면 본문 pb 축소.
   // Phase 1 통합 — 교집합(isCombined)은 sticky 제거(보조 "쿠폰만 받기"로 대체) → pb 도 축소.
-  const hasStickyBar = Boolean(funnelCoupon && onReserveAndClaim && !isCombined);
+  // FIX — funnelCoupon(detail.coupon, 매장 활성쿠폰)이 정보/구매 드롭에도 붙어 새는 케이스 차단:
+  //   sticky "쿠폰 받기"는 쿠폰 드롭(isCoupon)에서만. (주석상 "정보/구매/상담 드롭 = sticky 없음" 의도 강제.)
+  const hasStickyBar = Boolean(funnelCoupon && onReserveAndClaim && !isCombined && isCoupon);
 
   return (
     <div
@@ -1027,7 +1028,7 @@ export function InfoDropPage({
             const calendarPanel = showCalendar ? (
               <ReservationCalendarClient
                 partnerName={safeLocal.name}
-                campgroundInfo={MOCK_RESERVATION_CAMPGROUND_INFO}
+                campgroundInfo={{ name: safeLocal.name }}
                 makerAvailableDates={reservationDates}
                 partnerId={partnerId}
                 initialSlots={initialSlots}
@@ -1678,7 +1679,7 @@ export function InfoDropPage({
       {/* v7.2 5b — sticky 하단 바: funnelCoupon + onReserveAndClaim 있을
             때만 단일 액션. 카카오톡 공유는 위 공유 블록으로 이전 (sticky 미사용).
             정보/구매/상담 드롭 = sticky 없음. */}
-      {funnelCoupon && onReserveAndClaim && !isCombined ? (
+      {funnelCoupon && onReserveAndClaim && !isCombined && isCoupon ? (
         <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#E5E7EB] bg-white">
           <div className="mx-auto w-full max-w-[480px] px-6 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
             <button
