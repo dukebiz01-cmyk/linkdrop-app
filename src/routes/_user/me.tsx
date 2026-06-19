@@ -12,6 +12,7 @@ import {
   BarChart3,
   Wallet,
   Send,
+  Pencil,
 } from "lucide-react";
 // Wallet = 쿠폰 지갑 섹션 헤더. Send = 받은 쿠폰 메이커, Heart = 구독한 메이커. Gift = 증정 쿠폰 라벨.
 import { Toaster } from "@/components/ui/sonner";
@@ -776,6 +777,23 @@ function MePage() {
                       >
                         <BarChart3 className="size-4" strokeWidth={2} />
                         성과 보기
+                        <ChevronRight className="size-4" strokeWidth={2} />
+                      </button>
+                    ) : null}
+                    {/* 수정 — curator_message 라이트 편집. share_uuid 있을 때만(owner 전원). */}
+                    {d.share_uuid ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate({
+                            to: "/card-edit/$shareUuid",
+                            params: { shareUuid: d.share_uuid! },
+                          })
+                        }
+                        className="mt-2 flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-[#0A0A0A] hover:underline"
+                      >
+                        <Pencil className="size-4" strokeWidth={2} />
+                        수정
                         <ChevronRight className="size-4" strokeWidth={2} />
                       </button>
                     ) : null}
