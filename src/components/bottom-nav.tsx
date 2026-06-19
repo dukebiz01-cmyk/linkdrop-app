@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, Compass, Sparkles, User } from "lucide-react";
+import { Home, Compass, Plus, User } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -42,7 +42,7 @@ const TABS: NavTab[] = [
   {
     id: "studio",
     label: "스튜디오",
-    Icon: Sparkles,
+    Icon: Plus,
     to: "/studio",
     match: (p) => p.startsWith("/studio"),
   },
@@ -73,21 +73,9 @@ export function BottomNav() {
             const iconStroke = active ? 2.25 : 1.75;
             const labelWeight = active ? "font-bold" : "font-medium";
 
-            // 스튜디오 = 1차 액션 강조: 검정 채운 원(36px) 안에 흰 아이콘. 다른 탭보다
-            // 시각적으로 무겁게 — active 상태와 무관하게 항상 강조. 라벨 "스튜디오".
-            const isStudio = tab.id === "studio";
-            const content = isStudio ? (
-              <>
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0A0A0A] transition-transform duration-150 group-active:scale-90">
-                  <tab.Icon className="h-5 w-5 text-white" strokeWidth={2.25} />
-                </span>
-                <span
-                  className={`text-[11px] tracking-ko transition-colors ${labelColor} ${labelWeight}`}
-                >
-                  {tab.label}
-                </span>
-              </>
-            ) : (
+            // 모든 탭 동일 스타일 — active 시 상단 인디케이터 바 + 일반 아이콘.
+            //   (스튜디오 검정 원 강조 분기 제거 — 홈/탐색/나와 동일 비중.)
+            const content = (
               <>
                 {active ? (
                   <span className="absolute top-0 h-[3px] w-8 rounded-full bg-[#0A0A0A]" />
