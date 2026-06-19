@@ -1,7 +1,8 @@
-import { Sparkles, Calendar, Users, ChevronRight, ArrowRight, Ticket } from "lucide-react";
+import { Sparkles, Calendar, Users, ChevronRight, ArrowRight, Ticket, Send } from "lucide-react";
 import { StoreProfileCard } from "@/components/partner/StoreProfileCard";
 import { DropFeedCard } from "@/components/drop-feed-card";
 import type { DropFeedItem } from "@/components/home-page";
+import { reshareDrop } from "@/lib/reshare-drop";
 
 // Slice 4a — 역할 홈 골격. 만들기 폼(HomePageV3) 대체: 홈 = 역할 랜딩 + 다이제스트.
 //   카드 생성 진입은 스튜디오 탭으로 일원화 — 홈엔 "카드 만들기" CTA 없음(중복 제거).
@@ -44,6 +45,8 @@ export type HomeCoupon = { claimCode: string; title: string; expiresAt: string |
 export type UserHomeData = {
   expiringCoupons: HomeCoupon[];
   followedDrops: DropFeedItem[];
+  /** 내가(로그인 유저가) sender 로 공유한 카드 — 공유 중심 유저홈 1차. */
+  sentDrops: DropFeedItem[];
 };
 
 function expiryLabel(iso: string | null): string {
@@ -162,7 +165,9 @@ export function RoleHome({
   if (!isBusiness || !merchant) {
     const coupons = user?.expiringCoupons ?? [];
     const followedDrops = user?.followedDrops ?? [];
-    const bothEmpty = coupons.length === 0 && followedDrops.length === 0;
+    const sentDrops = user?.sentDrops ?? [];
+    const bothEmpty =
+      coupons.length === 0 && followedDrops.length === 0 && sentDrops.length === 0;
     return (
       <div className="mx-auto max-w-md space-y-6 px-6 pt-6 pb-4">
         <header>
@@ -206,7 +211,34 @@ export function RoleHome({
           </section>
         ) : null}
 
-        {/* 2. 구독 메이커 새 카드 (있으면) */}
+        {/* 2. 내가 공유한 카드 (있으면) — 공유 중심 유저홈. 카드에서 바로 재공유(reshareDrop). */}
+        {sentDrops.length > 0 ? (
+          <section>
+            <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
+              <Send className="size-4" strokeWidth={2} />내가 공유한 카드
+            </h2>
+            <div className="space-y-3">
+              {sentDrops.map((drop) => (
+                <DropFeedCard
+                  key={drop.shareUuid}
+                  {...drop}
+                  onClick={() => onOpenDrop(drop.shareUuid)}
+                  onCtaClick={() => onOpenDrop(drop.shareUuid)}
+                  onShare={() =>
+                    void reshareDrop({
+                      shareUuid: drop.shareUuid,
+                      title: drop.title,
+                      imageUrl: drop.videoThumbnailUrl,
+                      purpose: drop.intent,
+                    })
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {/* 3. 구독 메이커 새 카드 (있으면) */}
         {followedDrops.length > 0 ? (
           <section>
             <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
