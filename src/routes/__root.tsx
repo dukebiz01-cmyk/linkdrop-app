@@ -128,7 +128,14 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
-      {!isApp && <BusinessFooter />}
+      {!isApp &&
+        (pathname === "/" ? (
+          <div className="pb-[calc(6rem+env(safe-area-inset-bottom))]">
+            <BusinessFooter />
+          </div>
+        ) : (
+          <BusinessFooter />
+        ))}
     </QueryClientProvider>
   );
 }
