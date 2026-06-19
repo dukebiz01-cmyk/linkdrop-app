@@ -83,7 +83,7 @@ export function PurposePickerGrid({
     ? WIZARD_PURPOSES
     : WIZARD_PURPOSES.filter((p) => p.purpose === "정보");
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="flex flex-col gap-2">
       {visiblePurposes.map((item) => {
         const Icon = item.icon;
         const isSelected = selected === item.purpose;
@@ -97,15 +97,27 @@ export function PurposePickerGrid({
             type="button"
             onClick={() => onSelect(item.purpose)}
             className={cn(
-              "group relative flex min-h-[112px] flex-col items-start justify-between gap-2 overflow-hidden rounded-2xl border border-border p-4 text-left transition-all duration-150 ease-out",
+              "group flex w-full items-center gap-3 rounded-lg border border-border p-3 text-left transition-all duration-150 ease-out",
               "hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
               isSelected && "border-[#0A0A0A] bg-[#FAFAFA]/40 ring-1 ring-[#0A0A0A]/25",
             )}
           >
+            {/* 좌측 아이콘 박스 */}
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface">
+              <Icon className="size-5 text-text-muted" strokeWidth={2} />
+            </span>
+            {/* 가운데 — 제목 + 설명 1줄 */}
+            <div className="min-w-0 flex-1">
+              <span className="text-sm font-medium tracking-ko text-text-strong">{item.label}</span>
+              <p className="mt-0.5 line-clamp-1 text-xs font-medium tracking-ko text-text-muted">
+                {item.description}
+              </p>
+            </div>
+            {/* AI 추천 pill — 실제 suggest-purpose 결과 있을 때만(quick-path §4) */}
             {showSuggestedBadge && (
               <span
                 className={cn(
-                  "absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-semibold tracking-ko",
+                  "inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-semibold tracking-ko",
                   suggestionConfidence === "high"
                     ? "bg-[#0A0A0A] text-white"
                     : "border border-[#0A0A0A] bg-white text-[#0A0A0A]",
@@ -115,23 +127,8 @@ export function PurposePickerGrid({
                 AI 추천
               </span>
             )}
-            {/* quick-path §4 — '근거 없는' 기본 AI 추천 배지 제거. 실제 suggest-purpose
-                결과(suggestedPurpose)가 있을 때만 위 showSuggestedBadge 로 노출. */}
-            <span
-              aria-hidden
-              className={cn(
-                "absolute inset-y-0 left-0 w-1 transition-opacity duration-150",
-                item.stripClass,
-                isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-              )}
-            />
-            <Icon className="size-6 text-text-muted" strokeWidth={2} />
-            <div>
-              <span className="text-sm font-bold tracking-ko text-text-strong">{item.label}</span>
-              <p className="mt-1 text-xs font-medium leading-snug tracking-ko text-text-muted">
-                {item.description}
-              </p>
-            </div>
+            {/* 우측 — 선택 시에만 체크 */}
+            {isSelected && <Check className="size-5 shrink-0 text-[#0A0A0A]" strokeWidth={2} />}
           </button>
         );
       })}
@@ -255,14 +252,14 @@ export function Step2PurposeSelect({
   }
 
   return (
-    <main className="overflow-y-auto px-6 pb-6 pt-2">
+    <main className="overflow-y-auto px-6 pb-4 pt-2">
       <StepBadge n={1} />
       <CardShell config={purposeCardConfig}>
         <h1 className="mt-3 text-2xl font-extrabold leading-snug tracking-ko text-text-strong">
           이 카드의 목적을 선택하세요
         </h1>
 
-        <div className="mt-6">
+        <div className="mt-4">
           <PurposePickerGrid
             selected={selected}
             onSelect={onSelect}
