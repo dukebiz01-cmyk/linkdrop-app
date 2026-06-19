@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   Video,
@@ -12,18 +12,36 @@ import {
   TrendingUp,
   Rocket,
   ChevronRight,
+  Lock,
 } from "lucide-react";
 import { CreatorCoachCard } from "@/components/creator-coach-card";
+import { getAuthClient } from "@/lib/auth-context";
 
 // 스튜디오 허브 — 하단 탭 3번째("스튜디오") 진입 화면. 상단=AI 코치, 아래 3섹션:
 //   새 카드 만들기(목적-first) · 가져오기(큐레이션) · 내 카드 강화.
-//   ★ loader 없음 — _user beforeLoad 가 auth 단독 처리(세션/userId throw 금지 → 리다이렉트 루프 방지).
+//   ★ loader = isBusiness 판별만(쿠폰·예약/커머스 게이트용). auth redirect throw 금지 —
+//      _user beforeLoad 가 auth 단독 처리(세션/userId throw 금지 → 리다이렉트 루프 방지).
 //   목적 버튼은 /create-wizard?purpose= 로 목적을 프리셀렉트(create-wizard validateSearch + PURPOSE_EN_TO_KO).
 //     · info=정보 / coupon=혜택·예약 / purchase=상품 판매. 비사업자 게이팅은 위저드 자체 책임(여기서 건드리지 않음).
 //   도구 내부 기능이 아직 없으면 placeholder(준비 중 토스트).
 
+type StudioLoaderData = { isBusiness: boolean };
+
 export const Route = createFileRoute("/_user/studio")({
   head: () => ({ meta: [{ title: "스튜디오 — LinkDrop" }] }),
+  // 비즈니스(approved 파트너) 판별 — 쿠폰·예약/커머스 버튼 게이트용(home.tsx loader 패턴).
+  //   데이터 조회만 — redirect throw 금지(버튼 깜빡임 방지 + 리다이렉트 루프 방지).
+  loader: async (): Promise<StudioLoaderData> => {
+    const supabase = await getAuthClient();
+    if (!supabase) return { isBusiness: false };
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user.id ?? null;
+    if (!userId) return { isBusiness: false };
+    const { data: isBusinessRaw } = await supabase.rpc("is_active_partner_owner", {
+      _user_id: userId,
+    });
+    return { isBusiness: Boolean(isBusinessRaw) };
+  },
   component: StudioPage,
 });
 
@@ -37,6 +55,8 @@ type Tool = {
   to?: "/create-wizard" | "/explore" | "/partner/promotion";
   /** /create-wizard 진입 시 목적 프리셀렉트(create-wizard ?purpose=). */
   purpose?: WizardPurpose;
+  /** 비즈니스(approved 파트너) 전용 — 아니면 잠금 + 사업자 등록 유도(/partner/register). */
+  gated?: boolean;
 };
 
 type ToolSection = { title: string; tools: Tool[] };
@@ -47,8 +67,8 @@ const SECTIONS: ToolSection[] = [
     tools: [
       { label: "영상 가져오기", Icon: Video, to: "/create-wizard" }, // 기존 제작 흐름 연결(목적 미지정)
       { label: "정보", Icon: Info, to: "/create-wizard", purpose: "info" },
-      { label: "쿠폰·예약", Icon: Ticket, to: "/create-wizard", purpose: "coupon" },
-      { label: "커머스", Icon: ShoppingBag, to: "/create-wizard", purpose: "purchase" },
+      { label: "쿠폰·예약", Icon: Ticket, to: "/create-wizard", purpose: "coupon", gated: true },
+      { label: "커머스", Icon: ShoppingBag, to: "/create-wizard", purpose: "purchase", gated: true },
     ],
   },
   {
@@ -86,7 +106,34 @@ function ToolInner({ Icon, label }: { Icon: typeof Video; label: string }) {
   );
 }
 
-function ToolItem({ tool }: { tool: Tool }) {
+function ToolItem({ tool, isBusiness }: { tool: Tool; isBusiness: boolean }) {
+  const navigate = useNavigate();
+
+  // 비즈니스 전용 게이트 — approved 파트너 아니면 잠금 + 사업자 등록 유도(/partner/register).
+  //   백엔드 v7.4 게이트와 정합: 비-파트너는 정보 외 purpose 거부 → 위저드 헛수고 사전 차단.
+  //   잠금 UI = 랜딩(HomePageV3) 패턴 재현(dimmed + Lock + "사업자 전용").
+  if (tool.gated && !isBusiness) {
+    return (
+      <button
+        type="button"
+        onClick={() => void navigate({ to: "/partner/register" })}
+        className={`${TOOL_BTN_CLASS} bg-[#FAFAFA] opacity-70`}
+        aria-label={`${tool.label} — 사업자 전용`}
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#F5F5F5]">
+          <tool.Icon className="size-[18px] text-[#0A0A0A]" strokeWidth={2} />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-ko text-[#0A0A0A]">
+          {tool.label}
+        </span>
+        <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[#E5E5E5] px-2 py-0.5 text-[10px] font-semibold text-[#A3A3A3]">
+          <Lock className="size-2.5" strokeWidth={2.5} />
+          사업자 전용
+        </span>
+      </button>
+    );
+  }
+
   // 목적 프리셀렉트 — /create-wizard?purpose= (create-wizard validateSearch 가 purpose 수용).
   if (tool.to === "/create-wizard" && tool.purpose) {
     return (
@@ -112,6 +159,7 @@ function ToolItem({ tool }: { tool: Tool }) {
 }
 
 function StudioPage() {
+  const { isBusiness } = Route.useLoaderData();
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#F8FAFC] tracking-ko pb-12">
       <header className="flex items-center justify-between border-b border-[#F1F5F9] bg-white px-5 py-4">
@@ -132,7 +180,7 @@ function StudioPage() {
             <h2 className="text-sm font-bold tracking-ko text-[#0A0A0A]">{section.title}</h2>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {section.tools.map((tool) => (
-                <ToolItem key={tool.label} tool={tool} />
+                <ToolItem key={tool.label} tool={tool} isBusiness={isBusiness} />
               ))}
             </div>
           </section>
