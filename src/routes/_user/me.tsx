@@ -19,6 +19,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
 import { shareToKakao } from "@/lib/kakao";
+import { reshareDrop } from "@/lib/reshare-drop";
 import {
   getCouponDisplayStatus,
   isCouponUsable,
@@ -794,6 +795,25 @@ function MePage() {
                       >
                         <Pencil className="size-4" strokeWidth={2} />
                         수정
+                        <ChevronRight className="size-4" strokeWidth={2} />
+                      </button>
+                    ) : null}
+                    {/* 재발송(공유) — 기존 카드 카톡 재공유. share_uuid 있을 때만(owner 전원). reshareDrop 재사용. */}
+                    {d.share_uuid ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void reshareDrop({
+                            shareUuid: d.share_uuid!,
+                            title: d.source?.title ?? "(제목 없음)",
+                            imageUrl: d.source?.thumbnail_url ?? undefined,
+                            purpose: d.purpose ?? undefined,
+                          })
+                        }
+                        className="mt-2 flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-[#0A0A0A] hover:underline"
+                      >
+                        <Send className="size-4" strokeWidth={2} />
+                        공유
                         <ChevronRight className="size-4" strokeWidth={2} />
                       </button>
                     ) : null}
