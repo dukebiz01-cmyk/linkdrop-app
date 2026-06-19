@@ -55,3 +55,4 @@ secrets/
 *.njsproj
 *.sln
 *.sw?
+supabase/.temp/
