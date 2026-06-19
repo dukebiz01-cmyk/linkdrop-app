@@ -152,8 +152,10 @@ export const Route = createFileRoute("/_user/home")({
 
     // 새 예약 — pending 만, 최근순 상위 N (partner.reservations.tsx 와 동일 status 필터).
     const reservationRows = (reservationRes.data as ReservationRpcRow[] | null) ?? [];
-    const newReservations: HomeReservation[] = reservationRows
-      .filter((r) => r.status === "pending")
+    const pendingReservations = reservationRows.filter((r) => r.status === "pending");
+    // 배지용 pending 총개수(상위 N 리스트와 별개 — 3건 초과해도 실제 개수 표시).
+    const newReservationsCount = pendingReservations.length;
+    const newReservations: HomeReservation[] = pendingReservations
       .slice(0, RESERVATION_LIMIT)
       .map((r) => ({
         reservationId: r.reservation_id,
@@ -175,6 +177,7 @@ export const Route = createFileRoute("/_user/home")({
       tier: partner.verification_status === "approved" ? "biz" : "pb",
       guide,
       newReservations,
+      newReservationsCount,
       proposals,
     };
 

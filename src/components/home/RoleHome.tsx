@@ -34,6 +34,8 @@ export type MerchantHomeData = {
   tier: "biz" | "pb";
   guide: HomeGuide;
   newReservations: HomeReservation[];
+  /** 배지용 pending 예약 총개수(newReservations 상위 N 와 별개). */
+  newReservationsCount: number;
   proposals: HomeProposal[];
 };
 
@@ -249,7 +251,13 @@ export function RoleHome({
       {merchant.newReservations.length > 0 ? (
         <section>
           <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-            <Calendar className="size-4" strokeWidth={2} />새 예약 {merchant.newReservations.length}
+            <Calendar className="size-4" strokeWidth={2} />
+            새 예약
+            {merchant.newReservationsCount > 0 ? (
+              <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#0A0A0A] px-1.5 text-[11px] font-bold text-white">
+                {merchant.newReservationsCount}
+              </span>
+            ) : null}
           </h2>
           <ul className="space-y-2">
             {merchant.newReservations.map((r) => (

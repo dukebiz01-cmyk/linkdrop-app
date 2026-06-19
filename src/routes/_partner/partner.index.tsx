@@ -54,6 +54,8 @@ type LoaderData = {
   address: string | null;
   subscriberCount: number; // maker_follows active count
   activeCoupons: AllianceActiveCoupon[];
+  // 예약관리 메뉴 배지 — 미확인(pending) 예약 개수.
+  pendingReservationCount: number;
   // 받은 제휴 요청 (pending).
   incomingRequests: IncomingRequest[];
   // 내 동맹 (accepted).
@@ -74,6 +76,7 @@ export const Route = createFileRoute("/_partner/partner/")({
       address: null,
       subscriberCount: 0,
       activeCoupons: [],
+      pendingReservationCount: 0,
       incomingRequests: [],
       allies: [],
     };
@@ -110,6 +113,7 @@ export const Route = createFileRoute("/_partner/partner/")({
       { data: majors },
       { data: incomingRaw },
       { data: acceptedRaw },
+      { data: reservationsRaw },
     ] = await Promise.all([
       supabase
         .from("maker_follows")
@@ -134,7 +138,13 @@ export const Route = createFileRoute("/_partner/partner/")({
         )
         .eq("status", "accepted")
         .or(`requester_partner_id.eq.${partner.id},target_partner_id.eq.${partner.id}`),
+      // 예약관리 메뉴 pending 배지 — 기존 RPC 재사용(신규 RPC 0). 전체 반환 → pending 카운트.
+      supabase.rpc("get_partner_reservations", { p_partner_id: partner.id }),
     ]);
+
+    const pendingReservationCount = (
+      (reservationsRaw as { status: string | null }[] | null) ?? []
+    ).filter((r) => r.status === "pending").length;
 
     const majorMap = new Map(
       ((majors as { code: string; label: string }[] | null) ?? []).map((m) => [m.code, m.label]),
@@ -221,6 +231,7 @@ export const Route = createFileRoute("/_partner/partner/")({
       address: partner.address ?? null,
       subscriberCount: subscriberCount ?? 0,
       activeCoupons: (activeCouponsRaw as AllianceActiveCoupon[] | null) ?? [],
+      pendingReservationCount,
       incomingRequests,
       allies,
     };
@@ -517,7 +528,15 @@ function PartnerHome() {
               <p className="mt-0.5 text-xs text-[#64748B]">예약·캘린더</p>
             </div>
           </div>
-          <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
+          <span className="flex items-center gap-2">
+            {/* 미확인(pending) 예약 count 배지 — 0 이면 숨김. 모노크롬. */}
+            {data.pendingReservationCount > 0 ? (
+              <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#0A0A0A] px-1.5 text-[11px] font-bold text-white">
+                {data.pendingReservationCount}
+              </span>
+            ) : null}
+            <ChevronRight className="size-5 text-[#94A3B8]" strokeWidth={2} />
+          </span>
         </Link>
       </div>
 
