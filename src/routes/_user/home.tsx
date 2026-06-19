@@ -192,7 +192,6 @@ function HomeRoute() {
       isBusiness={isBusiness}
       merchant={merchant}
       user={user}
-      onCreate={() => void navigate({ to: "/create-wizard" })}
       onGoResults={() => void navigate({ to: "/partner/results" })}
       onGoReservations={() => void navigate({ to: "/partner/reservations" })}
       onGoProposals={() => void navigate({ to: "/partner" })}

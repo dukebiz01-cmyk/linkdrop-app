@@ -1,10 +1,10 @@
-import { Sparkles, Calendar, Users, Plus, ChevronRight, ArrowRight, Ticket } from "lucide-react";
+import { Sparkles, Calendar, Users, ChevronRight, ArrowRight, Ticket } from "lucide-react";
 import { StoreProfileCard } from "@/components/partner/StoreProfileCard";
 import { DropFeedCard } from "@/components/drop-feed-card";
 import type { DropFeedItem } from "@/components/home-page";
 
 // Slice 4a — 역할 홈 골격. 만들기 폼(HomePageV3) 대체: 홈 = 역할 랜딩 + 다이제스트.
-//   창작 기능은 만들기 탭(/create-wizard)로 일원화 — 홈엔 "카드 만들기" CTA만.
+//   카드 생성 진입은 스튜디오 탭으로 일원화 — 홈엔 "카드 만들기" CTA 없음(중복 제거).
 //   상인 홈만 채우고(오늘의 AI·새 예약·제안·명함), 유저 홈은 placeholder(4b에서 채움).
 //   항목 없으면 블록 숨김(빈 박스 방지) · 한정 개수 · 무한스크롤 없음(끝 있음).
 
@@ -137,24 +137,10 @@ function TodayAiCard({ guide, onGoResults }: { guide: HomeGuide; onGoResults: ()
   );
 }
 
-function CreateCardCta({ onCreate }: { onCreate: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onCreate}
-      className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-5 text-base font-bold tracking-ko text-white transition-colors hover:bg-[#171717]"
-    >
-      <Plus className="size-5" strokeWidth={2.25} />
-      카드 만들기
-    </button>
-  );
-}
-
 export function RoleHome({
   isBusiness,
   merchant,
   user,
-  onCreate,
   onGoResults,
   onGoReservations,
   onGoProposals,
@@ -164,7 +150,6 @@ export function RoleHome({
   isBusiness: boolean;
   merchant: MerchantHomeData | null;
   user: UserHomeData | null;
-  onCreate: () => void;
   onGoResults: () => void;
   onGoReservations: () => void;
   onGoProposals: () => void;
@@ -244,9 +229,6 @@ export function RoleHome({
             영상 링크 하나로 카드를 만들어 친구에게 보내보세요.
           </p>
         ) : null}
-
-        {/* 3. 카드 만들기 CTA (항상) */}
-        <CreateCardCta onCreate={onCreate} />
       </div>
     );
   }
@@ -336,9 +318,6 @@ export function RoleHome({
         activeCoupons={[]}
         note="내 매장 명함"
       />
-
-      {/* 5. 카드 만들기 CTA */}
-      <CreateCardCta onCreate={onCreate} />
     </div>
   );
 }
