@@ -1,5 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MoreVertical, MapPin, ExternalLink } from "lucide-react";
+import { MoreVertical, MapPin, ExternalLink, Send } from "lucide-react";
 
 export interface DropFeedCardProps {
   shareUuid: string;
@@ -33,6 +33,8 @@ export interface DropFeedCardProps {
   };
   onClick?: () => void;
   onCtaClick?: () => void;
+  /** 있으면 메이커 행 우측에 "공유"(카톡 재공유) 버튼 노출. 탐색에서만 주입(목적 무관). */
+  onShare?: () => void;
 }
 
 function getIntentLabel(intent: DropFeedCardProps["intent"]): string {
@@ -113,6 +115,7 @@ export function DropFeedCard({
   creator,
   onClick,
   onCtaClick,
+  onShare,
 }: DropFeedCardProps) {
   const metaText =
     intent === "coupon" && remainingCoupons
@@ -144,16 +147,32 @@ export function DropFeedCard({
             <span className="text-xs text-[#A3A3A3]">{maker.droppedAgo}</span>
           </div>
         </div>
-        <button
-          className="flex h-8 w-8 items-center justify-center rounded text-[#A3A3A3] transition-colors hover:bg-[#F5F5F5]"
-          onClick={(e) => {
-            e.stopPropagation();
-            console.log("[DropFeedCard] More menu clicked:", shareUuid);
-          }}
-          aria-label="더 보기"
-        >
-          <MoreVertical className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          {/* 공유(카톡 재공유) — 탐색에서만(onShare 주입 시), 목적 무관. 카드 본문 열기 방지 stopPropagation. */}
+          {onShare && (
+            <button
+              className="flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-[#0A0A0A] transition-colors hover:bg-[#F5F5F5]"
+              onClick={(e) => {
+                e.stopPropagation();
+                onShare();
+              }}
+              aria-label="공유"
+            >
+              <Send className="h-4 w-4" strokeWidth={2} />
+              공유
+            </button>
+          )}
+          <button
+            className="flex h-8 w-8 items-center justify-center rounded text-[#A3A3A3] transition-colors hover:bg-[#F5F5F5]"
+            onClick={(e) => {
+              e.stopPropagation();
+              console.log("[DropFeedCard] More menu clicked:", shareUuid);
+            }}
+            aria-label="더 보기"
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {/* Video thumbnail */}

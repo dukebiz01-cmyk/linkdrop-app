@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { getAuthClient } from "@/lib/auth-context";
 import { DropFeedCard } from "@/components/drop-feed-card";
 import { getDiscoverDrops } from "@/lib/feed-queries";
+import { reshareDrop } from "@/lib/reshare-drop";
 import type { DropFeedItem } from "@/components/home-page";
 
 // 탐색 = 발견 전용(pull). 공개 published 카드(getDiscoverDrops) 피드만.
@@ -48,6 +49,14 @@ function ExplorePage() {
               {...drop}
               onClick={() => handleOpenDrop(drop.shareUuid)}
               onCtaClick={() => handleOpenDrop(drop.shareUuid)}
+              onShare={() =>
+                void reshareDrop({
+                  shareUuid: drop.shareUuid,
+                  title: drop.title,
+                  imageUrl: drop.videoThumbnailUrl,
+                  purpose: drop.intent,
+                })
+              }
             />
           ))}
         </div>
