@@ -106,7 +106,7 @@ export function CreatorCoachCard() {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-[#0F172A]" strokeWidth={2} />
-          <h2 className="text-base font-bold text-[#0F172A]">AI 코치</h2>
+          <h2 className="text-base font-bold text-[#0F172A]">링고AI</h2>
         </div>
         <div className="flex gap-0.5 rounded-lg bg-[#F1F5F9] p-0.5">
           {PERIODS.map((p) => (
