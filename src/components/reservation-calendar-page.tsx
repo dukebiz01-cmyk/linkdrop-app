@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Minus, Plus } from "lucide-react";
+import { format } from "date-fns";
+import { ko } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { WIZARD_SECONDARY_BUTTON_CLASS } from "@/components/create-wizard-button-styles";
@@ -245,11 +247,11 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
   range_middle: "!bg-transparent rounded-lg",
   // v7.2 hover — Button(ghost variant) 의 hover:bg-accent(보라) 차단.
   // 셀 hover 시 연한 초록(#f0fdf4) + 초록 글자(#16a34a) 로 톤 일관.
-  day_button: "hover:!bg-[#f0fdf4] hover:!text-[#16a34a]",
+  day_button: "hover:!bg-surface",
   // v7.2 — 보라(bg-accent) 잔여 제거 + 초록 ring-2 통일 + 모든 셀 rounded-lg.
-  today: "font-bold text-[#0A0A0A] !bg-transparent ring-2 ring-inset ring-[#22c55e] rounded-lg",
+  today: "!bg-transparent ring-1 ring-inset ring-text-subtle rounded-lg",
   outside: "text-text-subtle opacity-40",
-  disabled: "text-[#A3A3A3]",
+  disabled: "text-text-subtle",
 };
 
 // 수신자 선택(체크인/체크아웃/range middle) 시각 — shadcn 기본은 bg-primary(BLACK)/
@@ -264,29 +266,40 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
 // 색만 상태별로 다르게. 진한 초록(#22c55e) = 선택/range 양끝, 연한 초록
 // (#dcfce7) = range middle 띠. 셀 간 간격 균일.
 const CALENDAR_BUTTON_OVERRIDE = cn(
-  // 단일 선택 (mode=single)
-  "[&_button[data-selected-single=true]]:!bg-[#22c55e]",
-  "[&_button[data-selected-single=true]]:!text-white",
+  "[&_button[data-selected-single=true]]:!bg-text-strong/5",
+  "[&_button[data-selected-single=true]]:!text-text-strong",
+  "[&_button[data-selected-single=true]]:!font-bold",
   "[&_button[data-selected-single=true]]:!rounded-lg",
-  // range 시작점
-  "[&_button[data-range-start=true]]:!bg-[#22c55e]",
-  "[&_button[data-range-start=true]]:!text-white",
+  "[&_button[data-selected-single=true]]:!ring-1",
+  "[&_button[data-selected-single=true]]:!ring-inset",
+  "[&_button[data-selected-single=true]]:!ring-text-strong/20",
+  "[&_button[data-range-start=true]]:!bg-text-strong/5",
+  "[&_button[data-range-start=true]]:!text-text-strong",
+  "[&_button[data-range-start=true]]:!font-bold",
   "[&_button[data-range-start=true]]:!rounded-lg",
-  // range 끝점
-  "[&_button[data-range-end=true]]:!bg-[#22c55e]",
-  "[&_button[data-range-end=true]]:!text-white",
+  "[&_button[data-range-start=true]]:!ring-1",
+  "[&_button[data-range-start=true]]:!ring-inset",
+  "[&_button[data-range-start=true]]:!ring-text-strong/20",
+  "[&_button[data-range-end=true]]:!bg-text-strong/5",
+  "[&_button[data-range-end=true]]:!text-text-strong",
+  "[&_button[data-range-end=true]]:!font-bold",
   "[&_button[data-range-end=true]]:!rounded-lg",
-  // range 중간 (체크인~체크아웃 사이 띠)
-  "[&_button[data-range-middle=true]]:!bg-[#dcfce7]",
-  "[&_button[data-range-middle=true]]:!text-[#16a34a]",
-  "[&_button[data-range-middle=true]]:!rounded-lg",
+  "[&_button[data-range-end=true]]:!ring-1",
+  "[&_button[data-range-end=true]]:!ring-inset",
+  "[&_button[data-range-end=true]]:!ring-text-strong/20",
+  "[&_button[data-range-middle=true]]:!bg-transparent",
+  "[&_button[data-range-middle=true]]:!text-text-strong",
+  "[&_button[data-range-middle=true]]:!rounded-none",
 );
+
+const DOT_CLASS =
+  "relative rounded-lg after:content-[''] after:absolute after:bottom-[3px] after:left-1/2 after:-translate-x-1/2 after:size-1 after:rounded-full after:bg-text-subtle after:pointer-events-none";
 
 // 메이커 가능 날짜 — "선택 가능한 후보"임을 약하게 표시. 채움/긴 바 금지.
 // 얇은 ring 만 — 수신자 선택의 채움과 시각 분리.
 // v7.2 — rounded-md → rounded-lg (셀 모양 통일)
-const MAKER_OPEN_CLASS = "rounded-lg ring-1 ring-inset ring-[#15803D]/40";
-const MAKER_WARN_CLASS = "rounded-lg ring-1 ring-inset ring-[#B45309]/40";
+const MAKER_OPEN_CLASS = "rounded-lg";
+const MAKER_WARN_CLASS = DOT_CLASS;
 
 // Phase A — 매장 슬롯 셀은 DayButton 커스텀(makeReservationDayButton) 으로
 // 색·텍스트 일원화. modifier 기반 PARTNER_SLOT_CLASS 미사용 (legacy 주석).
@@ -307,23 +320,11 @@ function makeReservationDayButton(slotMap: Map<string, number>) {
       return <CalendarDayButton {...props} />;
     }
     const isUrgent = available <= 1;
-    const colorClass = isUrgent
-      ? "!bg-[#fef3c7] !text-[#92400e] !ring-1 !ring-inset !ring-[#92400e]/40"
-      : "!bg-[#f0fdf4] !text-[#16a34a] !ring-1 !ring-inset !ring-[#15803d]/40";
     return (
       <CalendarDayButton
         {...props}
-        className={cn(props.className, colorClass, "!rounded-lg !font-bold")}
-      >
-        {/* div 로 감싸 ui/calendar L168 의 [&>span]:text-xs/opacity-70
-            셀렉터 회피 — 직접 자식이 div 가 되어 매치 0 */}
-        <div className="flex flex-col items-center leading-none">
-          <span className="text-sm leading-none">{props.day.date.getDate()}</span>
-          <span className="mt-0.5 text-[9px] leading-none">
-            남은 {available}자리
-          </span>
-        </div>
-      </CalendarDayButton>
+        className={cn(props.className, isUrgent && DOT_CLASS)}
+      />
     );
   };
 }
@@ -333,11 +334,7 @@ function SlotLegend() {
   return (
     <div className="mt-3 flex items-center gap-3 text-[11px] text-text-muted">
       <span className="inline-flex items-center gap-1">
-        <span className="size-3 rounded-md bg-[#f0fdf4] ring-1 ring-inset ring-[#15803d]/40" />
-        남은 자리
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <span className="size-3 rounded-md bg-[#fef3c7] ring-1 ring-inset ring-[#92400e]/40" />
+        <span className="size-1 rounded-full bg-text-subtle" />
         마감 임박
       </span>
     </div>
@@ -605,12 +602,19 @@ function EditableReservationCard({
   }, [checkIn, checkOut, adults, children, pets]);
 
   // Phase A — 매장 슬롯 자리수 Map(iso -> available). DayButton closure 가둠.
-  const editableDayButton = useMemo(() => {
-    const slotMap = new Map<string, number>(
-      (partnerSlotEntries ?? []).map((e) => [isoFromDate(e.date), e.available]),
-    );
-    return makeReservationDayButton(slotMap);
-  }, [partnerSlotEntries]);
+  const slotMap = useMemo(
+    () =>
+      new Map<string, number>(
+        (partnerSlotEntries ?? []).map((e) => [isoFromDate(e.date), e.available]),
+      ),
+    [partnerSlotEntries],
+  );
+  const editableDayButton = useMemo(
+    () => makeReservationDayButton(slotMap),
+    [slotMap],
+  );
+  const selectedSeats =
+    checkIn !== undefined ? slotMap.get(isoFromDate(checkIn)) : undefined;
 
   return (
     <div className={cn("w-full max-w-full space-y-4", className)}>
@@ -633,6 +637,8 @@ function EditableReservationCard({
           defaultMonth={defaultMonth}
           numberOfMonths={1}
           showOutsideDays
+          locale={ko}
+          formatters={{ formatCaption: (date) => format(date, "yyyy년 M월", { locale: ko }) }}
           disabled={(date: Date) => {
             const t = startOfDay(date).getTime();
             const today = startOfDay(new Date()).getTime();
@@ -741,11 +747,29 @@ function EditableReservationCard({
         </label>
       </div>
 
-      <div className="rounded-2xl border border-[#0A0A0A]/30 bg-[#FAFAFA]/50 px-4 py-4">
-        <p className="text-xs font-bold tracking-ko text-[#0A0A0A]">선택한 예약</p>
-        <p className="mt-2 text-base font-bold leading-snug tracking-ko text-text-strong">{dateLine}</p>
-        {stayLine && (
-          <p className="mt-1 text-sm font-semibold tracking-ko text-text-strong">{stayLine}</p>
+      <div className="rounded-2xl border border-text-strong/30 bg-surface px-4 py-4">
+        <p className="text-xs font-bold tracking-ko text-text-muted">선택한 예약</p>
+        {!checkIn && (
+          <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">날짜를 선택해 주세요</p>
+        )}
+        {checkIn && (
+          <p className="mt-2 text-lg font-bold leading-snug tracking-ko text-text-strong">
+            {format(checkIn, "M월 d일 (E)", { locale: ko })}
+            <span className="ml-1.5 text-sm font-semibold text-text-muted">체크인</span>
+          </p>
+        )}
+        {checkOut && (
+          <p className="mt-1 text-lg font-bold leading-snug tracking-ko text-text-strong">
+            {format(checkOut, "M월 d일 (E)", { locale: ko })}
+            <span className="ml-1.5 text-sm font-semibold text-text-muted">체크아웃</span>
+          </p>
+        )}
+        {(nights > 0 || selectedSeats !== undefined) && (
+          <p className="mt-3 text-sm font-medium tracking-ko text-text-muted">
+            {nights > 0 && `${nights}박`}
+            {nights > 0 && selectedSeats !== undefined && " · "}
+            {selectedSeats !== undefined && `남은 ${selectedSeats}자리`}
+          </p>
         )}
       </div>
 
@@ -855,6 +879,8 @@ function ReadOnlyReservationCard({
             defaultMonth={defaultMonth}
             numberOfMonths={1}
             showOutsideDays
+            locale={ko}
+            formatters={{ formatCaption: (date) => format(date, "yyyy년 M월", { locale: ko }) }}
             disabled={hasMakerDates ? makerClosedDates : undefined}
             modifiers={{
               makerOpen: makerOpenDates,
