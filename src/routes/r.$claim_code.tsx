@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Calendar as CalendarIcon, Check, MapPin, Ticket } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
@@ -98,7 +98,9 @@ function CouponVerifyPage() {
   const navigate = useNavigate();
   const router = useRouter();
   const [amount, setAmount] = useState("");
+  const [amountError, setAmountError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const amountRef = useRef<HTMLInputElement>(null);
 
   // 404 — 없는 코드
   if (!data) {
@@ -123,6 +125,14 @@ function CouponVerifyPage() {
 
   async function handleRedeem() {
     if (submitting) return;
+    // 금액 필수 — 비었거나 0 이하면 RPC 호출 전 차단(NULL/0 → gross NULL → 트리거 롤백 방지).
+    const amt = amount.trim() ? Number(amount.replace(/[^0-9]/g, "")) : null;
+    if (amt === null || !Number.isFinite(amt) || amt <= 0) {
+      setAmountError(true);
+      amountRef.current?.focus();
+      toast.error("사용 금액을 입력해주세요.");
+      return;
+    }
     setSubmitting(true);
     try {
       const supabase = getSupabase();
@@ -133,7 +143,6 @@ function CouponVerifyPage() {
         toast.error("로그인 상태를 다시 확인해 주세요.");
         return;
       }
-      const amt = amount.trim() ? Number(amount.replace(/[^0-9]/g, "")) : null;
       const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : null;
       const { error } = await supabase.rpc("redeem_coupon_v2", {
         p_claim_code: claimCode,
@@ -149,6 +158,7 @@ function CouponVerifyPage() {
       }
       toast.success("사용 처리됐어요.");
       setAmount("");
+      setAmountError(false);
       await router.invalidate(); // loader 재실행 → status=used 반영(버튼 사라짐)
     } catch (err) {
       console.error("[r/$claim_code] unexpected:", err);
@@ -215,20 +225,33 @@ function CouponVerifyPage() {
               <h2 className="text-sm font-semibold text-[#0A0A0A]">사용 처리</h2>
             </div>
             <label htmlFor="amount" className="block text-sm font-semibold text-[#0F172A]">
-              결제 금액 (원, 선택)
+              결제 금액 (원) <span className="text-[#DC2626]">*</span>
             </label>
             <input
               id="amount"
+              ref={amountRef}
               type="text"
               inputMode="numeric"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                if (amountError) setAmountError(false);
+              }}
+              aria-invalid={amountError}
               placeholder="예: 15000"
-              className="mt-2 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-base font-semibold text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]/20"
+              className={`mt-2 h-12 w-full rounded-xl border bg-white px-4 text-base font-semibold text-[#0F172A] placeholder:text-[#94A3B8] focus:outline-none focus:ring-2 ${
+                amountError
+                  ? "border-[#DC2626] focus:border-[#DC2626] focus:ring-[#DC2626]/20"
+                  : "border-[#E5E7EB] focus:border-[#0A0A0A] focus:ring-[#0A0A0A]/20"
+              }`}
             />
-            <p className="mt-2 text-xs text-[#64748B]">
-              안 적으셔도 사용 처리는 돼요. 적어주시면 매출 집계에 도움이 돼요.
-            </p>
+            {amountError ? (
+              <p className="mt-2 text-xs font-medium text-[#DC2626]">사용 금액을 입력해주세요.</p>
+            ) : (
+              <p className="mt-2 text-xs text-[#64748B]">
+                실제 결제하신 금액을 입력해 주세요. 매출 집계와 보상 정산에 사용돼요.
+              </p>
+            )}
             <button
               type="button"
               onClick={() => void handleRedeem()}
