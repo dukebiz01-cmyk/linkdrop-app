@@ -13,6 +13,8 @@ export function Step5PurposeShare({
   onGoHome,
   shareError,
   shareFeedback,
+  isPublic,
+  onTogglePublic,
 }: {
   data: WizardSharePreviewData;
   shareUrl: string;
@@ -21,6 +23,8 @@ export function Step5PurposeShare({
   onGoHome: () => void;
   shareError: string | null;
   shareFeedback: string | null;
+  isPublic?: boolean;
+  onTogglePublic?: (next: boolean) => void;
 }) {
   // phase1 FIX1: Step 3 = Step4 (section) + Step5 병합. WizardSharePreview 외부
   // 컨테이너가 `flex flex-1 flex-col` 라 부모 flex-col 안에서 viewport 점유 →
@@ -37,6 +41,8 @@ export function Step5PurposeShare({
       onGoHome={onGoHome}
       shareError={shareError}
       shareFeedback={shareFeedback}
+      isPublic={isPublic}
+      onTogglePublic={onTogglePublic}
     />
   );
 }

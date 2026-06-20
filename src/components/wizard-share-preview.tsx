@@ -6,6 +6,7 @@ import {
   WIZARD_SECONDARY_BUTTON_CLASS,
 } from "@/components/create-wizard-button-styles";
 import { ErrorMessage } from "@/components/ErrorMessage";
+import { VisibilityToggle } from "@/components/create/VisibilityToggle";
 import type { DropPurpose } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,9 @@ export interface WizardSharePreviewProps {
   onGoHome: () => void;
   shareError?: string | null;
   shareFeedback?: string | null;
+  /** 공개/비공개 토글 — 제공될 때만 토글 UI 노출(없으면 미표시). */
+  isPublic?: boolean;
+  onTogglePublic?: (next: boolean) => void;
   className?: string;
 }
 
@@ -179,6 +183,8 @@ export function WizardSharePreview({
   onGoHome,
   shareError,
   shareFeedback,
+  isPublic,
+  onTogglePublic,
   className,
 }: WizardSharePreviewProps) {
   const [kakaoLoading, setKakaoLoading] = useState(false);
@@ -229,6 +235,7 @@ export function WizardSharePreview({
       </div>
 
       <div className="sticky bottom-0 space-y-3 border-t border-border bg-bg px-6 py-4">
+        <VisibilityToggle isPublic={isPublic} onToggle={onTogglePublic} />
         <ActionButton
           type="button"
           onClick={handleKakao}

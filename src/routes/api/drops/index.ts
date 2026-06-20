@@ -35,6 +35,8 @@ type CreateDropBody = {
   /** 나-1 상품 카피 — 메인 product 블록 block_data 에 머지(headline/selling_points). 자체업로드 전용. */
   headline?: string;
   selling_points?: string[];
+  /** 공개/비공개 — true 면 탐색 피드 노출, false(기본) 면 받은 사람만 링크 열람. */
+  is_public?: boolean;
 };
 
 export const Route = createFileRoute("/api/drops/")({
@@ -174,6 +176,7 @@ export const Route = createFileRoute("/api/drops/")({
               p_curator_message: body.curator_message ?? null,
               p_campaign_id: body.campaign_id ?? null,
               p_share_code: selfShareCode,
+              p_is_public: body.is_public ?? false,
             });
             if (selfDropErr || !selfDropRes) {
               return Response.json(
@@ -332,6 +335,7 @@ export const Route = createFileRoute("/api/drops/")({
             p_curator_message: body.curator_message ?? null,
             p_campaign_id: body.campaign_id ?? null,
             p_share_code: shareCode,
+            p_is_public: body.is_public ?? false,
           });
           if (dropErr || !dropRes) {
             return Response.json(

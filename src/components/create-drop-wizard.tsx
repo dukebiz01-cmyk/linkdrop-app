@@ -40,6 +40,7 @@ import { MyContentPicker } from "@/components/create/MyContentPicker";
 import { Step2PurposeSelect } from "@/components/create/Step2Purpose";
 import { Step4DropPreview } from "@/components/create/Step4DropPreview";
 import { Step5PurposeShare } from "@/components/create/Step5Share";
+import { VisibilityToggle } from "@/components/create/VisibilityToggle";
 import { Step3Options } from "@/components/create/step3/Step3Options";
 import { Step3Commerce } from "@/components/create/step3/Step3Commerce";
 import { ProductAttachSection } from "@/components/create/step3/ProductAttachSection";
@@ -234,6 +235,8 @@ export function CreateDropWizard({
   const [promoCard, setPromoCard] = useState<PromoCard | null>(null);
   // Slice2 멀티영상 — primary 외 추가 영상 누적(검색→담기 push, navigate 아님).
   const [attachedVideos, setAttachedVideos] = useState<AttachedVideo[]>([]);
+  // 공개/비공개 — Step5 토글. 기본 false(비공개, 받은 사람만). onComplete 시 전달.
+  const [isPublic, setIsPublic] = useState(false);
   // quick-path — 기본 = Step1 후 미리보기 직행. [스튜디오에서 다듬기] 누르면 studioMode=true
   //   로 수동 카드화(Step2) 진입. studio 재진입 미리보기는 단일 [보내기](2버튼 아님).
   const [studioMode, setStudioMode] = useState(false);
@@ -461,6 +464,7 @@ export function CreateDropWizard({
       attachedProducts,
       attachedVideos,
       promoCard,
+      isPublic,
     });
     savingRef.current = promise;
     try {
@@ -738,6 +742,7 @@ export function CreateDropWizard({
                 <p className="text-sm font-medium tracking-ko text-text-muted">{shareFeedback}</p>
               ) : null}
               <ErrorMessage message={shareError} />
+              <VisibilityToggle isPublic={isPublic} onToggle={setIsPublic} />
               <ActionButton
                 type="button"
                 disabled={!step3Fields.shareMessage.trim()}
@@ -787,6 +792,8 @@ export function CreateDropWizard({
               onGoHome={handleGoHome}
               shareError={shareError}
               shareFeedback={shareFeedback}
+              isPublic={isPublic}
+              onTogglePublic={setIsPublic}
             />
           </>
         ))}

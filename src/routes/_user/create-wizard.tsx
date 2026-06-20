@@ -236,6 +236,7 @@ function CreateWizardPage() {
             media_url: data.video.url,
             purpose: data.purpose,
             curator_message: data.makerMessage || null,
+            is_public: data.isPublic ?? false,
             // chunk1 1d — 탐색 카드에서 진입한 경우 본인 매장 자동 연결.
             ...(search.partner_id ? { partner_id: search.partner_id } : {}),
             // F2 커머스(구매) — price_krw/category 는 content_sources 에 persist(Slice 1).

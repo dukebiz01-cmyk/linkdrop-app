@@ -134,6 +134,7 @@ export async function getDiscoverDrops(client: SupabaseClient): Promise<DropFeed
     .from("info_drops")
     .select(DISCOVER_SELECT)
     .eq("status", "published")
+    .eq("is_public", true)
     .order("published_at", { ascending: false, nullsFirst: false })
     .limit(20);
   if (error || !data) return [];

@@ -107,6 +107,8 @@ export interface CreateDropWizardProps {
     attachedVideos?: AttachedVideo[];
     /** B 상품 홍보 카드(MVP 1개). 있으면 is_promo product 블록으로 적재. */
     promoCard?: PromoCard | null;
+    /** 공개/비공개 — true 면 탐색 피드 노출. 기본 false(받은 사람만 링크 열람). */
+    isPublic?: boolean;
   }) => Promise<{ shareUuid: string; shareUrl: string }>;
 }
 
