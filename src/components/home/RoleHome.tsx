@@ -6,7 +6,7 @@ import { reshareDrop } from "@/lib/reshare-drop";
 
 // Slice 4a — 역할 홈 골격. 만들기 폼(HomePageV3) 대체: 홈 = 역할 랜딩 + 다이제스트.
 //   카드 생성 진입은 스튜디오 탭으로 일원화 — 홈엔 "카드 만들기" CTA 없음(중복 제거).
-//   상인 홈만 채우고(오늘의 AI·새 예약·제안·명함), 유저 홈은 placeholder(4b에서 채움).
+//   상인 홈만 채우고(링고 매장 진단·새 예약·제안·명함), 유저 홈은 placeholder(4b에서 채움).
 //   항목 없으면 블록 숨김(빈 박스 방지) · 한정 개수 · 무한스크롤 없음(끝 있음).
 
 type GuideDiagnosis = {
@@ -70,14 +70,8 @@ const SEVERITY_LABEL: Record<GuideDiagnosis["severity"], string> = {
   low: "낮음",
   info: "안내",
 };
-const SEVERITY_STRIP: Record<GuideDiagnosis["severity"], string> = {
-  high: "bg-[#0A0A0A]",
-  medium: "bg-[#737373]",
-  low: "bg-[#A3A3A3]",
-  info: "bg-[#D4D4D4]",
-};
 
-// 오늘의 AI — 매출관리 자동진단(캐시 = guide_history 최신 1행)에서 가장 급한 1개 + 액션.
+// 링고 매장 진단 — 매출관리 자동진단(캐시 = guide_history 최신 1행)에서 가장 급한 1개 + 액션.
 //   재계산 없음(추가 RPC 0). 진단 없으면 "매출관리에서 진단 받기" 포인터.
 function TodayAiCard({ guide, onGoResults }: { guide: HomeGuide; onGoResults: () => void }) {
   const topDiag =
@@ -90,37 +84,34 @@ function TodayAiCard({ guide, onGoResults }: { guide: HomeGuide; onGoResults: ()
       : null;
 
   return (
-    <section>
+    <section className="rounded-2xl bg-[#F5F5F5] p-4">
       <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
         <Sparkles className="size-4" strokeWidth={2} />
-        오늘의 AI
+        링고AI 매장 진단
       </h2>
 
       {topDiag ? (
         <div className="overflow-hidden rounded-2xl border border-[#E5E5E5] bg-white">
-          <div className="flex">
-            <span className={`w-1 shrink-0 ${SEVERITY_STRIP[topDiag.severity]}`} aria-hidden />
-            <div className="min-w-0 flex-1 px-4 py-4">
-              <span className="text-[10px] font-semibold tracking-ko text-[#737373]">
-                [{SEVERITY_LABEL[topDiag.severity]}]
-              </span>
-              <p className="mt-1 text-sm font-bold leading-snug tracking-ko text-[#0A0A0A]">
-                {topDiag.title}
+          <div className="min-w-0 px-4 py-4">
+            <span className="text-[10px] font-semibold tracking-ko text-[#737373]">
+              [{SEVERITY_LABEL[topDiag.severity]}]
+            </span>
+            <p className="mt-1 text-sm font-bold leading-snug tracking-ko text-[#0A0A0A]">
+              {topDiag.title}
+            </p>
+            {topAction ? (
+              <p className="mt-1.5 text-xs font-medium leading-relaxed tracking-ko text-[#737373]">
+                → {topAction}
               </p>
-              {topAction ? (
-                <p className="mt-1.5 text-xs font-medium leading-relaxed tracking-ko text-[#737373]">
-                  → {topAction}
-                </p>
-              ) : null}
-              <button
-                type="button"
-                onClick={onGoResults}
-                className="mt-3 inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-[#0A0A0A] px-4 text-sm font-semibold tracking-ko text-white transition-colors hover:bg-[#171717]"
-              >
-                매출관리에서 보기
-                <ArrowRight className="size-4" strokeWidth={2} />
-              </button>
-            </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={onGoResults}
+              className="mt-3 inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-[#0A0A0A] px-4 text-sm font-semibold tracking-ko text-white transition-colors hover:bg-[#171717]"
+            >
+              매출관리에서 보기
+              <ArrowRight className="size-4" strokeWidth={2} />
+            </button>
           </div>
         </div>
       ) : (
@@ -131,7 +122,7 @@ function TodayAiCard({ guide, onGoResults }: { guide: HomeGuide; onGoResults: ()
           <button
             type="button"
             onClick={onGoResults}
-            className="mt-3 inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-[#E5E5E5] bg-white px-4 text-sm font-semibold tracking-ko text-[#0A0A0A] transition-colors hover:bg-[#FAFAFA]"
+            className="mt-3 inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-[#0A0A0A] px-4 text-sm font-semibold tracking-ko text-white transition-colors hover:bg-[#171717]"
           >
             매출관리에서 진단 받기
             <ChevronRight className="size-4" strokeWidth={2} />
@@ -179,7 +170,7 @@ export function RoleHome({
         {recommendedDrops.length > 0 ? (
           <section>
             <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-              <Sparkles className="size-4" strokeWidth={2} />링고 추천 영상
+              <Sparkles className="size-4" strokeWidth={2} />링고AI 추천 영상
             </h2>
             <div className="space-y-3">
               {recommendedDrops.map((drop) => (
@@ -271,10 +262,10 @@ export function RoleHome({
         <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">
           {merchant.partnerName || "내 매장"}
         </h1>
-        <p className="mt-1 text-sm font-medium tracking-ko text-[#737373]">오늘의 매장 소식</p>
+        <p className="mt-1 text-sm font-medium tracking-ko text-[#737373]">링고AI가 매장 운영을 도와요</p>
       </header>
 
-      {/* 1. 오늘의 AI (항상 노출 — 진단 or 포인터) */}
+      {/* 1. 링고 매장 진단 (항상 노출 — 진단 or 포인터) */}
       <TodayAiCard guide={merchant.guide} onGoResults={onGoResults} />
 
       {/* 2. 새 예약 (있으면) */}
