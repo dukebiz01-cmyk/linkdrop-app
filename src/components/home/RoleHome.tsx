@@ -1,4 +1,4 @@
-import { Sparkles, Calendar, Users, ChevronRight, ArrowRight, Ticket, Send } from "lucide-react";
+import { Sparkles, Calendar, Users, ChevronRight, ArrowRight, Ticket } from "lucide-react";
 import { StoreProfileCard } from "@/components/partner/StoreProfileCard";
 import { DropFeedCard } from "@/components/drop-feed-card";
 import type { DropFeedItem } from "@/components/home-page";
@@ -45,8 +45,8 @@ export type HomeCoupon = { claimCode: string; title: string; expiresAt: string |
 export type UserHomeData = {
   expiringCoupons: HomeCoupon[];
   followedDrops: DropFeedItem[];
-  /** 내가(로그인 유저가) sender 로 공유한 카드 — 공유 중심 유저홈 1차. */
-  sentDrops: DropFeedItem[];
+  /** 링고 추천 영상 — 공개 탐색 카드(getDiscoverDrops) 상위 N. */
+  recommendedDrops: DropFeedItem[];
 };
 
 function expiryLabel(iso: string | null): string {
@@ -165,17 +165,42 @@ export function RoleHome({
   if (!isBusiness || !merchant) {
     const coupons = user?.expiringCoupons ?? [];
     const followedDrops = user?.followedDrops ?? [];
-    const sentDrops = user?.sentDrops ?? [];
+    const recommendedDrops = user?.recommendedDrops ?? [];
     const bothEmpty =
-      coupons.length === 0 && followedDrops.length === 0 && sentDrops.length === 0;
+      coupons.length === 0 && followedDrops.length === 0 && recommendedDrops.length === 0;
     return (
       <div className="mx-auto max-w-md space-y-6 px-6 pt-6 pb-4">
         <header>
-          <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">홈</h1>
-          <p className="mt-1 text-sm font-medium tracking-ko text-[#737373]">
-            곧 쓸 혜택과 구독한 메이커의 새 카드를 모았어요.
-          </p>
+          <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">LINKDROP</h1>
+          <p className="mt-1.5 text-sm font-medium tracking-ko text-[#737373]">링크는 목적을 만나 행동이 된다</p>
         </header>
+
+        {/* 0. 링고 추천 영상 (있으면) — 공개 탐색 카드. 카드에서 바로 재공유(reshareDrop). */}
+        {recommendedDrops.length > 0 ? (
+          <section>
+            <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
+              <Sparkles className="size-4" strokeWidth={2} />링고 추천 영상
+            </h2>
+            <div className="space-y-3">
+              {recommendedDrops.map((drop) => (
+                <DropFeedCard
+                  key={drop.shareUuid}
+                  {...drop}
+                  onClick={() => onOpenDrop(drop.shareUuid)}
+                  onCtaClick={() => onOpenDrop(drop.shareUuid)}
+                  onShare={() =>
+                    void reshareDrop({
+                      shareUuid: drop.shareUuid,
+                      title: drop.title,
+                      imageUrl: drop.videoThumbnailUrl,
+                      purpose: drop.intent,
+                    })
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* 1. 곧 쓸 혜택 (있으면) */}
         {coupons.length > 0 ? (
@@ -211,38 +236,11 @@ export function RoleHome({
           </section>
         ) : null}
 
-        {/* 2. 내가 공유한 카드 (있으면) — 공유 중심 유저홈. 카드에서 바로 재공유(reshareDrop). */}
-        {sentDrops.length > 0 ? (
-          <section>
-            <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-              <Send className="size-4" strokeWidth={2} />내가 공유한 카드
-            </h2>
-            <div className="space-y-3">
-              {sentDrops.map((drop) => (
-                <DropFeedCard
-                  key={drop.shareUuid}
-                  {...drop}
-                  onClick={() => onOpenDrop(drop.shareUuid)}
-                  onCtaClick={() => onOpenDrop(drop.shareUuid)}
-                  onShare={() =>
-                    void reshareDrop({
-                      shareUuid: drop.shareUuid,
-                      title: drop.title,
-                      imageUrl: drop.videoThumbnailUrl,
-                      purpose: drop.intent,
-                    })
-                  }
-                />
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {/* 3. 구독 메이커 새 카드 (있으면) */}
+        {/* 2. 구독 메이커 새 카드 (있으면) */}
         {followedDrops.length > 0 ? (
           <section>
             <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-              <Sparkles className="size-4" strokeWidth={2} />구독한 메이커 새 카드
+              <Users className="size-4" strokeWidth={2} />구독한 메이커 새 카드
             </h2>
             <div className="space-y-3">
               {followedDrops.map((drop) => (

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { getAuthClient } from "@/lib/auth-context";
-import { getFollowedMakerDrops, getSentDrops } from "@/lib/feed-queries";
+import { getFollowedMakerDrops, getDiscoverDrops } from "@/lib/feed-queries";
 import { getCouponDisplayStatus } from "@/lib/coupon-status";
 import {
   RoleHome,
@@ -28,7 +28,7 @@ const RESERVATION_LIMIT = 3;
 const PROPOSAL_LIMIT = 3;
 const COUPON_LIMIT = 3;
 const FOLLOWED_DROP_LIMIT = 6;
-const SENT_DROP_LIMIT = 6;
+const RECOMMENDED_DROP_LIMIT = 4;
 
 // get_my_wallet 반환 행 중 홈의 "곧 쓸 혜택"에 쓰는 필드만.
 type WalletRow = {
@@ -87,10 +87,10 @@ export const Route = createFileRoute("/_user/home")({
 
     // 유저(비사업자) 홈 — 곧 쓸 혜택(get_my_wallet → expiring) + 구독 메이커 새 카드.
     if (!isBusiness) {
-      const [walletRes, followedDrops, sentDrops] = await Promise.all([
+      const [walletRes, followedDrops, recommendedDrops] = await Promise.all([
         supabase.rpc("get_my_wallet"),
         getFollowedMakerDrops(supabase, userId),
-        getSentDrops(supabase, userId),
+        getDiscoverDrops(supabase),
       ]);
       const walletRows = (walletRes.data as WalletRow[] | null) ?? [];
       const expiringCoupons: HomeCoupon[] = walletRows
@@ -114,7 +114,7 @@ export const Route = createFileRoute("/_user/home")({
         user: {
           expiringCoupons,
           followedDrops: followedDrops.slice(0, FOLLOWED_DROP_LIMIT),
-          sentDrops: sentDrops.slice(0, SENT_DROP_LIMIT),
+          recommendedDrops: recommendedDrops.slice(0, RECOMMENDED_DROP_LIMIT),
         },
       };
     }
