@@ -32,6 +32,8 @@ type ReservationRow = {
   status: string | null;
   customer_name: string | null;
   phone_last4: string | null;
+  // 복호화된 전체 번호(하이픈 없는 11자리). RPC가 반환(없으면 null) — types.ts 미반영이라 로컬 타입에만.
+  customer_phone: string | null;
   customer_message: string | null;
   created_at: string | null;
 };
@@ -76,6 +78,11 @@ function formatDateRange(row: ReservationRow): string {
     return `${formatDate(row.reserved_date)}${time}`;
   }
   return "날짜 미정";
+}
+
+// 하이픈 없는 11자리(010XXXXXXXX) → 010-XXXX-XXXX. 형식 안 맞으면 원문 그대로.
+function formatPhone(phone: string): string {
+  return phone.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
 }
 
 function formatDate(iso: string): string {
@@ -309,8 +316,20 @@ function ReservationCard({
         {row.guest_count ? ` · ${row.guest_count}명` : ""}
       </div>
 
-      {/* 전화 뒷자리 (있으면) */}
-      {row.phone_last4 ? (
+      {/* 손님 전화 — 전체번호(복호화) 있으면 번호+전화하기, 없으면 뒷자리 fallback */}
+      {row.customer_phone ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-[#475569]">
+          <Phone className="size-4 text-[#94A3B8]" strokeWidth={2} />
+          <span className="font-semibold text-[#0F172A]">{formatPhone(row.customer_phone)}</span>
+          <a
+            href={`tel:${row.customer_phone}`}
+            className="inline-flex min-h-[36px] items-center gap-1 rounded-lg bg-[#0A0A0A] px-3 text-xs font-semibold text-white hover:bg-[#171717]"
+          >
+            <Phone className="size-3.5" strokeWidth={2} />
+            전화하기
+          </a>
+        </div>
+      ) : row.phone_last4 ? (
         <div className="mt-1.5 flex items-center gap-2 text-sm text-[#475569]">
           <Phone className="size-4 text-[#94A3B8]" strokeWidth={2} />
           뒷자리 {row.phone_last4}
