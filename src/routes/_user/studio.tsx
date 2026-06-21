@@ -25,7 +25,7 @@ import { getAuthClient } from "@/lib/auth-context";
 //     · info=정보 / coupon=혜택·예약 / purchase=상품 판매. 비사업자 게이팅은 위저드 자체 책임(여기서 건드리지 않음).
 //   도구 내부 기능이 아직 없으면 placeholder(준비 중 토스트).
 
-type StudioLoaderData = { isBusiness: boolean };
+type StudioLoaderData = { isBusiness: boolean; myRewards: number };
 
 export const Route = createFileRoute("/_user/studio")({
   head: () => ({ meta: [{ title: "스튜디오 — LinkDrop" }] }),
@@ -33,14 +33,26 @@ export const Route = createFileRoute("/_user/studio")({
   //   데이터 조회만 — redirect throw 금지(버튼 깜빡임 방지 + 리다이렉트 루프 방지).
   loader: async (): Promise<StudioLoaderData> => {
     const supabase = await getAuthClient();
-    if (!supabase) return { isBusiness: false };
+    if (!supabase) return { isBusiness: false, myRewards: 0 };
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData.session?.user.id ?? null;
-    if (!userId) return { isBusiness: false };
+    if (!userId) return { isBusiness: false, myRewards: 0 };
     const { data: isBusinessRaw } = await supabase.rpc("is_active_partner_owner", {
       _user_id: userId,
     });
-    return { isBusiness: Boolean(isBusinessRaw) };
+    // 내 캐쉬 — reward_ledger 누적 잔액(party_user_id=auth.uid()). 미인증/에러 시 0 폴백.
+    //   ⚠️ TEMP — get_my_rewards 가 types.ts 미반영이라 typed rpc 우회. 타입 재생성 후 제거.
+    let myRewards = 0;
+    try {
+      const rpc = supabase.rpc as unknown as (
+        fn: string,
+      ) => Promise<{ data: unknown; error: unknown }>;
+      const { data: rewardsRaw, error: rewardsErr } = await rpc("get_my_rewards");
+      if (!rewardsErr) myRewards = Number(rewardsRaw) || 0;
+    } catch {
+      // 조회 실패 — 헤더는 0 으로 그대로 렌더(깨짐 방지).
+    }
+    return { isBusiness: Boolean(isBusinessRaw), myRewards };
   },
   component: StudioPage,
 });
@@ -159,15 +171,17 @@ function ToolItem({ tool, isBusiness }: { tool: Tool; isBusiness: boolean }) {
 }
 
 function StudioPage() {
-  const { isBusiness } = Route.useLoaderData();
+  const { isBusiness, myRewards } = Route.useLoaderData();
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#F8FAFC] tracking-ko pb-12">
       <header className="flex items-center justify-between border-b border-[#F1F5F9] bg-white px-5 py-4">
         <h1 className="text-lg font-bold text-[#0A0A0A]">스튜디오</h1>
-        {/* 캐쉬 표시 자리 — 값은 추후 연동. 지금은 placeholder. */}
+        {/* 내 캐쉬 — reward_ledger 누적 잔액(loader get_my_rewards). 미연동 시 0. */}
         <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#F5F5F5] px-3 py-1.5">
           <span className="text-[11px] font-medium tracking-ko text-[#737373]">내 캐쉬</span>
-          <span className="text-sm font-bold tracking-ko text-[#0A0A0A]">—</span>
+          <span className="text-sm font-bold tracking-ko text-[#0A0A0A]">
+            {Number(myRewards ?? 0).toLocaleString()}원
+          </span>
         </span>
       </header>
 
