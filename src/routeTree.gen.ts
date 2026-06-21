@@ -54,6 +54,7 @@ import { Route as PartnerPartnerReservationsRouteImport } from './routes/_partne
 import { Route as PartnerPartnerRegisterRouteImport } from './routes/_partner/partner.register'
 import { Route as PartnerPartnerRedeemRouteImport } from './routes/_partner/partner.redeem'
 import { Route as PartnerPartnerPromotionRouteImport } from './routes/_partner/partner.promotion'
+import { Route as PartnerPartnerPreordersRouteImport } from './routes/_partner/partner.preorders'
 import { Route as PartnerPartnerCouponsRouteImport } from './routes/_partner/partner.coupons'
 import { Route as PartnerPartnerCalendarRouteImport } from './routes/_partner/partner.calendar'
 import { Route as AdminAdminTrendsRouteImport } from './routes/_admin/admin.trends'
@@ -290,6 +291,11 @@ const PartnerPartnerPromotionRoute = PartnerPartnerPromotionRouteImport.update({
   path: '/partner/promotion',
   getParentRoute: () => PartnerRoute,
 } as any)
+const PartnerPartnerPreordersRoute = PartnerPartnerPreordersRouteImport.update({
+  id: '/partner/preorders',
+  path: '/partner/preorders',
+  getParentRoute: () => PartnerRoute,
+} as any)
 const PartnerPartnerCouponsRoute = PartnerPartnerCouponsRouteImport.update({
   id: '/partner/coupons',
   path: '/partner/coupons',
@@ -391,6 +397,7 @@ export interface FileRoutesByFullPath {
   '/admin/trends': typeof AdminAdminTrendsRoute
   '/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
+  '/partner/preorders': typeof PartnerPartnerPreordersRoute
   '/partner/promotion': typeof PartnerPartnerPromotionRoute
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
@@ -447,6 +454,7 @@ export interface FileRoutesByTo {
   '/admin/trends': typeof AdminAdminTrendsRoute
   '/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
   '/partner/coupons': typeof PartnerPartnerCouponsRoute
+  '/partner/preorders': typeof PartnerPartnerPreordersRoute
   '/partner/promotion': typeof PartnerPartnerPromotionRoute
   '/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/partner/register': typeof PartnerPartnerRegisterRoute
@@ -507,6 +515,7 @@ export interface FileRoutesById {
   '/_admin/admin/trends': typeof AdminAdminTrendsRoute
   '/_partner/partner/calendar': typeof PartnerPartnerCalendarRouteWithChildren
   '/_partner/partner/coupons': typeof PartnerPartnerCouponsRoute
+  '/_partner/partner/preorders': typeof PartnerPartnerPreordersRoute
   '/_partner/partner/promotion': typeof PartnerPartnerPromotionRoute
   '/_partner/partner/redeem': typeof PartnerPartnerRedeemRoute
   '/_partner/partner/register': typeof PartnerPartnerRegisterRoute
@@ -565,6 +574,7 @@ export interface FileRouteTypes {
     | '/admin/trends'
     | '/partner/calendar'
     | '/partner/coupons'
+    | '/partner/preorders'
     | '/partner/promotion'
     | '/partner/redeem'
     | '/partner/register'
@@ -621,6 +631,7 @@ export interface FileRouteTypes {
     | '/admin/trends'
     | '/partner/calendar'
     | '/partner/coupons'
+    | '/partner/preorders'
     | '/partner/promotion'
     | '/partner/redeem'
     | '/partner/register'
@@ -680,6 +691,7 @@ export interface FileRouteTypes {
     | '/_admin/admin/trends'
     | '/_partner/partner/calendar'
     | '/_partner/partner/coupons'
+    | '/_partner/partner/preorders'
     | '/_partner/partner/promotion'
     | '/_partner/partner/redeem'
     | '/_partner/partner/register'
@@ -1047,6 +1059,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PartnerPartnerPromotionRouteImport
       parentRoute: typeof PartnerRoute
     }
+    '/_partner/partner/preorders': {
+      id: '/_partner/partner/preorders'
+      path: '/partner/preorders'
+      fullPath: '/partner/preorders'
+      preLoaderRoute: typeof PartnerPartnerPreordersRouteImport
+      parentRoute: typeof PartnerRoute
+    }
     '/_partner/partner/coupons': {
       id: '/_partner/partner/coupons'
       path: '/partner/coupons'
@@ -1173,6 +1192,7 @@ const PartnerPartnerCalendarRouteWithChildren =
 interface PartnerRouteChildren {
   PartnerPartnerCalendarRoute: typeof PartnerPartnerCalendarRouteWithChildren
   PartnerPartnerCouponsRoute: typeof PartnerPartnerCouponsRoute
+  PartnerPartnerPreordersRoute: typeof PartnerPartnerPreordersRoute
   PartnerPartnerPromotionRoute: typeof PartnerPartnerPromotionRoute
   PartnerPartnerRedeemRoute: typeof PartnerPartnerRedeemRoute
   PartnerPartnerRegisterRoute: typeof PartnerPartnerRegisterRoute
@@ -1187,6 +1207,7 @@ interface PartnerRouteChildren {
 const PartnerRouteChildren: PartnerRouteChildren = {
   PartnerPartnerCalendarRoute: PartnerPartnerCalendarRouteWithChildren,
   PartnerPartnerCouponsRoute: PartnerPartnerCouponsRoute,
+  PartnerPartnerPreordersRoute: PartnerPartnerPreordersRoute,
   PartnerPartnerPromotionRoute: PartnerPartnerPromotionRoute,
   PartnerPartnerRedeemRoute: PartnerPartnerRedeemRoute,
   PartnerPartnerRegisterRoute: PartnerPartnerRegisterRoute,

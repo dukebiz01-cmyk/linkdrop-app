@@ -76,17 +76,17 @@ export function PreorderSheet({
     setStep("submitting");
     try {
       const supabase = getSupabase();
-      // ⚠️ TEMP — create_preorder 가 types.ts 미반영이라 typed rpc 우회. ③a 타입 재생성 후 제거.
-      const rpc = supabase.rpc as unknown as (
-        fn: string,
-        args: Record<string, unknown>,
-      ) => Promise<{ error: { message?: string } | null }>;
-      const { error } = await rpc("create_preorder", {
-        p_drop_id: dropId,
-        p_quantity: qty,
-        p_share_uuid: shareUuid,
-        p_customer_message: message.trim() || null,
-      });
+      // create_preorder 가 types.ts 미반영(③a). client.rpc 를 변수로 분리하면 this 분실
+      //   ('rest' 에러) → supabase.rpc 를 메서드로 직접 호출하고, 캐스트는 인자(as never)·결과에만.
+      const { error } = (await supabase.rpc(
+        "create_preorder" as never,
+        {
+          p_drop_id: dropId,
+          p_quantity: qty,
+          p_share_uuid: shareUuid,
+          p_customer_message: message.trim() || null,
+        } as never,
+      )) as { error: { message?: string } | null };
       if (error) {
         const m = error.message ?? "";
         setErrorMsg(

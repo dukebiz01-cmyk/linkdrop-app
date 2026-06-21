@@ -11,6 +11,8 @@ import {
   Eye,
   EyeOff,
   Megaphone,
+  ClipboardList,
+  ChevronRight,
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { Toaster } from "@/components/ui/sonner";
@@ -187,6 +189,18 @@ function ProductsIndexPage() {
           className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 py-3.5 text-sm font-semibold text-white hover:bg-[#171717]"
         >
           <Plus className="size-4" strokeWidth={2} />새 상품 등록
+        </Link>
+
+        {/* ③c — 받은 선주문 보기 (additive). 토큰 색. */}
+        <Link
+          to="/partner/preorders"
+          className="flex w-full min-h-[44px] items-center justify-between rounded-2xl border border-border bg-bg px-4 py-3.5 text-sm font-semibold text-text-strong hover:bg-surface"
+        >
+          <span className="inline-flex items-center gap-2">
+            <ClipboardList className="size-4" strokeWidth={2} />
+            받은 선주문 보기
+          </span>
+          <ChevronRight className="size-4 text-text-subtle" strokeWidth={2} />
         </Link>
 
         {loading ? (
