@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft,
-  Package,
   Plus,
   Share2,
   ExternalLink,
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { Toaster } from "@/components/ui/sonner";
+import { CommercePrepGuide } from "@/components/commerce/CommercePrepGuide";
 
 // S3a — 판매 관리: 자체업로드 상품("내 상품") 목록. 읽기 전용 직접 쿼리(마이그 0).
 //   소유 기준 = info_drops.owner_user_id = 현재 uid + purpose='구매'.
@@ -195,18 +195,8 @@ function ProductsIndexPage() {
             </button>
           </div>
         ) : products.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-6 py-12 text-center">
-            <span className="flex size-16 items-center justify-center rounded-full bg-[#F8FAFC]">
-              <Package className="size-10 text-[#CBD5E1]" strokeWidth={1.5} />
-            </span>
-            <p className="mt-4 text-sm text-[#64748B]">아직 등록한 상품이 없어요</p>
-            <Link
-              to="/partner/products/new"
-              className="mt-4 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#171717]"
-            >
-              <Plus className="size-4" strokeWidth={2} />새 상품 등록
-            </Link>
-          </div>
+          // 등록 상품 0개 — 빈 화면 대신 커머스 준비 가이드(4항목). approved 가맹점 전용.
+          <CommercePrepGuide />
         ) : (
           <ul className="flex flex-col gap-3">
             {products.map((p) => {
