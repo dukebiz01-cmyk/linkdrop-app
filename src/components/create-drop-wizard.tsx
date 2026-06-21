@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { getSupabase } from "@/lib/supabase";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ActionButton } from "@/components/ActionButton";
 import { ErrorMessage } from "@/components/ErrorMessage";
@@ -377,6 +378,42 @@ export function CreateDropWizard({
       platform: "youtube", // placeholder — 커머스 카드는 플랫폼 라벨 미사용
     });
   }, [purpose, url, commerceName]);
+
+  // Option A — 빠른 경로 쿠폰 자동부착. 목적이 쿠폰으로 정해지면(Step2 스킵 포함) 본인 매장
+  //   첫 활성쿠폰을 selectedFunnelCouponId 에 자동 세팅 → onComplete 의 set_drop_funnel_coupon
+  //   이 빠른 경로에서도 발화 → 쿠폰 부착. (CouponPurposeOptions 의 !selectedCouponId 가드와 정합.)
+  useEffect(() => {
+    if (purpose !== "쿠폰") return;
+    if (selectedFunnelCouponId !== null) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = getSupabase();
+        const { data: sess } = await supabase.auth.getSession();
+        const uid = sess.session?.user.id;
+        if (!uid) return;
+        const { data: partner } = await supabase
+          .from("partners")
+          .select("id")
+          .eq("owner_user_id", uid)
+          .maybeSingle();
+        if (cancelled || !partner) return;
+        const { data: rows } = await supabase.rpc("get_active_store_coupons", {
+          p_partner_id: partner.id,
+        });
+        if (cancelled) return;
+        const list = (rows ?? []) as Array<{ id: string }>;
+        if (list.length > 0) {
+          setSelectedFunnelCouponId(list[0].id);
+        }
+      } catch {
+        /* 조회 실패 — 무동작 (기존처럼 쿠폰 미부착으로 진행) */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [purpose, selectedFunnelCouponId]);
 
   function buildAiPreview(p: DropPurpose): AiPreviewData {
     const base = aiPreviewFromPurpose(p);
