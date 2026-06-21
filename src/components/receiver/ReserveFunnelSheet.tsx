@@ -52,13 +52,6 @@ type CouponDoneStatus = "none" | "claimed" | "failed";
 
 type Step = "form" | "submitting" | "done" | "error";
 
-async function sha256Hex(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 function normalizePhone(raw: string): string {
   return raw.replace(/[^0-9]/g, "");
 }
@@ -137,7 +130,8 @@ export function ReserveFunnelSheet({
     if (!Number.isFinite(gc) || gc < 1) return "인원을 정확히 입력해 주세요.";
     if (!name.trim()) return "이름을 입력해 주세요.";
     const phoneDigits = normalizePhone(phone);
-    if (phoneDigits.length < 9 || phoneDigits.length > 11) return "전화번호를 정확히 입력해 주세요.";
+    if (!/^010\d{8}$/.test(phoneDigits))
+      return "휴대폰 번호를 010으로 시작하는 11자리 숫자로 입력해 주세요.";
     return null;
   }
 
@@ -154,8 +148,6 @@ export function ReserveFunnelSheet({
     try {
       const supabase = getSupabase();
       const phoneDigits = normalizePhone(phone);
-      const phoneHash = await sha256Hex(phoneDigits);
-      const phoneLast4 = phoneDigits.slice(-4);
       // RSV-FIX1 — 안정적 anonymous_id (E2 이벤트 추적과 같은 localStorage 키 재사용).
       // visitors row 사전 생성 없이 random UUID 를 그대로 p_visitor_id 로 보내면
       // reservations.visitor_id_fkey → visitors(id) FK 위반으로 INSERT 실패.
@@ -213,8 +205,7 @@ export function ReserveFunnelSheet({
         p_check_out_date: isMultiNight ? checkOut : null,
         p_guest_count: Number(guestCount),
         p_name: name.trim(),
-        p_phone_hash: phoneHash,
-        p_phone_last4: phoneLast4,
+        p_phone: phoneDigits,
         p_customer_message: message.trim() || null,
         // A안 로그인 강제 — catcher_user_id 로 uq_reservations_active_catcher
         //   (drop당 1인 1활성예약) abuse 방어. RPC 가 DEFAULT NULL 이라 안전.
@@ -341,13 +332,12 @@ function FormBody(props: {
   onSubmit: () => void;
 }) {
   const phoneDigits = normalizePhone(props.phone);
-  // 2b — 이름 비었거나 전화 9~11자리 미충족(또는 날짜 미선택)이면 제출 비활성.
+  // 2b — 이름 비었거나 휴대폰(010 + 8자리) 미충족(또는 날짜 미선택)이면 제출 비활성.
   const canSubmit =
     props.step === "form" &&
     Boolean(props.checkIn) &&
     props.name.trim().length > 0 &&
-    phoneDigits.length >= 9 &&
-    phoneDigits.length <= 11;
+    /^010\d{8}$/.test(phoneDigits);
   return (
     <div className="space-y-4">
       <header>
@@ -433,6 +423,11 @@ function FormBody(props: {
       {props.errorMsg ? (
         <p className="text-sm font-medium text-[#EF4444]">{props.errorMsg}</p>
       ) : null}
+
+      <p className="text-xs font-medium tracking-ko text-text-muted">
+        예약 신청 보내기를 누르면 입력하신 전화번호가 예약 확인·안내를 위해 매장에 안전하게
+        전달됩니다.
+      </p>
 
       <button
         type="button"
