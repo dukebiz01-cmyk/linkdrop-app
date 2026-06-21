@@ -1011,7 +1011,11 @@ export function InfoDropPage({
               {!isReservation && (
                 <p className="text-sm font-medium tracking-ko text-text-muted">{safeTitle}</p>
               )}
-              <p className="text-xs font-medium text-text-subtle">{safeCreator.channelName}</p>
+              {/* 결정 B — 매장명 우선(사업자=가게명), 없으면 영상 채널명 fallback(정보 등).
+                  safeLocal.name 은 DEFAULT_LOCAL("매장") 폴백이 있어 raw local?.name 으로 store 유무 판정. */}
+              <p className="text-xs font-medium text-text-subtle">
+                {local?.name?.trim() || safeCreator.channelName}
+              </p>
             </div>
           </section>
         )}
