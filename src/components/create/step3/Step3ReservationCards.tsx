@@ -43,6 +43,7 @@ import type {
   Step3FieldState,
 } from "@/components/create/types";
 import { Input } from "@/components/ui/input";
+import { getSupabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
 // 예약 Step 3 — 고객 미리보기 카드 (현재 state 로 라이브 갱신).
@@ -442,6 +443,8 @@ export function Step3ReservationCards({
   const [perDateLinkOpen, setPerDateLinkOpen] = useState(false);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  // 프로필 prefill 1회 가드 — 마운트 시 본인 매장 정보로 빈 필드만 채운다(중복 방지).
+  const prefillDoneRef = useRef(false);
 
   const weekendIsos = useMemo(() => thisWeekendIsos(), []);
   const selectedItem = selectedIso
@@ -552,6 +555,55 @@ export function Step3ReservationCards({
       sheetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [selectedIso]);
+
+  // 프로필 자동 prefill (studio A) — 마운트 시 1회. 본인 partner 프로필에서
+  //   "현재 비어 있는 필드만" 채운다(사용자 입력 절대 덮어쓰기 금지). 비동기라 폼은 블로킹 안 함.
+  //   장소명←display_name / 주소←address / 전화←contact_phone / 예약버튼←reservation_url("self" dest).
+  //   조회 실패·프로필 null·값 null 이면 해당 필드 스킵(폼은 수동으로 정상 동작). placeMapUrl 미관여.
+  useEffect(() => {
+    if (prefillDoneRef.current) return;
+    prefillDoneRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = getSupabase();
+        const { data: sess } = await supabase.auth.getSession();
+        const uid = sess.session?.user.id;
+        if (!uid) return;
+        const { data: partner } = await supabase
+          .from("partners")
+          .select("display_name, address, contact_phone, reservation_url")
+          .eq("owner_user_id", uid)
+          .maybeSingle();
+        if (cancelled || !partner) return;
+
+        const patch: Partial<Step3FieldState> = {};
+        const displayName = (partner.display_name ?? "").trim();
+        const address = (partner.address ?? "").trim();
+        const contactPhone = (partner.contact_phone ?? "").trim();
+        const reservationUrl = (partner.reservation_url ?? "").trim();
+
+        if (displayName && fields.placeName.trim() === "") patch.placeName = displayName;
+        if (address && fields.placeAddress.trim() === "") patch.placeAddress = address;
+        if (contactPhone && fields.placePhone.trim() === "") patch.placePhone = contactPhone;
+        // 예약 URL 있으면 예약 버튼을 "자체 예약(self, 외부 링크)" 로 세팅 + 링크 채움.
+        //   dest 가 이미 선택돼 있으면(사용자 선택) 건드리지 않는다.
+        if (reservationUrl && fields.bookingLink.trim() === "") {
+          patch.bookingLink = reservationUrl;
+          if (!fields.reservationDest) patch.reservationDest = "self";
+        }
+
+        if (!cancelled && Object.keys(patch).length > 0) onFieldsChange(patch);
+      } catch {
+        // 조회 실패 — 무동작. 폼은 수동 입력으로 정상.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // 마운트 1회만 — prefillDoneRef 가드로 재실행 차단. 의존성 고의 비움.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // stay 템플릿 안전망 — fields.reservationType 이 비어 있으면 실제 fields 에 기본값 주입.
   // createEmptyStep3Fields 의 default 가 어떤 이유로든 통과 안 된 경우에도 게이트가 막히지 않게.
