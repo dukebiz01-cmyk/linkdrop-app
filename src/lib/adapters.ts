@@ -358,6 +358,8 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
       statusLabel: "",
       // phase1-3: store.contact_phone → local.phone (CTA tel:/sms: 연결)
       phone: d.store?.phone ?? "",
+      // c-1: 네이버형 매장 식별 — 외부 예약 URL 보유 시 순수 쿠폰 카드에 보조 링크 노출.
+      reservationUrl: d.store?.reservation_url ?? null,
     },
     creator: {
       // 커머스(구매): "원본 영상" 프레이밍 제거 — 판매자명(author_name) 없으면 생략(빈값).

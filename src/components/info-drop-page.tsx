@@ -36,6 +36,7 @@ import {
   Package,
   CalendarDays,
   Sprout,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AiPriceComparisonCard, type PriceOfferRow } from "@/components/ai-price-comparison-card";
@@ -142,6 +143,7 @@ export interface InfoDropPageProps {
     address: string;
     statusLabel: string;
     phone?: string; // phase1-3: partners.contact_phone 연결
+    reservationUrl?: string | null; // c-1: 네이버형 매장 외부 예약 URL(순수 쿠폰 카드 보조 링크)
     hoursLabel?: string;
     rating?: number;
     reviewCount?: number;
@@ -1590,6 +1592,21 @@ export function InfoDropPage({
               ) : null}
             </section>
           )}
+
+        {/* c-1 — 순수 쿠폰 카드 + 네이버형 매장(reservation_url 보유) 일 때만 보조 예약 링크.
+            예약-목적/결합 카드엔 미렌더(인앱 펀널 우선). 주요 CTA 아닌 서브틀 외부 링크. */}
+        {isCoupon && !isCombined && local?.reservationUrl ? (
+          <a
+            href={local.reservationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="coupon-naver-reservation"
+            className="flex items-center justify-center gap-1.5 text-xs font-medium tracking-ko text-text-subtle underline-offset-2 transition-colors hover:text-text-muted hover:underline"
+          >
+            <ExternalLink className="size-3.5" strokeWidth={2} />
+            네이버에서 예약하기
+          </a>
+        ) : null}
       </div>
 
       {/* G2 멀티소스 — primary 외 담은 콘텐츠(영상=링크, 글=링크 카드). 원문 새 탭. */}
