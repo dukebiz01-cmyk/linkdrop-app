@@ -13,6 +13,18 @@ export const Route = createFileRoute("/_user")({
         search: { redirect: location.href } as never,
       });
     }
+    // ── ADDITIVE: 신규 1회 게이트인트로 ──
+    // /start 자신은 화이트리스트(루프 방지). 온보딩 플래그 없으면 /start 로.
+    if (!location.pathname.startsWith("/start")) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("onboarding_completed_at")
+        .eq("id", data.session.user.id)
+        .maybeSingle();
+      if (!profile?.onboarding_completed_at) {
+        throw redirect({ to: "/start" });
+      }
+    }
   },
   component: UserLayout,
 });
