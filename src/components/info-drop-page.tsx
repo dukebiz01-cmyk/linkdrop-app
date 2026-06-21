@@ -34,6 +34,8 @@ import {
   MapPin,
   ShoppingCart,
   Package,
+  CalendarDays,
+  Sprout,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AiPriceComparisonCard, type PriceOfferRow } from "@/components/ai-price-comparison-card";
@@ -94,6 +96,11 @@ export interface InfoDropPageProps {
     /** 나-2 — 상품 메인 블록 저장 카피(나-1). 있으면 상품 /d 페이지에 리치 표시. */
     headline?: string;
     sellingPoints?: string[];
+    /** ② 신선 원물(농가 선주문) — isFresh 일 때만 신선 strip. 시세는 미표시(플래그만 운반). */
+    isFresh?: boolean;
+    harvestDate?: string | null;
+    stockLimit?: number | null;
+    priceBandEnabled?: boolean;
   };
   /** ③ 카드 담기 — 담은(관련) 상품. 본체 source 와 무관, 별도 "관련 상품" 섹션. */
   attachedProducts?: Array<{
@@ -1269,6 +1276,47 @@ export function InfoDropPage({
                       ? `${commerce.priceKrw.toLocaleString("ko-KR")}원`
                       : "가격 미정"}
                   </p>
+                  {/* ② 농가/산지 — props.local 있을 때만(없으면 생략). 신뢰 강화. */}
+                  {local?.name?.trim() || local?.address?.trim() ? (
+                    <p className="flex items-center gap-1.5 text-sm font-medium tracking-ko text-text-muted">
+                      <MapPin className="size-4 shrink-0 text-text-subtle" strokeWidth={2} />
+                      <span className="min-w-0 truncate">
+                        {[local?.name?.trim(), local?.address?.trim()]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </p>
+                  ) : null}
+                  {/* ② 신선 원물 strip — isFresh 일 때만. 수확·발송 예정일 + 한정 수량. 시세 미표시. */}
+                  {commerce.isFresh ? (
+                    <div className="space-y-2 rounded-xl border border-border bg-surface p-3">
+                      <span className="inline-flex w-fit items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
+                        <Sprout className="size-4 shrink-0 text-text-strong" strokeWidth={2} />
+                        신선 원물
+                      </span>
+                      {commerce.harvestDate ? (
+                        <p className="flex items-center gap-1.5 text-sm font-medium tracking-ko text-text-muted">
+                          <CalendarDays
+                            className="size-4 shrink-0 text-text-subtle"
+                            strokeWidth={2}
+                          />
+                          {(() => {
+                            const parts = String(commerce.harvestDate).split("-");
+                            const mm = parts[1];
+                            const dd = parts[2];
+                            return mm && dd
+                              ? `${Number(mm)}월 ${Number(dd)}일 수확·발송 예정`
+                              : String(commerce.harvestDate);
+                          })()}
+                        </p>
+                      ) : null}
+                      {commerce.stockLimit != null ? (
+                        <span className="inline-flex w-fit items-center rounded-md border border-border bg-bg px-2 py-0.5 text-xs font-semibold tracking-ko text-text-strong">
+                          {commerce.stockLimit}개 한정
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {/* 나-2 — 상품 저장 카피(나-1). 있으면 헤드라인+셀링포인트 리치 표시(없으면 회귀 0). */}
                   {commerce.headline ? (
                     <p className="text-base font-bold leading-snug tracking-ko text-text-strong">

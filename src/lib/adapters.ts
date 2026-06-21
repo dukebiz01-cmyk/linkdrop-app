@@ -162,6 +162,10 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     price_krw?: unknown;
     headline?: unknown;
     selling_points?: unknown;
+    is_fresh?: unknown;
+    harvest_date?: unknown;
+    stock_limit?: unknown;
+    price_band_enabled?: unknown;
   };
   const priceKrw = typeof data.price_krw === "number" ? data.price_krw : null;
   const name =
@@ -173,6 +177,18 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
         .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
         .map((s) => s.trim())
     : [];
+  // ② 신선 원물(농가 선주문) — ① 이 block_data 에 ADDITIVE 로 저장한 신선 속성.
+  //   is_fresh===true 일 때만 신선 카드. harvest_date/stock_limit 은 있을 때만.
+  const isFresh = data.is_fresh === true;
+  const harvestDate =
+    typeof data.harvest_date === "string" && data.harvest_date.trim()
+      ? data.harvest_date.trim()
+      : null;
+  const stockLimit =
+    typeof data.stock_limit === "number" && Number.isFinite(data.stock_limit)
+      ? data.stock_limit
+      : null;
+  const priceBandEnabled = data.price_band_enabled === true;
   return {
     name,
     priceKrw,
@@ -182,6 +198,11 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     selfUpload: (d.source.source_url ?? "").startsWith(SELF_UPLOAD_SOURCE_PREFIX),
     ...(headline ? { headline } : {}),
     ...(sellingPoints.length > 0 ? { sellingPoints } : {}),
+    // ② 신선 속성 동봉 — isFresh 는 항상, 나머지는 신선일 때만 의미.
+    isFresh,
+    ...(isFresh && harvestDate ? { harvestDate } : {}),
+    ...(isFresh && stockLimit != null ? { stockLimit } : {}),
+    ...(isFresh ? { priceBandEnabled } : {}),
   };
 }
 
