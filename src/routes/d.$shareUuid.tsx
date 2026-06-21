@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { InfoDropPage } from "@/components/info-drop-page";
 import { ReserveFunnelSheet } from "@/components/receiver/ReserveFunnelSheet";
+import { PreorderSheet } from "@/components/receiver/PreorderSheet";
 import type { ReservationSelection } from "@/components/reservation-calendar-page";
 import { getAuthClient } from "@/lib/auth-context";
 import {
@@ -67,6 +68,8 @@ type DropSearch = {
   ci?: string; // check-in  (YYYY-MM-DD)
   co?: string; // check-out (YYYY-MM-DD)
   g?: string; // guest count
+  // ③b 선주문: OAuth 복귀 후 선주문 시트 자동 오픈 표식. reserve 와 상호배타(별 param).
+  preorder?: string;
 };
 
 // P3 — get_available_slots 반환 행. SSR loader 가 미리 가져와 HTML 에 실어 보낸다.
@@ -133,6 +136,7 @@ export const Route = createFileRoute("/d/$shareUuid")({
       ci: typeof search.ci === "string" ? search.ci : undefined,
       co: typeof search.co === "string" ? search.co : undefined,
       g: typeof search.g === "string" ? search.g : undefined,
+      preorder: typeof search.preorder === "string" ? search.preorder : undefined,
     };
   },
   loader: async ({ params, location }): Promise<LoaderData> => {
@@ -267,6 +271,8 @@ function DropPage() {
   const loaderData = Route.useLoaderData();
   // A안 직접예약 — 인앱 신청 시트 + 캘린더 선택값 prefill.
   const [reserveSheetOpen, setReserveSheetOpen] = useState(false);
+  // ③b 선주문 시트 — reserve 와 별개 상태(상호배타).
+  const [preorderSheetOpen, setPreorderSheetOpen] = useState(false);
   const [reservePrefill, setReservePrefill] = useState<{
     checkIn: string;
     checkOut: string;
@@ -375,6 +381,8 @@ function DropPage() {
   const navigate = useNavigate();
   const claimedRef = useRef(false);
   const reserveResumeRef = useRef(false);
+  // ③b 선주문 복귀 1회 가드 — reserveResumeRef 와 별개 ref.
+  const preorderResumeRef = useRef(false);
   const returnDiagRef = useRef(false);
 
   // 카드 복귀 — authChecked 완료 + ?coupon=1 인데 세션을 못 읽었으면(claim 불가) 안내. 1 회만.
@@ -495,6 +503,34 @@ function DropPage() {
     setReserveSheetOpen(true);
   }, [authChecked, search.reserve, search.ci, search.co, search.g, userId]);
 
+  // ③b 선주문 — 로그인 강제(catcher abuse 방어). handleReservationRequest 미러(별개 흐름).
+  //   userId 있음 → 시트 오픈 / 없음 → 카카오 OAuth, ?preorder=1 로 복귀.
+  function handlePreorder() {
+    if (userId) {
+      setPreorderSheetOpen(true);
+      return;
+    }
+    void startKakaoLogin(`/d/${shareUuid}?preorder=1`);
+  }
+
+  // OAuth 복귀 ?preorder=1 + 로그인 → 선주문 시트 자동 오픈. 1회만(preorderResumeRef).
+  //   ⚠️ reserve useEffect(?reserve=1)와 별 param·별 ref — 동시 발화 없음(param 상호배타).
+  useEffect(() => {
+    if (!authChecked) return;
+    if (search.preorder !== "1") return;
+    if (!userId) return;
+    if (preorderResumeRef.current) return;
+    preorderResumeRef.current = true;
+    setPreorderSheetOpen(true);
+    // param 정리 — preorder 키만 제거(다른 query 보존). 재오픈은 ref 가 막음.
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      sp.delete("preorder");
+      const qs = sp.toString();
+      window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    }
+  }, [authChecked, search.preorder, userId]);
+
   return (
     <>
       <InfoDropPage
@@ -531,6 +567,10 @@ function DropPage() {
         onReservationRequest={(selection) => {
           trackReceiverEvent("reservation_click", detail.drop.id);
           handleReservationRequest(selection);
+        }}
+        onPreorder={() => {
+          trackReceiverEvent("reservation_click", detail.drop.id);
+          handlePreorder();
         }}
         onWatchOriginal={() => {
           const url = detail.source?.source_url;
@@ -639,6 +679,21 @@ function DropPage() {
           onClaimed={() => {
             claimedRef.current = true;
           }}
+        />
+      ) : null}
+
+      {/* ③b 선주문 시트 — commerce(자체업로드) 전용. 로그인 강제(userId 있을 때만 렌더). */}
+      {userId && props.commerce ? (
+        <PreorderSheet
+          open={preorderSheetOpen}
+          onOpenChange={setPreorderSheetOpen}
+          dropId={detail.drop.id}
+          shareUuid={shareUuid}
+          productName={props.commerce.name}
+          unitPriceKrw={props.commerce.priceKrw ?? 0}
+          harvestDate={props.commerce.harvestDate ?? null}
+          stockLimit={props.commerce.stockLimit ?? null}
+          partnerPhone={props.local?.phone?.trim() || null}
         />
       ) : null}
     </>

@@ -193,6 +193,8 @@ export interface InfoDropPageProps {
   } | null;
   /** H1-d funnel — [예약 문의하고 쿠폰 받기] CTA 클릭. 부모가 로그인/폼/RPC 핸들 */
   onReserveAndClaim?: () => void;
+  /** ③b 선주문 — commerce(자체업로드) "선주문하기" CTA 클릭. 부모가 로그인/시트/RPC 핸들 */
+  onPreorder?: () => void;
 }
 
 const PURPOSE_CHIP_CLASS: Record<DropPurpose, string> = {
@@ -556,6 +558,7 @@ export function InfoDropPage({
   shareUrl,
   funnelCoupon,
   onReserveAndClaim,
+  onPreorder,
   reservationDates,
   isReshare = false,
   videoSourceUrl,
@@ -1340,17 +1343,15 @@ export function InfoDropPage({
                     </ul>
                   ) : null}
                   {commerce.selfUpload ? (
-                    // 자체업로드 상품 — 1차 버튼 = 구매하기(장바구니). 결제는 임시(준비중 토스트).
+                    // ③b 자체업로드 상품 — 1차 버튼 = 선주문하기. 부모(d.$shareUuid)가 로그인 강제 +
+                    //   PreorderSheet(발송일·수량·결제 스텁) 오픈 + create_preorder 호출을 핸들.
                     <ActionButton
                       type="button"
                       className="w-full gap-2"
-                      onClick={() => {
-                        // TODO: 토스 결제 연결
-                        toast("준비중입니다");
-                      }}
+                      onClick={() => onPreorder?.()}
                     >
                       <ShoppingCart className="size-4" strokeWidth={2} />
-                      구매하기
+                      선주문하기
                     </ActionButton>
                   ) : (
                     <ActionButton
