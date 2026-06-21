@@ -13,6 +13,7 @@ import {
   Wallet,
   Send,
   Pencil,
+  Package,
 } from "lucide-react";
 // Wallet = 쿠폰 지갑 섹션 헤더. Send = 받은 쿠폰 메이커, Heart = 구독한 메이커. Gift = 증정 쿠폰 라벨.
 import { Toaster } from "@/components/ui/sonner";
@@ -601,6 +602,18 @@ function MePage() {
             </button>
           </SectionCard>
         ) : null}
+
+        {/* 내 주문 — 손님 선주문 상태(읽기전용) 진입. "내 매장" 패턴 미러(additive). */}
+        <SectionCard Icon={Package} title="내 주문">
+          <button
+            type="button"
+            onClick={() => navigate({ to: "/me/orders" })}
+            className="flex w-full min-h-[44px] items-center justify-between rounded-xl bg-[#F8FAFC] px-4 py-3 text-sm font-semibold text-[#0F172A] hover:bg-[#F1F5F9]"
+          >
+            <span>주문 상태 보기</span>
+            <ChevronRight className="size-4 text-[#64748B]" strokeWidth={2} />
+          </button>
+        </SectionCard>
 
         {/* ② 내 혜택 지갑 — 행동형 헤더 + 상태 필터 칩(2/5). 카드(1/5)·정렬·다른 섹션 무수정.
             필터는 클라이언트 로컬 state, 정렬은 loader 최신순 유지. */}

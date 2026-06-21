@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Phone, Minus, Plus, CheckCircle2, Truck, Coins } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getSupabase } from "@/lib/supabase";
@@ -262,6 +263,13 @@ export function PreorderSheet({
             >
               확인
             </button>
+            {/* 주문 접수 후 손님 본인 주문상태 화면으로(읽기전용). */}
+            <Link
+              to="/me/orders"
+              className="flex w-full min-h-[44px] items-center justify-center text-sm font-medium tracking-ko text-text-muted underline-offset-2 hover:text-text-strong hover:underline"
+            >
+              내 주문에서 상태 확인하기
+            </Link>
           </div>
         ) : (
           <div className="space-y-4 py-6 text-center">
