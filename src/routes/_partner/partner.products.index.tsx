@@ -41,6 +41,8 @@ type ProductSource = {
 
 type ShareEventRow = { share_uuid: string | null; created_at: string | null };
 
+type BlockRow = { block_kind: string | null; block_data: Record<string, unknown> | null };
+
 type ProductRow = {
   id: string;
   status: string | null;
@@ -48,6 +50,7 @@ type ProductRow = {
   view_count: number | null;
   source: ProductSource | null;
   share_events: ShareEventRow[] | null;
+  blocks: BlockRow[] | null;
 };
 
 // 한 드롭의 공유 share_uuid = share_events 중 created_at 최소(첫) 것.
@@ -56,6 +59,13 @@ function firstShareUuid(r: ProductRow): string | null {
     .slice()
     .sort((a, b) => +new Date(a.created_at ?? 0) - +new Date(b.created_at ?? 0))[0];
   return ev?.share_uuid ?? null;
+}
+
+// 신선 원물 여부 — product 블록 block_data.is_fresh === true (신선 등록 상품만 true).
+function isFreshProduct(r: ProductRow): boolean {
+  return (r.blocks ?? []).some(
+    (b) => b.block_kind === "product" && b.block_data?.is_fresh === true,
+  );
 }
 
 function ProductsIndexPage() {
@@ -82,7 +92,8 @@ function ProductsIndexPage() {
         .select(
           `id, status, created_at, view_count,
            source:content_sources!inner ( title, thumbnail_url, price_krw, source_url, provider ),
-           share_events ( share_uuid, created_at )`,
+           share_events ( share_uuid, created_at ),
+           blocks:component_blocks ( block_kind, block_data )`,
         )
         .eq("owner_user_id", uid)
         .eq("purpose", "구매")
@@ -239,6 +250,11 @@ function ProductsIndexPage() {
                             비공개
                           </span>
                         )}
+                        {isFreshProduct(p) ? (
+                          <span className="rounded-md bg-intent-success-bg px-2 py-0.5 text-xs font-medium text-intent-success">
+                            신선
+                          </span>
+                        ) : null}
                         {p.view_count != null ? (
                           <span className="text-xs text-[#94A3B8]">조회 {p.view_count}</span>
                         ) : null}

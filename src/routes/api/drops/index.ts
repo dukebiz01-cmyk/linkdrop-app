@@ -35,6 +35,12 @@ type CreateDropBody = {
   /** 나-1 상품 카피 — 메인 product 블록 block_data 에 머지(headline/selling_points). 자체업로드 전용. */
   headline?: string;
   selling_points?: string[];
+  /** 신선 원물(농가 선주문) — 메인 product 블록 block_data 에 머지. 자체업로드 전용, ADDITIVE.
+   *  is_fresh=false(가공) 면 나머지 신선 키 생략. 마이그 0(jsonb 키만 추가). */
+  is_fresh?: boolean;
+  harvest_date?: string | null;
+  stock_limit?: number | null;
+  price_band_enabled?: boolean;
   /** 공개/비공개 — true 면 탐색 피드 노출, false(기본) 면 받은 사람만 링크 열람. */
   is_public?: boolean;
 };
@@ -166,6 +172,40 @@ export const Route = createFileRoute("/api/drops/")({
                   ...(target.block_data ?? {}),
                   ...(selfHeadline ? { headline: selfHeadline } : {}),
                   ...(selfPoints.length > 0 ? { selling_points: selfPoints } : {}),
+                };
+              }
+            }
+            // 신선 원물(농가 선주문) — 메인 product 블록 block_data 에 신선 키 머지(ADDITIVE).
+            //   카피 머지(위)와 독립 — 카피 없이 신선 속성만 있어도 반영. 기존 키 무수정.
+            //   is_fresh 는 항상 기록(true=신선/false=가공). 가공이면 나머지 신선 키 생략.
+            //   신선이면 harvest_date/stock_limit(있을 때만) + price_band_enabled(플래그) 추가.
+            const selfIsFresh = body.is_fresh === true; // 명시적 true 만 신선. 미지정/false = 일반(스크랩·가공 포함).
+            const selfHarvestDate =
+              typeof body.harvest_date === "string" && body.harvest_date.trim()
+                ? body.harvest_date.trim()
+                : null;
+            const selfStockLimit =
+              typeof body.stock_limit === "number" &&
+              Number.isFinite(body.stock_limit) &&
+              body.stock_limit > 0
+                ? Math.floor(body.stock_limit)
+                : null;
+            const selfPriceBandEnabled = body.price_band_enabled === true;
+            {
+              const arr = selfBlocks as Array<{
+                block_kind?: string;
+                block_data?: Record<string, unknown>;
+              }>;
+              const target =
+                arr.find((b) => b?.block_kind === "product" && !b.block_data?.ref_drop_id) ??
+                arr[0];
+              if (target) {
+                target.block_data = {
+                  ...(target.block_data ?? {}),
+                  is_fresh: selfIsFresh,
+                  ...(selfIsFresh && selfHarvestDate ? { harvest_date: selfHarvestDate } : {}),
+                  ...(selfIsFresh && selfStockLimit != null ? { stock_limit: selfStockLimit } : {}),
+                  ...(selfIsFresh ? { price_band_enabled: selfPriceBandEnabled } : {}),
                 };
               }
             }

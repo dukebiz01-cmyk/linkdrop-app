@@ -1,7 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, ImagePlus, Package, Loader2, CheckCircle2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ImagePlus,
+  Package,
+  Loader2,
+  CheckCircle2,
+  Sprout,
+  Factory,
+  CalendarDays,
+  Hash,
+  TrendingUp,
+} from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { Toaster } from "@/components/ui/sonner";
 import {
@@ -61,6 +72,11 @@ function ProductNewPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  // 신선 원물(농가 선주문) — 기본 신선. 가공 선택 시 신선 입력칸 숨김 + is_fresh=false.
+  const [isFresh, setIsFresh] = useState(true);
+  const [harvestDate, setHarvestDate] = useState("");
+  const [stockLimit, setStockLimit] = useState("");
+  const [priceBandEnabled, setPriceBandEnabled] = useState(false);
   // 나-1 — 상품 카피(headline/selling_points). 비우면 저장 시 키 생략(회귀 0).
   const [copy, setCopy] = useState<ProductCopyValue>(EMPTY_PRODUCT_COPY);
   const [uploading, setUploading] = useState(false);
@@ -141,6 +157,12 @@ function ProductNewPage() {
           // 나-1 — 카피 동봉(서버가 메인 product 블록 block_data 에 머지). 빈 값은 서버에서 생략.
           headline: copy.headline.trim(),
           selling_points: copy.sellingPoints.map((s) => s.trim()).filter(Boolean),
+          // 신선 원물 — 가공이면 is_fresh=false + 나머지 생략(null). 신선이면 예정일·수량·시세 플래그.
+          is_fresh: isFresh,
+          harvest_date: isFresh && harvestDate ? harvestDate : null,
+          stock_limit:
+            isFresh && Number(stockLimit) >= 1 ? Math.floor(Number(stockLimit)) : null,
+          price_band_enabled: isFresh ? priceBandEnabled : false,
           blocks: [
             {
               block_kind: "product",
@@ -289,6 +311,116 @@ function ProductNewPage() {
               />
               <span className="shrink-0 text-sm font-semibold text-[#64748B]">원</span>
             </div>
+          </div>
+
+          {/* 신선/가공 — 농가 선주문 속성. 기본 신선. 가공이면 신선 입력칸 숨김(is_fresh=false). */}
+          <div className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
+            <span className="block text-xs font-semibold tracking-ko text-text-strong">
+              상품 유형
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsFresh(true)}
+                aria-pressed={isFresh}
+                className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl border text-sm font-semibold tracking-ko transition-colors ${
+                  isFresh
+                    ? "border-action bg-bg text-text-strong"
+                    : "border-border bg-bg text-text-muted hover:border-text-muted"
+                }`}
+              >
+                <Sprout className="size-4" strokeWidth={2} />
+                신선 원물
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsFresh(false)}
+                aria-pressed={!isFresh}
+                className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl border text-sm font-semibold tracking-ko transition-colors ${
+                  !isFresh
+                    ? "border-action bg-bg text-text-strong"
+                    : "border-border bg-bg text-text-muted hover:border-text-muted"
+                }`}
+              >
+                <Factory className="size-4" strokeWidth={2} />
+                가공식품
+              </button>
+            </div>
+
+            {isFresh ? (
+              <div className="space-y-3 pt-1">
+                {/* 수확/발송 예정일 */}
+                <label htmlFor="pd-harvest" className="block">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
+                    <CalendarDays className="size-3.5" strokeWidth={2} />
+                    수확·발송 예정일{" "}
+                    <span className="font-medium text-text-subtle">(선택)</span>
+                  </span>
+                  <input
+                    id="pd-harvest"
+                    type="date"
+                    value={harvestDate}
+                    onChange={(e) => setHarvestDate(e.target.value)}
+                    className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
+                  />
+                </label>
+
+                {/* 한정 수량 */}
+                <label htmlFor="pd-stock" className="block">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
+                    <Hash className="size-3.5" strokeWidth={2} />
+                    한정 수량{" "}
+                    <span className="font-medium text-text-subtle">(선택)</span>
+                  </span>
+                  <input
+                    id="pd-stock"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={stockLimit}
+                    onChange={(e) => setStockLimit(e.target.value)}
+                    placeholder="예: 30"
+                    className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                  />
+                </label>
+
+                {/* 시세 표시 토글 */}
+                <button
+                  type="button"
+                  onClick={() => setPriceBandEnabled((v) => !v)}
+                  aria-pressed={priceBandEnabled}
+                  className={`flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl border px-3 text-sm font-semibold tracking-ko transition-colors ${
+                    priceBandEnabled
+                      ? "border-action bg-bg text-text-strong"
+                      : "border-border bg-bg text-text-muted hover:border-text-muted"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <TrendingUp className="size-4" strokeWidth={2} />
+                    시세 표시
+                  </span>
+                  <span
+                    className={`inline-flex h-6 w-10 shrink-0 items-center rounded-full px-0.5 transition-colors ${
+                      priceBandEnabled ? "bg-action" : "bg-border"
+                    }`}
+                  >
+                    <span
+                      className={`size-5 rounded-full bg-bg transition-transform ${
+                        priceBandEnabled ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </span>
+                </button>
+                <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
+                  켜면 카드에 시세 비교가 표시될 예정이에요. (표시는 추후 제공)
+                </p>
+              </div>
+            ) : (
+              <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
+                가공식품은 사진·가격·이름·홍보 문구만 등록해요. 유통기한·식품표시는 다음 단계에서
+                지원합니다.
+              </p>
+            )}
           </div>
 
           {/* 나-1 — 홍보 문구(선택). 상품명·가격·메모 기반 AI 카피 + 수동 수정. */}
