@@ -31,7 +31,9 @@ import { Route as ApiConsultationsRouteImport } from './routes/api/consultations
 import { Route as ApiAbuseReportsRouteImport } from './routes/api/abuse-reports'
 import { Route as AllianceSlugRouteImport } from './routes/alliance.$slug'
 import { Route as UserStudioRouteImport } from './routes/_user/studio'
+import { Route as UserStartRouteImport } from './routes/_user/start'
 import { Route as UserProfileRouteImport } from './routes/_user/profile'
+import { Route as UserMeOrdersRouteImport } from './routes/_user/me-orders'
 import { Route as UserMeRouteImport } from './routes/_user/me'
 import { Route as UserInboxRouteImport } from './routes/_user/inbox'
 import { Route as UserHomeRouteImport } from './routes/_user/home'
@@ -47,7 +49,6 @@ import { Route as ApiProductsCopyRouteImport } from './routes/api/products/copy'
 import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
 import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
 import { Route as UserResultsShareUuidRouteImport } from './routes/_user/results.$shareUuid'
-import { Route as UserMeOrdersRouteImport } from './routes/_user/me.orders'
 import { Route as UserCouponClaim_codeRouteImport } from './routes/_user/coupon.$claim_code'
 import { Route as UserCardEditShareUuidRouteImport } from './routes/_user/card-edit.$shareUuid'
 import { Route as PartnerPartnerResultsRouteImport } from './routes/_partner/partner.results'
@@ -176,9 +177,19 @@ const UserStudioRoute = UserStudioRouteImport.update({
   path: '/studio',
   getParentRoute: () => UserRoute,
 } as any)
+const UserStartRoute = UserStartRouteImport.update({
+  id: '/start',
+  path: '/start',
+  getParentRoute: () => UserRoute,
+} as any)
 const UserProfileRoute = UserProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserMeOrdersRoute = UserMeOrdersRouteImport.update({
+  id: '/me-orders',
+  path: '/me-orders',
   getParentRoute: () => UserRoute,
 } as any)
 const UserMeRoute = UserMeRouteImport.update({
@@ -255,11 +266,6 @@ const UserResultsShareUuidRoute = UserResultsShareUuidRouteImport.update({
   id: '/results/$shareUuid',
   path: '/results/$shareUuid',
   getParentRoute: () => UserRoute,
-} as any)
-const UserMeOrdersRoute = UserMeOrdersRouteImport.update({
-  id: '/orders',
-  path: '/orders',
-  getParentRoute: () => UserMeRoute,
 } as any)
 const UserCouponClaim_codeRoute = UserCouponClaim_codeRouteImport.update({
   id: '/coupon/$claim_code',
@@ -380,8 +386,10 @@ export interface FileRoutesByFullPath {
   '/explore': typeof UserExploreRoute
   '/home': typeof UserHomeRoute
   '/inbox': typeof UserInboxRoute
-  '/me': typeof UserMeRouteWithChildren
+  '/me': typeof UserMeRoute
+  '/me-orders': typeof UserMeOrdersRoute
   '/profile': typeof UserProfileRoute
+  '/start': typeof UserStartRoute
   '/studio': typeof UserStudioRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
@@ -411,7 +419,6 @@ export interface FileRoutesByFullPath {
   '/partner/results': typeof PartnerPartnerResultsRoute
   '/card-edit/$shareUuid': typeof UserCardEditShareUuidRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
-  '/me/orders': typeof UserMeOrdersRoute
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
@@ -438,8 +445,10 @@ export interface FileRoutesByTo {
   '/explore': typeof UserExploreRoute
   '/home': typeof UserHomeRoute
   '/inbox': typeof UserInboxRoute
-  '/me': typeof UserMeRouteWithChildren
+  '/me': typeof UserMeRoute
+  '/me-orders': typeof UserMeOrdersRoute
   '/profile': typeof UserProfileRoute
+  '/start': typeof UserStartRoute
   '/studio': typeof UserStudioRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
@@ -469,7 +478,6 @@ export interface FileRoutesByTo {
   '/partner/results': typeof PartnerPartnerResultsRoute
   '/card-edit/$shareUuid': typeof UserCardEditShareUuidRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
-  '/me/orders': typeof UserMeOrdersRoute
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
@@ -500,8 +508,10 @@ export interface FileRoutesById {
   '/_user/explore': typeof UserExploreRoute
   '/_user/home': typeof UserHomeRoute
   '/_user/inbox': typeof UserInboxRoute
-  '/_user/me': typeof UserMeRouteWithChildren
+  '/_user/me': typeof UserMeRoute
+  '/_user/me-orders': typeof UserMeOrdersRoute
   '/_user/profile': typeof UserProfileRoute
+  '/_user/start': typeof UserStartRoute
   '/_user/studio': typeof UserStudioRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
@@ -531,7 +541,6 @@ export interface FileRoutesById {
   '/_partner/partner/results': typeof PartnerPartnerResultsRoute
   '/_user/card-edit/$shareUuid': typeof UserCardEditShareUuidRoute
   '/_user/coupon/$claim_code': typeof UserCouponClaim_codeRoute
-  '/_user/me/orders': typeof UserMeOrdersRoute
   '/_user/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
@@ -561,7 +570,9 @@ export interface FileRouteTypes {
     | '/home'
     | '/inbox'
     | '/me'
+    | '/me-orders'
     | '/profile'
+    | '/start'
     | '/studio'
     | '/alliance/$slug'
     | '/api/abuse-reports'
@@ -591,7 +602,6 @@ export interface FileRouteTypes {
     | '/partner/results'
     | '/card-edit/$shareUuid'
     | '/coupon/$claim_code'
-    | '/me/orders'
     | '/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
@@ -619,7 +629,9 @@ export interface FileRouteTypes {
     | '/home'
     | '/inbox'
     | '/me'
+    | '/me-orders'
     | '/profile'
+    | '/start'
     | '/studio'
     | '/alliance/$slug'
     | '/api/abuse-reports'
@@ -649,7 +661,6 @@ export interface FileRouteTypes {
     | '/partner/results'
     | '/card-edit/$shareUuid'
     | '/coupon/$claim_code'
-    | '/me/orders'
     | '/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
@@ -680,7 +691,9 @@ export interface FileRouteTypes {
     | '/_user/home'
     | '/_user/inbox'
     | '/_user/me'
+    | '/_user/me-orders'
     | '/_user/profile'
+    | '/_user/start'
     | '/_user/studio'
     | '/alliance/$slug'
     | '/api/abuse-reports'
@@ -710,7 +723,6 @@ export interface FileRouteTypes {
     | '/_partner/partner/results'
     | '/_user/card-edit/$shareUuid'
     | '/_user/coupon/$claim_code'
-    | '/_user/me/orders'
     | '/_user/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
@@ -910,11 +922,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UserStudioRouteImport
       parentRoute: typeof UserRoute
     }
+    '/_user/start': {
+      id: '/_user/start'
+      path: '/start'
+      fullPath: '/start'
+      preLoaderRoute: typeof UserStartRouteImport
+      parentRoute: typeof UserRoute
+    }
     '/_user/profile': {
       id: '/_user/profile'
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof UserProfileRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/me-orders': {
+      id: '/_user/me-orders'
+      path: '/me-orders'
+      fullPath: '/me-orders'
+      preLoaderRoute: typeof UserMeOrdersRouteImport
       parentRoute: typeof UserRoute
     }
     '/_user/me': {
@@ -1021,13 +1047,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/results/$shareUuid'
       preLoaderRoute: typeof UserResultsShareUuidRouteImport
       parentRoute: typeof UserRoute
-    }
-    '/_user/me/orders': {
-      id: '/_user/me/orders'
-      path: '/orders'
-      fullPath: '/me/orders'
-      preLoaderRoute: typeof UserMeOrdersRouteImport
-      parentRoute: typeof UserMeRoute
     }
     '/_user/coupon/$claim_code': {
       id: '/_user/coupon/$claim_code'
@@ -1241,17 +1260,6 @@ const PartnerRouteChildren: PartnerRouteChildren = {
 const PartnerRouteWithChildren =
   PartnerRoute._addFileChildren(PartnerRouteChildren)
 
-interface UserMeRouteChildren {
-  UserMeOrdersRoute: typeof UserMeOrdersRoute
-}
-
-const UserMeRouteChildren: UserMeRouteChildren = {
-  UserMeOrdersRoute: UserMeOrdersRoute,
-}
-
-const UserMeRouteWithChildren =
-  UserMeRoute._addFileChildren(UserMeRouteChildren)
-
 interface UserRouteChildren {
   UserCreateRoute: typeof UserCreateRoute
   UserCreateBuilderRoute: typeof UserCreateBuilderRoute
@@ -1259,8 +1267,10 @@ interface UserRouteChildren {
   UserExploreRoute: typeof UserExploreRoute
   UserHomeRoute: typeof UserHomeRoute
   UserInboxRoute: typeof UserInboxRoute
-  UserMeRoute: typeof UserMeRouteWithChildren
+  UserMeRoute: typeof UserMeRoute
+  UserMeOrdersRoute: typeof UserMeOrdersRoute
   UserProfileRoute: typeof UserProfileRoute
+  UserStartRoute: typeof UserStartRoute
   UserStudioRoute: typeof UserStudioRoute
   UserCardEditShareUuidRoute: typeof UserCardEditShareUuidRoute
   UserCouponClaim_codeRoute: typeof UserCouponClaim_codeRoute
@@ -1274,8 +1284,10 @@ const UserRouteChildren: UserRouteChildren = {
   UserExploreRoute: UserExploreRoute,
   UserHomeRoute: UserHomeRoute,
   UserInboxRoute: UserInboxRoute,
-  UserMeRoute: UserMeRouteWithChildren,
+  UserMeRoute: UserMeRoute,
+  UserMeOrdersRoute: UserMeOrdersRoute,
   UserProfileRoute: UserProfileRoute,
+  UserStartRoute: UserStartRoute,
   UserStudioRoute: UserStudioRoute,
   UserCardEditShareUuidRoute: UserCardEditShareUuidRoute,
   UserCouponClaim_codeRoute: UserCouponClaim_codeRoute,

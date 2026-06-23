@@ -607,7 +607,7 @@ function MePage() {
         <SectionCard Icon={Package} title="내 주문">
           <button
             type="button"
-            onClick={() => navigate({ to: "/me/orders" })}
+            onClick={() => navigate({ to: "/me-orders" })}
             className="flex w-full min-h-[44px] items-center justify-between rounded-xl bg-[#F8FAFC] px-4 py-3 text-sm font-semibold text-[#0F172A] hover:bg-[#F1F5F9]"
           >
             <span>주문 상태 보기</span>

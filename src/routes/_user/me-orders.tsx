@@ -26,7 +26,7 @@ type LoaderData = {
   preorders: MyPreorderRow[];
 };
 
-export const Route = createFileRoute("/_user/me/orders")({
+export const Route = createFileRoute("/_user/me-orders")({
   head: () => ({ meta: [{ title: "내 주문 — LinkDrop" }] }),
   loader: async (): Promise<LoaderData> => {
     const empty: LoaderData = { preorders: [] };
