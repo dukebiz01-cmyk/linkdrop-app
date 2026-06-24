@@ -1,8 +1,11 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { getAuthClient } from "@/lib/auth-context";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import { CouponPreview } from "@/components/receiver/CouponPreview";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Toaster } from "@/components/ui/sonner";
+import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
 import {
   Calendar,
   Video,
@@ -204,7 +207,10 @@ const STUDIO_BUILD_CSS = `
 
 export function CardStudioPage() {
   // loader 데이터 수신만 — 이번 단계는 배선까지. 화면 하드코딩 치환은 다음 단계.
-  const { isBusiness, store, coupons } = Route.useLoaderData();
+  const { isBusiness, store, coupons, manageCoupons } = Route.useLoaderData();
+  const router = useRouter();
+  // 쿠폰 만들기 바텀시트(CouponManageView 임베드) 노출 상태.
+  const [couponSheetOpen, setCouponSheetOpen] = useState(false);
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [cardColor, setCardColor] = useState(CARD_COLORS[1].value);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -453,57 +459,69 @@ export function CardStudioPage() {
                 <p className="mt-0.5 text-[13px] text-white/75">괴산 호수 캠핑 · 노지 감성</p>
 
                 <div className="mt-4 space-y-2">
-                  {applied["coupon"] &&
-                    (selectedCoupon ? (
-                      // 쿠폰 장착 + 활성 쿠폰 있음 = 손님이 볼 실제 쿠폰 미리보기(선택된 쿠폰).
-                      <div className="animate-slide-up space-y-2">
-                        <CouponPreview
-                          coupon={{ ...selectedCoupon, title: selectedCoupon.title ?? "" }}
-                        />
-                        {/* 쿠폰 2개 이상일 때만 "쿠폰 바꾸기" 인라인 피커(색상 팔레트와 동일 노출 방식). */}
-                        {coupons.length > 1 ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setShowCouponPicker((v) => !v)}
-                              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/25 py-2 text-[12px] font-semibold text-white/80 transition-colors hover:bg-white/10"
-                            >
-                              <Ticket className="h-3.5 w-3.5" strokeWidth={2} />
-                              쿠폰 바꾸기
-                            </button>
-                            {showCouponPicker ? (
-                              // 리스트 = Step3Options.tsx:330-368 무채색 패턴 시각 복제(블루 없음).
-                              <ul className="space-y-1.5 rounded-xl bg-white/10 p-2">
-                                {coupons
-                                  .filter((c) => c.id !== selectedCoupon?.id)
-                                  .map((c) => (
-                                    <li key={c.id}>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedCouponId(c.id);
-                                          setShowCouponPicker(false);
-                                        }}
-                                        className="flex w-full items-center gap-2 rounded-lg border border-[#E5E5E5] bg-white p-2.5 text-left text-[#0A0A0A] transition-colors hover:bg-[#FAFAFA]"
-                                      >
-                                        <Ticket className="h-4 w-4 shrink-0" strokeWidth={2} />
-                                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-ko">
-                                          {c.title ?? "쿠폰"}
-                                        </span>
-                                      </button>
-                                    </li>
-                                  ))}
-                              </ul>
-                            ) : null}
-                          </>
-                        ) : null}
-                      </div>
-                    ) : (
-                      // 장착했지만 매장에 활성 쿠폰 없음 — 안내(빈 상태 패턴 재사용).
-                      <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55 animate-slide-up">
-                        매장에 활성 쿠폰이 없어요
-                      </div>
-                    ))}
+                  {applied["coupon"] && (
+                    <div className="animate-slide-up space-y-2">
+                      {selectedCoupon ? (
+                        <>
+                          {/* 쿠폰 장착 + 활성 쿠폰 있음 = 손님이 볼 실제 쿠폰 미리보기(선택된 쿠폰). */}
+                          <CouponPreview
+                            coupon={{ ...selectedCoupon, title: selectedCoupon.title ?? "" }}
+                          />
+                          {/* 쿠폰 2개 이상일 때만 "쿠폰 바꾸기" 인라인 피커(색상 팔레트와 동일 노출 방식). */}
+                          {coupons.length > 1 ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setShowCouponPicker((v) => !v)}
+                                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/25 py-2 text-[12px] font-semibold text-white/80 transition-colors hover:bg-white/10"
+                              >
+                                <Ticket className="h-3.5 w-3.5" strokeWidth={2} />
+                                쿠폰 바꾸기
+                              </button>
+                              {showCouponPicker ? (
+                                // 리스트 = Step3Options.tsx:330-368 무채색 패턴 시각 복제(블루 없음).
+                                <ul className="space-y-1.5 rounded-xl bg-white/10 p-2">
+                                  {coupons
+                                    .filter((c) => c.id !== selectedCoupon?.id)
+                                    .map((c) => (
+                                      <li key={c.id}>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedCouponId(c.id);
+                                            setShowCouponPicker(false);
+                                          }}
+                                          className="flex w-full items-center gap-2 rounded-lg border border-[#E5E5E5] bg-white p-2.5 text-left text-[#0A0A0A] transition-colors hover:bg-[#FAFAFA]"
+                                        >
+                                          <Ticket className="h-4 w-4 shrink-0" strokeWidth={2} />
+                                          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-ko">
+                                            {c.title ?? "쿠폰"}
+                                          </span>
+                                        </button>
+                                      </li>
+                                    ))}
+                                </ul>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </>
+                      ) : (
+                        // 장착했지만 매장에 활성 쿠폰 없음 — 안내(빈 상태 패턴 재사용).
+                        <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55">
+                          매장에 활성 쿠폰이 없어요
+                        </div>
+                      )}
+                      {/* 새 쿠폰 만들기 — 쿠폰 유무와 무관하게 피커 영역에 항상 노출(바텀시트로 CouponManageView). */}
+                      <button
+                        type="button"
+                        onClick={() => setCouponSheetOpen(true)}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-white py-2.5 text-[13px] font-bold text-[#1D4ED8] transition-colors hover:bg-[#F0F4FF]"
+                      >
+                        <Plus className="h-4 w-4" strokeWidth={2.5} />
+                        새 쿠폰 만들기
+                      </button>
+                    </div>
+                  )}
                   {applied["calendar"] && (
                     <button className="flex w-full items-center justify-between rounded-xl bg-white px-3.5 py-3 text-[#0A0A0A] shadow-sm animate-slide-up">
                       <span className="flex items-center gap-2 text-[14px] font-bold">
@@ -838,6 +856,27 @@ export function CardStudioPage() {
           </div>
         </div>
       </div>
+
+      {/* ───────── 새 쿠폰 만들기 바텀시트 (CouponManageView 무수정 임베드) ───────── */}
+      <Sheet open={couponSheetOpen} onOpenChange={setCouponSheetOpen}>
+        <SheetContent
+          side="bottom"
+          className="max-h-[85vh] overflow-y-auto rounded-t-2xl tracking-ko"
+        >
+          <SheetTitle className="mb-4 text-lg font-bold tracking-ko text-[#0A0A0A]">
+            새 쿠폰 만들기
+          </SheetTitle>
+          <CouponManageView
+            partnerId={store?.id ?? null}
+            coupons={manageCoupons}
+            onChanged={async () => {
+              await router.invalidate();
+            }}
+          />
+        </SheetContent>
+      </Sheet>
+
+      <Toaster richColors position="top-center" />
     </div>
   );
 }
@@ -863,6 +902,9 @@ type StudioBuildLoaderData = {
   isBusiness: boolean;
   store: StudioBuildStore | null;
   coupons: StudioBuildCoupon[];
+  // 쿠폰 만들기 시트(CouponManageView) 임베드용 — partner.coupons 와 동일 쿼리(coupons 테이블 직접).
+  //   피커용 coupons(get_active_store_coupons)와 별개로 둘 다 반환.
+  manageCoupons: CouponRow[];
 };
 
 export const Route = createFileRoute("/_user/studio-build")({
@@ -870,7 +912,12 @@ export const Route = createFileRoute("/_user/studio-build")({
   // S1 — 실데이터 로딩 길 + 비즈니스 게이트. 화면 하드코딩 치환은 다음 단계.
   //   인증은 부모 _user.tsx beforeLoad 담당 → 세션 throw 금지(graceful). 매장 없으면 등록 유도.
   loader: async (): Promise<StudioBuildLoaderData> => {
-    const empty: StudioBuildLoaderData = { isBusiness: false, store: null, coupons: [] };
+    const empty: StudioBuildLoaderData = {
+      isBusiness: false,
+      store: null,
+      coupons: [],
+      manageCoupons: [],
+    };
     const supabase = await getAuthClient();
     if (!supabase) return empty;
 
@@ -913,7 +960,25 @@ export const Route = createFileRoute("/_user/studio-build")({
       console.error("[studio-build] coupon load failed", e);
     }
 
-    return { isBusiness, store, coupons };
+    // 쿠폰 만들기 시트용 — partner.coupons CouponsPage 와 동일 쿼리(coupons 테이블 직접, partner_id 필터, created_at desc).
+    //   CouponManageView 는 이 목록(전체 쿠폰: 활성/비활성 포함)을 그대로 받아 렌더한다.
+    let manageCoupons: CouponRow[] = [];
+    try {
+      const { data: rows, error: rowsErr } = await supabase
+        .from("coupons")
+        .select(
+          "id, title, coupon_type, discount_value, discount_unit, conditions, valid_until, total_count, is_active, created_at, gift_item",
+        )
+        .eq("partner_id", store.id)
+        .order("created_at", { ascending: false });
+      if (!rowsErr && Array.isArray(rows)) {
+        manageCoupons = rows as CouponRow[];
+      }
+    } catch (e) {
+      console.error("[studio-build] manage coupons load failed", e);
+    }
+
+    return { isBusiness, store, coupons, manageCoupons };
   },
   component: CardStudioPage,
 });
