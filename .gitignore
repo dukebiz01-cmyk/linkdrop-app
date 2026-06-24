@@ -56,3 +56,7 @@ secrets/
 *.sln
 *.sw?
 supabase/.temp/
+
+# temp ad-hoc query sql (check-*, del-*) — not migrations
+check-*.sql
+del-*.sql
