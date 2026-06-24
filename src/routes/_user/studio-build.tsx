@@ -208,6 +208,9 @@ export function CardStudioPage() {
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [cardColor, setCardColor] = useState(CARD_COLORS[1].value);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  // 쿠폰 피커 — 내 쿠폰 여러 개 중 선택(인라인, 색상 팔레트 showColorPicker 패턴 동일).
+  const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
+  const [showCouponPicker, setShowCouponPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
   const [deckIndex, setDeckIndex] = useState(0);
   const [pressedId, setPressedId] = useState<string | null>(null);
@@ -217,6 +220,9 @@ export function CardStudioPage() {
   const touchStart = useRef(0);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasHold = useRef(false);
+
+  // 선택된 쿠폰 — 미선택이면 첫 쿠폰 fallback(장착 시 자동 첫 쿠폰). coupons 비면 undefined.
+  const selectedCoupon = coupons.find((c) => c.id === selectedCouponId) ?? coupons[0];
 
   const score = useMemo(
     () =>
@@ -448,10 +454,49 @@ export function CardStudioPage() {
 
                 <div className="mt-4 space-y-2">
                   {applied["coupon"] &&
-                    (coupons[0] ? (
-                      // 쿠폰 장착 + 활성 쿠폰 있음 = 손님이 볼 실제 쿠폰 미리보기(손님 화면과 동일 컴포넌트).
-                      <div className="animate-slide-up">
-                        <CouponPreview coupon={{ ...coupons[0], title: coupons[0].title ?? "" }} />
+                    (selectedCoupon ? (
+                      // 쿠폰 장착 + 활성 쿠폰 있음 = 손님이 볼 실제 쿠폰 미리보기(선택된 쿠폰).
+                      <div className="animate-slide-up space-y-2">
+                        <CouponPreview
+                          coupon={{ ...selectedCoupon, title: selectedCoupon.title ?? "" }}
+                        />
+                        {/* 쿠폰 2개 이상일 때만 "쿠폰 바꾸기" 인라인 피커(색상 팔레트와 동일 노출 방식). */}
+                        {coupons.length > 1 ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setShowCouponPicker((v) => !v)}
+                              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/25 py-2 text-[12px] font-semibold text-white/80 transition-colors hover:bg-white/10"
+                            >
+                              <Ticket className="h-3.5 w-3.5" strokeWidth={2} />
+                              쿠폰 바꾸기
+                            </button>
+                            {showCouponPicker ? (
+                              // 리스트 = Step3Options.tsx:330-368 무채색 패턴 시각 복제(블루 없음).
+                              <ul className="space-y-1.5 rounded-xl bg-white/10 p-2">
+                                {coupons
+                                  .filter((c) => c.id !== selectedCoupon?.id)
+                                  .map((c) => (
+                                    <li key={c.id}>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedCouponId(c.id);
+                                          setShowCouponPicker(false);
+                                        }}
+                                        className="flex w-full items-center gap-2 rounded-lg border border-[#E5E5E5] bg-white p-2.5 text-left text-[#0A0A0A] transition-colors hover:bg-[#FAFAFA]"
+                                      >
+                                        <Ticket className="h-4 w-4 shrink-0" strokeWidth={2} />
+                                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-ko">
+                                          {c.title ?? "쿠폰"}
+                                        </span>
+                                      </button>
+                                    </li>
+                                  ))}
+                              </ul>
+                            ) : null}
+                          </>
+                        ) : null}
                       </div>
                     ) : (
                       // 장착했지만 매장에 활성 쿠폰 없음 — 안내(빈 상태 패턴 재사용).
