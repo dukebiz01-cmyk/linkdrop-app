@@ -30,6 +30,7 @@ import { Route as ApiEventsRouteImport } from './routes/api/events'
 import { Route as ApiConsultationsRouteImport } from './routes/api/consultations'
 import { Route as ApiAbuseReportsRouteImport } from './routes/api/abuse-reports'
 import { Route as AllianceSlugRouteImport } from './routes/alliance.$slug'
+import { Route as UserStudioBuildRouteImport } from './routes/_user/studio-build'
 import { Route as UserStudioRouteImport } from './routes/_user/studio'
 import { Route as UserStartRouteImport } from './routes/_user/start'
 import { Route as UserProfileRouteImport } from './routes/_user/profile'
@@ -171,6 +172,11 @@ const AllianceSlugRoute = AllianceSlugRouteImport.update({
   id: '/alliance/$slug',
   path: '/alliance/$slug',
   getParentRoute: () => rootRouteImport,
+} as any)
+const UserStudioBuildRoute = UserStudioBuildRouteImport.update({
+  id: '/studio-build',
+  path: '/studio-build',
+  getParentRoute: () => UserRoute,
 } as any)
 const UserStudioRoute = UserStudioRouteImport.update({
   id: '/studio',
@@ -391,6 +397,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof UserProfileRoute
   '/start': typeof UserStartRoute
   '/studio': typeof UserStudioRoute
+  '/studio-build': typeof UserStudioBuildRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
@@ -450,6 +457,7 @@ export interface FileRoutesByTo {
   '/profile': typeof UserProfileRoute
   '/start': typeof UserStartRoute
   '/studio': typeof UserStudioRoute
+  '/studio-build': typeof UserStudioBuildRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
@@ -513,6 +521,7 @@ export interface FileRoutesById {
   '/_user/profile': typeof UserProfileRoute
   '/_user/start': typeof UserStartRoute
   '/_user/studio': typeof UserStudioRoute
+  '/_user/studio-build': typeof UserStudioBuildRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
   '/api/consultations': typeof ApiConsultationsRoute
@@ -574,6 +583,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/start'
     | '/studio'
+    | '/studio-build'
     | '/alliance/$slug'
     | '/api/abuse-reports'
     | '/api/consultations'
@@ -633,6 +643,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/start'
     | '/studio'
+    | '/studio-build'
     | '/alliance/$slug'
     | '/api/abuse-reports'
     | '/api/consultations'
@@ -695,6 +706,7 @@ export interface FileRouteTypes {
     | '/_user/profile'
     | '/_user/start'
     | '/_user/studio'
+    | '/_user/studio-build'
     | '/alliance/$slug'
     | '/api/abuse-reports'
     | '/api/consultations'
@@ -914,6 +926,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/alliance/$slug'
       preLoaderRoute: typeof AllianceSlugRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_user/studio-build': {
+      id: '/_user/studio-build'
+      path: '/studio-build'
+      fullPath: '/studio-build'
+      preLoaderRoute: typeof UserStudioBuildRouteImport
+      parentRoute: typeof UserRoute
     }
     '/_user/studio': {
       id: '/_user/studio'
@@ -1272,6 +1291,7 @@ interface UserRouteChildren {
   UserProfileRoute: typeof UserProfileRoute
   UserStartRoute: typeof UserStartRoute
   UserStudioRoute: typeof UserStudioRoute
+  UserStudioBuildRoute: typeof UserStudioBuildRoute
   UserCardEditShareUuidRoute: typeof UserCardEditShareUuidRoute
   UserCouponClaim_codeRoute: typeof UserCouponClaim_codeRoute
   UserResultsShareUuidRoute: typeof UserResultsShareUuidRoute
@@ -1289,6 +1309,7 @@ const UserRouteChildren: UserRouteChildren = {
   UserProfileRoute: UserProfileRoute,
   UserStartRoute: UserStartRoute,
   UserStudioRoute: UserStudioRoute,
+  UserStudioBuildRoute: UserStudioBuildRoute,
   UserCardEditShareUuidRoute: UserCardEditShareUuidRoute,
   UserCouponClaim_codeRoute: UserCouponClaim_codeRoute,
   UserResultsShareUuidRoute: UserResultsShareUuidRoute,
