@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, Check } from "lucide-react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
   ABUSE_REASONS,
   type AbuseReportReason,
@@ -84,9 +84,9 @@ export function AbuseReportSheet({ isOpen, onClose, dropId }: AbuseReportSheetPr
       <SheetContent side="bottom" className="rounded-t-2xl px-6 pb-8">
         <div className="flex flex-col gap-4 pt-6">
           <div>
-            <h2 className="text-lg font-bold tracking-ko text-text-strong">
+            <SheetTitle className="text-lg font-bold tracking-ko text-text-strong">
               이 카드의 문제를 알려주세요
-            </h2>
+            </SheetTitle>
             <p className="mt-1 text-sm tracking-ko text-text-muted">
               신고 사유를 선택해 주세요
             </p>

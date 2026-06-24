@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Calendar, Phone, User, MessageSquare, CheckCircle2 } from "lucide-react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { getSupabase } from "@/lib/supabase";
 
 /**
@@ -341,7 +341,7 @@ function FormBody(props: {
   return (
     <div className="space-y-4">
       <header>
-        <h2 className="text-lg font-bold text-[#0F172A]">예약 신청하기</h2>
+        <SheetTitle className="text-lg font-bold text-[#0F172A]">예약 신청하기</SheetTitle>
         <p className="mt-1 text-sm text-[#64748B]">
           신청을 보내면 매장에서 확인 후 카톡으로 연락드려요.
           <br />

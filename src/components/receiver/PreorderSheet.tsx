@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Phone, Minus, Plus, CheckCircle2, Truck, Coins } from "lucide-react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { getSupabase } from "@/lib/supabase";
 
 /**
@@ -116,7 +116,7 @@ export function PreorderSheet({
         {step === "form" ? (
           <div className="space-y-4">
             <header>
-              <h2 className="text-lg font-bold tracking-ko text-text-strong">선주문하기</h2>
+              <SheetTitle className="text-lg font-bold tracking-ko text-text-strong">선주문하기</SheetTitle>
               <p className="mt-1 text-sm font-medium tracking-ko text-text-muted">
                 결제는 농가와 직접 확정해요. 주문을 보내면 농가가 연락드려요.
               </p>
