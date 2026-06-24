@@ -348,7 +348,7 @@ export function CardStudioPage() {
               <div className="mt-0.5 flex items-center gap-1.5">
                 <span className="flex items-center gap-1 text-[11px] font-medium text-[#737373]">
                   <Store className="h-3 w-3" strokeWidth={2} />
-                  모래재캠핑장
+                  {store?.display_name ?? "내 매장"}
                 </span>
                 <span className="text-[#D4D4D4]">·</span>
                 <span
@@ -455,7 +455,7 @@ export function CardStudioPage() {
                   )}
                 </div>
 
-                <h3 className="mt-4 text-xl font-bold tracking-tight">모래재캠핑장</h3>
+                <h3 className="mt-4 text-xl font-bold tracking-tight">{store?.display_name ?? "내 매장"}</h3>
                 <p className="mt-0.5 text-[13px] text-white/75">괴산 호수 캠핑 · 노지 감성</p>
 
                 <div className="mt-4 space-y-2">
