@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { getAuthClient } from "@/lib/auth-context";
+import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import {
   Calendar,
   Video,
@@ -54,6 +55,18 @@ interface StudioBlock {
   isMain?: boolean;
   isPaid?: boolean;
 }
+
+// 히어로 영상 미리보기용 더미 — 영상 블록 장착 시 손님이 볼 실제 임베드(YouTubeLiteEmbed)를
+//   채우기 위한 예시 영상. videoId 는 실존 공개 영상(영구 보존된 YouTube 최초 영상, 교체 가능).
+//   실데이터(content_sources) 배선은 다음 단계(S1b). props 는 YouTubeLiteEmbed 시그니처 그대로.
+const PREVIEW_VIDEO = {
+  videoId: "jNQXAC9IVRw",
+  thumbnailUrl: "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg",
+  title: "예시 영상",
+  isShorts: false,
+  durationLabel: "0:42",
+  sourceLabel: "YouTube",
+} as const;
 
 const STUDIO_BLOCKS: StudioBlock[] = [
   {
@@ -411,16 +424,15 @@ export function CardStudioPage() {
                 </div>
 
                 <div className="mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/15">
-                  {applied["content"] || applied["image"] ? (
+                  {applied["content"] ? (
+                    // 영상 장착 = 손님이 볼 실제 임베드 미리보기(손님 화면 info-drop-page 와 동일 컴포넌트).
+                    <YouTubeLiteEmbed {...PREVIEW_VIDEO} />
+                  ) : applied["image"] ? (
+                    // 대표 이미지만 장착(영상 아님) — 기존 placeholder 보존.
                     <div className="relative flex h-full w-full items-center justify-center">
                       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 backdrop-blur animate-scale-in">
                         <Play className="ml-0.5 h-5 w-5 fill-[#0A0A0A] text-[#0A0A0A]" strokeWidth={0} />
                       </div>
-                      {applied["content"] && (
-                        <span className="absolute bottom-2 right-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold">
-                          0:42 핵심
-                        </span>
-                      )}
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-1.5 text-white/45">
