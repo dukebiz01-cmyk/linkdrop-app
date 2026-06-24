@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { getAuthClient } from "@/lib/auth-context";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
+import { CouponPreview } from "@/components/receiver/CouponPreview";
 import {
   Calendar,
   Video,
@@ -446,12 +447,18 @@ export function CardStudioPage() {
                 <p className="mt-0.5 text-[13px] text-white/75">괴산 호수 캠핑 · 노지 감성</p>
 
                 <div className="mt-4 space-y-2">
-                  {applied["coupon"] && (
-                    <div className="flex items-center gap-2 rounded-xl bg-white/12 px-3 py-2.5 backdrop-blur animate-slide-up">
-                      <Ticket className="h-4 w-4 shrink-0" strokeWidth={2} />
-                      <span className="text-[13px] font-semibold">평일 1만원 할인 쿠폰</span>
-                    </div>
-                  )}
+                  {applied["coupon"] &&
+                    (coupons[0] ? (
+                      // 쿠폰 장착 + 활성 쿠폰 있음 = 손님이 볼 실제 쿠폰 미리보기(손님 화면과 동일 컴포넌트).
+                      <div className="animate-slide-up">
+                        <CouponPreview coupon={{ ...coupons[0], title: coupons[0].title ?? "" }} />
+                      </div>
+                    ) : (
+                      // 장착했지만 매장에 활성 쿠폰 없음 — 안내(빈 상태 패턴 재사용).
+                      <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55 animate-slide-up">
+                        매장에 활성 쿠폰이 없어요
+                      </div>
+                    ))}
                   {applied["calendar"] && (
                     <button className="flex w-full items-center justify-between rounded-xl bg-white px-3.5 py-3 text-[#0A0A0A] shadow-sm animate-slide-up">
                       <span className="flex items-center gap-2 text-[14px] font-bold">
@@ -800,6 +807,12 @@ type StudioBuildCoupon = {
   title: string | null;
   discount_value: number | null;
   discount_unit: string | null;
+  // CouponPreview 표시용 — get_active_store_coupons(v5.11)가 이미 반환(loader 직접 캐스팅으로 통과).
+  //   conditions(min_amount)는 그 RPC에 없어 옵셔널(CouponPreview가 옵셔널 처리).
+  coupon_type?: string | null;
+  gift_item?: string | null;
+  valid_until?: string | null;
+  conditions?: { min_amount?: number; [k: string]: unknown } | null;
 };
 type StudioBuildLoaderData = {
   isBusiness: boolean;
@@ -838,22 +851,21 @@ export const Route = createFileRoute("/_user/studio-build")({
       throw redirect({ to: "/partner/register" });
     }
 
-    // 활성 쿠폰 (create-drop-wizard.tsx:401 패턴). get_active_store_coupons 는 types.ts
-    //   미반영(studio.tsx get_my_rewards 와 동일) → 캐스팅 우회. 실패 시 빈 배열.
+    // 활성 쿠폰 (create-drop-wizard.tsx:401 패턴). get_active_store_coupons 는 types.ts 미반영.
+    //   ⚠️ supabase.rpc 를 변수로 떼면 this 분실('rest' 에러) → 메서드 직접 호출하고 캐스트는
+    //   인자(as never)·결과에만 적용 (PreorderSheet.tsx:80-81 정본 패턴). 실패 시 빈 배열.
     let coupons: StudioBuildCoupon[] = [];
     try {
-      const rpc = supabase.rpc as unknown as (
-        fn: string,
-        args: Record<string, unknown>,
-      ) => Promise<{ data: unknown; error: unknown }>;
-      const { data: rowsRaw, error: rowsErr } = await rpc("get_active_store_coupons", {
-        p_partner_id: store.id,
-      });
+      const { data: rowsRaw, error: rowsErr } = (await supabase.rpc(
+        "get_active_store_coupons" as never,
+        { p_partner_id: store.id } as never,
+      )) as { data: unknown; error: unknown };
       if (!rowsErr && Array.isArray(rowsRaw)) {
         coupons = rowsRaw as StudioBuildCoupon[];
       }
-    } catch {
-      // 쿠폰 조회 실패 — 빈 배열로 진행(화면 깨짐 방지).
+    } catch (e) {
+      // 무증상 실패 재발 방지 — 콘솔에 단서 남김(이전엔 빈 catch라 'rest' 에러가 묻혔음).
+      console.error("[studio-build] coupon load failed", e);
     }
 
     return { isBusiness, store, coupons };
