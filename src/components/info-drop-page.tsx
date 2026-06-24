@@ -27,8 +27,6 @@ import {
   ShieldCheck,
   Bell,
   Flag,
-  Ticket,
-  Gift,
   Phone,
   MessageSquare,
   MapPin,
@@ -60,6 +58,7 @@ import {
 } from "@/components/reservation-calendar-page";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
+import { CouponPreview } from "@/components/receiver/CouponPreview";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
 import { trackReceiverEvent } from "@/lib/event-tracking";
@@ -1032,8 +1031,6 @@ export function InfoDropPage({
             v7.2 쿠폰 드롭 = [쿠폰 | 예약가능 캘린더] 2탭. 정보/구매/상담 진입 X. */}
         {showReservationCalendar &&
           (() => {
-            const isGift = funnelCoupon?.coupon_type === "gift";
-            const giftItem = funnelCoupon?.gift_item?.trim() || "";
 
             // v7.1 — partnerId 가 있으면 매장 슬롯 가용일도 표시(makerAvailableDates 와 공존).
             // makerAvailableDates 비어도 partnerId 있으면 캘린더 카드를 보여주어
@@ -1117,35 +1114,7 @@ export function InfoDropPage({
 
             const couponPanel = funnelCoupon ? (
               <div className="space-y-3">
-                <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Ticket className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-                    <span className="text-sm font-medium tracking-ko text-[#64748B]">
-                      받을 수 있는 쿠폰
-                    </span>
-                  </div>
-                  <p className="text-lg font-bold tracking-ko text-[#0F172A]">
-                    {funnelCoupon.title}
-                  </p>
-                  {isGift && giftItem ? (
-                    <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#FAFAFA] px-3 py-1 text-sm font-bold tracking-ko text-[#0A0A0A]">
-                      <Gift className="size-4" strokeWidth={2.2} />
-                      {giftItem} 증정
-                    </p>
-                  ) : (
-                    typeof funnelCoupon.conditions?.min_amount === "number" && (
-                      <p className="mt-2 text-sm font-medium tracking-ko text-[#64748B]">
-                        {funnelCoupon.conditions.min_amount.toLocaleString("ko-KR")}원 이상 사용하실
-                        때
-                      </p>
-                    )
-                  )}
-                  <p className="mt-1 text-sm font-medium tracking-ko text-[#64748B]">
-                    {funnelCoupon.valid_until
-                      ? `${new Date(funnelCoupon.valid_until).toLocaleDateString("ko-KR")}까지`
-                      : "기간 제한 없음"}
-                  </p>
-                </div>
+                <CouponPreview coupon={funnelCoupon} />
                 <p className="text-xs font-medium tracking-ko text-text-muted">
                   예약을 신청하면 쿠폰이 지갑에 담겨요.
                 </p>
