@@ -42,14 +42,7 @@ process.stdin.on("end", () => {
     process.exit(2);
   }
 
-  // Guard B — forbidden brand colors. Code/style files only.
-  const isCodeOrStyle = /\.(tsx|ts|jsx|js|mjs|cjs|css|scss)$/i.test(filePath);
-  if (isCodeOrStyle && /#2563EB|#EFF6FF/i.test(content)) {
-    process.stderr.write(
-      "BLOCKED: 금지 색상(#2563EB / #EFF6FF). 검정 미니멀 #0A0A0A 사용\n"
-    );
-    process.exit(2);
-  }
+  // Guard B (brand color block) removed 2026-06-25 — design lock released: blue/navy accent allowed, no specific color code enforced.
 
   process.exit(0);
 });
