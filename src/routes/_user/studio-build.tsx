@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
+import { getAuthClient } from "@/lib/auth-context";
 import {
   Calendar,
   Video,
@@ -188,6 +189,8 @@ const STUDIO_BUILD_CSS = `
 `;
 
 export function CardStudioPage() {
+  // loader 데이터 수신만 — 이번 단계는 배선까지. 화면 하드코딩 치환은 다음 단계.
+  const { isBusiness, store, coupons } = Route.useLoaderData();
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [cardColor, setCardColor] = useState(CARD_COLORS[1].value);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -775,7 +778,73 @@ export function CardStudioPage() {
   );
 }
 
+type StudioBuildStore = {
+  id: string;
+  display_name: string;
+  verification_status: string;
+};
+type StudioBuildCoupon = {
+  id: string;
+  title: string | null;
+  discount_value: number | null;
+  discount_unit: string | null;
+};
+type StudioBuildLoaderData = {
+  isBusiness: boolean;
+  store: StudioBuildStore | null;
+  coupons: StudioBuildCoupon[];
+};
+
 export const Route = createFileRoute("/_user/studio-build")({
   head: () => ({ meta: [{ title: "카드 스튜디오 — LinkDrop" }] }),
+  // S1 — 실데이터 로딩 길 + 비즈니스 게이트. 화면 하드코딩 치환은 다음 단계.
+  //   인증은 부모 _user.tsx beforeLoad 담당 → 세션 throw 금지(graceful). 매장 없으면 등록 유도.
+  loader: async (): Promise<StudioBuildLoaderData> => {
+    const empty: StudioBuildLoaderData = { isBusiness: false, store: null, coupons: [] };
+    const supabase = await getAuthClient();
+    if (!supabase) return empty;
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user.id ?? null;
+    if (!userId) return empty; // 인증은 _user.tsx 담당 — 여기선 throw 안 함(graceful).
+
+    // 비즈니스 여부 (create-wizard.tsx:77 패턴).
+    const { data: isBusinessRaw } = await supabase.rpc("is_active_partner_owner", {
+      _user_id: userId,
+    });
+    const isBusiness = Boolean(isBusinessRaw);
+
+    // 내 매장 (partner.register.tsx:57-61 패턴) — display_name 은 다음 단계 표시용.
+    const { data: store } = await supabase
+      .from("partners")
+      .select("id, display_name, verification_status")
+      .eq("owner_user_id", userId)
+      .maybeSingle();
+
+    // 비즈니스 게이트 — 매장 없거나 비즈니스 아니면 사업자 등록으로 유도(소프트 게이트).
+    if (!isBusiness || !store) {
+      throw redirect({ to: "/partner/register" });
+    }
+
+    // 활성 쿠폰 (create-drop-wizard.tsx:401 패턴). get_active_store_coupons 는 types.ts
+    //   미반영(studio.tsx get_my_rewards 와 동일) → 캐스팅 우회. 실패 시 빈 배열.
+    let coupons: StudioBuildCoupon[] = [];
+    try {
+      const rpc = supabase.rpc as unknown as (
+        fn: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ data: unknown; error: unknown }>;
+      const { data: rowsRaw, error: rowsErr } = await rpc("get_active_store_coupons", {
+        p_partner_id: store.id,
+      });
+      if (!rowsErr && Array.isArray(rowsRaw)) {
+        coupons = rowsRaw as StudioBuildCoupon[];
+      }
+    } catch {
+      // 쿠폰 조회 실패 — 빈 배열로 진행(화면 깨짐 방지).
+    }
+
+    return { isBusiness, store, coupons };
+  },
   component: CardStudioPage,
 });
