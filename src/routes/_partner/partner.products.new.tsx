@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Hash,
   TrendingUp,
+  Tags,
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { Toaster } from "@/components/ui/sonner";
@@ -33,6 +34,10 @@ export const Route = createFileRoute("/_partner/partner/products/new")({
 
 const MAX_WIDTH = 1200;
 const BUCKET = "product-images";
+
+// KAMIS 품목 분류 — 라이브 DB kamis_categories(6행)/kamis_items(130행). types.ts 미반영이라 캐스트.
+type KamisCategory = { category_code: string; category_name: string };
+type KamisItem = { item_code: string; item_name: string };
 
 // File → 가로 최대 1200px 비율유지 → image/jpeg 0.8 Blob. 캔버스 압축은 브라우저 전용.
 async function resizeToJpegBlob(file: File): Promise<Blob> {
@@ -77,6 +82,11 @@ function ProductNewPage() {
   const [harvestDate, setHarvestDate] = useState("");
   const [stockLimit, setStockLimit] = useState("");
   const [priceBandEnabled, setPriceBandEnabled] = useState(false);
+  // KAMIS 품목 2단(부류→품목) — 시세(STEP4)·제철(STEP5) 연동 기반. 선택 사항(미선택 허용).
+  const [kamisCategoryCode, setKamisCategoryCode] = useState("");
+  const [kamisItemCode, setKamisItemCode] = useState("");
+  const [kamisCategories, setKamisCategories] = useState<KamisCategory[]>([]);
+  const [kamisItems, setKamisItems] = useState<KamisItem[]>([]);
   // 나-1 — 상품 카피(headline/selling_points). 비우면 저장 시 키 생략(회귀 0).
   const [copy, setCopy] = useState<ProductCopyValue>(EMPTY_PRODUCT_COPY);
   const [uploading, setUploading] = useState(false);
@@ -86,6 +96,41 @@ function ProductNewPage() {
   const [submitting, setSubmitting] = useState(false);
   // 저장 성공 결과 — 생성된 드롭의 공유 URL(drop.how/{code}) + share_uuid(/d 미리보기용).
   const [result, setResult] = useState<{ shareUrl: string; shareUuid: string } | null>(null);
+
+  // 부류 6개 1회 로드 (register.tsx business_categories 패턴). types.ts 미반영 → as never 캐스트.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { data } = await getSupabase()
+        .from("kamis_categories" as never)
+        .select("category_code, category_name")
+        .order("sort_order");
+      if (!cancelled) setKamisCategories((data as unknown as KamisCategory[] | null) ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 부류 선택 시 해당 품목 로드 (register.tsx 149-166 패턴). 부류 비면 품목 비움.
+  useEffect(() => {
+    if (!kamisCategoryCode) {
+      setKamisItems([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data } = await getSupabase()
+        .from("kamis_items" as never)
+        .select("item_code, item_name")
+        .eq("category_code", kamisCategoryCode)
+        .order("sort_order");
+      if (!cancelled) setKamisItems((data as unknown as KamisItem[] | null) ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [kamisCategoryCode]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -163,6 +208,8 @@ function ProductNewPage() {
           stock_limit:
             isFresh && Number(stockLimit) >= 1 ? Math.floor(Number(stockLimit)) : null,
           price_band_enabled: isFresh ? priceBandEnabled : false,
+          // KAMIS 품목코드 — 신선 + 선택했을 때만. 미선택이면 키 생략(ADDITIVE, 기존 등록 무영향).
+          ...(isFresh && kamisItemCode ? { kamis_item_code: kamisItemCode } : {}),
           blocks: [
             {
               block_kind: "product",
@@ -414,6 +461,48 @@ function ProductNewPage() {
                 <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
                   켜면 카드에 시세 비교가 표시될 예정이에요. (표시는 추후 제공)
                 </p>
+
+                {/* 품목 분류 — KAMIS 부류→품목 2단(선택). 시세·제철 연동 기반. 미선택 허용. */}
+                <div className="space-y-2 pt-1">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
+                    <Tags className="size-3.5" strokeWidth={2} />
+                    품목 분류{" "}
+                    <span className="font-medium text-text-subtle">
+                      (선택 · 시세·제철 연동용)
+                    </span>
+                  </span>
+                  <select
+                    aria-label="부류 선택"
+                    value={kamisCategoryCode}
+                    onChange={(e) => {
+                      setKamisCategoryCode(e.target.value);
+                      setKamisItemCode(""); // 부류 바뀌면 품목 선택 초기화(stale 방지)
+                    }}
+                    className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
+                  >
+                    <option value="">부류 선택</option>
+                    {kamisCategories.map((c) => (
+                      <option key={c.category_code} value={c.category_code}>
+                        {c.category_name}
+                      </option>
+                    ))}
+                  </select>
+                  {kamisCategoryCode && kamisItems.length > 0 ? (
+                    <select
+                      aria-label="품목 선택"
+                      value={kamisItemCode}
+                      onChange={(e) => setKamisItemCode(e.target.value)}
+                      className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
+                    >
+                      <option value="">품목 선택</option>
+                      {kamisItems.map((it) => (
+                        <option key={it.item_code} value={it.item_code}>
+                          {it.item_name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
               </div>
             ) : (
               <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">

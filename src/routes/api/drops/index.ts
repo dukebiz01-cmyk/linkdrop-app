@@ -41,6 +41,8 @@ type CreateDropBody = {
   harvest_date?: string | null;
   stock_limit?: number | null;
   price_band_enabled?: boolean;
+  /** KAMIS 품목코드 — 신선 시세·제철 연동용. 선택값(미지정 가능). is_fresh 일 때만 머지. */
+  kamis_item_code?: string;
   /** 공개/비공개 — true 면 탐색 피드 노출, false(기본) 면 받은 사람만 링크 열람. */
   is_public?: boolean;
 };
@@ -191,6 +193,10 @@ export const Route = createFileRoute("/api/drops/")({
                 ? Math.floor(body.stock_limit)
                 : null;
             const selfPriceBandEnabled = body.price_band_enabled === true;
+            const selfKamisItemCode =
+              typeof body.kamis_item_code === "string" && body.kamis_item_code.trim()
+                ? body.kamis_item_code.trim()
+                : null;
             {
               const arr = selfBlocks as Array<{
                 block_kind?: string;
@@ -206,6 +212,7 @@ export const Route = createFileRoute("/api/drops/")({
                   ...(selfIsFresh && selfHarvestDate ? { harvest_date: selfHarvestDate } : {}),
                   ...(selfIsFresh && selfStockLimit != null ? { stock_limit: selfStockLimit } : {}),
                   ...(selfIsFresh ? { price_band_enabled: selfPriceBandEnabled } : {}),
+                  ...(selfIsFresh && selfKamisItemCode ? { kamis_item_code: selfKamisItemCode } : {}),
                 };
               }
             }
