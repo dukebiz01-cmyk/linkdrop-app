@@ -39,6 +39,26 @@ const BUCKET = "product-images";
 type KamisCategory = { category_code: string; category_name: string };
 type KamisItem = { item_code: string; item_name: string };
 
+// get-price-band 응답(STEP4-A). sources 배열 = 다중소스(KAMIS 소매 + 추후 도매/인터넷).
+type PriceSource = {
+  source: string;
+  source_label: string;
+  price_type: string;
+  low: number;
+  high: number;
+  unit: string;
+  rank_note: string;
+  ref_date: string;
+};
+type PriceBandResult = {
+  status: "ok" | "no_data" | "unconfigured" | "error";
+  item_code: string;
+  item_name: string | null;
+  sources: PriceSource[];
+  cached: boolean;
+  note?: string;
+};
+
 // File → 가로 최대 1200px 비율유지 → image/jpeg 0.8 Blob. 캔버스 압축은 브라우저 전용.
 async function resizeToJpegBlob(file: File): Promise<Blob> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -73,6 +93,84 @@ async function resizeToJpegBlob(file: File): Promise<Blob> {
   return blob;
 }
 
+function fmtWon(n: number): string {
+  return n.toLocaleString("ko-KR");
+}
+// "2026-06-23" → "06/23"
+function fmtRefDate(iso: string): string {
+  const m = iso.slice(5, 7);
+  const d = iso.slice(8, 10);
+  return m && d ? `${m}/${d}` : iso;
+}
+
+// KAMIS 소매 시세 어드바이저 — 농가 가격 결정 참고용(§0: 추천/단정 아님, 농가 결정).
+//   다중소스 대비 sources.map(4-B 도매·4-C 인터넷 추가되면 자동으로 여러 줄).
+function PriceBandAdvisor({
+  priceBand,
+  loading,
+}: {
+  priceBand: PriceBandResult | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="mt-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
+        <p className="text-sm font-medium tracking-ko text-text-muted">시세 조회 중…</p>
+      </div>
+    );
+  }
+  if (!priceBand) return null;
+  // unconfigured/error → 작은 안내만(등록 막지 않음).
+  if (priceBand.status === "unconfigured" || priceBand.status === "error") {
+    return (
+      <div className="mt-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
+        <p className="text-[12px] font-medium tracking-ko text-text-subtle">
+          시세 정보를 불러올 수 없어요.
+        </p>
+      </div>
+    );
+  }
+  // no_data(옥수수 등 미조사) → 담담한 회색 안내.
+  if (priceBand.status === "no_data" || priceBand.sources.length === 0) {
+    return (
+      <div className="mt-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
+        <p className="text-[13px] font-medium leading-relaxed tracking-ko text-text-muted">
+          이 품목은 KAMIS 시세 정보가 없어요 (시세 미조사 품목).
+        </p>
+      </div>
+    );
+  }
+  // ok — 소스별 렌더.
+  return (
+    <div className="mt-2 space-y-2 rounded-xl border border-border bg-surface/40 p-4">
+      <div className="flex items-center gap-1.5">
+        <TrendingUp className="size-4 text-text-strong" strokeWidth={2} />
+        <span className="text-xs font-semibold tracking-ko text-text-strong">시세 참고 정보</span>
+      </div>
+      <ul className="space-y-1.5">
+        {priceBand.sources.map((s) => (
+          <li
+            key={`${s.source}-${s.price_type}`}
+            className="text-sm leading-relaxed tracking-ko text-text-strong"
+          >
+            <span className="font-semibold">{s.source_label}</span>{" "}
+            <span className="font-bold tabular-nums">
+              {s.low === s.high ? fmtWon(s.low) : `${fmtWon(s.low)}~${fmtWon(s.high)}`}원
+            </span>
+            {s.unit ? <span className="text-text-muted"> / {s.unit}</span> : null}
+            {s.rank_note ? <span className="text-text-subtle"> ({s.rank_note})</span> : null}
+            <span className="text-text-subtle"> · {fmtRefDate(s.ref_date)} 기준</span>
+          </li>
+        ))}
+      </ul>
+      {/* §0 — 우리가 가격 추천/단정 아님. 농가가 직접 결정. */}
+      <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
+        ※ 도매시장 소매 기준 참고가예요. 판매가는 직접 정하세요.
+      </p>
+    </div>
+  );
+}
+
 function ProductNewPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
@@ -87,6 +185,9 @@ function ProductNewPage() {
   const [kamisItemCode, setKamisItemCode] = useState("");
   const [kamisCategories, setKamisCategories] = useState<KamisCategory[]>([]);
   const [kamisItems, setKamisItems] = useState<KamisItem[]>([]);
+  // STEP4-A — KAMIS 소매 시세 어드바이저(농가 가격 참고용). 품목 선택 시 get-price-band 조회.
+  const [priceBand, setPriceBand] = useState<PriceBandResult | null>(null);
+  const [priceBandLoading, setPriceBandLoading] = useState(false);
   // 나-1 — 상품 카피(headline/selling_points). 비우면 저장 시 키 생략(회귀 0).
   const [copy, setCopy] = useState<ProductCopyValue>(EMPTY_PRODUCT_COPY);
   const [uploading, setUploading] = useState(false);
@@ -131,6 +232,41 @@ function ProductNewPage() {
       cancelled = true;
     };
   }, [kamisCategoryCode]);
+
+  // 품목 선택 시 KAMIS 소매 시세 조회 (미선택이면 호출 안 함 — 불필요 호출 방지).
+  //   detach 주의: supabase.functions.invoke 를 메서드로 직접 호출(this 유지).
+  useEffect(() => {
+    if (!kamisItemCode || !kamisCategoryCode) {
+      setPriceBand(null);
+      return;
+    }
+    let cancelled = false;
+    setPriceBandLoading(true);
+    void (async () => {
+      const fail: PriceBandResult = {
+        status: "error",
+        item_code: kamisItemCode,
+        item_name: null,
+        sources: [],
+        cached: false,
+      };
+      try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase.functions.invoke("get-price-band", {
+          body: { item_code: kamisItemCode, category_code: kamisCategoryCode },
+        });
+        if (cancelled) return;
+        setPriceBand(error || !data ? fail : (data as PriceBandResult));
+      } catch {
+        if (!cancelled) setPriceBand(fail);
+      } finally {
+        if (!cancelled) setPriceBandLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [kamisItemCode, kamisCategoryCode]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -501,6 +637,11 @@ function ProductNewPage() {
                         </option>
                       ))}
                     </select>
+                  ) : null}
+
+                  {/* KAMIS 소매 시세 어드바이저 — 품목 선택 시만. 농가 가격 참고용(§0). */}
+                  {kamisItemCode ? (
+                    <PriceBandAdvisor priceBand={priceBand} loading={priceBandLoading} />
                   ) : null}
                 </div>
               </div>
