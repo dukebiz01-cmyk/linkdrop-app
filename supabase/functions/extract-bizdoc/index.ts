@@ -22,7 +22,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
 });
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-sonnet-4-6";
 const USD_TO_KRW = 1400;
 const BUCKET = "business-docs";
 const GENERATION_TYPE = "bizdoc_ocr";
@@ -40,7 +40,7 @@ function jsonResponse(body: object, status = 200): Response {
 }
 
 function costKrw(inTok: number, outTok: number): number {
-  const usd = (inTok / 1_000_000) * 1 + (outTok / 1_000_000) * 5;
+  const usd = (inTok / 1_000_000) * 3 + (outTok / 1_000_000) * 15;
   return Math.round(usd * USD_TO_KRW * 100) / 100;
 }
 
@@ -148,6 +148,7 @@ Deno.serve(async (req) => {
     const res = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 700,
+      temperature: 0,
       system: SYSTEM_PROMPT,
       messages: [
         {

@@ -1,7 +1,15 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Store, CheckCircle2, AlertTriangle } from "lucide-react";
+import {
+  Store,
+  CheckCircle2,
+  AlertTriangle,
+  Camera,
+  Upload,
+  ShieldCheck,
+  Loader2,
+} from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
 import { Toaster } from "@/components/ui/sonner";
@@ -45,6 +53,10 @@ type LoaderData = {
 
 export const Route = createFileRoute("/_partner/partner/register")({
   head: () => ({ meta: [{ title: "파트너 등록 — LinkDrop" }] }),
+  // Step 6 연결고리 — /start seller 진입 시 ?kind=seller. 지금은 안내문/타이틀만 분기(기능 분기 최소).
+  validateSearch: (search: Record<string, unknown>): { kind?: string } => ({
+    kind: typeof search.kind === "string" ? search.kind : undefined,
+  }),
   loader: async (): Promise<LoaderData> => {
     const empty: LoaderData = { userId: null, myPartner: null, majors: [] };
     const supabase = await getAuthClient();
@@ -126,6 +138,44 @@ function RegisterPage() {
 // ─────────────────────────────────────────────────────────
 // (A) 등록 폼
 // ─────────────────────────────────────────────────────────
+// 사업자등록증 이미지 리사이즈(products.new 패턴 복제) — 캔버스는 브라우저 전용. PDF엔 호출 안 함.
+const DOC_MAX_WIDTH = 1600;
+async function resizeToJpegBlob(file: File): Promise<Blob> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("파일을 읽지 못했어요."));
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("이미지를 불러오지 못했어요."));
+    el.src = dataUrl;
+  });
+  const scale = img.width > DOC_MAX_WIDTH ? DOC_MAX_WIDTH / img.width : 1;
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("이미지 처리에 실패했어요.");
+  ctx.drawImage(img, 0, 0, w, h);
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", 0.92),
+  );
+  if (!blob) throw new Error("이미지 압축에 실패했어요.");
+  return blob;
+}
+
+// YYYYMMDD → YYYY-MM-DD (open_date 컬럼 = date). 8자리 숫자 아니면 null.
+function ymdToIso(ymd: string): string | null {
+  const d = ymd.replace(/[^0-9]/g, "");
+  if (d.length !== 8) return null;
+  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+}
+
 function RegisterForm({
   userId,
   majors,
@@ -144,6 +194,21 @@ function RegisterForm({
   const [reservationUrl, setReservationUrl] = useState("");
   const [address, setAddress] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Step 5 — 사업자등록증 업로드 + OCR 자동채움 + 국세청 진위확인 (ADDITIVE).
+  const [repName, setRepName] = useState("");
+  const [openDate, setOpenDate] = useState(""); // YYYYMMDD 문자열(자동채움, 수정 가능)
+  const [docPath, setDocPath] = useState(""); // business-docs 객체경로(공개 URL 아님)
+  const [docPreviewUrl, setDocPreviewUrl] = useState<string | null>(null); // signedUrl(이미지만)
+  const [docName, setDocName] = useState(""); // pdf 등 미리보기 불가 시 표시용
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [verifyState, setVerifyState] = useState<"idle" | "verifying" | "ok" | "mismatch">(
+    "idle",
+  );
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { kind } = Route.useSearch();
+  const isSeller = kind === "seller";
 
   // 대분류 선택 시 세부 로드
   useEffect(() => {
@@ -194,6 +259,87 @@ function RegisterForm({
     return null;
   }
 
+  // OCR 자동채움 — extract-bizdoc. 실패해도 수동입력 폴백(막지 않음). 채운 값은 전부 수정 가능.
+  async function runOcr(
+    supabase: ReturnType<typeof getSupabase>,
+    uid: string,
+    path: string,
+  ) {
+    setOcrLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("extract-bizdoc", {
+        body: { user_id: uid, doc_path: path },
+      });
+      const r = data as {
+        b_nm?: string;
+        b_no?: string;
+        p_nm?: string;
+        start_dt?: string;
+        b_adr?: string;
+        error?: string;
+      } | null;
+      if (error || !r || r.error) throw new Error(r?.error ?? "OCR_FAILED");
+      // 자동채움 — readonly 아님(사용자 수정 가능). 값 있을 때만 덮어씀.
+      if (r.b_nm) setDisplayName(r.b_nm);
+      if (r.b_no) setBusinessNo(r.b_no);
+      if (r.p_nm) setRepName(r.p_nm);
+      if (r.start_dt) setOpenDate(r.start_dt);
+      if (r.b_adr) setAddress(r.b_adr);
+      toast.success("AI가 읽은 값을 채웠어요. 확인하고 고쳐주세요.");
+    } catch (e) {
+      console.error("[partner.register] extract-bizdoc failed:", e);
+      toast.error("자동 입력에 실패했어요. 직접 입력해 주세요.");
+    } finally {
+      setOcrLoading(false);
+    }
+  }
+
+  // 사업자등록증 업로드 → business-docs(비공개) → signedUrl 미리보기 → 자동 OCR.
+  async function handleDocFile(file: File | undefined) {
+    if (!file) return;
+    setUploadError(null);
+    try {
+      const supabase = getSupabase();
+      const { data: sess } = await supabase.auth.getSession();
+      const uid = sess.session?.user.id;
+      if (!uid) {
+        setUploadError("로그인이 필요해요.");
+        return;
+      }
+      const isPdf =
+        file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      const ext = isPdf ? "pdf" : "jpg";
+      // ★ 원본 파일명 금지(한글 깨짐) — uuid. 경로 첫 segment=uid(business-docs RLS 통과).
+      const path = `${uid}/${crypto.randomUUID()}.${ext}`;
+      const blob = isPdf ? file : await resizeToJpegBlob(file);
+      const { error: upErr } = await supabase.storage.from("business-docs").upload(path, blob, {
+        contentType: isPdf ? "application/pdf" : "image/jpeg",
+        upsert: false,
+      });
+      if (upErr) {
+        console.error("[partner.register] doc upload failed:", upErr);
+        setUploadError("업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      setDocPath(path);
+      setDocName(isPdf ? "사업자등록증(PDF)" : "사업자등록증 사진");
+      // 비공개 버킷 → getPublicUrl 금지. 미리보기는 signedUrl(이미지만).
+      if (!isPdf) {
+        const { data: signed } = await supabase.storage
+          .from("business-docs")
+          .createSignedUrl(path, 120);
+        setDocPreviewUrl(signed?.signedUrl ?? null);
+      } else {
+        setDocPreviewUrl(null);
+      }
+      toast.success("사업자등록증을 올렸어요.");
+      await runOcr(supabase, uid, path); // 업로드 직후 자동 OCR
+    } catch (e) {
+      console.error("[partner.register] doc handle unexpected:", e);
+      setUploadError(e instanceof Error ? e.message : "파일 처리 중 문제가 생겼어요.");
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (submitting) return; // 진입 가드
@@ -230,16 +376,47 @@ function RegisterForm({
         address: address.trim() || null,
         // ④-1: 배열 저장. 빈 배열일 땐 metadata={} (옛 sub_category 키도 안 씀)
         metadata: selectedSubs.length > 0 ? { sub_categories: selectedSubs } : {},
+        // Step 5 — 사업자 인증 필드(ADDITIVE). 비었으면 null.
+        rep_name: repName.trim() || null,
+        open_date: ymdToIso(openDate),
+        business_doc_path: docPath || null,
         // partner_kind 생략 → DEFAULT 'store'
         // verification_status 생략 → DEFAULT 'pending'
       };
 
-      const { error } = await supabase.from("partners").insert(payload);
-      if (error) {
+      // ADDITIVE — INSERT 후 새 partner.id 확보(verify-bizdoc 가 본인행에 nts_verified_at 기록하려면 id 필요).
+      const { data: inserted, error } = await supabase
+        .from("partners")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error || !inserted) {
         console.error("[partner.register] insert failed:", error);
         toast.error("등록에 실패했어요. 잠시 후 다시 시도해 주세요.");
         return;
       }
+
+      // 진위확인(보조 게이트 — 등록을 막지 않음). b_no 10 + 개업일 8 + 대표자명 다 있을 때만.
+      const openDigits = openDate.replace(/[^0-9]/g, "");
+      if (bnDigits.length === 10 && openDigits.length === 8 && repName.trim()) {
+        setVerifyState("verifying");
+        try {
+          const { data: vres } = await supabase.functions.invoke("verify-bizdoc", {
+            body: {
+              user_id: userId,
+              partner_id: (inserted as { id: string }).id,
+              b_no: bnDigits,
+              start_dt: openDigits,
+              p_nm: repName.trim(),
+            },
+          });
+          setVerifyState((vres as { ok?: boolean } | null)?.ok ? "ok" : "mismatch");
+        } catch (verr) {
+          console.error("[partner.register] verify-bizdoc failed:", verr);
+          setVerifyState("mismatch"); // 실패해도 등록은 진행
+        }
+      }
+
       toast.success("매장 등록 신청이 완료됐어요.");
       await onSubmitted();
     } catch (err) {
@@ -253,13 +430,103 @@ function RegisterForm({
   return (
     <main className="min-h-screen bg-[#F8FAFC] tracking-ko pb-12">
       <header className="bg-white px-5 py-4 border-b border-[#F1F5F9]">
-        <h1 className="text-lg font-bold text-[#0F172A]">파트너 등록</h1>
+        <h1 className="text-lg font-bold text-[#0F172A]">
+          {isSeller ? "상품 판매 등록" : "파트너 등록"}
+        </h1>
         <p className="mt-0.5 text-xs text-[#64748B]">
-          매장 정보를 입력하면 운영자 확인 후 승인돼요
+          {isSeller
+            ? "판매자 정보를 입력하면 운영자 확인 후 승인돼요"
+            : "매장 정보를 입력하면 운영자 확인 후 승인돼요"}
         </p>
+        {/* TODO(Step 6): kind==="seller" → 농수산물 추가서류 분기(여기 자리). */}
       </header>
 
       <form onSubmit={handleSubmit} className="space-y-4 px-5 pt-4">
+        {/* 사업자등록증 — 업로드 → AI OCR 자동채움 → (제출 시) 국세청 진위확인 */}
+        <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-xl bg-[#FAFAFA]">
+              <ShieldCheck className="size-4 text-[#0A0A0A]" strokeWidth={2} />
+            </span>
+            <h2 className="text-sm font-bold text-[#0F172A]">사업자등록증</h2>
+          </div>
+          <p className="text-sm font-medium text-[#475569]">
+            사업자등록증을 올리면 정보가 자동으로 입력돼요
+          </p>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white"
+            >
+              <Camera className="size-4" strokeWidth={2} />
+              사진 촬영
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-bold text-[#0F172A] hover:bg-[#F8FAFC]"
+            >
+              <Upload className="size-4" strokeWidth={2} />
+              파일 올리기
+            </button>
+          </div>
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => void handleDocFile(e.target.files?.[0])}
+            className="hidden"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            onChange={(e) => void handleDocFile(e.target.files?.[0])}
+            className="hidden"
+          />
+
+          {uploadError ? (
+            <p className="text-xs font-medium text-[#EF4444]">{uploadError}</p>
+          ) : null}
+
+          {ocrLoading ? (
+            <div className="flex items-center gap-2 rounded-xl bg-[#F8FAFC] px-4 py-3">
+              <Loader2 className="size-4 animate-spin text-[#0A0A0A]" strokeWidth={2} />
+              <span className="text-sm font-semibold text-[#0F172A]">링고AI가 읽는 중…</span>
+            </div>
+          ) : docPath ? (
+            <div className="space-y-2">
+              {docPreviewUrl ? (
+                <div className="overflow-hidden rounded-xl border border-[#E5E7EB]">
+                  <img
+                    src={docPreviewUrl}
+                    alt="업로드한 사업자등록증 미리보기"
+                    className="aspect-video w-full object-cover"
+                  />
+                </div>
+              ) : null}
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-[#0F172A]">
+                <CheckCircle2 className="size-3.5" strokeWidth={2} />
+                {docName || "파일"} 업로드됨 — 아래 값을 확인하고 고쳐주세요
+              </p>
+            </div>
+          ) : null}
+
+          {verifyState === "ok" ? (
+            <p className="inline-flex items-center gap-1.5 rounded-full bg-[#FAFAFA] px-3 py-1 text-xs font-bold text-[#0A0A0A]">
+              <ShieldCheck className="size-3.5" strokeWidth={2.2} />
+              국세청 확인됨
+            </p>
+          ) : verifyState === "mismatch" ? (
+            <p className="text-xs font-medium text-[#64748B]">
+              정보가 국세청 기록과 달라요. 확인하거나 그대로 신청할 수 있어요.
+            </p>
+          ) : null}
+        </section>
+
         <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-4">
           {/* 매장 이름 */}
           <div className="space-y-2">
@@ -405,6 +672,40 @@ function RegisterForm({
               placeholder="예: 123-45-67890"
               className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
               required
+            />
+          </div>
+
+          {/* 대표자명 — OCR 자동채움, 수정 가능(readonly 아님) */}
+          <div className="space-y-2">
+            <label htmlFor="rg-rep" className="block text-xs font-semibold text-[#0F172A]">
+              대표자명{" "}
+              <span className="font-medium text-[#94A3B8]">(자동 입력 · 수정 가능)</span>
+            </label>
+            <input
+              id="rg-rep"
+              type="text"
+              value={repName}
+              onChange={(e) => setRepName(e.target.value)}
+              placeholder="예: 홍길동"
+              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+            />
+          </div>
+
+          {/* 개업일 — OCR 자동채움, 수정 가능. YYYYMMDD 8자리 */}
+          <div className="space-y-2">
+            <label htmlFor="rg-open" className="block text-xs font-semibold text-[#0F172A]">
+              개업일{" "}
+              <span className="font-medium text-[#94A3B8]">(자동 입력 · 수정 가능)</span>
+            </label>
+            <input
+              id="rg-open"
+              type="text"
+              inputMode="numeric"
+              value={openDate}
+              onChange={(e) => setOpenDate(e.target.value)}
+              placeholder="예: 20200101"
+              maxLength={8}
+              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm tabular-nums text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
             />
           </div>
 
