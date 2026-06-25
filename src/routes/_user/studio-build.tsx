@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { getAuthClient } from "@/lib/auth-context";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
@@ -23,7 +23,6 @@ import {
   Send,
   Play,
   Lock,
-  ChevronRight,
   Store,
   X,
   Zap,
@@ -523,13 +522,17 @@ export function CardStudioPage() {
                     </div>
                   )}
                   {applied["calendar"] && (
-                    <button className="flex w-full items-center justify-between rounded-xl bg-white px-3.5 py-3 text-[#0A0A0A] shadow-sm animate-slide-up">
-                      <span className="flex items-center gap-2 text-[14px] font-bold">
-                        <Calendar className="h-4 w-4" strokeWidth={2.25} />
-                        날짜 골라 예약하기
-                      </span>
-                      <ChevronRight className="h-4 w-4 text-[#A3A3A3]" strokeWidth={2.5} />
-                    </button>
+                    <div className="animate-slide-up">
+                      {/* 메이커 액션 — 예약 가능일/자리수 설정 페이지로 이동(/partner/calendar).
+                          캘린더는 react-day-picker + Radix Dialog 충돌로 시트 임베드 불가 → 풀페이지. */}
+                      <Link
+                        to="/partner/calendar"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-white py-2.5 text-[13px] font-bold text-[#1D4ED8] transition-colors hover:bg-[#F0F4FF]"
+                      >
+                        <Calendar className="h-4 w-4" strokeWidth={2.5} />
+                        예약일 설정하기
+                      </Link>
+                    </div>
                   )}
                   {applied["link"] && (
                     <div className="flex gap-2 animate-slide-up">
