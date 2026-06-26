@@ -231,8 +231,6 @@ const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link"];
 const STUDIO_BUILD_CSS = `
 @keyframes sb-forge-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .forge-float { animation: sb-forge-float 4s ease-in-out infinite; }
-@keyframes sb-holo-sweep { 0% { transform: translateX(0); opacity: 0; } 18% { opacity: 1; } 100% { transform: translateX(360%); opacity: 0; } }
-.holo-sweep { animation: sb-holo-sweep 3.6s ease-in-out infinite; }
 @keyframes sb-forge-burst { 0% { transform: scale(0.2); opacity: 0; } 40% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
 .forge-burst { animation: sb-forge-burst 0.5s cubic-bezier(0.19,1,0.22,1) both; }
 @keyframes sb-chip-pop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }

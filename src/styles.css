@@ -221,8 +221,8 @@
 .dot-loading > span:nth-child(1){animation-delay:0ms}
 .dot-loading > span:nth-child(2){animation-delay:160ms}
 .dot-loading > span:nth-child(3){animation-delay:320ms}
-@keyframes holo-sweep { 0%{transform:translateX(-120%) skewX(-18deg);opacity:0} 18%{opacity:.55} 60%{opacity:.15} 100%{transform:translateX(120%) skewX(-18deg);opacity:0} }
-.holo-sweep { animation:holo-sweep 4.6s cubic-bezier(0.4,0,0.2,1) infinite; }
+@keyframes holo-sweep { 0% { transform: translateX(0); opacity: 0; } 18% { opacity: 1; } 100% { transform: translateX(360%); opacity: 0; } }
+.holo-sweep { animation: holo-sweep 3.6s ease-in-out infinite; }
 @keyframes caret-blink { 0%,45%{opacity:1} 50%,95%{opacity:0} 100%{opacity:1} }
 .caret-blink { animation:caret-blink 1s steps(1) infinite; }
 @keyframes ai-breathe { 0%,100%{transform:scale(1);opacity:.5} 50%{transform:scale(1.18);opacity:.15} }
