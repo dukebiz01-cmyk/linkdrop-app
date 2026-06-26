@@ -255,6 +255,10 @@ export function CardStudioPage() {
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
   const [showCouponPicker, setShowCouponPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
+  // S2-a 저장 — POST /api/drops(영상+한마디만). 단축 URL 반환 확인까지.
+  const [saving, setSaving] = useState(false);
+  const [savedUrl, setSavedUrl] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deckIndex, setDeckIndex] = useState(0);
   const [pressedId, setPressedId] = useState<string | null>(null);
   // 블록 설정 아코디언 — 한 번에 하나만 펼침(null = 전부 접힘).
@@ -361,6 +365,50 @@ export function CardStudioPage() {
       setVideoSearched(true);
     }
   };
+
+  // S2-a 저장 — 영상(media_url) + 한마디(curator_message)만 /api/drops 로. 쿠폰·예약은 다음 단계.
+  //   media_url = selectedVideo.videoId 로 만든 YouTube watch URL(서버가 extract-meta 로 source 처리).
+  //   purpose = "정보"(drop_purpose enum 값, 영상만 카드). is_public = false. blocks 미전송(영상은 media_url 본체).
+  async function handleSaveDrop() {
+    if (!selectedVideo) {
+      setSaveError("영상을 먼저 선택해주세요.");
+      return;
+    }
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const mediaUrl = `https://www.youtube.com/watch?v=${selectedVideo.videoId}`;
+      const res = await fetch("/api/drops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          media_url: mediaUrl,
+          purpose: "정보",
+          curator_message: tagline.trim() || null,
+          is_public: false,
+        }),
+      });
+      const json = (await res.json()) as {
+        drop?: { id?: string; share_uuid?: string };
+        shareable_url?: string;
+        message?: string;
+      };
+      if (!res.ok || !json.drop?.share_uuid) {
+        setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
+      setSavedUrl(json.shareable_url ?? `${origin}/d/${json.drop.share_uuid}`);
+      setDropped(true);
+    } catch (e) {
+      console.error("[studio-build] handleSaveDrop", e);
+      setSaveError("카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function equip(block: StudioBlock) {
     if (block.isPaid && score < ENHANCE_UNLOCK) return;
@@ -1213,8 +1261,8 @@ export function CardStudioPage() {
         <div className="bg-[#FAFAFA]/95 backdrop-blur-md">
           <div className="mx-auto max-w-md px-5 pb-4">
             <button
-              onClick={() => setDropped(true)}
-              disabled={score < 40}
+              onClick={() => void handleSaveDrop()}
+              disabled={score < 40 || saving}
               className={`group flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl text-[15px] font-bold transition-all duration-300 ${
                 score >= 40
                   ? "text-white shadow-[0_8px_24px_rgba(15,23,42,0.22)] active:scale-[0.985]"
@@ -1222,10 +1270,12 @@ export function CardStudioPage() {
               }`}
               style={score >= 40 ? { backgroundColor: INK } : undefined}
             >
-              {dropped ? (
+              {saving ? (
+                <>저장 중…</>
+              ) : dropped ? (
                 <>
                   <Check className="h-5 w-5" strokeWidth={2.5} />
-                  카톡으로 드롭했어요!
+                  카드를 저장했어요!
                 </>
               ) : score >= 40 ? (
                 <>
@@ -1242,6 +1292,25 @@ export function CardStudioPage() {
                 </>
               )}
             </button>
+            {/* S2-a 저장 결과 — 단축 URL 반환 확인(카톡 공유 연결은 다음 단계). */}
+            {saveError ? (
+              <p className="mt-2 text-center text-[12px] text-[#B91C1C]">{saveError}</p>
+            ) : savedUrl ? (
+              <div className="mt-2 flex items-center justify-center gap-2 text-[12px] text-[#525252]">
+                <span className="truncate font-medium text-[#0A0A0A]">{savedUrl}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.clipboard) {
+                      void navigator.clipboard.writeText(savedUrl);
+                    }
+                  }}
+                  className="shrink-0 rounded-lg bg-white px-2 py-1 font-semibold text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] hover:bg-[#FAFAFA]"
+                >
+                  복사
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
