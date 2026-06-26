@@ -25,6 +25,7 @@ import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as ApiSuggestPurposeRouteImport } from './routes/api/suggest-purpose'
 import { Route as ApiPriceCompareRouteImport } from './routes/api/price-compare'
 import { Route as ApiOembedRouteImport } from './routes/api/oembed'
+import { Route as ApiGenerateSummaryRouteImport } from './routes/api/generate-summary'
 import { Route as ApiGeneratePromoCopyRouteImport } from './routes/api/generate-promo-copy'
 import { Route as ApiEventsRouteImport } from './routes/api/events'
 import { Route as ApiConsultationsRouteImport } from './routes/api/consultations'
@@ -146,6 +147,11 @@ const ApiPriceCompareRoute = ApiPriceCompareRouteImport.update({
 const ApiOembedRoute = ApiOembedRouteImport.update({
   id: '/api/oembed',
   path: '/api/oembed',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGenerateSummaryRoute = ApiGenerateSummaryRouteImport.update({
+  id: '/api/generate-summary',
+  path: '/api/generate-summary',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiGeneratePromoCopyRoute = ApiGeneratePromoCopyRouteImport.update({
@@ -403,6 +409,7 @@ export interface FileRoutesByFullPath {
   '/api/consultations': typeof ApiConsultationsRoute
   '/api/events': typeof ApiEventsRoute
   '/api/generate-promo-copy': typeof ApiGeneratePromoCopyRoute
+  '/api/generate-summary': typeof ApiGenerateSummaryRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
   '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
@@ -463,6 +470,7 @@ export interface FileRoutesByTo {
   '/api/consultations': typeof ApiConsultationsRoute
   '/api/events': typeof ApiEventsRoute
   '/api/generate-promo-copy': typeof ApiGeneratePromoCopyRoute
+  '/api/generate-summary': typeof ApiGenerateSummaryRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
   '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
@@ -527,6 +535,7 @@ export interface FileRoutesById {
   '/api/consultations': typeof ApiConsultationsRoute
   '/api/events': typeof ApiEventsRoute
   '/api/generate-promo-copy': typeof ApiGeneratePromoCopyRoute
+  '/api/generate-summary': typeof ApiGenerateSummaryRoute
   '/api/oembed': typeof ApiOembedRoute
   '/api/price-compare': typeof ApiPriceCompareRoute
   '/api/suggest-purpose': typeof ApiSuggestPurposeRoute
@@ -589,6 +598,7 @@ export interface FileRouteTypes {
     | '/api/consultations'
     | '/api/events'
     | '/api/generate-promo-copy'
+    | '/api/generate-summary'
     | '/api/oembed'
     | '/api/price-compare'
     | '/api/suggest-purpose'
@@ -649,6 +659,7 @@ export interface FileRouteTypes {
     | '/api/consultations'
     | '/api/events'
     | '/api/generate-promo-copy'
+    | '/api/generate-summary'
     | '/api/oembed'
     | '/api/price-compare'
     | '/api/suggest-purpose'
@@ -712,6 +723,7 @@ export interface FileRouteTypes {
     | '/api/consultations'
     | '/api/events'
     | '/api/generate-promo-copy'
+    | '/api/generate-summary'
     | '/api/oembed'
     | '/api/price-compare'
     | '/api/suggest-purpose'
@@ -764,6 +776,7 @@ export interface RootRouteChildren {
   ApiConsultationsRoute: typeof ApiConsultationsRoute
   ApiEventsRoute: typeof ApiEventsRoute
   ApiGeneratePromoCopyRoute: typeof ApiGeneratePromoCopyRoute
+  ApiGenerateSummaryRoute: typeof ApiGenerateSummaryRoute
   ApiOembedRoute: typeof ApiOembedRoute
   ApiPriceCompareRoute: typeof ApiPriceCompareRoute
   ApiSuggestPurposeRoute: typeof ApiSuggestPurposeRoute
@@ -890,6 +903,13 @@ declare module '@tanstack/react-router' {
       path: '/api/oembed'
       fullPath: '/api/oembed'
       preLoaderRoute: typeof ApiOembedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/generate-summary': {
+      id: '/api/generate-summary'
+      path: '/api/generate-summary'
+      fullPath: '/api/generate-summary'
+      preLoaderRoute: typeof ApiGenerateSummaryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/generate-promo-copy': {
@@ -1332,6 +1352,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiConsultationsRoute: ApiConsultationsRoute,
   ApiEventsRoute: ApiEventsRoute,
   ApiGeneratePromoCopyRoute: ApiGeneratePromoCopyRoute,
+  ApiGenerateSummaryRoute: ApiGenerateSummaryRoute,
   ApiOembedRoute: ApiOembedRoute,
   ApiPriceCompareRoute: ApiPriceCompareRoute,
   ApiSuggestPurposeRoute: ApiSuggestPurposeRoute,
