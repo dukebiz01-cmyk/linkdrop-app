@@ -153,6 +153,8 @@ export interface InfoDropPageProps {
   /** AI 한 줄 요약 (없으면 description 사용) */
   aiSummary?: string;
   keyPoints?: string[];
+  /** v7.2 — 메이커가 고른 카드 배경색. ★ 타입 자리만 — 렌더 배선은 e단계(현재 화면 변화 0). */
+  cardColor?: string;
   shareUrl?: string;
   /** 예약 목적 — 메이커가 보낸 예약 가능 날짜 (수신자 달력 마킹용). */
   reservationDates?: ReservationDateItem[];

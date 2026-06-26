@@ -38,6 +38,8 @@ export type DropDetailRpc = {
     reservation_data: unknown;
     /** v7.1c — 매장별 캘린더 연동. 손님 화면이 partner_id 로 슬롯 조회. */
     partner_id?: string | null;
+    /** v7.2 — 메이커가 고른 카드 배경색. NULL(옛 드롭) 가능. */
+    card_color?: string | null;
   };
   intent: { key: string | null; name: string | null; purpose: string | null };
   source: {
@@ -333,6 +335,8 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     dropId: d.drop.id,
     // v7.1c — 손님 캘린더 → reservation_slots 연동. 예약 드롭에서만 사용.
     partnerId: d.drop.partner_id ?? null,
+    // v7.2 — 메이커 카드색. NULL(옛 드롭)이면 undefined → 손님 fallback(e단계). 기본색 강제 안 함.
+    cardColor: d.drop.card_color ?? undefined,
     maker: {
       name: d.maker?.display_name?.trim() || "익명",
       avatarUrl: d.maker?.avatar_url ?? undefined,
