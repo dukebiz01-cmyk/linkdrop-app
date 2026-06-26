@@ -777,14 +777,26 @@ export function CardStudioPage() {
                                   {selectedVideo.title}
                                 </span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedVideo(null)}
-                                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-white py-2.5 text-[13px] font-medium text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] transition-colors hover:bg-[#FAFAFA]"
-                              >
-                                <RefreshCw className="h-4 w-4" strokeWidth={2} />
-                                다시 고르기
-                              </button>
+                              <div className="flex gap-2">
+                                {/* 다시 고르기 = 취소(영상 비우고 검색 복귀). 보조 버튼. */}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedVideo(null)}
+                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white py-2.5 text-[13px] font-medium text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] transition-colors hover:bg-[#FAFAFA]"
+                                >
+                                  <RefreshCw className="h-4 w-4" strokeWidth={2} />
+                                  다시 고르기
+                                </button>
+                                {/* 확인 = 매듭(selectedVideo 유지, 아코디언만 닫기). 카드 반영은 이미 됨(WYSIWYG). */}
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedBlockId(null)}
+                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#0A0A0A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#171717]"
+                                >
+                                  <Check className="h-4 w-4" strokeWidth={2.5} />
+                                  확인
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             // 검색 모드 — 검색창 + 결과 리스트.
