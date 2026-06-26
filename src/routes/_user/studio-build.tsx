@@ -481,6 +481,25 @@ export function CardStudioPage() {
         }
       }
 
+      // B-3b 셀링포인트 영속화 — 메이커가 고른 키포인트로 ai_key_points 덮어쓰기.
+      //   저장 응답 후 호출 = generate-summary 자동기록(AI 5개) 뒤라 메이커 선택분이 최종 승.
+      //   create-wizard/쿠폰과 동일 패턴: 직접 supabase.rpc, best-effort(실패해도 저장/URL 진행).
+      if (dropId && pickedPoints.length > 0) {
+        try {
+          const { getSupabase } = await import("@/lib/supabase");
+          const supabase = getSupabase();
+          if (supabase) {
+            const { error: kpErr } = await supabase.rpc("update_drop_key_points", {
+              p_drop_id: dropId,
+              p_points: pickedPoints,
+            });
+            if (kpErr) console.warn("[studio-build] 셀링포인트 저장 실패:", kpErr.message);
+          }
+        } catch (e) {
+          console.warn("[studio-build] update_drop_key_points exception:", e);
+        }
+      }
+
       const origin =
         typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
       setSavedUrl(json.shareable_url ?? `${origin}/d/${json.drop.share_uuid}`);
