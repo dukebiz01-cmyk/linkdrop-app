@@ -8,6 +8,9 @@ import { Toaster } from "@/components/ui/sonner";
 import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
 import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
+import { DropCardShell } from "@/components/card/DropCardShell";
+import { CardActionButton } from "@/components/card/CardActionButton";
+import { SellingPoints } from "@/components/card/SellingPoints";
 import {
   Calendar,
   Video,
@@ -281,7 +284,6 @@ export function CardStudioPage() {
   const [pickedPoints, setPickedPoints] = useState<string[]>([]);
   // 경쟁조건 가드 — 영상 빨리 바꿀 때 stale 응답이 키포인트 덮어쓰지 않게(최신 선택 videoId).
   const aiVideoRef = useRef<string | null>(null);
-  const [tilt, setTilt] = useState({ rx: 0, ry: 0, gx: 50, gy: 50 });
   const [burstKey, setBurstKey] = useState(0);
 
   const touchStart = useRef(0);
@@ -500,6 +502,24 @@ export function CardStudioPage() {
         }
       }
 
+      // B-b 카드색 영속화 — 메이커가 고른 카드 배경색 저장(cardColor 는 항상 값, 기본 forest).
+      //   셀링포인트/쿠폰과 동일 패턴: 직접 supabase.rpc, best-effort(실패해도 저장/URL 진행).
+      if (dropId && cardColor) {
+        try {
+          const { getSupabase } = await import("@/lib/supabase");
+          const supabase = getSupabase();
+          if (supabase) {
+            const { error: colorErr } = await supabase.rpc("set_drop_card_color", {
+              p_drop_id: dropId,
+              p_color: cardColor,
+            });
+            if (colorErr) console.warn("[studio-build] 카드색 저장 실패:", colorErr.message);
+          }
+        } catch (e) {
+          console.warn("[studio-build] set_drop_card_color exception:", e);
+        }
+      }
+
       const origin =
         typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
       setSavedUrl(json.shareable_url ?? `${origin}/d/${json.drop.share_uuid}`);
@@ -524,21 +544,7 @@ export function CardStudioPage() {
     if (!applied[block.id]) setBurstKey((k) => k + 1);
   }
 
-  // 히어로 카드 틸트 (포인터 위치 → 3D 회전 + 광택 위치)
-  function handleTilt(e: React.PointerEvent<HTMLDivElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width;
-    const py = (e.clientY - r.top) / r.height;
-    setTilt({
-      rx: (0.5 - py) * 12,
-      ry: (px - 0.5) * 14,
-      gx: px * 100,
-      gy: py * 100,
-    });
-  }
-  function resetTilt() {
-    setTilt({ rx: 0, ry: 0, gx: 50, gy: 50 });
-  }
+  // 히어로 카드 틸트는 DropCardShell 로 캡슐화 이동(interactive prop).
 
   // 길게 누르면 아크릴 안내 패널, 짧게 탭하면 장착
   function startPress(id: string) {
@@ -616,57 +622,28 @@ export function CardStudioPage() {
       <div className="mx-auto max-w-md px-5">
         {/* ───────── 히어로: 홀로그래픽 메인 카드 (3D 틸트) ───────── */}
         <section className="pt-7" style={{ perspective: "1100px" }}>
+          {/* forge-float 플로팅은 스튜디오 전용 → 셸 밖 유지. 등급 그림자·홀로 강도(stage 의존)·
+              버스트(게임화)는 셸에 prop/slot 으로 주입(셸 자체는 색·게임 중립). */}
           <div className="forge-float">
-            <div
-              onPointerMove={handleTilt}
-              onPointerLeave={resetTilt}
-              className="relative mx-auto w-full select-none rounded-[26px] p-5 text-white transition-transform duration-150 ease-out will-change-transform"
-              style={{
-                backgroundColor: cardColor,
-                transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`,
-                transformStyle: "preserve-3d",
-                boxShadow: `0 22px 60px -12px rgba(15,23,42,${0.28 + stage.stars * 0.07}), 0 0 0 1px rgba(255,255,255,0.08) inset`,
-              }}
+            <DropCardShell
+              cardColor={cardColor}
+              interactive
+              boxShadow={`0 22px 60px -12px rgba(15,23,42,${0.28 + stage.stars * 0.07}), 0 0 0 1px rgba(255,255,255,0.08) inset`}
+              holoOpacity={0.1 + stage.stars * 0.07}
+              overlay={
+                <div
+                  key={burstKey}
+                  className="pointer-events-none absolute right-5 top-5 z-10"
+                  style={{ transform: "translateZ(40px)" }}
+                >
+                  {burstKey > 0 && (
+                    <div className="forge-burst flex h-8 w-8 items-center justify-center rounded-full bg-white/90">
+                      <Zap className="h-4 w-4" style={{ color: POINT }} strokeWidth={2.5} fill={POINT} />
+                    </div>
+                  )}
+                </div>
+              }
             >
-              {/* 홀로그래픽 레이어 (등급 높을수록 진해짐) */}
-              <div
-                className="pointer-events-none absolute inset-0 overflow-hidden rounded-[26px]"
-                style={{ opacity: 0.1 + stage.stars * 0.07 }}
-              >
-                {/* 포인터 따라가는 스페큘러 */}
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background: `radial-gradient(circle at ${tilt.gx}% ${tilt.gy}%, rgba(255,255,255,0.5), transparent 45%)`,
-                  }}
-                />
-                {/* 무지개 홀로 틴트 */}
-                <div
-                  className="absolute inset-0 mix-blend-overlay"
-                  style={{
-                    background:
-                      "linear-gradient(115deg, transparent 20%, rgba(56,189,248,0.7) 38%, rgba(168,85,247,0.6) 52%, rgba(244,114,182,0.6) 64%, transparent 82%)",
-                  }}
-                />
-                {/* 광택 스윕 */}
-                <div className="holo-sweep absolute -inset-y-4 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/35 to-transparent" />
-              </div>
-
-              {/* 레벨업 버스트 */}
-              <div
-                key={burstKey}
-                className="pointer-events-none absolute right-5 top-5 z-10"
-                style={{ transform: "translateZ(40px)" }}
-              >
-                {burstKey > 0 && (
-                  <div className="forge-burst flex h-8 w-8 items-center justify-center rounded-full bg-white/90">
-                    <Zap className="h-4 w-4" style={{ color: POINT }} strokeWidth={2.5} fill={POINT} />
-                  </div>
-                )}
-              </div>
-
-              {/* 콘텐츠 (살짝 떠 있는 깊이감) */}
-              <div className="relative" style={{ transform: "translateZ(30px)" }}>
                 <div className="flex items-center gap-1.5 text-[11px] font-medium text-white/75">
                   <Play className="h-3 w-3 fill-white/75" strokeWidth={0} />
                   YouTube · 괴산 호수 캠핑
@@ -708,16 +685,7 @@ export function CardStudioPage() {
                 )}
 
                 {/* 셀링포인트(보조) — 메이커가 고른 것. 부제보다 작게(위계: 매장명 > 한마디 > 셀링포인트). */}
-                {pickedPoints.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {pickedPoints.map((kp, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-[11px] leading-snug text-white/65">
-                        <Check className="mt-0.5 h-3 w-3 shrink-0 text-white/65" strokeWidth={2} />
-                        {kp}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <SellingPoints points={pickedPoints} />
 
                 <div className="mt-4 space-y-2">
                   {applied["coupon"] && (
@@ -746,22 +714,22 @@ export function CardStudioPage() {
                     store?.contact_phone || store?.address || store?.reservation_url ? (
                       <div className="flex gap-2 animate-slide-up">
                         {store?.contact_phone ? (
-                          <span className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-white/12 py-2 text-center text-[12px] font-semibold backdrop-blur">
-                            <Phone className="h-3.5 w-3.5" strokeWidth={2} />
-                            전화
-                          </span>
+                          <CardActionButton
+                            icon={<Phone className="h-3.5 w-3.5" strokeWidth={2} />}
+                            label="전화"
+                          />
                         ) : null}
                         {store?.address ? (
-                          <span className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-white/12 py-2 text-center text-[12px] font-semibold backdrop-blur">
-                            <MapPin className="h-3.5 w-3.5" strokeWidth={2} />
-                            길찾기
-                          </span>
+                          <CardActionButton
+                            icon={<MapPin className="h-3.5 w-3.5" strokeWidth={2} />}
+                            label="길찾기"
+                          />
                         ) : null}
                         {store?.reservation_url ? (
-                          <span className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-white/12 py-2 text-center text-[12px] font-semibold backdrop-blur">
-                            <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />
-                            예약
-                          </span>
+                          <CardActionButton
+                            icon={<ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />}
+                            label="예약"
+                          />
                         ) : null}
                       </div>
                     ) : (
@@ -776,8 +744,7 @@ export function CardStudioPage() {
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
+            </DropCardShell>
           </div>
         </section>
 
