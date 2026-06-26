@@ -382,9 +382,12 @@ export function CardStudioPage() {
       // 쿠폰 붙음 단일 판정 — purpose 결정 + 쿠폰 RPC 둘 다 같은 조건(일관성).
       //   selectedCouponId(원본)로 판단(selectedCoupon fallback 거짓 양성 회피).
       const hasCoupon = applied["coupon"] && !!selectedCouponId;
-      // purpose 동적 — 쿠폰 붙으면 "쿠폰"(손님 화면 variant=coupon → 쿠폰 렌더), 아니면 "정보".
-      //   TODO S2-c: 예약(applied["calendar"]+슬롯) 장착 시 "예약" 추가.
-      const dropPurpose = hasCoupon ? "쿠폰" : "정보";
+      // 예약 장착 — 캘린더 블록 장착이면 예약 의도. 슬롯은 캘린더 인라인이 매장 단위로 이미 저장,
+      //   손님 화면이 drop.partner_id 로 get_available_slots 조회(슬롯 0개여도 purpose="예약" 유효).
+      const hasReservation = !!applied["calendar"];
+      // purpose 우선순위: 예약 > 쿠폰 > 정보. 예약+쿠폰 = "예약"(우선) + 쿠폰은 funnel_coupon_id
+      //   로 같이 붙는 통합카드(손님 화면 isReservation + isCoupon&&partnerId).
+      const dropPurpose = hasReservation ? "예약" : hasCoupon ? "쿠폰" : "정보";
       const res = await fetch("/api/drops", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -393,6 +396,9 @@ export function CardStudioPage() {
           purpose: dropPurpose,
           curator_message: tagline.trim() || null,
           is_public: false,
+          // 예약 슬롯 조회(손님 get_available_slots)가 drop.partner_id 기준 — 매장 연결 필수.
+          //   쿠폰·정보에도 매장 연결로 유용. studio-build 는 비즈니스 전제(store 있음).
+          partner_id: store?.id ?? null,
         }),
       });
       const json = (await res.json()) as {
