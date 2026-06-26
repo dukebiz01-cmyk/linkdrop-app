@@ -127,7 +127,7 @@ const STUDIO_BLOCKS: StudioBlock[] = [
   },
   {
     id: "coupon",
-    label: "쿠폰 붙이기",
+    label: "쿠폰 연결",
     desc: "내 매장 쿠폰 중 선택",
     detail: "내 매장에 등록된 쿠폰을 카드에 붙여 방문 동기를 만들어요. 할인폭이 클수록 전환이 올라가요.",
     icon: Ticket,
@@ -379,12 +379,18 @@ export function CardStudioPage() {
     setSaveError(null);
     try {
       const mediaUrl = `https://www.youtube.com/watch?v=${selectedVideo.videoId}`;
+      // 쿠폰 붙음 단일 판정 — purpose 결정 + 쿠폰 RPC 둘 다 같은 조건(일관성).
+      //   selectedCouponId(원본)로 판단(selectedCoupon fallback 거짓 양성 회피).
+      const hasCoupon = applied["coupon"] && !!selectedCouponId;
+      // purpose 동적 — 쿠폰 붙으면 "쿠폰"(손님 화면 variant=coupon → 쿠폰 렌더), 아니면 "정보".
+      //   TODO S2-c: 예약(applied["calendar"]+슬롯) 장착 시 "예약" 추가.
+      const dropPurpose = hasCoupon ? "쿠폰" : "정보";
       const res = await fetch("/api/drops", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           media_url: mediaUrl,
-          purpose: "정보",
+          purpose: dropPurpose,
           curator_message: tagline.trim() || null,
           is_public: false,
         }),
@@ -398,6 +404,26 @@ export function CardStudioPage() {
         setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
         return;
       }
+      const dropId = json.drop.id ?? null;
+
+      // S2-b 쿠폰 연결 — purpose 결정과 동일 조건(hasCoupon). create-wizard 패턴: 저장 후
+      //   별도 RPC. best-effort(실패해도 저장/URL 진행).
+      if (dropId && hasCoupon) {
+        try {
+          const { getSupabase } = await import("@/lib/supabase");
+          const supabase = getSupabase();
+          if (supabase) {
+            const { error: couponErr } = await supabase.rpc("set_drop_funnel_coupon", {
+              p_drop_id: dropId,
+              p_coupon_id: selectedCouponId,
+            });
+            if (couponErr) console.warn("[studio-build] 쿠폰 연결 실패:", couponErr.message);
+          }
+        } catch (e) {
+          console.warn("[studio-build] set_drop_funnel_coupon exception:", e);
+        }
+      }
+
       const origin =
         typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
       setSavedUrl(json.shareable_url ?? `${origin}/d/${json.drop.share_uuid}`);
@@ -608,20 +634,22 @@ export function CardStudioPage() {
                 <div className="mt-4 space-y-2">
                   {applied["coupon"] && (
                     <div className="animate-slide-up space-y-2">
-                      {selectedCoupon ? (
-                        <>
-                          {/* 쿠폰 장착 + 활성 쿠폰 있음 = 손님이 볼 실제 쿠폰 미리보기(선택된 쿠폰). */}
-                          <CouponPreview
-                            coupon={{ ...selectedCoupon, title: selectedCoupon.title ?? "" }}
-                          />
-                        </>
+                      {selectedCouponId && selectedCoupon ? (
+                        // 실제 선택된 쿠폰만 미리보기(selectedCouponId 기준 — fallback 첫 쿠폰 거짓 표시 제거).
+                        <CouponPreview
+                          coupon={{ ...selectedCoupon, title: selectedCoupon.title ?? "" }}
+                        />
+                      ) : coupons.length > 0 ? (
+                        // 쿠폰은 있으나 미선택 — 아래 설정에서 고르도록 안내.
+                        <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55">
+                          아래에서 쿠폰을 선택하세요
+                        </div>
                       ) : (
-                        // 장착했지만 매장에 활성 쿠폰 없음 — 안내(빈 상태 패턴 재사용).
+                        // 매장에 활성 쿠폰 없음.
                         <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55">
                           매장에 활성 쿠폰이 없어요
                         </div>
                       )}
-                      {/* 쿠폰 선택/생성 → S3a에서 아래 설정 영역으로 이전 예정 */}
                     </div>
                   )}
                   {/* 예약 설정 → S3b에서 아래 설정 영역(인라인)으로 이전 예정 */}
@@ -742,7 +770,9 @@ export function CardStudioPage() {
                                 <p className="text-[11px] text-[#A3A3A3]">내 쿠폰에서 선택</p>
                                 <div className="flex flex-col gap-1.5">
                                   {coupons.map((c) => {
-                                    const isSel = selectedCoupon?.id === c.id;
+                                    // 체크 표시 = selectedCouponId(원본). selectedCoupon(?? coupons[0] fallback)
+                                    //   을 쓰면 미선택에도 첫 쿠폰이 체크돼 보여 저장(가드=selectedCouponId)과 불일치.
+                                    const isSel = selectedCouponId === c.id;
                                     return (
                                       <button
                                         key={c.id}
@@ -789,6 +819,18 @@ export function CardStudioPage() {
                                 새 쿠폰 만들기
                               </button>
                             </div>
+                            {/* 확인 = 선택 매듭 + 아코디언 닫기(영상 패턴). selectedCouponId 있을 때만 활성. */}
+                            {coupons.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedBlockId(null)}
+                                disabled={!selectedCouponId}
+                                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0A0A0A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#171717] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
+                              >
+                                <Check className="h-4 w-4" strokeWidth={2.5} />
+                                확인
+                              </button>
+                            ) : null}
                           </div>
                         ) : block.id === "calendar" ? (
                           // 캘린더 인라인 — embedded(헤더 없는 body만). ClientOnly 없이 자체 mounted 가드로 #418 차단(1차).
