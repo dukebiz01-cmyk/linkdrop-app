@@ -98,7 +98,7 @@ async function youtubeSearch(keyword: string): Promise<NormalizedCandidate[]> {
   url.searchParams.set("part", "snippet");
   url.searchParams.set("q", keyword);
   url.searchParams.set("type", "video");
-  url.searchParams.set("maxResults", "8");
+  url.searchParams.set("maxResults", "16");
   url.searchParams.set("regionCode", "KR");
   url.searchParams.set("relevanceLanguage", "ko");
   url.searchParams.set("key", YOUTUBE_API_KEY);

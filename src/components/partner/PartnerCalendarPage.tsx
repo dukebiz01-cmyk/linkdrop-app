@@ -20,6 +20,9 @@ type SlotRow = {
 type Props = {
   partnerId: string;
   partnerName: string | null;
+  // embedded=true: 시트 안에 들어갈 콘텐츠만 렌더(풀페이지 <main>/<header> 껍데기 제거).
+  // 미지정/false: 기존 풀페이지 동작 그대로.
+  embedded?: boolean;
 };
 
 const MIN_CAPACITY = 1;
@@ -44,7 +47,7 @@ function monthRange(month: Date): { from: string; to: string } {
   return { from: toIsoDate(from), to: toIsoDate(to) };
 }
 
-export function PartnerCalendarPage({ partnerId, partnerName }: Props) {
+export function PartnerCalendarPage({ partnerId, partnerName, embedded = false }: Props) {
   const router = useRouter();
   const supabase = getSupabase();
 
@@ -199,23 +202,9 @@ export function PartnerCalendarPage({ partnerId, partnerName }: Props) {
   const existingSlot = selectedIso ? slotsByDate.get(selectedIso) : undefined;
   const hasBookings = (existingSlot?.current_bookings ?? 0) > 0;
 
-  return (
-    <main className="min-h-screen bg-[#F8FAFC] tracking-ko pb-12">
-      <header className="bg-white px-5 py-4 border-b border-[#F1F5F9] flex items-center gap-3">
-        <Link
-          to="/partner"
-          className="flex size-10 min-h-[44px] min-w-[44px] items-center justify-center -ml-2"
-        >
-          <ArrowLeft className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-        </Link>
-        <div className="min-w-0">
-          <h1 className="text-lg font-bold text-[#0F172A] truncate">예약 캘린더</h1>
-          {partnerName ? (
-            <p className="mt-0.5 text-xs text-[#64748B] truncate">{partnerName}</p>
-          ) : null}
-        </div>
-      </header>
-
+  // 캘린더 본체 — 풀페이지/시트(embedded) 두 모드가 공유(껍데기 main/header 만 분기).
+  const body = (
+    <>
       <div className="px-5 pt-4 space-y-4">
         <section className="rounded-2xl bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
           {mounted ? (
@@ -406,6 +395,32 @@ export function PartnerCalendarPage({ partnerId, partnerName }: Props) {
       </div>
 
       <Toaster richColors position="top-center" />
+    </>
+  );
+
+  // embedded: 시트 콘텐츠만(여백만). 풀페이지 껍데기/헤더/뒤로가기 없음.
+  if (embedded) {
+    return <div className="px-1 pb-2">{body}</div>;
+  }
+
+  // 풀페이지(기존 동작 100% 보존) — min-h-screen <main> + 헤더(뒤로가기) + body.
+  return (
+    <main className="min-h-screen bg-[#F8FAFC] tracking-ko pb-12">
+      <header className="bg-white px-5 py-4 border-b border-[#F1F5F9] flex items-center gap-3">
+        <Link
+          to="/partner"
+          className="flex size-10 min-h-[44px] min-w-[44px] items-center justify-center -ml-2"
+        >
+          <ArrowLeft className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+        </Link>
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold text-[#0F172A] truncate">예약 캘린더</h1>
+          {partnerName ? (
+            <p className="mt-0.5 text-xs text-[#64748B] truncate">{partnerName}</p>
+          ) : null}
+        </div>
+      </header>
+      {body}
     </main>
   );
 }
