@@ -205,7 +205,8 @@ const CARD_COLORS = [
 const ENHANCE_UNLOCK = 75;
 const POINT = "#1D4ED8"; // 전환력 지표(게이지·별·파워)에만
 const INK = "#0A0A0A";
-const TAGLINE_MAX = 20; // 한마디(카드 부제) 글자수 — headline 20자 기준과 통일
+const TAGLINE_MAX = 40; // 한마디(카드 부제) 글자수
+const MAX_POINTS = 3; // 카드에 넣을 셀링포인트 최대 개수(카드 안 넘치게)
 
 function getStage(score: number) {
   if (score >= ENHANCE_UNLOCK) return { stars: 3, label: "완성", tone: "전환 준비 완료" };
@@ -273,9 +274,11 @@ export function CardStudioPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   // 검색 실행 여부 — 검색 전(안내) vs 결과 0개(없음) 구분용.
   const [videoSearched, setVideoSearched] = useState(false);
-  // 카피 AI(B-2) — 영상 선택 시 백그라운드로 키포인트 리드(B-3에서 한마디 후보로 사용).
+  // 카피 AI(B-2) — 영상 선택 시 백그라운드로 키포인트 리드(B-3에서 셀링포인트로 사용).
   const [aiKeyPoints, setAiKeyPoints] = useState<string[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  // B-3 — 메이커가 고른 셀링포인트(카드 미리보기 표시용). ★ 저장은 다음 단계(RPC 필요), 이번엔 state까지.
+  const [pickedPoints, setPickedPoints] = useState<string[]>([]);
   // 경쟁조건 가드 — 영상 빨리 바꿀 때 stale 응답이 키포인트 덮어쓰지 않게(최신 선택 videoId).
   const aiVideoRef = useRef<string | null>(null);
   const [tilt, setTilt] = useState({ rx: 0, ry: 0, gx: 50, gy: 50 });
@@ -380,6 +383,7 @@ export function CardStudioPage() {
     setSelectedVideo(slot); // 즉시 카드 반영
     aiVideoRef.current = slot.videoId; // 이 호출이 최신 선택임을 기록
     setAiKeyPoints([]);
+    setPickedPoints([]); // 새 영상이면 이전 선택 셀링포인트 무효
     setAiLoading(true);
     try {
       const videoUrl = `https://www.youtube.com/watch?v=${slot.videoId}`;
@@ -684,6 +688,18 @@ export function CardStudioPage() {
                   <p className="mt-0.5 text-[13px] text-white/40">한마디를 입력하면 여기 표시돼요</p>
                 )}
 
+                {/* 셀링포인트(보조) — 메이커가 고른 것. 부제보다 작게(위계: 매장명 > 한마디 > 셀링포인트). */}
+                {pickedPoints.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {pickedPoints.map((kp, i) => (
+                      <li key={i} className="flex items-start gap-1.5 text-[11px] leading-snug text-white/65">
+                        <Check className="mt-0.5 h-3 w-3 shrink-0 text-white/65" strokeWidth={2} />
+                        {kp}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
                 <div className="mt-4 space-y-2">
                   {applied["coupon"] && (
                     <div className="animate-slide-up space-y-2">
@@ -760,10 +776,61 @@ export function CardStudioPage() {
             placeholder="우리 가게를 한마디로 소개해보세요"
             className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2.5 text-[14px] outline-none focus:border-[#0A0A0A]"
           />
-          {/* 링고AI 넛지 — 안내만(비활성). AI 제안 연결은 다음 단계. */}
-          <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[#A3A3A3]">
-            <Sparkles className="h-3 w-3" strokeWidth={1.75} />
-            막히면 링고AI가 도와드려요
+          {/* 셀링포인트(보조 설명) — AI가 영상에서 뽑은 키포인트. 탭해서 카드에 추가(최대 3).
+              ★ 한마디(카피)는 위 직접입력 유지 — AI는 셀링포인트만. 저장은 다음 단계(미리보기까지). */}
+          <div className="mt-3">
+            {aiLoading ? (
+              <div className="flex items-center gap-1.5 text-[12px] text-[#A3A3A3]">
+                <Sparkles className="h-3 w-3" strokeWidth={1.75} />
+                링고AI가 영상에서 추천 문구 찾는 중…
+              </div>
+            ) : aiKeyPoints.length > 0 ? (
+              <>
+                <div className="mb-1.5 text-[11px] text-[#A3A3A3]">
+                  셀링포인트 — 탭해서 카드에 추가 (최대 {MAX_POINTS})
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {aiKeyPoints.map((kp, i) => {
+                    const picked = pickedPoints.includes(kp);
+                    const atMax = pickedPoints.length >= MAX_POINTS && !picked;
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        disabled={atMax}
+                        onClick={() =>
+                          setPickedPoints((p) =>
+                            picked ? p.filter((x) => x !== kp) : [...p, kp],
+                          )
+                        }
+                        className="flex items-start gap-2 rounded-lg bg-white p-2.5 text-left text-[13px] transition-shadow disabled:opacity-40"
+                        style={{ boxShadow: picked ? "0 0 0 1.5px #0A0A0A" : "0 0 0 0.5px #E5E5E5" }}
+                      >
+                        {picked ? (
+                          <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#0A0A0A]" strokeWidth={2} />
+                        ) : (
+                          <Circle className="mt-0.5 h-4 w-4 shrink-0 text-[#C4C4C4]" strokeWidth={2} />
+                        )}
+                        <span className={picked ? "font-medium text-[#0A0A0A]" : "text-[#525252]"}>
+                          {kp}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : selectedVideo ? (
+              // 영상은 있으나 키포인트 없음(AI 실패 등) — 한마디 직접입력 안내.
+              <div className="flex items-center gap-1.5 text-[11px] text-[#A3A3A3]">
+                <Sparkles className="h-3 w-3" strokeWidth={1.75} />
+                막히면 링고AI가 도와드려요
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-[11px] text-[#A3A3A3]">
+                <Sparkles className="h-3 w-3" strokeWidth={1.75} />
+                영상을 선택하면 추천 문구가 나와요
+              </div>
+            )}
           </div>
         </div>
 
@@ -928,6 +995,7 @@ export function CardStudioPage() {
                                     setSelectedVideo(null);
                                     aiVideoRef.current = null;
                                     setAiKeyPoints([]);
+                                    setPickedPoints([]);
                                     setAiLoading(false);
                                   }}
                                   className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white py-2.5 text-[13px] font-medium text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] transition-colors hover:bg-[#FAFAFA]"
