@@ -273,6 +273,11 @@ export function CardStudioPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   // 검색 실행 여부 — 검색 전(안내) vs 결과 0개(없음) 구분용.
   const [videoSearched, setVideoSearched] = useState(false);
+  // 카피 AI(B-2) — 영상 선택 시 백그라운드로 키포인트 리드(B-3에서 한마디 후보로 사용).
+  const [aiKeyPoints, setAiKeyPoints] = useState<string[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  // 경쟁조건 가드 — 영상 빨리 바꿀 때 stale 응답이 키포인트 덮어쓰지 않게(최신 선택 videoId).
+  const aiVideoRef = useRef<string | null>(null);
   const [tilt, setTilt] = useState({ rx: 0, ry: 0, gx: 50, gy: 50 });
   const [burstKey, setBurstKey] = useState(0);
 
@@ -363,6 +368,48 @@ export function CardStudioPage() {
     } finally {
       setVideoSearching(false);
       setVideoSearched(true);
+    }
+  };
+
+  // 영상 선택 — 카드 즉시 반영(WYSIWYG) + 백그라운드 카피 AI 리드(B-2).
+  //   oembed 로 source_id(content_sources UUID) 확보 → generate-summary 로 키포인트 수신.
+  //   경쟁조건: 영상 빨리 바꾸면 aiVideoRef 로 stale 응답을 무시(최신 선택만 반영).
+  //   best-effort — 실패해도 카피는 직접 입력 가능.
+  const handleSelectVideo = async (c: DiscoverCandidate) => {
+    const slot = toVideoSlot(c);
+    setSelectedVideo(slot); // 즉시 카드 반영
+    aiVideoRef.current = slot.videoId; // 이 호출이 최신 선택임을 기록
+    setAiKeyPoints([]);
+    setAiLoading(true);
+    try {
+      const videoUrl = `https://www.youtube.com/watch?v=${slot.videoId}`;
+      const oembedRes = await fetch("/api/oembed?url=" + encodeURIComponent(videoUrl));
+      const oembedJson = (await oembedRes.json()) as { source_id?: string };
+      const sourceId = oembedJson?.source_id;
+      if (!oembedRes.ok || !sourceId) throw new Error("oembed failed");
+      if (aiVideoRef.current !== slot.videoId) return; // stale — 그 사이 다른 영상 선택됨
+
+      const sumRes = await fetch("/api/generate-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_id: sourceId }), // purpose 생략 → "정보" 기본
+      });
+      const sumJson = (await sumRes.json()) as { ai_key_points?: unknown };
+      if (!sumRes.ok) throw new Error("summary failed");
+      if (aiVideoRef.current !== slot.videoId) return; // stale 재확인
+
+      setAiKeyPoints(
+        Array.isArray(sumJson?.ai_key_points)
+          ? (sumJson.ai_key_points as unknown[]).filter(
+              (s): s is string => typeof s === "string" && s.trim().length > 0,
+            )
+          : [],
+      );
+    } catch (e) {
+      console.warn("[studio-build] 카피 AI 리드 실패:", e);
+      if (aiVideoRef.current === slot.videoId) setAiKeyPoints([]);
+    } finally {
+      if (aiVideoRef.current === slot.videoId) setAiLoading(false);
     }
   };
 
@@ -874,10 +921,15 @@ export function CardStudioPage() {
                                 </span>
                               </div>
                               <div className="flex gap-2">
-                                {/* 다시 고르기 = 취소(영상 비우고 검색 복귀). 보조 버튼. */}
+                                {/* 다시 고르기 = 취소(영상 비우고 검색 복귀). AI 키포인트도 리셋. */}
                                 <button
                                   type="button"
-                                  onClick={() => setSelectedVideo(null)}
+                                  onClick={() => {
+                                    setSelectedVideo(null);
+                                    aiVideoRef.current = null;
+                                    setAiKeyPoints([]);
+                                    setAiLoading(false);
+                                  }}
                                   className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white py-2.5 text-[13px] font-medium text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] transition-colors hover:bg-[#FAFAFA]"
                                 >
                                   <RefreshCw className="h-4 w-4" strokeWidth={2} />
@@ -931,7 +983,7 @@ export function CardStudioPage() {
                                     <li key={`${c.provider}|${c.source_id}`}>
                                       <button
                                         type="button"
-                                        onClick={() => setSelectedVideo(toVideoSlot(c))}
+                                        onClick={() => void handleSelectVideo(c)}
                                         className="flex w-full items-center gap-2.5 rounded-lg bg-white p-2 text-left transition-shadow [box-shadow:0_0_0_0.5px_#E5E5E5] hover:[box-shadow:0_0_0_1px_#0A0A0A]"
                                       >
                                         <div className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-[#F5F5F5]">
