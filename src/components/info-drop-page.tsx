@@ -1060,12 +1060,39 @@ export function InfoDropPage({
           </section>
         )}
 
+        {isReservation && (
+          // 4d — 예약 코어(영상·제목·한마디·셀링)도 동일 CardBody(A1: 코어만, navy 유지).
+          //   funnelCoupon 생략 → coupon=null → CouponPreview 미렌더(couponPanel 담당 dedup).
+          //   contactSlot 생략 → 전화/길찾기는 secondary-contact-row 담당. reservation-header/캘린더/reservePanel 0터치.
+          <DropCardShell
+            cardColor={cardColor ?? "#1E3A8A"}
+            interactive={false}
+            holoOpacity={0.45}
+            boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
+          >
+            <CardBody
+              {...toCardBodyProps({
+                videoSourceUrl,
+                videoThumbnailUrl,
+                videoDurationSec,
+                videoSourceLabel,
+                title,
+                makerMessage,
+                keyPoints,
+                cardColor,
+                local,
+                variant,
+              } as unknown as InfoDropPageProps)}
+            />
+          </DropCardShell>
+        )}
+
         {/* 2. 영상 카드 — 유튜브: lite embed(facade→iframe), 그 외: 썸네일 + onWatchOriginal.
             세로(쇼츠) 영상은 max-h cap 으로 화면을 다 먹지 않게 (히어로 유지 + 하단
             CTA 도달성). 가로(16:9) 는 자연 비율이라 cap 영향 거의 없음. */}
         {/* F2 커머스 — 영상 헤더(썸네일+원본영상 프레임) 숨김. 상품 카드가 이미지 보유.
             commerce 일 때만 숨기고, 영상/정보/쿠폰/예약 드롭은 그대로(회귀 없음). */}
-        {!commerce && resolvedVariant !== "info" && resolvedVariant !== "coupon" && (
+        {!commerce && resolvedVariant !== "info" && resolvedVariant !== "coupon" && resolvedVariant !== "reservation" && (
           <section
             className={cn(
               "overflow-hidden rounded-2xl border border-border bg-bg",
@@ -1136,7 +1163,7 @@ export function InfoDropPage({
           </section>
         )}
 
-        {makerMessage && resolvedVariant !== "info" && resolvedVariant !== "coupon" && (
+        {makerMessage && resolvedVariant !== "info" && resolvedVariant !== "coupon" && resolvedVariant !== "reservation" && (
           <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium italic leading-relaxed tracking-ko text-text-muted">
             &quot;{makerMessage}&quot;
           </p>
