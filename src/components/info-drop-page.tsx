@@ -576,6 +576,7 @@ export function InfoDropPage({
   partnerId,
   initialSlots,
   calendarMode = "date_range",
+  cardColor,
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   // 트랙 D §50 — 매장(partnerId) 구독. me.tsx handleSubscribe 패턴 재사용(maker_follows, 스키마 0).
@@ -845,12 +846,14 @@ export function InfoDropPage({
   return (
     <div
       className={cn(
-        "relative mx-auto min-h-screen w-full max-w-[480px] bg-white",
+        "relative mx-auto min-h-screen w-full max-w-[480px]",
         // sticky 바 = 12(pt) + 52(primary) + 12(pb) + safe-area ≈ 76px + safe-area.
         // 본문 마지막 ~ sticky 바 사이 안 겹치게 pb-[calc(5.5rem+safe-area)] (88px).
         // sticky 없는 드롭(정보/구매/상담) = pb-8 만으로 충분.
         hasStickyBar ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "pb-8",
       )}
+      // 메이커 cardColor 셸 배경(스튜디오 navy 통일). NULL/undefined=navy 기본(#1E3A8A).
+      style={{ backgroundColor: cardColor ?? "#1E3A8A" }}
       data-testid="public-drop-page"
       data-variant={resolvedVariant}
     >
@@ -864,13 +867,13 @@ export function InfoDropPage({
             </AvatarFallback>
           </Avatar>
           <div>
-            <p className="text-sm font-bold tracking-ko text-text-strong">
+            <p className="text-sm font-bold tracking-ko text-white">
               {safeMaker.name}
-              <span className="font-medium text-text-muted">님이 보냈어요</span>
+              <span className="font-medium text-white/70">님이 보냈어요</span>
             </p>
             {/* selfUpload(자체업로드 상품)은 영상이 아니므로 "공유된 영상" 라벨 숨김. */}
             {!commerce?.selfUpload && (
-              <p className="text-xs font-medium tracking-ko text-text-subtle">
+              <p className="text-xs font-medium tracking-ko text-white/60">
                 LinkDrop으로 공유된 영상
               </p>
             )}
@@ -937,13 +940,13 @@ export function InfoDropPage({
             >
               {pageCopy.label}
             </span>
-            <h2 className="text-xl font-extrabold leading-snug tracking-ko text-text-strong">
+            <h2 className="text-xl font-extrabold leading-snug tracking-ko text-white">
               {pageCopy.sectionTitle}
             </h2>
-            <p className="text-sm font-medium leading-relaxed tracking-ko text-text-muted">
+            <p className="text-sm font-medium leading-relaxed tracking-ko text-white/70">
               {reservationGuide}
             </p>
-            <p className="text-xs font-medium text-text-subtle">{safeLocal.name}</p>
+            <p className="text-xs font-medium text-white/60">{safeLocal.name}</p>
           </section>
         )}
 
@@ -1098,7 +1101,7 @@ export function InfoDropPage({
                     >
                       {reserveCtaLabel}
                     </ActionButton>
-                    <p className="text-xs font-medium tracking-ko text-text-muted">
+                    <p className="text-xs font-medium tracking-ko text-white/70">
                       예약 신청을 받을 수 없는 드롭이에요.
                     </p>
                   </div>
@@ -1107,7 +1110,7 @@ export function InfoDropPage({
                 {/* 빌링 X 고지 — Duke 요구. 결제는 매장에서. */}
                 <p
                   data-testid="billing-notice"
-                  className="text-[11px] leading-relaxed tracking-ko text-text-subtle"
+                  className="text-[11px] leading-relaxed tracking-ko text-white/60"
                 >
                   결제는 매장에서 직접 진행돼요. 자세한 내용은 매장에 문의해 주세요.
                 </p>
@@ -1117,7 +1120,7 @@ export function InfoDropPage({
             const couponPanel = funnelCoupon ? (
               <div className="space-y-3">
                 <CouponPreview coupon={funnelCoupon} />
-                <p className="text-xs font-medium tracking-ko text-text-muted">
+                <p className="text-xs font-medium tracking-ko text-white/70">
                   예약을 신청하면 쿠폰이 지갑에 담겨요.
                 </p>
               </div>
@@ -1139,7 +1142,7 @@ export function InfoDropPage({
                 <section data-testid="benefit-event-section" className="space-y-3">
                   {funnelCoupon ? (
                     <div className="space-y-2">
-                      <h2 className="text-sm font-bold tracking-ko text-text-strong">
+                      <h2 className="text-sm font-bold tracking-ko text-white">
                         예약하면 받는 혜택
                       </h2>
                       {couponPanel}
@@ -1147,7 +1150,7 @@ export function InfoDropPage({
                   ) : null}
                   {hasEvents ? (
                     <div className="space-y-2">
-                      <h2 className="text-sm font-bold tracking-ko text-text-strong">
+                      <h2 className="text-sm font-bold tracking-ko text-white">
                         진행 이벤트
                       </h2>
                       <ul className="space-y-2">
@@ -1432,7 +1435,7 @@ export function InfoDropPage({
             탭 → 그 상품 자체 카드(/d/{refShareUuid}) 인앱 이동. 없으면 미표시. */}
         {attachedProducts && attachedProducts.length > 0 && (
           <section data-testid="related-products">
-            <h2 className="text-sm font-bold tracking-ko text-text-strong">관련 상품</h2>
+            <h2 className="text-sm font-bold tracking-ko text-white">관련 상품</h2>
             <ul className="mt-3 space-y-2">
               {attachedProducts.map((p) => {
                 const inner = (
@@ -1491,7 +1494,7 @@ export function InfoDropPage({
             비우고 sticky 단일 액션 으로. purchase/lead 만 본문 CTAS 사용. */}
         {ctas.length > 0 && (
           <section>
-            <h2 className="text-sm font-bold tracking-ko text-text-strong">
+            <h2 className="text-sm font-bold tracking-ko text-white">
               {pageCopy.ctaHeading}
             </h2>
             <div className="mt-3 flex flex-col gap-2">
@@ -1572,7 +1575,7 @@ export function InfoDropPage({
             target="_blank"
             rel="noopener noreferrer"
             data-testid="coupon-naver-reservation"
-            className="flex items-center justify-center gap-1.5 text-xs font-medium tracking-ko text-text-subtle underline-offset-2 transition-colors hover:text-text-muted hover:underline"
+            className="flex items-center justify-center gap-1.5 text-xs font-medium tracking-ko text-white/60 underline-offset-2 transition-colors hover:text-white/80 hover:underline"
           >
             <ExternalLink className="size-3.5" strokeWidth={2} />
             네이버에서 예약하기
@@ -1661,7 +1664,7 @@ export function InfoDropPage({
             전부 통합. 60대 친화 큰 터치, #15 검정 미니멀, 이모지 X. */}
       <section className="mx-auto w-full max-w-[480px] space-y-3 px-6 pt-4">
         {copyFeedback && (
-          <p className="flex items-center gap-2 text-sm font-medium text-text-strong">
+          <p className="flex items-center gap-2 text-sm font-medium text-white">
             <Check className="size-4 text-intent-success" strokeWidth={2} />
             {copyFeedback}
           </p>
@@ -1702,7 +1705,7 @@ export function InfoDropPage({
           </button>
         </div>
 
-        <p className="text-center text-[10px] leading-tight tracking-ko text-[#A3A3A3]">
+        <p className="text-center text-[10px] leading-tight tracking-ko text-white/50">
           본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
         </p>
 
@@ -1710,7 +1713,7 @@ export function InfoDropPage({
           <button
             type="button"
             onClick={() => setIsReportSheetOpen(true)}
-            className="inline-flex items-center gap-1 bg-transparent text-[11px] text-[#525252] underline underline-offset-2 hover:text-[#0A0A0A]"
+            className="inline-flex items-center gap-1 bg-transparent text-[11px] text-white/70 underline underline-offset-2 hover:text-white"
           >
             <Flag size={11} strokeWidth={2} />
             문제 신고
