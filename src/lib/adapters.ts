@@ -6,6 +6,10 @@
 import type { InfoDropPageProps } from "@/components/info-drop-page";
 import type { PriceOfferRow } from "@/components/ai-price-comparison-card";
 import type { DropViewVariant } from "@/lib/mock-data";
+import type { CardBodyProps, VideoSlot } from "@/components/card/CardBody.types";
+import type { CouponPreviewCoupon } from "@/components/receiver/CouponPreview";
+import type { DropPurpose } from "@/lib/types";
+import { parseVideoUrl } from "@/lib/video-metadata";
 
 const PROD_BASE = "https://app.drop.how";
 
@@ -375,5 +379,79 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
     // share_code(6자) 있으면 drop.how/{code} 단축 URL, 없으면 긴 URL fallback.
     // apex(drop.how) 하드코딩 — origin은 app.drop.how가 되어 단축 도메인을 못 거침.
     shareUrl: d.share_code ? `https://drop.how/${d.share_code}` : `${PROD_BASE}/d/${d.share_uuid}`,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// 4단계 준비 — 손님 데이터(InfoDropPageProps) → CardBodyProps 변환(순수함수).
+//   이번 단계는 함수만 추가(어디서도 호출 0). 손님이 CardBody 를 렌더하는 4단계에서 사용.
+//   스튜디오는 자체 state 로 CardBody 를 채우고, 손님은 이 어댑터로 채워 = 싱크로율.
+// ──────────────────────────────────────────────────────────────────────────
+
+// DropViewVariant(5목적 UI) → DropPurpose(enum). PURPOSE_TO_VARIANT 의 역방향.
+const VARIANT_TO_PURPOSE: Record<DropViewVariant, DropPurpose> = {
+  info: "정보",
+  coupon: "쿠폰",
+  reservation: "예약",
+  purchase: "구매",
+  lead: "상담",
+};
+
+// 초 → "M:SS"(또는 ≥1h "H:MM:SS"). VideoSlot.durationLabel 용(YouTubeLiteEmbed 오버레이).
+function secToDurationLabel(sec: number): string {
+  const t = Math.max(0, Math.floor(sec));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+// 손님 영상 필드 → VideoSlot. videoSourceUrl 없거나 파싱 실패 시 null(영상 슬롯 미렌더).
+//   videoId = parseVideoUrl(videoSourceUrl). isShorts = duration ≤60(스튜디오 어댑터 동일 규칙).
+function toVideoSlot(p: InfoDropPageProps): VideoSlot | null {
+  if (!p.videoSourceUrl) return null;
+  const parsed = parseVideoUrl(p.videoSourceUrl);
+  if (!parsed) return null;
+  return {
+    videoId: parsed.videoId,
+    thumbnailUrl: p.videoThumbnailUrl,
+    title: p.title,
+    isShorts: p.videoDurationSec > 0 && p.videoDurationSec <= 60,
+    durationLabel: p.videoDurationSec > 0 ? secToDurationLabel(p.videoDurationSec) : undefined,
+    sourceLabel: p.videoSourceLabel,
+  };
+}
+
+/** 손님 InfoDropPageProps → CardBodyProps. 순수함수. (4단계에서 호출, 지금은 미사용.) */
+export function toCardBodyProps(props: InfoDropPageProps): CardBodyProps {
+  const coupon: CouponPreviewCoupon | null = props.funnelCoupon
+    ? {
+        title: props.funnelCoupon.title,
+        coupon_type: props.funnelCoupon.coupon_type,
+        gift_item: props.funnelCoupon.gift_item,
+        conditions: props.funnelCoupon.conditions,
+        valid_until: props.funnelCoupon.valid_until,
+      }
+    : null;
+
+  return {
+    mode: "live",
+    cardColor: props.cardColor ?? "#1E3A8A",
+    video: toVideoSlot(props),
+    // 제목 = 영상 헤드라인(손님), 부제 = 메이커 한마디(curator_message=makerMessage).
+    title: props.title,
+    tagline: props.makerMessage ?? "",
+    sellingPoints: props.keyPoints ?? [],
+    coupon,
+    // local → store(연락 매핑). local 은 InfoDropPageProps 필수라 항상 객체.
+    store: {
+      name: props.local.name,
+      phone: props.local.phone,
+      address: props.local.address,
+      reservationUrl: props.local.reservationUrl ?? null,
+    },
+    purpose: props.variant ? VARIANT_TO_PURPOSE[props.variant] : "정보",
+    // 실기능 슬롯(reservationSlot·ctaSlot·contactSlot)은 4단계에서 container 가 주입(지금 undefined).
   };
 }
