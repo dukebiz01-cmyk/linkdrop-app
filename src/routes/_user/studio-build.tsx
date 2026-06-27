@@ -8,6 +8,7 @@ import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
 import { CardBody } from "@/components/card/CardBody";
+import { ButtonBlock } from "@/components/card/ButtonBlock";
 import type { VideoSlot } from "@/components/card/CardBody.types";
 import {
   Calendar,
@@ -830,6 +831,20 @@ export function CardStudioPage() {
 
                 {/* 행동영역 placeholder — 쿠폰/연락/목적 미장착 안내(문구·게이트 그대로). */}
                 <div className="mt-4 space-y-2">
+                  {/* 거울 1c — applied["calendar"] 장착 시 손님(1b)과 같은 ButtonBlock 닫힌 버튼.
+                      preview = 실 캘린더 RPC 안 돌림, 펼치면 정적 안내(presentational 보존). */}
+                  {applied["calendar"] && (
+                    <ButtonBlock
+                      label="예약 날짜 선택"
+                      icon={<Calendar className="h-4 w-4" strokeWidth={2} />}
+                      defaultExpanded={false}
+                      expandedContent={
+                        <div className="rounded-xl border border-white/20 bg-white/5 px-3 py-4 text-center text-[13px] text-white/70">
+                          손님이 여기서 예약 날짜를 골라요
+                        </div>
+                      }
+                    />
+                  )}
                   {applied["coupon"] && !(selectedCouponId && selectedCoupon) && (
                     <div className="animate-slide-up space-y-2">
                       {coupons.length > 0 ? (
