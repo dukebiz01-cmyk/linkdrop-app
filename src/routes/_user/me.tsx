@@ -620,8 +620,8 @@ function MePage() {
             <h3 className="text-base font-bold text-[#0A0A0A]">내지갑</h3>
           </div>
 
-          {/* 상위 탭 토글 — 쿠폰 / 드로피. 항상 노출(쿠폰 개수 무관). 쿠폰 필터칩과 동일 스타일. */}
-          <div className="mb-4 flex flex-wrap gap-2">
+          {/* 상위 탭 — 쿠폰 / 드로피. 세그먼트 컨트롤(박스 토글)로 하위 필터칩(둥근 pill)과 위계 분리. */}
+          <div className="mb-4 flex rounded-xl bg-[#F1F5F9] p-1">
             {(
               [
                 { key: "coupon", label: "쿠폰" },
@@ -634,10 +634,10 @@ function MePage() {
                   key={tab.key}
                   type="button"
                   onClick={() => setWalletTab(tab.key)}
-                  className={`inline-flex min-h-[32px] items-center rounded-full px-3 text-xs font-bold transition-colors ${
+                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition ${
                     selected
-                      ? "bg-[#0E4D42] text-white"
-                      : "border border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#FAFAFA]"
+                      ? "bg-white text-[#0A0A0A] shadow-sm"
+                      : "text-[#64748B]"
                   }`}
                 >
                   {tab.label}
