@@ -205,6 +205,8 @@ const CARD_COLORS = [
   { id: "slate", value: "#334155", label: "슬레이트" },
 ];
 
+const ENABLE_COLOR_PICKER = false; // 색 선택 기능 임시 숨김. true로 켜면 팔레트 복원.
+
 const ENHANCE_UNLOCK = 75;
 const POINT = "#1D4ED8"; // 전환력 지표(게이지·별·파워)에만
 const INK = "#0A0A0A";
@@ -222,7 +224,7 @@ const DECK = [
   ...STUDIO_BLOCKS.filter((b) => b.isMain),
   ...STUDIO_BLOCKS.filter((b) => !b.isMain && !b.isPaid),
   ...STUDIO_BLOCKS.filter((b) => b.isPaid),
-];
+].filter((b) => ENABLE_COLOR_PICKER || b.id !== "bgcolor"); // 색 기능 숨김 시 덱에서 bgcolor 제외(배열 원본은 보존)
 
 // 블록 설정 아코디언 대상 — 설정이 필요한 5개만. bgcolor(색=덱 팔레트)·강화 3종 제외.
 const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link"];
@@ -253,7 +255,7 @@ export function CardStudioPage() {
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   // 방금 켠 블록 id — 코칭이 "방금 켠 블록"에 반응하게(영상/쿠폰 내용검증 우선). 끄면 null.
   const [lastEquippedId, setLastEquippedId] = useState<string | null>(null);
-  const [cardColor, setCardColor] = useState(CARD_COLORS[1].value);
+  const [cardColor, setCardColor] = useState(CARD_COLORS[2].value); // navy(임시 고정). 색 기능 재개 시 CARD_COLORS[1](forest)로 환원
   const [showColorPicker, setShowColorPicker] = useState(false);
   // 쿠폰 피커 — 내 쿠폰 여러 개 중 선택(인라인, 색상 팔레트 showColorPicker 패턴 동일).
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
@@ -308,14 +310,14 @@ export function CardStudioPage() {
   // 선택된 쿠폰 — 미선택이면 첫 쿠폰 fallback(장착 시 자동 첫 쿠폰). coupons 비면 undefined.
   const selectedCoupon = coupons.find((c) => c.id === selectedCouponId) ?? coupons[0];
 
-  const score = useMemo(
-    () =>
-      Math.min(
-        100,
-        STUDIO_BLOCKS.reduce((sum, b) => (applied[b.id] ? sum + b.power : sum), 0)
-      ),
-    [applied]
-  );
+  const score = useMemo(() => {
+    // 도달가능(덱 노출) non-paid 블록 power 합을 분모로 정규화.
+    // bgcolor 숨김 시 분모도 줄어 전부 장착=100%. 색 재개 시 bgcolor 복귀로 분모 자동 복원.
+    const reachable = DECK.filter((b) => !b.isPaid);
+    const maxPower = reachable.reduce((sum, b) => sum + b.power, 0);
+    const gained = reachable.reduce((sum, b) => (applied[b.id] ? sum + b.power : sum), 0);
+    return maxPower > 0 ? Math.round((gained / maxPower) * 100) : 0;
+  }, [applied]);
 
   const stage = getStage(score);
   const appliedCount = STUDIO_BLOCKS.filter((b) => applied[b.id] && !b.isPaid).length;
@@ -743,19 +745,6 @@ export function CardStudioPage() {
                 <span className="truncate text-[13px] font-medium text-[#0A0A0A]">
                   {store?.display_name ?? "내 매장"}
                 </span>
-              </div>
-              <div className="mt-1 flex items-center gap-1.5">
-                <Zap className="h-3 w-3 shrink-0" style={{ color: POINT }} strokeWidth={2.5} fill={POINT} />
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#F0F0F0]">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${score}%`,
-                      background: `linear-gradient(90deg, ${POINT}, #60A5FA, ${POINT})`,
-                    }}
-                  />
-                </div>
-                <span className="text-[11px] tabular-nums text-[#737373]">{score}%</span>
               </div>
             </div>
           </div>
@@ -1485,7 +1474,7 @@ export function CardStudioPage() {
         {/* 장착 액션 (가운데 카드 대상) */}
         <div className="mx-auto mt-4 max-w-md px-5">
           {/* 배경색 팔레트 (배경색 카드가 가운데일 때) */}
-          {activeBlock.id === "bgcolor" && showColorPicker && (
+          {ENABLE_COLOR_PICKER && activeBlock.id === "bgcolor" && showColorPicker && (
             <div className="mb-3 flex flex-wrap items-center justify-center gap-2 animate-fade-in">
               {CARD_COLORS.map((c) => (
                 <button
