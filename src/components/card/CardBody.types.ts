@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { DropPurpose } from "@/lib/types";
+import type { CouponPreviewCoupon } from "@/components/receiver/CouponPreview";
 
 /**
  * 단일 카드 본체 props 계약 (CardBodyProps).
@@ -10,17 +11,14 @@ import type { DropPurpose } from "@/lib/types";
  *
  * ★ 이 단계는 "타입 선언만" — 어디서도 import/사용하지 않는다(렌더·기존 코드 무변경, 위험 0).
  *
- * 단일 출처 메모:
- *  - DropPurpose = @/lib/types 에서 import (단일 출처 ✓).
- *  - CardBodyVideo = studio-build VideoSlot(L78) / YouTubeLiteEmbed props(L21) 와 동일 형태.
- *    원본이 둘 다 export 되지 않아 import 불가 → 여기 임시 인라인. 둘 중 하나를 export 하면
- *    `import type { ... }` 로 교체할 것(재정의 제거, 단일 출처화).
- *  - CardBodyCoupon = CouponPreview coupon prop(CouponPreview.tsx L15-21) 과 동일 형태.
- *    CouponPreview 가 이 타입을 export 하면 import 로 교체할 것.
+ * 단일 출처:
+ *  - VideoSlot = YouTubeLiteEmbed 시그니처. 영상 데이터 계약의 정본(여기로 이동, studio-build 가 import).
+ *  - CouponPreviewCoupon = CouponPreview 가 받는 coupon 형태(CouponPreview.tsx 에서 import).
+ *  - DropPurpose = @/lib/types.
  */
 
-/** YouTubeLiteEmbed 시그니처. ※ 임시 — studio-build VideoSlot / YouTubeLiteEmbed props export 후 import 로 교체. */
-export type CardBodyVideo = {
+/** 영상 슬롯 데이터 형태 — YouTubeLiteEmbed 시그니처. (스튜디오 selectedVideo / 손님 어댑터 공통.) */
+export type VideoSlot = {
   videoId: string;
   thumbnailUrl: string;
   title: string;
@@ -29,22 +27,13 @@ export type CardBodyVideo = {
   sourceLabel?: string;
 };
 
-/** CouponPreview 가 받는 coupon 형태. ※ 임시 — CouponPreview coupon 타입 export 후 import 로 교체. */
-export type CardBodyCoupon = {
-  title: string;
-  coupon_type?: string | null;
-  gift_item?: string | null;
-  conditions?: { min_amount?: number; [k: string]: unknown } | null;
-  valid_until?: string | null;
-};
-
 export type CardBodyProps = {
   /** preview=버튼 시각만(제작층) / live=실기능 슬롯 주입(출고층). Plate readOnly 패턴. */
   mode: "preview" | "live";
   /** 카드 배경색 — navy 등(양쪽 동일, 메이커가 고른 값). */
   cardColor: string;
   /** 영상 슬롯 — YouTubeLiteEmbed 시그니처. 없으면 null(미선택/placeholder). */
-  video: CardBodyVideo | null;
+  video: VideoSlot | null;
   /** 제목 — 매장명(스튜디오) / 영상 헤드라인(손님). 의미 결정은 container 몫. */
   title: string;
   /** 부제 — 메이커 한마디(스튜디오) / 영상 제목·부제(손님). */
@@ -52,7 +41,7 @@ export type CardBodyProps = {
   /** 셀링포인트 불릿 — pickedPoints(스튜디오) / keyPoints(손님). */
   sellingPoints: string[];
   /** 쿠폰 — CouponPreview 계약. 없으면 null. */
-  coupon: CardBodyCoupon | null;
+  coupon: CouponPreviewCoupon | null;
   /** 매장 정보 — studio store / 손님 local 공통 매핑(name/phone/address/reservationUrl). */
   store?: {
     name: string;

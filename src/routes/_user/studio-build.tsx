@@ -11,6 +11,7 @@ import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
 import { CardActionButton } from "@/components/card/CardActionButton";
 import { SellingPoints } from "@/components/card/SellingPoints";
+import type { VideoSlot } from "@/components/card/CardBody.types";
 import {
   Calendar,
   Video,
@@ -74,15 +75,8 @@ interface StudioBlock {
   isPaid?: boolean;
 }
 
-// 영상 슬롯 데이터 형태 — YouTubeLiteEmbed 시그니처. selectedVideo state 가 보유.
-type VideoSlot = {
-  videoId: string;
-  thumbnailUrl: string;
-  title: string;
-  isShorts: boolean;
-  durationLabel?: string;
-  sourceLabel?: string;
-};
+// 영상 슬롯 데이터 형태(VideoSlot) — YouTubeLiteEmbed 시그니처 = CardBody.types 단일 출처에서 import.
+//   selectedVideo state 가 보유.
 
 // 초 → "M:SS" (또는 ≥1h 면 "H:MM:SS"). 영상 길이 라벨용.
 function formatDuration(totalSec: number): string {

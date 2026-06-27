@@ -9,16 +9,18 @@ import { Ticket, Gift } from "lucide-react";
  * ⚠️ 카드만 — 예약 흐름 카피("예약을 신청하면 쿠폰이 지갑에 담겨요")·바깥 wrapper 는
  *    이 컴포넌트에 넣지 않는다(예약 전용 → 호출부 책임).
  */
+export type CouponPreviewCoupon = {
+  title: string;
+  coupon_type?: string | null;
+  gift_item?: string | null;
+  conditions?: { min_amount?: number; [k: string]: unknown } | null;
+  valid_until?: string | null;
+};
+
 export function CouponPreview({
   coupon,
 }: {
-  coupon: {
-    title: string;
-    coupon_type?: string | null;
-    gift_item?: string | null;
-    conditions?: { min_amount?: number; [k: string]: unknown } | null;
-    valid_until?: string | null;
-  };
+  coupon: CouponPreviewCoupon;
 }) {
   const isGift = coupon?.coupon_type === "gift";
   const giftItem = coupon?.gift_item?.trim() || "";
