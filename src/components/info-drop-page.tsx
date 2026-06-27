@@ -959,7 +959,13 @@ export function InfoDropPage({
           // 4b — info CardBody 를 DropCardShell 로 감싸 스튜디오와 동일한 navy+holo 밝은 카드로.
           //   DropCardShell 이 text-white base+holo+rounded 제공(4a text-white 래퍼 대체).
           //   interactive=false(손님 스크롤 페이지라 틸트 끔), holoOpacity 고정 0.2(stage 없음).
-          <DropCardShell cardColor={cardColor ?? "#1E3A8A"} interactive={false} holoOpacity={0.2}>
+          <DropCardShell
+            cardColor={cardColor ?? "#1E3A8A"}
+            interactive={false}
+            // 스튜디오 완성(별3) 기준 밝기 + 파란 holo 강화(0.45). boxShadow alpha 0.28+3*0.07=0.49.
+            holoOpacity={0.45}
+            boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
+          >
             <CardBody
               {...toCardBodyProps({
                 videoSourceUrl,
