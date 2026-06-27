@@ -15,6 +15,7 @@ import {
   Pencil,
   Package,
   Settings,
+  Coins,
 } from "lucide-react";
 // Wallet = 쿠폰 지갑 섹션 헤더. Send = 받은 쿠폰 메이커, Heart = 구독한 메이커. Gift = 증정 쿠폰 라벨.
 import { Toaster } from "@/components/ui/sonner";
@@ -409,6 +410,8 @@ function MePage() {
 
   // 쿠폰 지갑 필터 칩 — 기본 '사용 가능'(usable). 클라이언트 로컬 state(서버 호출 없음).
   const [couponFilter, setCouponFilter] = useState<CouponFilter>("available");
+  // 내지갑 상위 탭 — 쿠폰 / 드로피(드로피=빈 상태 placeholder). 기본 쿠폰. 클라 로컬 state.
+  const [walletTab, setWalletTab] = useState<"coupon" | "dropy">("coupon");
 
   // 상태별 카운트 (coupon-status 헬퍼). usable(쓸 수 있는) = 사용 가능 + 곧 만료.
   const usableCount = data.coupons.filter((c) => isCouponUsable(c)).length;
@@ -609,19 +612,47 @@ function MePage() {
         {/* ② 내 혜택 지갑 — 행동형 헤더 + 상태 필터 칩(2/5). 카드(1/5)·정렬·다른 섹션 무수정.
             필터는 클라이언트 로컬 state, 정렬은 loader 최신순 유지. */}
         <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-          {/* 헤더 */}
-          <div className="mb-3">
-            <div className="flex items-center gap-2">
-              <Wallet className="size-4 text-[#0E4D42]" strokeWidth={2} />
-              <h3 className="text-base font-bold text-[#0A0A0A]">내 혜택 지갑</h3>
-            </div>
-            <p className="mt-1 text-sm font-medium text-[#64748B]">
-              쓸 수 있는 혜택 {usableCount}개
-              {expiringCount > 0 ? (
-                <span className="font-semibold"> · 곧 만료 {expiringCount}개</span>
-              ) : null}
-            </p>
+          {/* 헤더 — 쿠폰/드로피 공통 */}
+          <div className="mb-3 flex items-center gap-2">
+            <Wallet className="size-4 text-[#0E4D42]" strokeWidth={2} />
+            <h3 className="text-base font-bold text-[#0A0A0A]">내지갑</h3>
           </div>
+
+          {/* 상위 탭 토글 — 쿠폰 / 드로피. 항상 노출(쿠폰 개수 무관). 쿠폰 필터칩과 동일 스타일. */}
+          <div className="mb-4 flex flex-wrap gap-2">
+            {(
+              [
+                { key: "coupon", label: "쿠폰" },
+                { key: "dropy", label: "드로피" },
+              ] as const
+            ).map((tab) => {
+              const selected = walletTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setWalletTab(tab.key)}
+                  className={`inline-flex min-h-[32px] items-center rounded-full px-3 text-xs font-bold transition-colors ${
+                    selected
+                      ? "bg-[#0E4D42] text-white"
+                      : "border border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#FAFAFA]"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {walletTab === "coupon" && (
+            <>
+              {/* 부제 — 원본 무수정 이동 */}
+              <p className="mt-1 text-sm font-medium text-[#64748B]">
+                쓸 수 있는 혜택 {usableCount}개
+                {expiringCount > 0 ? (
+                  <span className="font-semibold"> · 곧 만료 {expiringCount}개</span>
+                ) : null}
+              </p>
 
           {/* 상태 필터 칩 — 선택=teal/흰, 그 외=아웃라인/회색 */}
           {data.coupons.length > 0 ? (
@@ -674,6 +705,16 @@ function MePage() {
                 );
               })}
             </ul>
+          )}
+            </>
+          )}
+
+          {walletTab === "dropy" && (
+            <div className="flex flex-col items-center justify-center gap-1 py-8 text-center">
+              <Coins className="size-6 text-[#64748B]" strokeWidth={2} />
+              <p className="text-base font-bold text-[#0A0A0A]">0 dropy</p>
+              <p className="text-sm font-medium text-[#A3A3A3]">준비 중</p>
+            </div>
           )}
         </section>
 
