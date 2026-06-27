@@ -14,6 +14,7 @@ import {
   Send,
   Pencil,
   Package,
+  Settings,
 } from "lucide-react";
 // Wallet = 쿠폰 지갑 섹션 헤더. Send = 받은 쿠폰 메이커, Heart = 구독한 메이커. Gift = 증정 쿠폰 라벨.
 import { Toaster } from "@/components/ui/sonner";
@@ -885,15 +886,14 @@ function MePage() {
           </SectionCard>
         ) : null}
 
-        {/* ⑥ 설정 — 하단 계정 섹션. 본문과 얇은 구분선으로 분리, 로그아웃 행은
-            '더보기' 버튼과 동일한 풀폭 정렬(border + bg-white + rounded-xl + min-h-[44px]). */}
-        <section className="border-t border-[#E5E7EB] pt-4">
-          <h2 className="mb-3 px-1 text-sm font-semibold text-[#0A0A0A]">설정</h2>
+        {/* ⑥ 설정 — 하단 계정 섹션. 다른 섹션과 동일한 SectionCard 래퍼 + 무채색 로그아웃 row.
+            (기존 border-t 단독 배치 → 카드 통일. 빨강 → 진회색. row min-h 56px 풀폭 탭영역.) */}
+        <SectionCard Icon={Settings} title="설정">
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <button
                 type="button"
-                className="flex w-full min-h-[44px] items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-semibold text-[#EF4444] transition-colors hover:bg-[#FEF2F2]"
+                className="flex w-full min-h-[56px] items-center gap-2 rounded-xl px-3 text-sm font-semibold text-[#0A0A0A] transition-colors hover:bg-[#F8FAFC]"
               >
                 <LogOut className="size-4" strokeWidth={2} />
                 로그아웃
@@ -914,14 +914,14 @@ function MePage() {
                     e.preventDefault();
                     void handleSignOut();
                   }}
-                  className="bg-[#EF4444] text-white hover:bg-[#DC2626]"
+                  className="bg-[#0A0A0A] text-white hover:bg-[#1F2937]"
                 >
                   {signingOut ? "로그아웃 중…" : "로그아웃"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </section>
+        </SectionCard>
       </div>
       {embedState ? (
         <YouTubeEmbedModal
