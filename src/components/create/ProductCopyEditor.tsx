@@ -33,6 +33,10 @@ export function ProductCopyEditor({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // 모드A 유도 — 상품명+가격이 채워지면 "AI 카피 생성"을 눈에 띄게(자동 트리거 아님: 버튼만 강조).
+  //   §0 — 생성된 카피는 아래 input 에서 사용자 검수·수정 후 저장(자동 저장 금지, 기존 그대로).
+  const aiReady = productName.trim().length > 0 && priceKrw != null && priceKrw > 0;
+
   async function generateCopy() {
     if (aiLoading) return;
     setAiLoading(true);
@@ -96,6 +100,10 @@ export function ProductCopyEditor({
       <label className="mt-3 block text-xs font-semibold tracking-ko text-text-strong">
         추가 정보 <span className="font-medium text-text-subtle">(선택)</span>
       </label>
+      {/* 모드A 유도 — 사실값 입력하면 더 정확한 카피(+ §0 사실 기반). */}
+      <p className="mt-1 text-xs font-medium leading-relaxed tracking-ko text-text-muted">
+        재료·산지·수확 방식·특징을 적으면 AI가 더 정확한 카피를 써줘요.
+      </p>
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value.slice(0, 300))}
@@ -104,11 +112,20 @@ export function ProductCopyEditor({
         className="mt-1 w-full resize-none rounded-lg border border-border bg-white px-3 py-2 text-sm tracking-ko text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
       />
 
+      {/* 모드A 유도 — 정보 입력되면 생성 권유 한 줄(자동 생성 아님, 사용자 탭 유도). */}
+      {aiReady ? (
+        <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
+          <Sparkles className="size-3.5 shrink-0" strokeWidth={2} />
+          정보를 입력했으니 AI로 홍보 문구를 만들어보세요.
+        </p>
+      ) : null}
       <button
         type="button"
         onClick={generateCopy}
         disabled={aiLoading}
-        className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-action px-4 text-sm font-bold tracking-ko text-action-foreground transition-colors disabled:opacity-60"
+        className={`mt-2 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-action px-4 text-sm font-bold tracking-ko text-action-foreground transition-colors disabled:opacity-60 ${
+          aiReady ? "ring-2 ring-action ring-offset-2 ring-offset-bg" : ""
+        }`}
       >
         {aiLoading ? (
           <>
