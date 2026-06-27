@@ -60,6 +60,7 @@ import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import { CouponPreview } from "@/components/receiver/CouponPreview";
 import { CardBody } from "@/components/card/CardBody";
+import { CardActionButton } from "@/components/card/CardActionButton";
 import { DropCardShell } from "@/components/card/DropCardShell";
 import { toCardBodyProps } from "@/lib/adapters";
 import { parseVideoUrl } from "@/lib/video-metadata";
@@ -973,6 +974,37 @@ export function InfoDropPage({
                 local,
                 variant,
               } as unknown as InfoDropPageProps)}
+              contactSlot={
+                // 손님 실동작 연락 칩 — 스튜디오 CardActionButton 모양 공유 + onClick=handleCtaClick(실제 tel:/지도/예약).
+                //   데이터(전화·주소·예약URL) 없으면 undefined → 버튼 0(일반 info 안전).
+                hasPhone || safeLocal.address?.trim() || local?.reservationUrl ? (
+                  <div className="flex gap-2">
+                    {hasPhone ? (
+                      <CardActionButton
+                        icon={<Phone className="size-4" strokeWidth={2} />}
+                        label="전화"
+                        onClick={() => handleCtaClick("phone")}
+                      />
+                    ) : null}
+                    {safeLocal.address?.trim() ? (
+                      <CardActionButton
+                        icon={<MapPin className="size-4" strokeWidth={2} />}
+                        label="길찾기"
+                        onClick={() => handleCtaClick("directions")}
+                      />
+                    ) : null}
+                    {local?.reservationUrl ? (
+                      <CardActionButton
+                        icon={<ExternalLink className="size-4" strokeWidth={2} />}
+                        label="예약"
+                        onClick={() =>
+                          window.open(local.reservationUrl as string, "_blank", "noopener,noreferrer")
+                        }
+                      />
+                    ) : null}
+                  </div>
+                ) : undefined
+              }
             />
           </DropCardShell>
         )}
