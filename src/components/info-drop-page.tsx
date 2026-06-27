@@ -59,6 +59,9 @@ import {
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import { CouponPreview } from "@/components/receiver/CouponPreview";
+import { CardBody } from "@/components/card/CardBody";
+import { DropCardShell } from "@/components/card/DropCardShell";
+import { toCardBodyProps } from "@/lib/adapters";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
 import { trackReceiverEvent } from "@/lib/event-tracking";
@@ -852,8 +855,10 @@ export function InfoDropPage({
         // sticky 없는 드롭(정보/구매/상담) = pb-8 만으로 충분.
         hasStickyBar ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "pb-8",
       )}
-      // 메이커 cardColor 셸 배경(스튜디오 navy 통일). NULL/undefined=navy 기본(#1E3A8A).
-      style={{ backgroundColor: cardColor ?? "#1E3A8A" }}
+      // 셸 배경 — info 만 회색(흰 배경 위 navy holo 카드 = 스튜디오 parity). 비-info 는 navy 유지(파일럿 보호).
+      style={{
+        backgroundColor: resolvedVariant === "info" ? "#F5F5F5" : (cardColor ?? "#1E3A8A"),
+      }}
       data-testid="public-drop-page"
       data-variant={resolvedVariant}
     >
@@ -867,13 +872,30 @@ export function InfoDropPage({
             </AvatarFallback>
           </Avatar>
           <div>
-            <p className="text-sm font-bold tracking-ko text-white">
+            <p
+              className={cn(
+                "text-sm font-bold tracking-ko",
+                resolvedVariant === "info" ? "text-text-strong" : "text-white",
+              )}
+            >
               {safeMaker.name}
-              <span className="font-medium text-white/70">님이 보냈어요</span>
+              <span
+                className={cn(
+                  "font-medium",
+                  resolvedVariant === "info" ? "text-text-muted" : "text-white/70",
+                )}
+              >
+                님이 보냈어요
+              </span>
             </p>
             {/* selfUpload(자체업로드 상품)은 영상이 아니므로 "공유된 영상" 라벨 숨김. */}
             {!commerce?.selfUpload && (
-              <p className="text-xs font-medium tracking-ko text-white/60">
+              <p
+                className={cn(
+                  "text-xs font-medium tracking-ko",
+                  resolvedVariant === "info" ? "text-text-subtle" : "text-white/60",
+                )}
+              >
                 LinkDrop으로 공유된 영상
               </p>
             )}
@@ -930,6 +952,30 @@ export function InfoDropPage({
       </header>
 
       <div className="space-y-6 px-6" data-testid={`variant-${resolvedVariant}`}>
+        {/* 4a — info variant 만 단일 CardBody(스튜디오 동일, 싱크로). 나머지 variant 는 아래 기존 렌더 0변경.
+            text-white 래퍼 = CardBody 제목(부모색 상속)을 navy 위 흰글씨로(묻힘 방지). */}
+        {resolvedVariant === "info" && (
+          // 4b — info CardBody 를 DropCardShell 로 감싸 스튜디오와 동일한 navy+holo 밝은 카드로.
+          //   DropCardShell 이 text-white base+holo+rounded 제공(4a text-white 래퍼 대체).
+          //   interactive=false(손님 스크롤 페이지라 틸트 끔), holoOpacity 고정 0.2(stage 없음).
+          <DropCardShell cardColor={cardColor ?? "#1E3A8A"} interactive={false} holoOpacity={0.2}>
+            <CardBody
+              {...toCardBodyProps({
+                videoSourceUrl,
+                videoThumbnailUrl,
+                videoDurationSec,
+                videoSourceLabel,
+                title,
+                makerMessage,
+                keyPoints,
+                cardColor,
+                funnelCoupon,
+                local,
+                variant,
+              } as unknown as InfoDropPageProps)}
+            />
+          </DropCardShell>
+        )}
         {isReservation && (
           <section className="space-y-2" data-testid="reservation-header">
             <span
@@ -955,7 +1001,7 @@ export function InfoDropPage({
             CTA 도달성). 가로(16:9) 는 자연 비율이라 cap 영향 거의 없음. */}
         {/* F2 커머스 — 영상 헤더(썸네일+원본영상 프레임) 숨김. 상품 카드가 이미지 보유.
             commerce 일 때만 숨기고, 영상/정보/쿠폰/예약 드롭은 그대로(회귀 없음). */}
-        {!commerce && (
+        {!commerce && resolvedVariant !== "info" && (
           <section
             className={cn(
               "overflow-hidden rounded-2xl border border-border bg-bg",
@@ -1026,7 +1072,7 @@ export function InfoDropPage({
           </section>
         )}
 
-        {makerMessage && (
+        {makerMessage && resolvedVariant !== "info" && (
           <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium italic leading-relaxed tracking-ko text-text-muted">
             &quot;{makerMessage}&quot;
           </p>
@@ -1220,7 +1266,7 @@ export function InfoDropPage({
                 <p className="text-base font-semibold leading-relaxed tracking-ko text-text-strong">
                   {summaryLine}
                 </p>
-                {points.length > 0 && (
+                {points.length > 0 && resolvedVariant !== "info" && (
                   <ul className="mt-4 space-y-2 border-t border-border pt-4">
                     {points.map((point) => (
                       <li
@@ -1435,7 +1481,14 @@ export function InfoDropPage({
             탭 → 그 상품 자체 카드(/d/{refShareUuid}) 인앱 이동. 없으면 미표시. */}
         {attachedProducts && attachedProducts.length > 0 && (
           <section data-testid="related-products">
-            <h2 className="text-sm font-bold tracking-ko text-white">관련 상품</h2>
+            <h2
+              className={cn(
+                "text-sm font-bold tracking-ko",
+                resolvedVariant === "info" ? "text-text-strong" : "text-white",
+              )}
+            >
+              관련 상품
+            </h2>
             <ul className="mt-3 space-y-2">
               {attachedProducts.map((p) => {
                 const inner = (
@@ -1494,7 +1547,12 @@ export function InfoDropPage({
             비우고 sticky 단일 액션 으로. purchase/lead 만 본문 CTAS 사용. */}
         {ctas.length > 0 && (
           <section>
-            <h2 className="text-sm font-bold tracking-ko text-white">
+            <h2
+              className={cn(
+                "text-sm font-bold tracking-ko",
+                resolvedVariant === "info" ? "text-text-strong" : "text-white",
+              )}
+            >
               {pageCopy.ctaHeading}
             </h2>
             <div className="mt-3 flex flex-col gap-2">
@@ -1664,7 +1722,12 @@ export function InfoDropPage({
             전부 통합. 60대 친화 큰 터치, #15 검정 미니멀, 이모지 X. */}
       <section className="mx-auto w-full max-w-[480px] space-y-3 px-6 pt-4">
         {copyFeedback && (
-          <p className="flex items-center gap-2 text-sm font-medium text-white">
+          <p
+            className={cn(
+              "flex items-center gap-2 text-sm font-medium",
+              resolvedVariant === "info" ? "text-text-strong" : "text-white",
+            )}
+          >
             <Check className="size-4 text-intent-success" strokeWidth={2} />
             {copyFeedback}
           </p>
@@ -1705,7 +1768,12 @@ export function InfoDropPage({
           </button>
         </div>
 
-        <p className="text-center text-[10px] leading-tight tracking-ko text-white/50">
+        <p
+          className={cn(
+            "text-center text-[10px] leading-tight tracking-ko",
+            resolvedVariant === "info" ? "text-[#A3A3A3]" : "text-white/50",
+          )}
+        >
           본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
         </p>
 
@@ -1713,7 +1781,10 @@ export function InfoDropPage({
           <button
             type="button"
             onClick={() => setIsReportSheetOpen(true)}
-            className="inline-flex items-center gap-1 bg-transparent text-[11px] text-white/70 underline underline-offset-2 hover:text-white"
+            className={cn(
+              "inline-flex items-center gap-1 bg-transparent text-[11px] underline underline-offset-2",
+              resolvedVariant === "info" ? "text-[#525252] hover:text-[#0A0A0A]" : "text-white/70 hover:text-white",
+            )}
           >
             <Flag size={11} strokeWidth={2} />
             문제 신고
