@@ -151,7 +151,8 @@ function ProductsIndexPage() {
       }
       const { error: upErr } = await supabase
         .from("info_drops")
-        .update({ status: next })
+        // 공개=판매+탐색 단일 정책 — status 와 is_public 동시 토글(공개 시 탐색 커머스탭 노출).
+        .update({ status: next, is_public: next === "published" })
         .eq("id", p.id);
       if (upErr) {
         console.error("[partner.products] status toggle failed:", upErr);
@@ -223,8 +224,13 @@ function ProductsIndexPage() {
           // 등록 상품 0개 — 빈 화면 대신 커머스 준비 가이드(4항목). approved 가맹점 전용.
           <CommercePrepGuide />
         ) : (
-          <ul className="flex flex-col gap-3">
-            {products.map((p) => {
+          <>
+            {/* 공개=판매+탐색 안내(60대 친화 짧게). 토글 의미 1회 설명. */}
+            <p className="px-1 text-xs text-[#64748B]">
+              공개하면 탐색에서 손님이 봐요. 숨기면 손님에게 안 보여요.
+            </p>
+            <ul className="flex flex-col gap-3">
+              {products.map((p) => {
               const shareUuid = firstShareUuid(p);
               const isPublished = p.status === "published";
               return (
@@ -332,7 +338,8 @@ function ProductsIndexPage() {
                 </li>
               );
             })}
-          </ul>
+            </ul>
+          </>
         )}
       </div>
 
