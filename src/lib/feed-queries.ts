@@ -55,6 +55,9 @@ type InfoDropDiscoverRow = {
   published_at: string | null;
   created_at: string | null;
   share_count: number | null;
+  // 탐색 3탭 필터용(서버 .in("purpose")/.not("partner_id")). adaptDiscoverRow 는 미사용(렌더 무관).
+  purpose?: string | null;
+  partner_id?: string | null;
   content_sources: ContentSourceRow | null;
   intent_types: IntentTypeRow | null;
   share_events: Array<{ share_uuid: string }> | null;
@@ -115,6 +118,8 @@ const DISCOVER_SELECT = `
   published_at,
   created_at,
   share_count,
+  purpose,
+  partner_id,
   content_sources!info_drops_source_id_fkey ( provider, title, thumbnail_url, duration_sec, author_name, source_url ),
   intent_types!info_drops_intent_id_fkey ( key ),
   share_events ( share_uuid )
@@ -129,12 +134,23 @@ const SENT_SELECT = `
   )
 `;
 
-export async function getDiscoverDrops(client: SupabaseClient): Promise<DropFeedItem[]> {
-  const { data, error } = await client
+// 탐색 3탭 필터 — purposes(drop_purpose enum 값)·bizOnly(매장 연결 카드만). 둘 다 없으면 기존 동작(하위호환).
+export async function getDiscoverDrops(
+  client: SupabaseClient,
+  opts?: { purposes?: string[]; bizOnly?: boolean },
+): Promise<DropFeedItem[]> {
+  let query = client
     .from("info_drops")
     .select(DISCOVER_SELECT)
     .eq("status", "published")
-    .eq("is_public", true)
+    .eq("is_public", true);
+  if (opts?.purposes && opts.purposes.length > 0) {
+    query = query.in("purpose", opts.purposes);
+  }
+  if (opts?.bizOnly) {
+    query = query.not("partner_id", "is", null);
+  }
+  const { data, error } = await query
     .order("published_at", { ascending: false, nullsFirst: false })
     .limit(20);
   if (error || !data) return [];
