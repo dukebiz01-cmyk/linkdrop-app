@@ -51,3 +51,28 @@ export function couponStatusLabel(s: CouponDisplayStatus): string {
       return "사용 가능";
   }
 }
+
+// 만료까지 D-day 카운트다운 라벨 — '곧 만료'(expiring) 배지에 표시용. (EXPIRING_SOON_MS 3일 임계 재사용)
+// §0: 실제 valid_until(=expires_at) 기준 사실만. 가짜 긴급/초단위 없음(날짜 라벨만). 압박 회피.
+//   없음/파싱실패/이미만료/3일 초과 → null. 0일→"오늘 마감" / 1일→"내일 마감" / 그외→"D-N".
+export function getExpiryCountdown(
+  expiresAt: string | null,
+  now: number = Date.now(),
+): string | null {
+  if (!expiresAt) return null;
+  const exp = new Date(expiresAt).getTime();
+  if (Number.isNaN(exp)) return null;
+  if (exp < now) return null; // 이미 만료 → 표시 안 함(expired 상태가 처리)
+  if (exp - now > EXPIRING_SOON_MS) return null; // 3일 초과 → 타이머 없음(본문 날짜만)
+
+  // 날짜 기준 일수 차이(시각 무시 — "오늘/내일/D-N" 정확히)
+  const e = new Date(exp);
+  const n = new Date(now);
+  const eDay = new Date(e.getFullYear(), e.getMonth(), e.getDate()).getTime();
+  const nDay = new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
+  const dayDiff = Math.round((eDay - nDay) / (24 * 60 * 60 * 1000));
+
+  if (dayDiff <= 0) return "오늘 마감";
+  if (dayDiff === 1) return "내일 마감";
+  return `D-${dayDiff}`;
+}

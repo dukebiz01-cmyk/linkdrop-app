@@ -16,6 +16,7 @@ import {
   Package,
   Settings,
   Coins,
+  Clock,
 } from "lucide-react";
 // Wallet = 쿠폰 지갑 섹션 헤더. Send = 받은 쿠폰 메이커, Heart = 구독한 메이커. Gift = 증정 쿠폰 라벨.
 import { Toaster } from "@/components/ui/sonner";
@@ -27,6 +28,7 @@ import {
   getCouponDisplayStatus,
   isCouponUsable,
   couponStatusLabel,
+  getExpiryCountdown,
   type CouponDisplayStatus,
 } from "@/lib/coupon-status";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -1102,9 +1104,9 @@ function CouponClaimCard({
       <div className="px-4 pb-3 pt-4">
         {/* 상단: 상태 배지 | 받은 날짜 (기존 표기 유지: YY.MM.DD HH:mm) */}
         <div className="flex items-center justify-between gap-2">
-          <CouponStatusBadge status={displayStatus} />
+          <CouponStatusBadge status={displayStatus} expiresAt={row.expires_at} />
           {row.issued_at ? (
-            <span className="shrink-0 text-xs font-medium text-[#94A3B8]">
+            <span className="shrink-0 text-[10px] font-medium text-[#CBD5E1]">
               {formatReceivedKST(row.issued_at)} 받음
             </span>
           ) : null}
@@ -1112,7 +1114,7 @@ function CouponClaimCard({
 
         {/* 매장 — 이니셜 원(teal tint) + 이름 / 업종·지역 */}
         <div className="mt-3 flex items-center gap-2">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#E1F5EE] text-xs font-bold text-[#085041]">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#EFF6FF] text-xs font-bold text-[#2563EB]">
             {storeInitial}
           </span>
           <div className="min-w-0">
@@ -1122,8 +1124,8 @@ function CouponClaimCard({
         </div>
 
         {/* 혜택 */}
-        <p className="mt-3 flex items-start gap-1.5 text-[17px] font-extrabold leading-snug text-[#0F172A]">
-          {isGift ? <Gift className="mt-0.5 size-[18px] shrink-0" strokeWidth={2.4} /> : null}
+        <p className="mt-3 flex items-start gap-1.5 text-[22px] font-extrabold leading-snug tracking-[-0.01em] text-[#0F172A]">
+          {isGift ? <Gift className="mt-0.5 size-[20px] shrink-0" strokeWidth={2.4} /> : null}
           <span className="min-w-0">{benefit}</span>
         </p>
 
@@ -1213,18 +1215,27 @@ function SenderPill({ label }: { label: { kind: "store" | "friend" | "platform";
 }
 
 // 상태 배지 — 사용가능 초록 / 곧만료 amber / 사용완료·만료 회색. 라벨은 couponStatusLabel.
-function CouponStatusBadge({ status }: { status: CouponDisplayStatus }) {
+function CouponStatusBadge({
+  status,
+  expiresAt,
+}: {
+  status: CouponDisplayStatus;
+  expiresAt?: string | null;
+}) {
+  const countdown = status === "expiring" ? getExpiryCountdown(expiresAt ?? null) : null;
+  const label = countdown ?? couponStatusLabel(status);
   const cls =
     status === "available"
-      ? "bg-[#ECFDF5] text-[#059669]"
+      ? "bg-[#EFF6FF] text-[#2563EB]" // 사용가능 = 블루(emerald 대체)
       : status === "expiring"
-        ? "bg-[#0A0A0A] text-white" // A안 — 곧 만료 배지 = 블랙 미니멀(신규 색·빨강 없음)
-        : "bg-[#F5F5F5] text-[#94A3B8]";
+        ? "bg-[#FEF3C7] text-[#B45309]" // 곧만료 = amber(검정 대체)
+        : "bg-[#F5F5F5] text-[#94A3B8]"; // 완료/만료 = 회색 유지
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${cls}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${cls}`}
     >
-      {couponStatusLabel(status)}
+      {status === "expiring" && <Clock className="h-3 w-3" />}
+      {label}
     </span>
   );
 }
