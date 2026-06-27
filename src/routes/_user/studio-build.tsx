@@ -1,16 +1,13 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAuthClient } from "@/lib/auth-context";
-import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
-import { CouponPreview } from "@/components/receiver/CouponPreview";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
 import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
-import { CardActionButton } from "@/components/card/CardActionButton";
-import { SellingPoints } from "@/components/card/SellingPoints";
+import { CardBody } from "@/components/card/CardBody";
 import type { VideoSlot } from "@/components/card/CardBody.types";
 import {
   Calendar,
@@ -771,58 +768,71 @@ export function CardStudioPage() {
                 </div>
               }
             >
-                <div className="flex items-center gap-1.5 text-[11px] font-medium text-white/75">
-                  <Play className="h-3 w-3 fill-white/75" strokeWidth={0} />
-                  YouTube · 괴산 호수 캠핑
-                </div>
+                {/* 카드 본체 = 단일 CardBody(실콘텐츠만). 손님 /d 도 4단계에서 같은 CardBody 채택. */}
+                <CardBody
+                  mode="preview"
+                  cardColor={cardColor}
+                  video={selectedVideo}
+                  title={store?.display_name ?? ""}
+                  tagline={tagline}
+                  sellingPoints={pickedPoints}
+                  coupon={
+                    selectedCouponId && selectedCoupon
+                      ? { ...selectedCoupon, title: selectedCoupon.title ?? "" }
+                      : null
+                  }
+                  store={
+                    // 연락 칩은 link 블록 장착 시에만(기존 applied["link"] 게이트 보존) → 미장착이면 store=null.
+                    applied["link"] && store
+                      ? {
+                          name: store.display_name,
+                          phone: store.contact_phone ?? undefined,
+                          address: store.address ?? undefined,
+                          reservationUrl: store.reservation_url,
+                        }
+                      : null
+                  }
+                  purpose={
+                    applied["calendar"] ? "예약" : applied["coupon"] && selectedCouponId ? "쿠폰" : "정보"
+                  }
+                />
 
-                <div className="mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/15">
-                  {applied["content"] ? (
-                    selectedVideo ? (
-                      // 영상 선택됨 = 손님이 볼 실제 임베드 미리보기(아래 설정에서 고른 영상).
-                      <YouTubeLiteEmbed {...selectedVideo} />
-                    ) : (
+                {/* ── preview placeholder (CardBody 밖, 스튜디오 authoring 안내 — 문구·게이트 그대로) ── */}
+                {/* 영상 슬롯 — 미선택 시. selectedVideo 있으면 CardBody 가 임베드. */}
+                {!selectedVideo && (
+                  <div className="mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/15">
+                    {applied["content"] ? (
                       // 영상 블록 장착했지만 미선택 — 아래 설정에서 검색·선택 유도(가짜 영상 표시 안 함).
                       <div className="flex flex-col items-center gap-1.5 text-white/45">
                         <Video className="h-7 w-7" strokeWidth={1.5} />
                         <span className="text-[11px] font-medium">아래에서 영상을 검색해 선택하세요</span>
                       </div>
-                    )
-                  ) : applied["image"] ? (
-                    // 대표 이미지만 장착(영상 아님) — 기존 placeholder 보존.
-                    <div className="relative flex h-full w-full items-center justify-center">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 backdrop-blur animate-scale-in">
-                        <Play className="ml-0.5 h-5 w-5 fill-[#0A0A0A] text-[#0A0A0A]" strokeWidth={0} />
+                    ) : applied["image"] ? (
+                      // 대표 이미지만 장착(영상 아님) — 기존 placeholder 보존.
+                      <div className="relative flex h-full w-full items-center justify-center">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 backdrop-blur animate-scale-in">
+                          <Play className="ml-0.5 h-5 w-5 fill-[#0A0A0A] text-[#0A0A0A]" strokeWidth={0} />
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-1.5 text-white/45">
-                      <ImageIcon className="h-7 w-7" strokeWidth={1.5} />
-                      <span className="text-[11px] font-medium">덱에서 콘텐츠를 장착하세요</span>
-                    </div>
-                  )}
-                </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1.5 text-white/45">
+                        <ImageIcon className="h-7 w-7" strokeWidth={1.5} />
+                        <span className="text-[11px] font-medium">덱에서 콘텐츠를 장착하세요</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                <h3 className="mt-4 text-xl font-bold tracking-tight">{store?.display_name ?? "내 매장"}</h3>
-                {/* 부제 = 메이커 한마디(아래 입력). 가짜 하드코딩 제거(§0). 비면 흐린 안내. */}
-                {tagline ? (
-                  <p className="mt-0.5 text-[13px] text-white/75">{tagline}</p>
-                ) : (
+                {/* 한마디 placeholder — 비면 흐린 안내(문구 그대로). */}
+                {!tagline && (
                   <p className="mt-0.5 text-[13px] text-white/40">한마디를 입력하면 여기 표시돼요</p>
                 )}
 
-                {/* 셀링포인트(보조) — 메이커가 고른 것. 부제보다 작게(위계: 매장명 > 한마디 > 셀링포인트). */}
-                <SellingPoints points={pickedPoints} />
-
+                {/* 행동영역 placeholder — 쿠폰/연락/목적 미장착 안내(문구·게이트 그대로). */}
                 <div className="mt-4 space-y-2">
-                  {applied["coupon"] && (
+                  {applied["coupon"] && !(selectedCouponId && selectedCoupon) && (
                     <div className="animate-slide-up space-y-2">
-                      {selectedCouponId && selectedCoupon ? (
-                        // 실제 선택된 쿠폰만 미리보기(selectedCouponId 기준 — fallback 첫 쿠폰 거짓 표시 제거).
-                        <CouponPreview
-                          coupon={{ ...selectedCoupon, title: selectedCoupon.title ?? "" }}
-                        />
-                      ) : coupons.length > 0 ? (
+                      {coupons.length > 0 ? (
                         // 쿠폰은 있으나 미선택 — 아래 설정에서 고르도록 안내.
                         <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55">
                           아래에서 쿠폰을 선택하세요
@@ -835,36 +845,12 @@ export function CardStudioPage() {
                       )}
                     </div>
                   )}
-                  {/* 예약 설정 → S3b에서 아래 설정 영역(인라인)으로 이전 예정 */}
-                  {applied["link"] && (
-                    // 매장 실데이터 연락처(손님 화면 info-drop-page 와 동일 항목) — 미리보기라 시각만.
-                    store?.contact_phone || store?.address || store?.reservation_url ? (
-                      <div className="flex gap-2 animate-slide-up">
-                        {store?.contact_phone ? (
-                          <CardActionButton
-                            icon={<Phone className="h-3.5 w-3.5" strokeWidth={2} />}
-                            label="전화"
-                          />
-                        ) : null}
-                        {store?.address ? (
-                          <CardActionButton
-                            icon={<MapPin className="h-3.5 w-3.5" strokeWidth={2} />}
-                            label="길찾기"
-                          />
-                        ) : null}
-                        {store?.reservation_url ? (
-                          <CardActionButton
-                            icon={<ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />}
-                            label="예약"
-                          />
-                        ) : null}
-                      </div>
-                    ) : (
+                  {applied["link"] &&
+                    !(store?.contact_phone || store?.address || store?.reservation_url) && (
                       <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55 animate-slide-up">
                         매장 정보를 등록하면 표시돼요
                       </div>
-                    )
-                  )}
+                    )}
                   {!applied["calendar"] && !applied["coupon"] && !applied["link"] && (
                     <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55">
                       목적 카드를 장착하면 여기에 행동 버튼이 생겨요
