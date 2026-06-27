@@ -22,9 +22,6 @@ import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
 import { shareToKakao } from "@/lib/kakao";
 import { reshareDrop } from "@/lib/reshare-drop";
-import { getSentDrops } from "@/lib/feed-queries";
-import { DropFeedCard } from "@/components/drop-feed-card";
-import type { DropFeedItem } from "@/components/home-page";
 import {
   getCouponDisplayStatus,
   isCouponUsable,
@@ -175,8 +172,6 @@ type MePageData = {
   avatarUrl: string | null;
   isBusiness: boolean;
   myDrops: MyDropRow[];
-  // 내가(로그인 유저가) sender 로 공유한 카드 — 홈에서 이동(getSentDrops 재사용).
-  sentDrops: DropFeedItem[];
   coupons: CouponClaimRow[];
   // 업종 코드 → 한글 라벨 (business_categories depth=1, 등록화면 매핑 재사용).
   businessLabels: Record<string, string>;
@@ -215,7 +210,6 @@ export const Route = createFileRoute("/_user/me")({
       avatarUrl: null,
       isBusiness: false,
       myDrops: [],
-      sentDrops: [],
       coupons: [],
       businessLabels: {},
       senderNames: {},
@@ -250,9 +244,6 @@ export const Route = createFileRoute("/_user/me")({
       p_offset: 0,
     });
     const myDrops = Array.isArray(dropsJson) ? (dropsJson as MyDropRow[]) : [];
-
-    // 보낸 카드 — 내가 sender 로 공유한 카드(홈에서 이동). getSentDrops 재사용(신규 백엔드 0).
-    const sentDrops = await getSentDrops(supabase, userId);
 
     // 받은 혜택 — get_my_wallet RPC(SECURITY DEFINER, auth.uid() 본인 claim만 RLS 우회).
     //   기존 임베드(coupons/partners/share_events) 가 RLS 로 깨지던 문제 해소. setof jsonb →
@@ -366,7 +357,6 @@ export const Route = createFileRoute("/_user/me")({
       avatarUrl: profile?.avatar_url ?? null,
       isBusiness: Boolean(isBusiness),
       myDrops,
-      sentDrops,
       coupons,
       businessLabels,
       senderNames,
@@ -856,35 +846,6 @@ function MePage() {
             </>
           )}
         </SectionCard>
-
-        {/* ⑤ 보낸 카드 — 내가 공유한 카드(홈에서 이동). 카드에서 바로 재공유(reshareDrop).
-            더보기 토글은 후속 — 지금은 전부 렌더. sentDrops.length > 0 게이트(빈 박스 방지). */}
-        {data.sentDrops.length > 0 ? (
-          <SectionCard Icon={FileText} title="보낸 카드">
-            <div className="space-y-3">
-              {data.sentDrops.map((drop) => (
-                <DropFeedCard
-                  key={drop.shareUuid}
-                  {...drop}
-                  onClick={() =>
-                    void navigate({ to: "/d/$shareUuid", params: { shareUuid: drop.shareUuid } })
-                  }
-                  onCtaClick={() =>
-                    void navigate({ to: "/d/$shareUuid", params: { shareUuid: drop.shareUuid } })
-                  }
-                  onShare={() =>
-                    void reshareDrop({
-                      shareUuid: drop.shareUuid,
-                      title: drop.title,
-                      imageUrl: drop.videoThumbnailUrl,
-                      purpose: drop.intent,
-                    })
-                  }
-                />
-              ))}
-            </div>
-          </SectionCard>
-        ) : null}
 
         {/* ⑥ 설정 — 하단 계정 섹션. 다른 섹션과 동일한 SectionCard 래퍼 + 무채색 로그아웃 row.
             (기존 border-t 단독 배치 → 카드 통일. 빨강 → 진회색. row min-h 56px 풀폭 탭영역.) */}
