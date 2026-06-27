@@ -32,6 +32,9 @@ import {
   type CouponDisplayStatus,
 } from "@/lib/coupon-status";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { DropFeedCard } from "@/components/drop-feed-card";
+import { getMakerRepDrops } from "@/lib/feed-queries";
+import type { DropFeedItem } from "@/components/home-page";
 import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import {
@@ -147,6 +150,9 @@ type MakerInfo = {
   verification_status: string | null;
 };
 
+// 받은 쿠폰 메이커 + 그 메이커의 대표 공개카드(있으면). repDrop 없으면 프로필 행만(fallback).
+type ReceivedMaker = MakerInfo & { repDrop?: DropFeedItem | null };
+
 // 받은 쿠폰 → 메이커 dedup 용 raw row (client GROUP BY 불가 → JS dedup).
 type ClaimMakerRow = {
   issued_at: string | null;
@@ -180,8 +186,8 @@ type MePageData = {
   businessLabels: Record<string, string>;
   // 발신자 id → display_name (public_profiles, RLS 우회 뷰). 발신자 라벨용.
   senderNames: Record<string, string>;
-  // 받은 쿠폰을 발행한 메이커(중복 제거) — 구독 버튼 부착.
-  receivedMakers: MakerInfo[];
+  // 받은 쿠폰을 발행한 메이커(중복 제거) — 구독 버튼 부착 + 대표 공개카드(있으면) 임베드.
+  receivedMakers: ReceivedMaker[];
   // 현재 구독(active) 중인 메이커.
   subscribedMakers: MakerInfo[];
 };
@@ -330,14 +336,27 @@ export const Route = createFileRoute("/_user/me")({
       .eq("catcher_user_id", userId)
       .order("issued_at", { ascending: false });
 
-    const receivedMakers: MakerInfo[] = [];
+    const receivedMakersBase: MakerInfo[] = [];
     const seenMaker = new Set<string>();
     for (const row of (claimMakerRows as ClaimMakerRow[] | null) ?? []) {
       const partner = row.coupon?.partner;
       if (!partner?.id || seenMaker.has(partner.id)) continue;
       seenMaker.add(partner.id);
-      receivedMakers.push(partner);
+      receivedMakersBase.push(partner);
     }
+
+    // 받은 쿠폰 메이커별 대표 공개카드 — N+1 회피 한 번에 fetch(공개카드 없으면 프로필 행만).
+    //   카드 내부 메이커 이름은 fallback("익명") 이라 실제 메이커 display_name 으로 덮어씀.
+    const repMap = await getMakerRepDrops(
+      supabase,
+      receivedMakersBase.map((m) => m.id),
+    );
+    const receivedMakers: ReceivedMaker[] = receivedMakersBase.map((m) => {
+      const rep = repMap.get(m.id);
+      if (!rep) return m;
+      const name = m.display_name?.trim() || rep.maker.name;
+      return { ...m, repDrop: { ...rep, maker: { ...rep.maker, name } } };
+    });
 
     // 구독한 메이커 — maker_follows(본인 RLS, active) + partners(approved public read).
     const { data: follows } = await supabase
@@ -747,6 +766,25 @@ function MePage() {
                         구독
                       </button>
                     )
+                  }
+                  below={
+                    m.repDrop ? (
+                      <DropFeedCard
+                        {...m.repDrop}
+                        onClick={() =>
+                          navigate({
+                            to: "/d/$shareUuid",
+                            params: { shareUuid: m.repDrop!.shareUuid },
+                          })
+                        }
+                        onCtaClick={() =>
+                          navigate({
+                            to: "/d/$shareUuid",
+                            params: { shareUuid: m.repDrop!.shareUuid },
+                          })
+                        }
+                      />
+                    ) : undefined
                   }
                 />
               ))}
@@ -1343,7 +1381,16 @@ function MakerTierChip({ tier }: { tier: "pb" | "biz" }) {
 
 // 메이커 1줄 행 — 이니셜 아바타 + 이름(+등급 칩) + 부제(설명 우선, 없으면 업종 라벨) + 우측 액션.
 // partners 에 로고 컬럼이 없어 display_name 첫 글자 이니셜로 표시(쿠폰 지갑 패턴).
-function MakerRow({ maker, right }: { maker: MakerInfo; right?: React.ReactNode }) {
+// below = 프로필 행 아래 임베드 슬롯(받은 쿠폰 메이커 대표 공개카드). 없으면 프로필 행만(기존 동작).
+function MakerRow({
+  maker,
+  right,
+  below,
+}: {
+  maker: MakerInfo;
+  right?: React.ReactNode;
+  below?: React.ReactNode;
+}) {
   const name = maker.display_name?.trim() || "메이커";
   const description = maker.metadata?.description?.trim();
   const subtitle = description || partnerKindLabel(maker.partner_kind);
@@ -1351,20 +1398,23 @@ function MakerRow({ maker, right }: { maker: MakerInfo; right?: React.ReactNode 
   const tier = makerTier(maker);
 
   return (
-    <li className="flex items-center gap-3 py-3">
-      <Avatar className="size-10 shrink-0">
-        <AvatarFallback className="bg-[#F1F5F9] text-base font-bold text-[#0F172A]">
-          {initial}
-        </AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <p className="truncate text-base font-bold text-[#0F172A]">{name}</p>
-          <MakerTierChip tier={tier} />
+    <li className="py-3">
+      <div className="flex items-center gap-3">
+        <Avatar className="size-10 shrink-0">
+          <AvatarFallback className="bg-[#F1F5F9] text-base font-bold text-[#0F172A]">
+            {initial}
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <p className="truncate text-base font-bold text-[#0F172A]">{name}</p>
+            <MakerTierChip tier={tier} />
+          </div>
+          <p className="mt-0.5 truncate text-sm font-medium text-[#64748B]">{subtitle}</p>
         </div>
-        <p className="mt-0.5 truncate text-sm font-medium text-[#64748B]">{subtitle}</p>
+        {right}
       </div>
-      {right}
+      {below ? <div className="mt-3">{below}</div> : null}
     </li>
   );
 }

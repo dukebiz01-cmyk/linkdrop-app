@@ -190,6 +190,38 @@ export async function getFollowedMakerDrops(
     .filter((x): x is DropFeedItem => x !== null);
 }
 
+// 받은 쿠폰 메이커별 "대표 공개카드 1개" — /me 받은 쿠폰 메이커 섹션 임베드용.
+//   ★ N+1 회피: 메이커별 개별 쿼리 금지. partner_id IN (배열) 한 번에 가져와
+//   앱에서 partner_id별 최신 1개 pick(최신순 정렬 → 첫 등장이 대표).
+//   §0 가드: is_public=true 공개카드만(비공개 노출 금지). 썸네일 없는 행은 adapt 가 skip →
+//   같은 메이커의 더 오래된(썸네일 있는) 카드로 폴백.
+export async function getMakerRepDrops(
+  client: SupabaseClient,
+  partnerIds: string[],
+): Promise<Map<string, DropFeedItem>> {
+  const result = new Map<string, DropFeedItem>();
+  const ids = Array.from(new Set(partnerIds.filter(Boolean)));
+  if (ids.length === 0) return result;
+
+  const { data, error } = await client
+    .from("info_drops")
+    .select(DISCOVER_SELECT)
+    .eq("status", "published")
+    .eq("is_public", true)
+    .in("partner_id", ids)
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(100);
+  if (error || !data) return result;
+
+  for (const row of data as unknown as InfoDropDiscoverRow[]) {
+    const pid = row.partner_id;
+    if (!pid || result.has(pid)) continue; // 최신순 → 이미 대표가 잡힌 메이커는 skip
+    const item = adaptDiscoverRow(row);
+    if (item) result.set(pid, item);
+  }
+  return result;
+}
+
 export async function getSentDrops(
   client: SupabaseClient,
   userId: string,
