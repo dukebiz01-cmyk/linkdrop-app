@@ -33,6 +33,7 @@ import {
   ShoppingCart,
   Package,
   CalendarDays,
+  Calendar,
   Sprout,
   ExternalLink,
 } from "lucide-react";
@@ -62,6 +63,7 @@ import { CouponPreview } from "@/components/receiver/CouponPreview";
 import { CardBody } from "@/components/card/CardBody";
 import { CardActionButton } from "@/components/card/CardActionButton";
 import { DropCardShell } from "@/components/card/DropCardShell";
+import { ButtonBlock } from "@/components/card/ButtonBlock";
 import { toCardBodyProps } from "@/lib/adapters";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
@@ -1320,7 +1322,14 @@ export function InfoDropPage({
             return (
               <div className="space-y-4">
                 {benefitEventSection}
-                {calendarPanel}
+                {/* 거울 1b — 항상 펼쳐진 캘린더를 "예약 날짜 선택" 닫힌 버튼 뒤로(제자리 래핑).
+                    calendarPanel 내부(ReservationCalendarClient·onCheckAvailability·fallback·mounted)는 0터치. */}
+                <ButtonBlock
+                  label="예약 날짜 선택"
+                  icon={<Calendar className="h-4 w-4" strokeWidth={2} />}
+                  defaultExpanded={false}
+                  expandedContent={calendarPanel}
+                />
                 {!isCoupon ? reservePanel : null}
                 {/* Phase 1 통합(가-2) — 교집합에서 sticky "쿠폰 받기" 대신 보조 "쿠폰만 받기".
                     예약 없이 claim_coupon 만(기존 onReserveAndClaim 경로 그대로). */}
