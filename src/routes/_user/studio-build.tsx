@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getAuthClient } from "@/lib/auth-context";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import { CouponPreview } from "@/components/receiver/CouponPreview";
@@ -251,6 +251,8 @@ export function CardStudioPage() {
   // 쿠폰 만들기 바텀시트(CouponManageView 임베드) 노출 상태.
   const [couponSheetOpen, setCouponSheetOpen] = useState(false);
   const [applied, setApplied] = useState<Record<string, boolean>>({});
+  // 방금 켠 블록 id — 코칭이 "방금 켠 블록"에 반응하게(영상/쿠폰 내용검증 우선). 끄면 null.
+  const [lastEquippedId, setLastEquippedId] = useState<string | null>(null);
   const [cardColor, setCardColor] = useState(CARD_COLORS[1].value);
   const [showColorPicker, setShowColorPicker] = useState(false);
   // 쿠폰 피커 — 내 쿠폰 여러 개 중 선택(인라인, 색상 팔레트 showColorPicker 패턴 동일).
@@ -284,6 +286,21 @@ export function CardStudioPage() {
   const aiVideoRef = useRef<string | null>(null);
   const [burstKey, setBurstKey] = useState(0);
 
+  // P — 히어로 미리보기가 화면(헤더 아래)에서 사라지면 상단 컴팩트 띠를 sticky 노출.
+  //   덱 장착 중에도 카드 상태(썸네일·제목·전환력)가 계속 보이게 해 위아래 왕복 제거.
+  const heroRef = useRef<HTMLDivElement>(null);
+  const [heroVisible, setHeroVisible] = useState(true);
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setHeroVisible(entry.isIntersecting),
+      { rootMargin: "-60px 0px 0px 0px", threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   const touchStart = useRef(0);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasHold = useRef(false);
@@ -303,39 +320,103 @@ export function CardStudioPage() {
   const stage = getStage(score);
   const appliedCount = STUDIO_BLOCKS.filter((b) => applied[b.id] && !b.isPaid).length;
 
-  const lingo = useMemo(() => {
+  const lingo = useMemo<{ text: string; short: string; action: string | null; done?: boolean }>(() => {
+    // 실제 내용 검증(A안) — 영상/쿠폰만 진짜 채워짐 확인. 이미지/캘린더는 변수 없어 장착=인정.
+    const hasVideo = !!selectedVideo;
+    const hasRealCoupon = !!selectedCouponId; // 원본 id (selectedCoupon fallback 금지)
+    const hasBody = (applied["content"] ? hasVideo : false) || !!applied["image"]; // 본체 실제 존재
+    const couponOk = applied["coupon"] ? hasRealCoupon : true; // 쿠폰 켰으면 실제 쿠폰 필수
+    const isComplete = hasBody && couponOk;
+
     const nextLever = [...STUDIO_BLOCKS]
       .filter((b) => !b.isPaid && !applied[b.id])
       .sort((a, b) => b.power - a.power)[0];
 
+    // ── 순서: (신규)방금 켠 블록 반응 → 정상추천(미장착 d/e/f) → 실제내용검증 안전망(a/b)
+    //    → 완성(c) → 강화(g/h). c 의 isComplete 게이팅 유지(영상 비면 done:true 불가 = 거짓완성 차단).
+
+    // 0: 방금 켠 블록 반응 — 영상/쿠폰을 막 켰는데 내용 미선택이면 그걸 먼저 안내(딴소리 방지).
+    //    캘린더/이미지는 내용변수 없어 대상 아님(장착=인정) → 정상 추천 흐름으로.
+    if (lastEquippedId === "content" && !hasVideo) {
+      return {
+        text: "영상 블록을 켰어요 — 실제 영상을 골라야 보낼 수 있어요",
+        short: "영상을 골라주세요",
+        action: "content",
+        done: false,
+      };
+    }
+    if (lastEquippedId === "coupon" && !hasRealCoupon) {
+      return { text: "쿠폰을 골라야 완성돼요", short: "쿠폰을 골라주세요", action: "coupon", done: false };
+    }
+
+    // d: content 미장착
     if (!applied["content"]) {
       return {
         text: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
+        short: "영상부터 넣어보세요",
         action: "content",
       };
     }
+    // e: calendar 미장착
     if (!applied["calendar"]) {
       return {
         text: "예약 카드인데 누를 곳이 없어요. 예약 캘린더를 장착해야 친구가 바로 행동해요.",
+        short: "예약 캘린더를 넣어요",
         action: "calendar",
       };
     }
+    // f: coupon 미장착
     if (!applied["coupon"]) {
-      return { text: "왜 지금 예약해야 하죠? 쿠폰 한 장이면 '누를 이유'가 생겨요.", action: "coupon" };
+      return {
+        text: "왜 지금 예약해야 하죠? 쿠폰 한 장이면 '누를 이유'가 생겨요.",
+        short: "쿠폰을 연결해요",
+        action: "coupon",
+      };
     }
+    // 완성 게이트(score>=100) — a/b 안전망은 이 게이트 안에서만 평가.
+    //   제작 중(score<100)엔 a/b 가 안 떠 "영상 골라주세요" 갇힘 해소(0번/d/e/f 만 동작).
+    //   거짓완성 차단 유지: 영상/쿠폰 비면 done:false, isComplete 일 때만 done:true.
+    if (score >= 100) {
+      // a: 영상 블록 켰으나 실제 영상 미선택
+      if (applied["content"] && !hasVideo) {
+        return {
+          text: "영상 블록을 켰어요 — 실제 영상을 골라야 보낼 수 있어요",
+          short: "영상을 골라주세요",
+          action: "content",
+          done: false,
+        };
+      }
+      // b: 쿠폰 블록 켰으나 실제 쿠폰 미선택
+      if (applied["coupon"] && !hasRealCoupon) {
+        return { text: "쿠폰을 골라야 완성돼요", short: "쿠폰을 골라주세요", action: "coupon", done: false };
+      }
+      // c: 100% 완성
+      if (isComplete) {
+        return {
+          text: "완성! 이제 손님에게 보낼 수 있어요",
+          short: "완성! 보낼 수 있어요",
+          action: null,
+          done: true,
+        };
+      }
+    }
+    // g: 75 미만 — 다음 레버 추천
     if (score < ENHANCE_UNLOCK) {
       return {
         text: nextLever
           ? `${nextLever.label}까지 더하면 전환력이 확 올라가요.`
           : "거의 다 됐어요. 마무리만 하면 완성!",
+        short: nextLever ? `${nextLever.label} 추가해요` : "조금만 더 채워요",
         action: nextLever?.id ?? null,
       };
     }
+    // h: 75 이상 — 강화
     return {
       text: "전환 레버가 충분해요. 이제 강화(부스트)를 켜면 도달이 늘어요. 지금이 쓸 타이밍.",
+      short: "강화를 켜보세요",
       action: null,
     };
-  }, [applied, score]);
+  }, [applied, score, selectedVideo, selectedCouponId, lastEquippedId]);
 
   // 블록 설정 아코디언 토글 — 같은 걸 다시 누르면 접힘, 다른 걸 누르면 그것만 펼침.
   const toggleBlockSettings = (id: string) =>
@@ -539,7 +620,13 @@ export function CardStudioPage() {
       return;
     }
     setApplied((p) => ({ ...p, [block.id]: !p[block.id] }));
-    if (!applied[block.id]) setBurstKey((k) => k + 1);
+    // OFF→ON(켜짐)이면 방금 켠 블록으로 기록, ON→OFF(꺼짐)이면 해제. (applied = 토글 전 값.)
+    if (!applied[block.id]) {
+      setBurstKey((k) => k + 1);
+      setLastEquippedId(block.id);
+    } else {
+      setLastEquippedId(null);
+    }
   }
 
   // 히어로 카드 틸트는 DropCardShell 로 캡슐화 이동(interactive prop).
@@ -617,9 +704,68 @@ export function CardStudioPage() {
         </div>
       </header>
 
+      {/* P — 컴팩트 미리보기 띠. 히어로 안 보일 때만. 헤더(top-0 z-40) 아래 고정(top-[56px] z-30).
+          ★ fixed 오버레이 — 흐름에서 빼 레이아웃 시프트(히어로 밀림) 제거 → 깜빡임 소멸.
+          바깥 pointer-events-none + 안쪽 auto = 띠 양옆 빈 영역이 아래 클릭 안 막음. 풀카드 복제 아님(썸네일 img만). */}
+      {!heroVisible && (
+        <div className="fixed left-0 right-0 top-[56px] z-30 flex justify-center px-5 pointer-events-none">
+          <div className="w-full max-w-md pointer-events-auto">
+          {/* 탭하면 히어로 풀카드로 부드럽게 스크롤. */}
+          <div
+            onClick={() => heroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="mt-2 flex cursor-pointer items-center gap-3 rounded-2xl border border-[#EDEDED] bg-white/95 p-2.5 backdrop-blur"
+          >
+            {/* 썸네일 — 영상 선택 시 썸네일, 아니면 메이커 cardColor 빈 박스(까만 고정 폐기). */}
+            <div
+              className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl"
+              style={selectedVideo?.thumbnailUrl ? undefined : { backgroundColor: cardColor }}
+            >
+              {selectedVideo?.thumbnailUrl ? (
+                <img src={selectedVideo.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-white/70">
+                  <Video className="h-5 w-5" strokeWidth={1.75} />
+                </div>
+              )}
+            </div>
+            {/* 코칭(lingo) + 제목 + 전환력 게이지 */}
+            <div className="min-w-0 flex-1">
+              {/* 링고AI 코칭 줄 — 본문 코칭 이관(lingo.text). 완성 시 체크(POINT). 노랑은 아이콘만 은은하게. */}
+              <div className="flex items-center gap-1.5">
+                {lingo.done ? (
+                  <CircleCheck className="h-3.5 w-3.5 shrink-0" style={{ color: POINT }} strokeWidth={2.5} />
+                ) : (
+                  <Lightbulb className="ai-breathe h-3.5 w-3.5 shrink-0" style={{ color: "#D97706" }} strokeWidth={2} />
+                )}
+                <span className="truncate text-[11px] text-[#525252]">{lingo.short ?? lingo.text}</span>
+              </div>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className="truncate text-[13px] font-medium text-[#0A0A0A]">
+                  {store?.display_name ?? "내 매장"}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center gap-1.5">
+                <Zap className="h-3 w-3 shrink-0" style={{ color: POINT }} strokeWidth={2.5} fill={POINT} />
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#F0F0F0]">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${score}%`,
+                      background: `linear-gradient(90deg, ${POINT}, #60A5FA, ${POINT})`,
+                    }}
+                  />
+                </div>
+                <span className="text-[11px] tabular-nums text-[#737373]">{score}%</span>
+              </div>
+            </div>
+          </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-md px-5">
         {/* ───────── 히어로: 홀로그래픽 메인 카드 (3D 틸트) ───────── */}
-        <section className="pt-7" style={{ perspective: "1100px" }}>
+        <section ref={heroRef} className="pt-7" style={{ perspective: "1100px" }}>
           {/* forge-float 플로팅은 스튜디오 전용 → 셸 밖 유지. 등급 그림자·홀로 강도(stage 의존)·
               버스트(게임화)는 셸에 prop/slot 으로 주입(셸 자체는 색·게임 중립). */}
           <div className="forge-float">
@@ -1168,25 +1314,7 @@ export function CardStudioPage() {
             레버 {appliedCount}개 장착 · 강화는 {ENHANCE_UNLOCK}점부터 열려요
           </p>
         </section>
-
-        {/* ───────── 링고AI 코칭 ───────── */}
-        <section className="mt-3 flex items-start gap-3 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)] animate-fade-in">
-          <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
-            style={{ backgroundColor: INK }}
-          >
-            <Lightbulb className="h-[18px] w-[18px]" strokeWidth={2} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[13px] font-bold text-[#0A0A0A]">링고AI</span>
-              <span className="rounded-full border border-[#E5E5E5] px-1.5 py-0.5 text-[9px] font-bold text-[#737373]">
-                전환 코칭
-              </span>
-            </div>
-            <p className="mt-1 text-[13px] leading-relaxed text-[#525252]">{lingo.text}</p>
-          </div>
-        </section>
+        {/* 링고AI 코칭은 상단 컴팩트 띠로 이관(중복 제거). lingo useMemo 는 띠에서 재사용. */}
       </div>
 
       {/* ───────── 강화 카드 덱 (스와이프 → 탭 장착) ───────── */}
