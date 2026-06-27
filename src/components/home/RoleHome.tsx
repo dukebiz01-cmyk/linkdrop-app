@@ -1,8 +1,8 @@
-import { Sparkles, Calendar, Users, ChevronRight, ArrowRight, Ticket } from "lucide-react";
+import { Sparkles, Calendar, Users, ChevronRight, ArrowRight } from "lucide-react";
 import { StoreProfileCard } from "@/components/partner/StoreProfileCard";
-import { DropFeedCard } from "@/components/drop-feed-card";
+import { PerformanceBanner } from "@/components/home/PerformanceBanner";
+import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
 import type { DropFeedItem } from "@/components/home-page";
-import { reshareDrop } from "@/lib/reshare-drop";
 
 // Slice 4a — 역할 홈 골격. 만들기 폼(HomePageV3) 대체: 홈 = 역할 랜딩 + 다이제스트.
 //   카드 생성 진입은 스튜디오 탭으로 일원화 — 홈엔 "카드 만들기" CTA 없음(중복 제거).
@@ -45,18 +45,11 @@ export type HomeCoupon = { claimCode: string; title: string; expiresAt: string |
 export type UserHomeData = {
   expiringCoupons: HomeCoupon[];
   followedDrops: DropFeedItem[];
-  /** 링고 추천 영상 — 공개 탐색 카드(getDiscoverDrops) 상위 N. */
+  /** 링고 추천 영상 — 공개 탐색 카드(getDiscoverDrops) 상위 N. (탐색 이관 — 유저홈 미사용, 데이터 보존) */
   recommendedDrops: DropFeedItem[];
+  /** 내가 sender 로 공유한 카드(getSentDrops) — 활동 세그먼트 "내 공유" 탭. */
+  sentDrops: DropFeedItem[];
 };
-
-function expiryLabel(iso: string | null): string {
-  if (!iso) return "곧 만료";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "곧 만료";
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${m}.${day}까지`;
-}
 
 const SEVERITY_RANK: Record<GuideDiagnosis["severity"], number> = {
   high: 3,
@@ -140,8 +133,6 @@ export function RoleHome({
   onGoResults,
   onGoReservations,
   onGoProposals,
-  onOpenCoupon,
-  onOpenDrop,
 }: {
   isBusiness: boolean;
   merchant: MerchantHomeData | null;
@@ -149,16 +140,12 @@ export function RoleHome({
   onGoResults: () => void;
   onGoReservations: () => void;
   onGoProposals: () => void;
-  onOpenCoupon: (claimCode: string) => void;
-  onOpenDrop: (shareUuid: string) => void;
 }) {
-  // 유저 홈(비사업자) — 곧 쓸 혜택 + 구독 메이커 새 카드. 상인은 아래 merchant 홈.
+  // 유저 홈(비사업자) — 성과 배너 + 활동 세그먼트(내 공유 | 구독). 상인은 아래 merchant 홈.
+  //   추천영상→탐색·받은쿠폰→나 탭 이관(유저홈에서 제거). 빈상태는 세그먼트가 자체 처리.
   if (!isBusiness || !merchant) {
-    const coupons = user?.expiringCoupons ?? [];
     const followedDrops = user?.followedDrops ?? [];
-    const recommendedDrops = user?.recommendedDrops ?? [];
-    const bothEmpty =
-      coupons.length === 0 && followedDrops.length === 0 && recommendedDrops.length === 0;
+    const sentDrops = user?.sentDrops ?? [];
     return (
       <div className="mx-auto max-w-md space-y-6 px-6 pt-6 pb-4">
         <header>
@@ -166,92 +153,11 @@ export function RoleHome({
           <p className="mt-1.5 text-sm font-medium tracking-ko text-[#737373]">링크는 목적을 만나 행동이 된다</p>
         </header>
 
-        {/* 0. 링고 추천 영상 (있으면) — 공개 탐색 카드. 카드에서 바로 재공유(reshareDrop). */}
-        {recommendedDrops.length > 0 ? (
-          <section>
-            <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-              <Sparkles className="size-4" strokeWidth={2} />링고AI 추천 영상
-            </h2>
-            <div className="space-y-3">
-              {recommendedDrops.map((drop) => (
-                <DropFeedCard
-                  key={drop.shareUuid}
-                  {...drop}
-                  onClick={() => onOpenDrop(drop.shareUuid)}
-                  onCtaClick={() => onOpenDrop(drop.shareUuid)}
-                  onShare={() =>
-                    void reshareDrop({
-                      shareUuid: drop.shareUuid,
-                      title: drop.title,
-                      imageUrl: drop.videoThumbnailUrl,
-                      purpose: drop.intent,
-                    })
-                  }
-                />
-              ))}
-            </div>
-          </section>
-        ) : null}
+        {/* 성과 배너 — 이번 달 내 성과(placeholder, 데이터 배선 추후). 순수 ADDITIVE 최상단. */}
+        <PerformanceBanner conversionCount={0} dropyAmount={0} />
 
-        {/* 1. 곧 쓸 혜택 (있으면) */}
-        {coupons.length > 0 ? (
-          <section>
-            <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-              <Ticket className="size-4" strokeWidth={2} />곧 쓸 혜택 {coupons.length}
-            </h2>
-            <ul className="space-y-2">
-              {coupons.map((c) => (
-                <li
-                  key={c.claimCode}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-[#E5E5E5] bg-white px-4 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold tracking-ko text-[#0A0A0A]">
-                      {c.title}
-                    </p>
-                    <p className="mt-0.5 text-xs font-medium tracking-ko text-[#737373]">
-                      {expiryLabel(c.expiresAt)}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onOpenCoupon(c.claimCode)}
-                    className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg bg-[#0A0A0A] px-3 text-sm font-semibold tracking-ko text-white transition-colors hover:bg-[#171717]"
-                  >
-                    사용하기
-                    <ChevronRight className="size-4" strokeWidth={2} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {/* 2. 구독 메이커 새 카드 (있으면) */}
-        {followedDrops.length > 0 ? (
-          <section>
-            <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-              <Users className="size-4" strokeWidth={2} />구독한 메이커 새 카드
-            </h2>
-            <div className="space-y-3">
-              {followedDrops.map((drop) => (
-                <DropFeedCard
-                  key={drop.shareUuid}
-                  {...drop}
-                  onClick={() => onOpenDrop(drop.shareUuid)}
-                  onCtaClick={() => onOpenDrop(drop.shareUuid)}
-                />
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {/* 둘 다 비면 가벼운 안내 */}
-        {bothEmpty ? (
-          <p className="rounded-2xl border border-[#E5E5E5] bg-white p-5 text-sm font-medium leading-relaxed tracking-ko text-[#737373]">
-            영상 링크 하나로 카드를 만들어 친구에게 보내보세요.
-          </p>
-        ) : null}
+        {/* 활동 세그먼트 — 내 공유 / 구독 토글. 빈상태 자체 처리. */}
+        <HomeActivitySegment sentDrops={sentDrops} followedDrops={followedDrops} />
       </div>
     );
   }

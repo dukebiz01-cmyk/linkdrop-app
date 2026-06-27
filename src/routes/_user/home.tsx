@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { getAuthClient } from "@/lib/auth-context";
-import { getFollowedMakerDrops, getDiscoverDrops } from "@/lib/feed-queries";
+import { getFollowedMakerDrops, getDiscoverDrops, getSentDrops } from "@/lib/feed-queries";
 import { getCouponDisplayStatus } from "@/lib/coupon-status";
 import {
   RoleHome,
@@ -87,10 +87,11 @@ export const Route = createFileRoute("/_user/home")({
 
     // 유저(비사업자) 홈 — 곧 쓸 혜택(get_my_wallet → expiring) + 구독 메이커 새 카드.
     if (!isBusiness) {
-      const [walletRes, followedDrops, recommendedDrops] = await Promise.all([
+      const [walletRes, followedDrops, recommendedDrops, sentDrops] = await Promise.all([
         supabase.rpc("get_my_wallet"),
         getFollowedMakerDrops(supabase, userId),
         getDiscoverDrops(supabase),
+        getSentDrops(supabase, userId),
       ]);
       const walletRows = (walletRes.data as WalletRow[] | null) ?? [];
       const expiringCoupons: HomeCoupon[] = walletRows
@@ -115,6 +116,7 @@ export const Route = createFileRoute("/_user/home")({
           expiringCoupons,
           followedDrops: followedDrops.slice(0, FOLLOWED_DROP_LIMIT),
           recommendedDrops: recommendedDrops.slice(0, RECOMMENDED_DROP_LIMIT),
+          sentDrops,
         },
       };
     }
@@ -204,10 +206,6 @@ function HomeRoute() {
       onGoResults={() => void navigate({ to: "/partner/results" })}
       onGoReservations={() => void navigate({ to: "/partner/reservations" })}
       onGoProposals={() => void navigate({ to: "/partner" })}
-      onOpenCoupon={(claimCode) =>
-        void navigate({ to: "/me", search: { claimed: claimCode } })
-      }
-      onOpenDrop={(shareUuid) => void navigate({ to: "/d/$shareUuid", params: { shareUuid } })}
     />
   );
 }

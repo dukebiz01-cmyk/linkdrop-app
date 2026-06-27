@@ -1,0 +1,96 @@
+import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { DropFeedCard } from "@/components/drop-feed-card";
+import type { DropFeedItem } from "@/components/home-page";
+import { reshareDrop } from "@/lib/reshare-drop";
+
+/**
+ * HomeActivitySegment — 유저홈 활동 세그먼트(내 공유 | 구독).
+ *
+ * 토글 2탭(기본 활성 = 내 공유). 평면 리스트(영상/카드 구분 없음).
+ * 색은 신규 0 — RoleHome 형제 섹션 색 문자열 그대로 재사용
+ *   (#0A0A0A, #737373, #E5E5E5, bg-white). 이모지 0, Lucide만, 60대 친화(탭영역 44px).
+ *
+ * 카드 열기 = useNavigate 내장(기존 onOpenDrop 동작 보존). 재공유는 내 공유 탭만(reshareDrop).
+ */
+export function HomeActivitySegment({
+  sentDrops,
+  followedDrops,
+}: {
+  sentDrops: DropFeedItem[];
+  followedDrops: DropFeedItem[];
+}) {
+  const [tab, setTab] = useState<"sent" | "subscribed">("sent");
+  const navigate = useNavigate();
+
+  const openDrop = (shareUuid: string) =>
+    void navigate({ to: "/d/$shareUuid", params: { shareUuid } });
+
+  const drops = tab === "sent" ? sentDrops : followedDrops;
+  const emptyText =
+    tab === "sent"
+      ? "아직 공유한 카드가 없어요. 마음에 드는 카드를 친구에게 공유해보세요."
+      : "구독한 메이커가 없어요. 탐색에서 마음에 드는 메이커를 찾아보세요.";
+
+  const TABS = [
+    { id: "sent", label: "내 공유" },
+    { id: "subscribed", label: "구독" },
+  ] as const;
+
+  return (
+    <section>
+      {/* 세그먼트 토글 — 활성 = 검정 bg + 흰 텍스트, 비활성 = 투명 + 그레이. */}
+      <div className="mb-3 inline-flex rounded-lg border border-[#E5E5E5] bg-white p-0.5">
+        {TABS.map((t) => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`min-h-[44px] rounded-lg px-4 text-sm font-bold tracking-ko transition-colors ${
+                active ? "bg-[#0A0A0A] text-white" : "bg-transparent text-[#737373]"
+              }`}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {drops.length > 0 ? (
+        <div className="space-y-3">
+          {drops.map((drop) =>
+            tab === "sent" ? (
+              <DropFeedCard
+                key={drop.shareUuid}
+                {...drop}
+                onClick={() => openDrop(drop.shareUuid)}
+                onCtaClick={() => openDrop(drop.shareUuid)}
+                onShare={() =>
+                  void reshareDrop({
+                    shareUuid: drop.shareUuid,
+                    title: drop.title,
+                    imageUrl: drop.videoThumbnailUrl,
+                    purpose: drop.intent,
+                  })
+                }
+              />
+            ) : (
+              <DropFeedCard
+                key={drop.shareUuid}
+                {...drop}
+                onClick={() => openDrop(drop.shareUuid)}
+                onCtaClick={() => openDrop(drop.shareUuid)}
+              />
+            ),
+          )}
+        </div>
+      ) : (
+        <p className="rounded-2xl border border-[#E5E5E5] bg-white p-5 text-sm font-medium leading-relaxed tracking-ko text-[#737373]">
+          {emptyText}
+        </p>
+      )}
+    </section>
+  );
+}
