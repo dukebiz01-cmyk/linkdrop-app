@@ -1,0 +1,73 @@
+import type { ReactNode } from "react";
+import type { DropPurpose } from "@/lib/types";
+
+/**
+ * 단일 카드 본체 props 계약 (CardBodyProps).
+ *
+ * 스튜디오 미리보기(mode="preview")와 손님 /d(mode="live")가 **같은 CardBody**를 렌더하기 위한
+ * presentational 계약. CardBody 는 데이터 출처(state/RPC)를 모르고 props 만 받는다(react-email 패턴).
+ * container(studio-build / info-drop-page)가 각자 어댑터로 데이터를 이 형태로 변환해 주입한다.
+ *
+ * ★ 이 단계는 "타입 선언만" — 어디서도 import/사용하지 않는다(렌더·기존 코드 무변경, 위험 0).
+ *
+ * 단일 출처 메모:
+ *  - DropPurpose = @/lib/types 에서 import (단일 출처 ✓).
+ *  - CardBodyVideo = studio-build VideoSlot(L78) / YouTubeLiteEmbed props(L21) 와 동일 형태.
+ *    원본이 둘 다 export 되지 않아 import 불가 → 여기 임시 인라인. 둘 중 하나를 export 하면
+ *    `import type { ... }` 로 교체할 것(재정의 제거, 단일 출처화).
+ *  - CardBodyCoupon = CouponPreview coupon prop(CouponPreview.tsx L15-21) 과 동일 형태.
+ *    CouponPreview 가 이 타입을 export 하면 import 로 교체할 것.
+ */
+
+/** YouTubeLiteEmbed 시그니처. ※ 임시 — studio-build VideoSlot / YouTubeLiteEmbed props export 후 import 로 교체. */
+export type CardBodyVideo = {
+  videoId: string;
+  thumbnailUrl: string;
+  title: string;
+  isShorts: boolean;
+  durationLabel?: string;
+  sourceLabel?: string;
+};
+
+/** CouponPreview 가 받는 coupon 형태. ※ 임시 — CouponPreview coupon 타입 export 후 import 로 교체. */
+export type CardBodyCoupon = {
+  title: string;
+  coupon_type?: string | null;
+  gift_item?: string | null;
+  conditions?: { min_amount?: number; [k: string]: unknown } | null;
+  valid_until?: string | null;
+};
+
+export type CardBodyProps = {
+  /** preview=버튼 시각만(제작층) / live=실기능 슬롯 주입(출고층). Plate readOnly 패턴. */
+  mode: "preview" | "live";
+  /** 카드 배경색 — navy 등(양쪽 동일, 메이커가 고른 값). */
+  cardColor: string;
+  /** 영상 슬롯 — YouTubeLiteEmbed 시그니처. 없으면 null(미선택/placeholder). */
+  video: CardBodyVideo | null;
+  /** 제목 — 매장명(스튜디오) / 영상 헤드라인(손님). 의미 결정은 container 몫. */
+  title: string;
+  /** 부제 — 메이커 한마디(스튜디오) / 영상 제목·부제(손님). */
+  tagline: string;
+  /** 셀링포인트 불릿 — pickedPoints(스튜디오) / keyPoints(손님). */
+  sellingPoints: string[];
+  /** 쿠폰 — CouponPreview 계약. 없으면 null. */
+  coupon: CardBodyCoupon | null;
+  /** 매장 정보 — studio store / 손님 local 공통 매핑(name/phone/address/reservationUrl). */
+  store?: {
+    name: string;
+    phone?: string;
+    address?: string;
+    reservationUrl?: string | null;
+  } | null;
+  /** 목적 — 정보/쿠폰/예약/구매/상담(drop_purpose 공통 enum). variant 분기 신호. */
+  purpose: DropPurpose;
+
+  // ── 실기능 슬롯 — live 에서만 container 가 주입(예약캘린더·CTA·연락 실동작) ──
+  /** 예약 캘린더 실동작(손님). preview 에선 미주입 → CardBody 가 시각 표현만. */
+  reservationSlot?: ReactNode;
+  /** 목적별 CTA 실버튼(손님). */
+  ctaSlot?: ReactNode;
+  /** 연락 row 실버튼(전화/문자/길찾기, 손님). */
+  contactSlot?: ReactNode;
+};
