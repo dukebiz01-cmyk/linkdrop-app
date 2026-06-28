@@ -1292,7 +1292,9 @@ export function InfoDropPage({
             //   로직 없음) 제거하고 패널을 세로 스택으로 보존. variant 별 구성 유지:
             //   coupon = [혜택·이벤트][캘린더] / reservation = [혜택·이벤트][캘린더(예약하기·결제고지 포함)].
             return (
-              <div className="space-y-4">
+              // 하단 블록 균일 스택 — 본문 space-y-6 리듬에 통일(쿠폰 미리보기·예약·쿠폰 받기).
+              //   새 블록(상품/타카드) 슬롯인 시 동일 간격 자동 적용. 블록 내부는 0터치.
+              <div className="space-y-6">
                 {benefitEventSection}
                 {/* 거울 1b — 항상 펼쳐진 캘린더를 "예약 날짜 선택" 닫힌 버튼 뒤로(제자리 래핑).
                     펼침 = [캘린더 + (날짜 선택 시)예약하기 + 결제고지] 자기완결 블록.
