@@ -1232,6 +1232,8 @@ export function InfoDropPage({
           // 4d — 예약 코어(영상·제목·한마디·셀링)도 동일 CardBody(A1: 코어만, navy 유지).
           //   funnelCoupon 생략 → coupon=null → CouponPreview 미렌더(couponPanel 담당 dedup).
           //   contactSlot 생략 → 전화/길찾기는 secondary-contact-row 담당. reservation-header/캘린더/reservePanel 0터치.
+          //   reservationBlock 무조건 렌더(showCalendar 게이트 X): 예약은 옛 IIFE 가 isReservation 이면
+          //   항상 렌더했고, showCalendar=false 시 calendarPanel 이 fallback("업주가 아직…")을 자체 렌더 → 옛 동작 보존.
           <DropCardShell
             cardColor={cardColor ?? "#1E3A8A"}
             interactive={false}
@@ -1253,12 +1255,10 @@ export function InfoDropPage({
               } as unknown as InfoDropPageProps)}
               couponBlock={benefitEventSection}
               reservationBlock={
-                showCalendar ? (
-                  <div className="space-y-3">
-                    {calendarPanel}
-                    {billingNotice}
-                  </div>
-                ) : null
+                <div className="space-y-3">
+                  {calendarPanel}
+                  {billingNotice}
+                </div>
               }
               contactBlock={contactRow}
             />
