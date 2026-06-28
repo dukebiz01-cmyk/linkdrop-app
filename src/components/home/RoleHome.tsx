@@ -1,8 +1,11 @@
-import { Sparkles, Calendar, Users, ChevronRight, ArrowRight } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Sparkles, Calendar, Users, ChevronRight, ArrowRight, Flame } from "lucide-react";
 import { StoreProfileCard } from "@/components/partner/StoreProfileCard";
 import { PerformanceBanner } from "@/components/home/PerformanceBanner";
 import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
+import { ShareCardTile } from "@/components/home/ShareCardTile";
 import type { DropFeedItem } from "@/components/home-page";
+import { reshareDrop } from "@/lib/reshare-drop";
 
 // Slice 4a — 역할 홈 골격. 만들기 폼(HomePageV3) 대체: 홈 = 역할 랜딩 + 다이제스트.
 //   카드 생성 진입은 스튜디오 탭으로 일원화 — 홈엔 "카드 만들기" CTA 없음(중복 제거).
@@ -141,11 +144,14 @@ export function RoleHome({
   onGoReservations: () => void;
   onGoProposals: () => void;
 }) {
+  const navigate = useNavigate();
   // 유저 홈(비사업자) — 성과 배너 + 활동 세그먼트(내 공유 | 구독). 상인은 아래 merchant 홈.
   //   추천영상→탐색·받은쿠폰→나 탭 이관(유저홈에서 제거). 빈상태는 세그먼트가 자체 처리.
   if (!isBusiness || !merchant) {
     const followedDrops = user?.followedDrops ?? [];
     const sentDrops = user?.sentDrops ?? [];
+    // 추천 카드 — loader(getDiscoverDrops)에서 이미 옴. 새 데이터 배선 0. 최신순 단일(HOT 토글은 Phase3).
+    const recommendedDrops = user?.recommendedDrops ?? [];
     return (
       <div className="mx-auto max-w-md space-y-6 px-6 pt-6 pb-4">
         <header>
@@ -155,6 +161,35 @@ export function RoleHome({
 
         {/* 성과 배너 — 이번 달 내 성과(placeholder, 데이터 배선 추후). 순수 ADDITIVE 최상단. */}
         <PerformanceBanner conversionCount={0} dropyAmount={0} />
+
+        {/* 오늘 공유하기 좋은 카드 — 추천 영상(있을 때만) 2열 그리드. 카드=공유(카톡 재공유)·열기. */}
+        {recommendedDrops.length > 0 ? (
+          <section>
+            <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
+              <Flame className="size-4" strokeWidth={2} />
+              오늘 공유하기 좋은 카드
+            </h2>
+            <div className="grid grid-cols-2 gap-2">
+              {recommendedDrops.map((drop) => (
+                <ShareCardTile
+                  key={drop.shareUuid}
+                  drop={drop}
+                  onShare={() =>
+                    void reshareDrop({
+                      shareUuid: drop.shareUuid,
+                      title: drop.title,
+                      imageUrl: drop.videoThumbnailUrl,
+                      purpose: drop.intent,
+                    })
+                  }
+                  onClick={() =>
+                    void navigate({ to: "/d/$shareUuid", params: { shareUuid: drop.shareUuid } })
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* 활동 세그먼트 — 내 공유 / 구독 토글. 빈상태 자체 처리. */}
         <HomeActivitySegment sentDrops={sentDrops} followedDrops={followedDrops} />
