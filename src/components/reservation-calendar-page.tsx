@@ -247,7 +247,9 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
   range_middle: "!bg-transparent rounded-lg",
   // v7.2 hover — Button(ghost variant) 의 hover:bg-accent(보라) 차단.
   // 셀 hover 시 연한 초록(#f0fdf4) + 초록 글자(#16a34a) 로 톤 일관.
-  day_button: "hover:!bg-surface",
+  // 글씨색 명시 — navy 셸(DropCardShell text-white) 상속 차단(밝은 bg-bg 위 흰글씨 묻힘 수정).
+  //   선택/range 는 ui/calendar L168 data-[selected]:text-primary-foreground(속성 선택자=더 구체적)가 우선.
+  day_button: "text-text-strong hover:!bg-surface",
   // v7.2 — 보라(bg-accent) 잔여 제거 + 초록 ring-2 통일 + 모든 셀 rounded-lg.
   today: "!bg-transparent ring-1 ring-inset ring-text-subtle rounded-lg",
   outside: "text-text-subtle opacity-40",
