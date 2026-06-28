@@ -910,6 +910,17 @@ export function CardStudioPage() {
                   </div>
                 ) : null}
 
+                {/* 거울 5b' — 손님 인라인 "쿠폰 받기"(L1367, isCombined=예약+쿠폰 통합, 흰배경 보조버튼 cta-coupon-only)를
+                    시각 stub 으로 미러. div(onClick 없음 = 시각만). 게이트 = 통합(쿠폰 선택 + 캘린더 장착) = 손님 isCombined.
+                    위 sticky-미러 stub(쿠폰 단독, !applied["calendar"])과 applied["calendar"] 유무로 배타. */}
+                {applied["coupon"] && selectedCouponId && applied["calendar"] ? (
+                  <div className="mx-auto w-full max-w-[480px] px-6 pt-3">
+                    <div className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-bold tracking-ko text-[#0A0A0A]">
+                      쿠폰 받기
+                    </div>
+                  </div>
+                ) : null}
+
                 {/* 거울 5a — 손님 공유 푸터(이 영상으로 만들기·링크 복사·친구에게 보내기·고지·신고)
                     시각 stub. 전부 div(onClick·href 없음 = 시각만). 손님은 페이지 레벨에서 실작동. */}
                 <section className="mx-auto w-full max-w-[480px] space-y-3 px-6 pt-4">
