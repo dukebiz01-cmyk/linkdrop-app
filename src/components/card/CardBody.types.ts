@@ -38,6 +38,9 @@ export type CardBodyProps = {
   title: string;
   /** 부제 — 메이커 한마디(스튜디오) / 영상 제목·부제(손님). */
   tagline: string;
+  /** 한마디 빈 상태 안내 — tagline 비었을 때 흐린 안내로 tagline 슬롯에 표시(스튜디오 authoring 전용).
+   *  손님(info-drop)은 미주입 → 빈 안내 안 뜸(실제 tagline 만). */
+  taglinePlaceholder?: string;
   /** 셀링포인트 불릿 — pickedPoints(스튜디오) / keyPoints(손님). */
   sellingPoints: string[];
   /** 쿠폰 — CouponPreview 계약. 없으면 null. */

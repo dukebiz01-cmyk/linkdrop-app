@@ -23,6 +23,7 @@ export function CardBody({
   video,
   title,
   tagline,
+  taglinePlaceholder,
   sellingPoints,
   coupon,
   store,
@@ -52,8 +53,13 @@ export function CardBody({
       {/* 제목 — 매장명/영상헤드라인. 빈 문자열이면 안 그림. */}
       {title ? <h3 className="mt-4 text-xl font-bold tracking-tight">{title}</h3> : null}
 
-      {/* 태그라인 — 한마디/부제. 빈 문자열이면 안 그림(placeholder 는 호출부). */}
-      {tagline ? <p className="mt-0.5 text-[13px] text-white/75">{tagline}</p> : null}
+      {/* 태그라인 — 한마디/부제. 채워지면 실제 tagline, 비고 taglinePlaceholder 주입 시 흐린 안내(스튜디오 전용).
+          손님은 taglinePlaceholder 미주입 → 둘 다 없으면 안 그림. */}
+      {tagline ? (
+        <p className="mt-0.5 text-[13px] text-white/75">{tagline}</p>
+      ) : taglinePlaceholder ? (
+        <p className="mt-0.5 text-[13px] text-white/40">{taglinePlaceholder}</p>
+      ) : null}
 
       {/* 셀링포인트 — 배열(SellingPoints 가 내부 map, 빈 배열이면 null). */}
       <SellingPoints points={sellingPoints} />

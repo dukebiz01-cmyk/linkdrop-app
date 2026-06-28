@@ -828,6 +828,7 @@ export function CardStudioPage() {
                   video={selectedVideo}
                   title={store?.display_name ?? ""}
                   tagline={tagline}
+                  taglinePlaceholder="한마디를 입력하면 여기 표시돼요"
                   sellingPoints={pickedPoints}
                   coupon={null}
                   couponBlock={couponBlockPreview}
@@ -864,10 +865,8 @@ export function CardStudioPage() {
                   </div>
                 )}
 
-                {/* 한마디 placeholder — 비면 흐린 안내(문구 그대로). */}
-                {!tagline && (
-                  <p className="mt-0.5 text-[13px] text-white/40">한마디를 입력하면 여기 표시돼요</p>
-                )}
+                {/* 한마디 placeholder — CardBody tagline 슬롯으로 이관(taglinePlaceholder).
+                    제목 바로 밑(채워진 tagline 과 같은 위치)에 표시 → 거울 위치 정합. */}
 
                 {/* 행동영역 placeholder — 쿠폰/연락/목적 미장착 안내(문구·게이트 그대로). */}
                 <div className="mt-4 space-y-2">
