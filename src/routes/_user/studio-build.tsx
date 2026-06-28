@@ -42,6 +42,9 @@ import {
   MessageSquare,
   MapPin,
   ExternalLink,
+  Copy,
+  MessageCircle,
+  Flag,
 } from "lucide-react";
 
 // =============================================================================
@@ -896,6 +899,30 @@ export function CardStudioPage() {
                     </div>
                   )}
                 </div>
+
+                {/* 거울 5a — 손님 공유 푸터(이 영상으로 만들기·링크 복사·친구에게 보내기·고지·신고)
+                    시각 stub. 전부 div(onClick·href 없음 = 시각만). 손님은 페이지 레벨에서 실작동. */}
+                <section className="mx-auto w-full max-w-[480px] space-y-3 px-6 pt-4">
+                  <div className="flex items-stretch gap-2">
+                    <div className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A]">
+                      <Plus className="size-5" strokeWidth={2} />이 영상으로 만들기
+                    </div>
+                    <div className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A]">
+                      <Copy className="size-5" strokeWidth={2} />링크 복사
+                    </div>
+                    <div className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl bg-[#0A0A0A] px-2 py-2 text-xs font-semibold tracking-ko text-white">
+                      <MessageCircle className="size-5" strokeWidth={2} />친구에게 보내기
+                    </div>
+                  </div>
+                  <p className="text-center text-[10px] tracking-ko text-white/50">
+                    본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
+                  </p>
+                  <div className="flex justify-center">
+                    <div className="inline-flex items-center gap-1 text-[11px] tracking-ko text-white/70 underline">
+                      <Flag className="size-3.5" strokeWidth={2} />문제 신고
+                    </div>
+                  </div>
+                </section>
             </DropCardShell>
           </div>
         </section>
