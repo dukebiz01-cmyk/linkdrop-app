@@ -17,6 +17,7 @@ import {
   Link as LinkIcon,
   Palette,
   Ticket,
+  ShoppingBag,
   Rocket,
   TrendingUp,
   Megaphone,
@@ -132,6 +133,15 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     icon: Ticket,
     category: "purpose",
     power: 18,
+  },
+  {
+    id: "product",
+    label: "상품 판매",
+    desc: "상품 한 개 골라 바로 판매",
+    detail: "내가 파는 상품을 카드에 붙여 바로 구매로 이어요. 사진·가격·구매 버튼이 한 장에 담겨요.",
+    icon: ShoppingBag,
+    category: "purpose",
+    power: 20,
   },
   {
     id: "image",
@@ -515,9 +525,11 @@ export function CardStudioPage() {
       // 예약 장착 — 캘린더 블록 장착이면 예약 의도. 슬롯은 캘린더 인라인이 매장 단위로 이미 저장,
       //   손님 화면이 drop.partner_id 로 get_available_slots 조회(슬롯 0개여도 purpose="예약" 유효).
       const hasReservation = !!applied["calendar"];
-      // purpose 우선순위: 예약 > 쿠폰 > 정보. 예약+쿠폰 = "예약"(우선) + 쿠폰은 funnel_coupon_id
-      //   로 같이 붙는 통합카드(손님 화면 isReservation + isCoupon&&partnerId).
-      const dropPurpose = hasReservation ? "예약" : hasCoupon ? "쿠폰" : "정보";
+      // 상품 장착 — product 블록 켜면 구매(판매) 의도. 상품 데이터·blocks 운반은 다음 단계(S3/S4).
+      const hasProduct = !!applied["product"];
+      // purpose 우선순위: 구매 > 예약 > 쿠폰 > 정보. 상품 장착 시 구매 최우선(판매 카드).
+      //   예약+쿠폰 = "예약"(우선) + 쿠폰은 funnel_coupon_id 로 같이 붙는 통합카드(손님 화면 isReservation + isCoupon&&partnerId).
+      const dropPurpose = hasProduct ? "구매" : hasReservation ? "예약" : hasCoupon ? "쿠폰" : "정보";
       const res = await fetch("/api/drops", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
