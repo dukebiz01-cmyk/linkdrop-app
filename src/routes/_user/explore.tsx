@@ -7,37 +7,40 @@ import { getDiscoverDrops } from "@/lib/feed-queries";
 import { reshareDrop } from "@/lib/reshare-drop";
 import type { DropFeedItem } from "@/components/home-page";
 
-// 탐색 = 발견 전용(pull). 공개 published 카드를 [정보·쿠폰·커머스] 3탭으로.
-//   탭별 서버 필터(purpose) — 카드 늘어도 클라가 안 터짐. 3탭 미리 로드(전환 즉각).
-//   정렬 = 최신순 단일(published_at desc, getDiscoverDrops 기본).
+// 탐색 = 발견 전용(pull). 공개 published 카드를 [전체·정보·쿠폰·커머스] 4탭으로.
+//   탭별 서버 필터(purpose) — 카드 늘어도 클라가 안 터짐. 4탭 미리 로드(전환 즉각).
+//   전체 = 필터 없는 공개 카드 전부(맨 앞·기본). 정렬 = 최신순 단일(published_at desc, getDiscoverDrops 기본).
 type ExploreLoaderData = {
+  all: DropFeedItem[];
   info: DropFeedItem[];
   coupon: DropFeedItem[];
   commerce: DropFeedItem[];
 };
 
-type ExploreTab = "info" | "coupon" | "commerce";
+type ExploreTab = "all" | "info" | "coupon" | "commerce";
 
 export const Route = createFileRoute("/_user/explore")({
   head: () => ({ meta: [{ title: "탐색" }] }),
   loader: async (): Promise<ExploreLoaderData> => {
-    const empty: ExploreLoaderData = { info: [], coupon: [], commerce: [] };
+    const empty: ExploreLoaderData = { all: [], info: [], coupon: [], commerce: [] };
     const supabase = await getAuthClient();
     if (!supabase) return empty;
     const { data: sess } = await supabase.auth.getSession();
     if (!sess.session?.user.id) return empty;
-    // 3탭 병렬 로드. 쿠폰 탭 = 쿠폰·예약(혜택) + 매장 연결(bizOnly).
-    const [info, coupon, commerce] = await Promise.all([
+    // 4탭 병렬 로드. 전체 = opts 없이(필터 없음 = 공개 카드 전부). 쿠폰 탭 = 쿠폰·예약(혜택) + 매장 연결(bizOnly).
+    const [all, info, coupon, commerce] = await Promise.all([
+      getDiscoverDrops(supabase),
       getDiscoverDrops(supabase, { purposes: ["정보"] }),
       getDiscoverDrops(supabase, { purposes: ["쿠폰", "예약"], bizOnly: true }),
       getDiscoverDrops(supabase, { purposes: ["구매"] }),
     ]);
-    return { info, coupon, commerce };
+    return { all, info, coupon, commerce };
   },
   component: ExplorePage,
 });
 
 const TABS: { key: ExploreTab; label: string; empty: string }[] = [
+  { key: "all", label: "전체", empty: "아직 공개된 카드가 없어요." },
   { key: "info", label: "정보", empty: "아직 공개된 정보 카드가 없어요." },
   { key: "coupon", label: "쿠폰", empty: "아직 공개된 쿠폰 카드가 없어요." },
   { key: "commerce", label: "커머스", empty: "아직 공개된 상품 카드가 없어요." },
@@ -46,7 +49,7 @@ const TABS: { key: ExploreTab; label: string; empty: string }[] = [
 function ExplorePage() {
   const data = Route.useLoaderData();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<ExploreTab>("info");
+  const [tab, setTab] = useState<ExploreTab>("all");
 
   function handleOpenDrop(shareUuid: string) {
     navigate({ to: "/d/$shareUuid", params: { shareUuid } });
@@ -64,7 +67,7 @@ function ExplorePage() {
         </p>
       </header>
 
-      {/* 3탭 탭바 — 활성=밑줄+검정, 비활성=그레이. */}
+      {/* 4탭 탭바 — 활성=밑줄+검정, 비활성=그레이. */}
       <div className="mb-3 flex items-center gap-5 border-b border-[#E5E5E5]">
         {TABS.map((t) => {
           const on = tab === t.key;
