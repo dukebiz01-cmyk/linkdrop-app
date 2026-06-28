@@ -36,6 +36,7 @@ import {
   Calendar,
   Sprout,
   ExternalLink,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AiPriceComparisonCard, type PriceOfferRow } from "@/components/ai-price-comparison-card";
@@ -1661,10 +1662,15 @@ export function InfoDropPage({
           </section>
         )}
 
-        {/* v7.2 — 보조 연락 row. 쿠폰/예약 드롭에만, 매장 정보 있을 때만.
-            전화/문자/길찾기 가로 아이콘. 60대 친화 큰 터치. */}
+        {/* v7.2 — 보조 연락(전화/문자/길찾기). "정보 보기" ButtonBlock 펼침 뒤로(칩·handleCtaClick 0터치).
+            쿠폰/예약 드롭에만, 매장 정보 있을 때만. 60대 친화 큰 터치. */}
         {(resolvedVariant === "coupon" || isReservation) &&
           (hasPhone || Boolean(safeLocal.address?.trim() || safeLocal.name?.trim())) && (
+            <ButtonBlock
+              label="정보 보기"
+              icon={<Info className="h-4 w-4" strokeWidth={2} />}
+              defaultExpanded={false}
+              expandedContent={
             <section data-testid="secondary-contact-row" className="flex items-stretch gap-2">
               {hasPhone ? (
                 <button
@@ -1700,6 +1706,8 @@ export function InfoDropPage({
                 </button>
               ) : null}
             </section>
+              }
+            />
           )}
 
         {/* c-1 — 순수 쿠폰 카드 + 네이버형 매장(reservation_url 보유) 일 때만 보조 예약 링크.
