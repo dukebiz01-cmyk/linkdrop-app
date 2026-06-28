@@ -8,7 +8,7 @@ import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
 import { CardBody } from "@/components/card/CardBody";
-import { ButtonBlock } from "@/components/card/ButtonBlock";
+import { CouponPreview } from "@/components/receiver/CouponPreview";
 import type { VideoSlot } from "@/components/card/CardBody.types";
 import {
   Calendar,
@@ -39,6 +39,7 @@ import {
   Search,
   RefreshCw,
   Phone,
+  MessageSquare,
   MapPin,
   ExternalLink,
 } from "lucide-react";
@@ -654,6 +655,54 @@ export function CardStudioPage() {
   const activeApplied = !!applied[activeBlock.id];
   const activeLocked = !!activeBlock.isPaid && score < ENHANCE_UNLOCK;
 
+  // 3c 거울 — 미리보기 하단 블록 stub(손님 CardBody 블록 슬롯과 동형). preview=시각만(onClick 0).
+  //   CardBody 가 reservation/contact 를 "예약 날짜 선택"/"정보 보기" ButtonBlock 으로 래핑(mode 무관).
+  // 쿠폰 stub — 손님 benefitEventSection 쿠폰 부분 동형(heading+CouponPreview+note). 진행이벤트는 스튜디오에 없음.
+  const couponBlockPreview =
+    selectedCouponId && selectedCoupon ? (
+      <section className="space-y-3">
+        <div className="space-y-2">
+          <h2 className="text-sm font-bold tracking-ko text-white">예약하면 받는 혜택</h2>
+          <div className="space-y-3">
+            <CouponPreview coupon={{ ...selectedCoupon, title: selectedCoupon.title ?? "" }} />
+            <p className="text-xs font-medium tracking-ko text-white/70">
+              예약을 신청하면 쿠폰이 지갑에 담겨요.
+            </p>
+          </div>
+        </div>
+      </section>
+    ) : null;
+  // 연락 stub — 손님 contactRow 동형(전화/문자/길찾기). 단 div(onClick 0 = preview 시각만).
+  const contactBlockPreview =
+    applied["link"] && store && (store.contact_phone || store.address || store.reservation_url) ? (
+      <section data-testid="secondary-contact-row" className="flex items-stretch gap-2">
+        {store.contact_phone ? (
+          <div className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A]">
+            <Phone className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+            전화
+          </div>
+        ) : null}
+        {store.contact_phone ? (
+          <div className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A]">
+            <MessageSquare className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+            문자
+          </div>
+        ) : null}
+        {store.address ? (
+          <div className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A]">
+            <MapPin className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+            길찾기
+          </div>
+        ) : null}
+      </section>
+    ) : null;
+  // 예약 stub — 정적 안내(실 캘린더 RPC X). CardBody 가 "예약 날짜 선택" ButtonBlock 으로 래핑.
+  const reservationBlockPreview = applied["calendar"] ? (
+    <div className="rounded-xl border border-white/20 bg-white/5 px-3 py-4 text-center text-[13px] text-white/70">
+      손님이 여기서 예약 날짜를 골라요
+    </div>
+  ) : null;
+
   return (
     <div className="min-h-screen bg-[#FAFAFA] pb-[150px]">
       <style>{STUDIO_BUILD_CSS}</style>
@@ -777,22 +826,10 @@ export function CardStudioPage() {
                   title={store?.display_name ?? ""}
                   tagline={tagline}
                   sellingPoints={pickedPoints}
-                  coupon={
-                    selectedCouponId && selectedCoupon
-                      ? { ...selectedCoupon, title: selectedCoupon.title ?? "" }
-                      : null
-                  }
-                  store={
-                    // 연락 칩은 link 블록 장착 시에만(기존 applied["link"] 게이트 보존) → 미장착이면 store=null.
-                    applied["link"] && store
-                      ? {
-                          name: store.display_name,
-                          phone: store.contact_phone ?? undefined,
-                          address: store.address ?? undefined,
-                          reservationUrl: store.reservation_url,
-                        }
-                      : null
-                  }
+                  coupon={null}
+                  couponBlock={couponBlockPreview}
+                  reservationBlock={reservationBlockPreview}
+                  contactBlock={contactBlockPreview}
                   purpose={
                     applied["calendar"] ? "예약" : applied["coupon"] && selectedCouponId ? "쿠폰" : "정보"
                   }
@@ -831,20 +868,7 @@ export function CardStudioPage() {
 
                 {/* 행동영역 placeholder — 쿠폰/연락/목적 미장착 안내(문구·게이트 그대로). */}
                 <div className="mt-4 space-y-2">
-                  {/* 거울 1c — applied["calendar"] 장착 시 손님(1b)과 같은 ButtonBlock 닫힌 버튼.
-                      preview = 실 캘린더 RPC 안 돌림, 펼치면 정적 안내(presentational 보존). */}
-                  {applied["calendar"] && (
-                    <ButtonBlock
-                      label="예약 날짜 선택"
-                      icon={<Calendar className="h-4 w-4" strokeWidth={2} />}
-                      defaultExpanded={false}
-                      expandedContent={
-                        <div className="rounded-xl border border-white/20 bg-white/5 px-3 py-4 text-center text-[13px] text-white/70">
-                          손님이 여기서 예약 날짜를 골라요
-                        </div>
-                      }
-                    />
-                  )}
+                  {/* 거울 1c — 예약 "예약 날짜 선택" ButtonBlock 은 CardBody reservationBlock 로 이관(3c). 여기선 미렌더. */}
                   {applied["coupon"] && !(selectedCouponId && selectedCoupon) && (
                     <div className="animate-slide-up space-y-2">
                       {coupons.length > 0 ? (
