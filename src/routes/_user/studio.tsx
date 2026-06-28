@@ -69,6 +69,8 @@ type Tool = {
   purpose?: WizardPurpose;
   /** 비즈니스(approved 파트너) 전용 — 아니면 잠금 + 사업자 등록 유도(/partner/register). */
   gated?: boolean;
+  /** 사업자(isBusiness)면 거울 빌더(studio-build)로, 아니면 기존 create-wizard 흐름 유지(창작자=위저드). */
+  studioForBiz?: boolean;
 };
 
 type ToolSection = { title: string; tools: Tool[] };
@@ -78,8 +80,8 @@ const SECTIONS: ToolSection[] = [
     title: "새 카드 만들기",
     tools: [
       { label: "영상 가져오기", Icon: Video, to: "/create-wizard" }, // 기존 제작 흐름 연결(목적 미지정)
-      { label: "정보", Icon: Info, to: "/create-wizard", purpose: "info" },
-      { label: "쿠폰·예약", Icon: Ticket, to: "/create-wizard", purpose: "coupon", gated: true },
+      { label: "정보", Icon: Info, to: "/create-wizard", purpose: "info", studioForBiz: true },
+      { label: "쿠폰·예약", Icon: Ticket, to: "/create-wizard", purpose: "coupon", gated: true, studioForBiz: true },
       { label: "커머스", Icon: ShoppingBag, to: "/create-wizard", purpose: "purchase", gated: true },
     ],
   },
@@ -143,6 +145,17 @@ function ToolItem({ tool, isBusiness }: { tool: Tool; isBusiness: boolean }) {
           사업자 전용
         </span>
       </button>
+    );
+  }
+
+  // 사업자(approved 파트너) = 거울 빌더(studio-build)로. 창작자(비즈니스 아님)는 아래 create-wizard 흐름 유지.
+  //   studio-build 진입은 search param 없이 — 빌더가 매장 컨텍스트를 자체 loader 로 로드(?apply 등 미사용).
+  //   gate(위)를 통과한 뒤이므로 비-사업자 gated 타일은 여기 도달 안 함(잠금 유지).
+  if (tool.studioForBiz && isBusiness) {
+    return (
+      <Link to="/studio-build" className={TOOL_BTN_CLASS}>
+        <ToolInner Icon={tool.Icon} label={tool.label} />
+      </Link>
     );
   }
 
