@@ -850,6 +850,120 @@ export function InfoDropPage({
   //   sticky "쿠폰 받기"는 쿠폰 드롭(isCoupon)에서만. (주석상 "정보/구매/상담 드롭 = sticky 없음" 의도 강제.)
   const hasStickyBar = Boolean(funnelCoupon && onReserveAndClaim && !isCombined && isCoupon);
 
+  // 3b-1 — 예약/쿠폰 하단 블록 const 호이스팅(IIFE → 컴포넌트 스코프). 콘텐츠 0변화, 위치만.
+  //   CardBody 주입(3b-3)이 쿠폰(L1030)·예약(L1076) 호출부에서 이 const 들을 참조하기 위함.
+  //   IIFE 는 셸만 남겨 return JSX·순서·조건 그대로(아래 showReservationCalendar 블록).
+  // v7.1 — partnerId 가 있으면 매장 슬롯 가용일도 표시(makerAvailableDates 와 공존).
+  // makerAvailableDates 비어도 partnerId 있으면 캘린더 카드를 보여주어
+  // 업주가 마킹한 날을 확인 가능.
+  // 쿠폰 변형은 partnerId 만 신호 (위 게이트에서 이미 보장).
+  const showCalendar = isCoupon
+    ? Boolean(partnerId)
+    : hasReservationDates || Boolean(partnerId);
+  const calendarPanel = showCalendar ? (
+    <ReservationCalendarClient
+      partnerName={safeLocal.name}
+      campgroundInfo={{ name: safeLocal.name }}
+      makerAvailableDates={reservationDates}
+      partnerId={partnerId}
+      initialSlots={initialSlots}
+      readOnly={isReshare}
+      reserveCtaLabel={reserveCtaLabel}
+      calendarMode={calendarMode}
+      onCheckAvailability={(selection) => {
+        // A안 직접예약 — 캘린더 [예약하기] = 인앱 신청 시트. 선택한 날짜·인원을
+        // 부모(d.$shareUuid)로 올려 prefill + 로그인 게이트 + 시트 오픈.
+        onReservationRequest?.(selection);
+      }}
+      onSecondaryAction={(action) => handleCtaClick(action)}
+    />
+  ) : (
+    <section className="rounded-2xl border border-border bg-surface p-4">
+      <p className="text-sm font-medium tracking-ko text-text-muted">
+        업주가 아직 가능한 날짜를 마킹하지 않았어요. 아래 [예약하기] 탭으로 예약 문의를
+        보낼 수 있어요.
+      </p>
+    </section>
+  );
+
+  // 예약 활성 버튼은 캘린더 내부(reservation-calendar-page)의 단일 [예약하기]로 일원화
+  //   (중복 제거). 여기선 슬롯 흐름이 깨졌을 때(onReservationRequest 부재) 안전 안내 1줄만.
+  const reserveNotice = !onReservationRequest ? (
+    <p className="text-xs font-medium tracking-ko text-white/70">
+      예약 신청을 받을 수 없는 매장이에요.
+    </p>
+  ) : null;
+
+  // 빌링 X 고지 — Duke 요구. 결제는 매장에서. 예약 ButtonBlock 펼침 안으로 흡수(자기완결).
+  const billingNotice = (
+    <p
+      data-testid="billing-notice"
+      className="text-[12px] leading-relaxed tracking-ko text-white/55"
+    >
+      결제는 매장에서 직접 진행돼요. 자세한 내용은 매장에 문의해 주세요.
+    </p>
+  );
+
+  const couponPanel = funnelCoupon ? (
+    <div className="space-y-3">
+      <CouponPreview coupon={funnelCoupon} />
+      <p className="text-xs font-medium tracking-ko text-white/70">
+        예약을 신청하면 쿠폰이 지갑에 담겨요.
+      </p>
+    </div>
+  ) : null;
+
+  // CC#2 (a) — 진행 이벤트 요약(makerAvailableDates 의 eventTitle/eventDescription).
+  //   캘린더 내부 상세 리스트 카드(reservation-calendar-page)는 데이터·소스 그대로 유지.
+  //   여기선 "진행 이벤트" 요약만 병치(merge 아님). 둘은 독립 소스.
+  const eventItems = (reservationDates ?? []).filter(
+    (d) => Boolean(d.eventTitle?.trim()) || Boolean(d.eventDescription?.trim()),
+  );
+  const hasEvents = eventItems.length > 0;
+
+  // CC#2 (a) — "예약하면 받는 혜택 / 진행 이벤트" 합성 섹션.
+  //   혜택 = funnelCoupon(기존 couponPanel 재사용) · 이벤트 = makerAvailableDates 요약.
+  //   두 소스 독립 → 조건부 병치(쿠폰만/이벤트만/둘 다 모두 정상, 둘 다 없으면 미렌더).
+  const benefitEventSection =
+    funnelCoupon || hasEvents ? (
+      <section data-testid="benefit-event-section" className="space-y-3">
+        {funnelCoupon ? (
+          <div className="space-y-2">
+            <h2 className="text-sm font-bold tracking-ko text-white">
+              예약하면 받는 혜택
+            </h2>
+            {couponPanel}
+          </div>
+        ) : null}
+        {hasEvents ? (
+          <div className="space-y-2">
+            <h2 className="text-sm font-bold tracking-ko text-white">
+              진행 이벤트
+            </h2>
+            <ul className="space-y-2">
+              {eventItems.map((item) => (
+                <li
+                  key={item.id}
+                  className="rounded-2xl border border-[#E2E8F0] bg-white p-4"
+                >
+                  {item.eventTitle?.trim() ? (
+                    <p className="text-sm font-bold tracking-ko text-[#0F172A]">
+                      {item.eventTitle}
+                    </p>
+                  ) : null}
+                  {item.eventDescription?.trim() ? (
+                    <p className="mt-1 text-xs font-medium tracking-ko text-[#64748B]">
+                      {item.eventDescription}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
+    ) : null;
+
   return (
     <div
       className={cn(
@@ -1176,117 +1290,6 @@ export function InfoDropPage({
             v7.2 쿠폰 드롭 = [쿠폰 | 예약가능 캘린더] 2탭. 정보/구매/상담 진입 X. */}
         {showReservationCalendar &&
           (() => {
-
-            // v7.1 — partnerId 가 있으면 매장 슬롯 가용일도 표시(makerAvailableDates 와 공존).
-            // makerAvailableDates 비어도 partnerId 있으면 캘린더 카드를 보여주어
-            // 업주가 마킹한 날을 확인 가능.
-            // 쿠폰 변형은 partnerId 만 신호 (위 게이트에서 이미 보장).
-            const showCalendar = isCoupon
-              ? Boolean(partnerId)
-              : hasReservationDates || Boolean(partnerId);
-            const calendarPanel = showCalendar ? (
-              <ReservationCalendarClient
-                partnerName={safeLocal.name}
-                campgroundInfo={{ name: safeLocal.name }}
-                makerAvailableDates={reservationDates}
-                partnerId={partnerId}
-                initialSlots={initialSlots}
-                readOnly={isReshare}
-                reserveCtaLabel={reserveCtaLabel}
-                calendarMode={calendarMode}
-                onCheckAvailability={(selection) => {
-                  // A안 직접예약 — 캘린더 [예약하기] = 인앱 신청 시트. 선택한 날짜·인원을
-                  // 부모(d.$shareUuid)로 올려 prefill + 로그인 게이트 + 시트 오픈.
-                  onReservationRequest?.(selection);
-                }}
-                onSecondaryAction={(action) => handleCtaClick(action)}
-              />
-            ) : (
-              <section className="rounded-2xl border border-border bg-surface p-4">
-                <p className="text-sm font-medium tracking-ko text-text-muted">
-                  업주가 아직 가능한 날짜를 마킹하지 않았어요. 아래 [예약하기] 탭으로 예약 문의를
-                  보낼 수 있어요.
-                </p>
-              </section>
-            );
-
-            // 예약 활성 버튼은 캘린더 내부(reservation-calendar-page)의 단일 [예약하기]로 일원화
-            //   (중복 제거). 여기선 슬롯 흐름이 깨졌을 때(onReservationRequest 부재) 안전 안내 1줄만.
-            const reserveNotice = !onReservationRequest ? (
-              <p className="text-xs font-medium tracking-ko text-white/70">
-                예약 신청을 받을 수 없는 매장이에요.
-              </p>
-            ) : null;
-
-            // 빌링 X 고지 — Duke 요구. 결제는 매장에서. 예약 ButtonBlock 펼침 안으로 흡수(자기완결).
-            const billingNotice = (
-              <p
-                data-testid="billing-notice"
-                className="text-[12px] leading-relaxed tracking-ko text-white/55"
-              >
-                결제는 매장에서 직접 진행돼요. 자세한 내용은 매장에 문의해 주세요.
-              </p>
-            );
-
-            const couponPanel = funnelCoupon ? (
-              <div className="space-y-3">
-                <CouponPreview coupon={funnelCoupon} />
-                <p className="text-xs font-medium tracking-ko text-white/70">
-                  예약을 신청하면 쿠폰이 지갑에 담겨요.
-                </p>
-              </div>
-            ) : null;
-
-            // CC#2 (a) — 진행 이벤트 요약(makerAvailableDates 의 eventTitle/eventDescription).
-            //   캘린더 내부 상세 리스트 카드(reservation-calendar-page)는 데이터·소스 그대로 유지.
-            //   여기선 "진행 이벤트" 요약만 병치(merge 아님). 둘은 독립 소스.
-            const eventItems = (reservationDates ?? []).filter(
-              (d) => Boolean(d.eventTitle?.trim()) || Boolean(d.eventDescription?.trim()),
-            );
-            const hasEvents = eventItems.length > 0;
-
-            // CC#2 (a) — "예약하면 받는 혜택 / 진행 이벤트" 합성 섹션.
-            //   혜택 = funnelCoupon(기존 couponPanel 재사용) · 이벤트 = makerAvailableDates 요약.
-            //   두 소스 독립 → 조건부 병치(쿠폰만/이벤트만/둘 다 모두 정상, 둘 다 없으면 미렌더).
-            const benefitEventSection =
-              funnelCoupon || hasEvents ? (
-                <section data-testid="benefit-event-section" className="space-y-3">
-                  {funnelCoupon ? (
-                    <div className="space-y-2">
-                      <h2 className="text-sm font-bold tracking-ko text-white">
-                        예약하면 받는 혜택
-                      </h2>
-                      {couponPanel}
-                    </div>
-                  ) : null}
-                  {hasEvents ? (
-                    <div className="space-y-2">
-                      <h2 className="text-sm font-bold tracking-ko text-white">
-                        진행 이벤트
-                      </h2>
-                      <ul className="space-y-2">
-                        {eventItems.map((item) => (
-                          <li
-                            key={item.id}
-                            className="rounded-2xl border border-[#E2E8F0] bg-white p-4"
-                          >
-                            {item.eventTitle?.trim() ? (
-                              <p className="text-sm font-bold tracking-ko text-[#0F172A]">
-                                {item.eventTitle}
-                              </p>
-                            ) : null}
-                            {item.eventDescription?.trim() ? (
-                              <p className="mt-1 text-xs font-medium tracking-ko text-[#64748B]">
-                                {item.eventDescription}
-                              </p>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </section>
-              ) : null;
 
             // CC#2 (a) 탭 → 스택. ReservationCardTabs(표시-전환 state 만 보유, 라우팅·데이터
             //   로직 없음) 제거하고 패널을 세로 스택으로 보존. variant 별 구성 유지:
