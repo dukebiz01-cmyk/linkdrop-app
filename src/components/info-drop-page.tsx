@@ -834,7 +834,7 @@ export function InfoDropPage({
       return;
     }
     if (ctaId === "coupon" || ctaId === "reserve-coupon") {
-      // phase1 FIX: 둘 다 funnelCoupon 펀넬 시트(예약 INSERT + claim_coupon) 트리거.
+      // phase1 FIX: 둘 다 funnelCoupon claim_coupon 만 트리거(예약 INSERT 없음).
       // onPrimaryAction(=네이버 reservation_url 핸드오프) 이 아니라 onReserveAndClaim
       // 으로 부른다. handleReserveAndClaim 이 funnelCoupon/userId 분기 + 로그인 폴백.
       onReserveAndClaim?.();
@@ -1209,51 +1209,22 @@ export function InfoDropPage({
               </section>
             );
 
-            const reservePanel = (
-              <div className="space-y-3">
-                <section className="rounded-2xl border border-border bg-surface p-4">
-                  <h2 className="text-base font-bold tracking-ko text-text-strong">예약하기</h2>
-                  <p className="mt-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
-                    {hasReservationDates
-                      ? "원하는 날짜를 골라 예약을 진행할 수 있어요."
-                      : "아래 버튼을 눌러 예약 문의를 보낼 수 있어요."}
-                  </p>
-                </section>
+            // 예약 활성 버튼은 캘린더 내부(reservation-calendar-page)의 단일 [예약하기]로 일원화
+            //   (중복 제거). 여기선 슬롯 흐름이 깨졌을 때(onReservationRequest 부재) 안전 안내 1줄만.
+            const reserveNotice = !onReservationRequest ? (
+              <p className="text-xs font-medium tracking-ko text-white/70">
+                예약 신청을 받을 수 없는 매장이에요.
+              </p>
+            ) : null;
 
-                {onReservationRequest ? (
-                  <ActionButton
-                    type="button"
-                    data-testid="cta-reservation-tab"
-                    onClick={() => onReservationRequest?.()}
-                    className={WIZARD_PRIMARY_BUTTON_CLASS}
-                  >
-                    {reserveCtaLabel}
-                  </ActionButton>
-                ) : (
-                  <div className="space-y-2">
-                    <ActionButton
-                      type="button"
-                      data-testid="cta-reservation-tab-disabled"
-                      disabled
-                      aria-disabled
-                      className={WIZARD_PRIMARY_BUTTON_CLASS}
-                    >
-                      {reserveCtaLabel}
-                    </ActionButton>
-                    <p className="text-xs font-medium tracking-ko text-white/70">
-                      예약 신청을 받을 수 없는 드롭이에요.
-                    </p>
-                  </div>
-                )}
-
-                {/* 빌링 X 고지 — Duke 요구. 결제는 매장에서. */}
-                <p
-                  data-testid="billing-notice"
-                  className="text-[11px] leading-relaxed tracking-ko text-white/60"
-                >
-                  결제는 매장에서 직접 진행돼요. 자세한 내용은 매장에 문의해 주세요.
-                </p>
-              </div>
+            // 빌링 X 고지 — Duke 요구. 결제는 매장에서. 예약 ButtonBlock 펼침 안으로 흡수(자기완결).
+            const billingNotice = (
+              <p
+                data-testid="billing-notice"
+                className="text-[12px] leading-relaxed tracking-ko text-white/55"
+              >
+                결제는 매장에서 직접 진행돼요. 자세한 내용은 매장에 문의해 주세요.
+              </p>
             );
 
             const couponPanel = funnelCoupon ? (
@@ -1318,19 +1289,25 @@ export function InfoDropPage({
 
             // CC#2 (a) 탭 → 스택. ReservationCardTabs(표시-전환 state 만 보유, 라우팅·데이터
             //   로직 없음) 제거하고 패널을 세로 스택으로 보존. variant 별 구성 유지:
-            //   coupon = [혜택·이벤트][캘린더] / reservation = [혜택·이벤트][캘린더][예약하기].
+            //   coupon = [혜택·이벤트][캘린더] / reservation = [혜택·이벤트][캘린더(예약하기·결제고지 포함)].
             return (
               <div className="space-y-4">
                 {benefitEventSection}
                 {/* 거울 1b — 항상 펼쳐진 캘린더를 "예약 날짜 선택" 닫힌 버튼 뒤로(제자리 래핑).
+                    펼침 = [캘린더 + (날짜 선택 시)예약하기 + 결제고지] 자기완결 블록.
                     calendarPanel 내부(ReservationCalendarClient·onCheckAvailability·fallback·mounted)는 0터치. */}
                 <ButtonBlock
                   label="예약 날짜 선택"
                   icon={<Calendar className="h-4 w-4" strokeWidth={2} />}
                   defaultExpanded={false}
-                  expandedContent={calendarPanel}
+                  expandedContent={
+                    <div className="space-y-3">
+                      {calendarPanel}
+                      {billingNotice}
+                    </div>
+                  }
                 />
-                {!isCoupon ? reservePanel : null}
+                {!isCoupon ? reserveNotice : null}
                 {/* Phase 1 통합(가-2) — 교집합에서 sticky "쿠폰 받기" 대신 보조 "쿠폰만 받기".
                     예약 없이 claim_coupon 만(기존 onReserveAndClaim 경로 그대로). */}
                 {isCombined && onReserveAndClaim ? (
