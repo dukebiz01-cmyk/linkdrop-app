@@ -1,8 +1,9 @@
-import { Play, Phone, MapPin, ExternalLink } from "lucide-react";
+import { Play, Phone, MapPin, ExternalLink, Calendar, Info } from "lucide-react";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import { SellingPoints } from "@/components/card/SellingPoints";
 import { CouponPreview } from "@/components/receiver/CouponPreview";
 import { CardActionButton } from "@/components/card/CardActionButton";
+import { ButtonBlock } from "@/components/card/ButtonBlock";
 import type { CardBodyProps } from "@/components/card/CardBody.types";
 
 /**
@@ -28,6 +29,9 @@ export function CardBody({
   contactSlot,
   reservationSlot,
   ctaSlot,
+  couponBlock,
+  reservationBlock,
+  contactBlock,
 }: CardBodyProps) {
   return (
     <>
@@ -56,43 +60,65 @@ export function CardBody({
       {/* 셀링포인트 — 배열(SellingPoints 가 내부 map, 빈 배열이면 null). */}
       <SellingPoints points={sellingPoints} />
 
-      {/* 행동영역 — 쿠폰 + 연락. */}
-      <div className="mt-4 space-y-2">
-        {/* 쿠폰 — 현재 단일. ★향후 쿠폰 리스트(append) 시 여기서 map. */}
-        {coupon ? (
+      {/* 행동영역 — 쿠폰 + 예약 + 연락. 균일 스택(손님 정돈 리듬 space-y-6). */}
+      <div className="mt-4 space-y-6">
+        {/* §2-1 하단 블록 슬롯 — container 가 균일 스택으로 주입(신규, 우선).
+            3a: 아무도 안 넘김 → 전부 null → 아래 기존 경로 그대로(동작 0변화). */}
+        {couponBlock ? couponBlock : null}
+        {reservationBlock ? (
+          <ButtonBlock
+            label="예약 날짜 선택"
+            icon={<Calendar className="h-4 w-4" strokeWidth={2} />}
+            defaultExpanded={false}
+            expandedContent={reservationBlock}
+          />
+        ) : null}
+        {contactBlock ? (
+          <ButtonBlock
+            label="정보 보기"
+            icon={<Info className="h-4 w-4" strokeWidth={2} />}
+            defaultExpanded={false}
+            expandedContent={contactBlock}
+          />
+        ) : null}
+
+        {/* 쿠폰(기존) — couponBlock 신규 슬롯 없을 때만(중복 방지). 3d 제거 전까지 유지. */}
+        {!couponBlock && coupon ? (
           <div className="space-y-2">
             <CouponPreview coupon={coupon} />
           </div>
         ) : null}
 
-        {/* 연락 — live=주입 슬롯(실동작 tel:/지도), preview=store 기반 시각 칩(onClick 0). */}
-        {mode === "live"
-          ? (contactSlot ?? null)
-          : store && (store.phone || store.address || store.reservationUrl) ? (
-              <div className="flex gap-2">
-                {store.phone ? (
-                  <CardActionButton
-                    icon={<Phone className="h-3.5 w-3.5" strokeWidth={2} />}
-                    label="전화"
-                  />
-                ) : null}
-                {store.address ? (
-                  <CardActionButton
-                    icon={<MapPin className="h-3.5 w-3.5" strokeWidth={2} />}
-                    label="길찾기"
-                  />
-                ) : null}
-                {store.reservationUrl ? (
-                  <CardActionButton
-                    icon={<ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />}
-                    label="예약"
-                  />
-                ) : null}
-              </div>
-            ) : null}
+        {/* 연락(기존) — contactBlock 없을 때만. live=주입 슬롯(실동작 tel:/지도), preview=store 기반 시각 칩(onClick 0). */}
+        {!contactBlock ? (
+          mode === "live" ? (
+            (contactSlot ?? null)
+          ) : store && (store.phone || store.address || store.reservationUrl) ? (
+            <div className="flex gap-2">
+              {store.phone ? (
+                <CardActionButton
+                  icon={<Phone className="h-3.5 w-3.5" strokeWidth={2} />}
+                  label="전화"
+                />
+              ) : null}
+              {store.address ? (
+                <CardActionButton
+                  icon={<MapPin className="h-3.5 w-3.5" strokeWidth={2} />}
+                  label="길찾기"
+                />
+              ) : null}
+              {store.reservationUrl ? (
+                <CardActionButton
+                  icon={<ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />}
+                  label="예약"
+                />
+              ) : null}
+            </div>
+          ) : null
+        ) : null}
 
-        {/* 예약 캘린더·CTA 실기능 — live 에서만 슬롯 주입(preview 엔 미주입). */}
-        {mode === "live" ? (reservationSlot ?? null) : null}
+        {/* 예약 캘린더·CTA 실기능 — live 에서만 슬롯 주입(preview 엔 미주입). 예약은 reservationBlock 없을 때만. */}
+        {!reservationBlock && mode === "live" ? (reservationSlot ?? null) : null}
         {mode === "live" ? (ctaSlot ?? null) : null}
       </div>
     </>

@@ -59,4 +59,14 @@ export type CardBodyProps = {
   ctaSlot?: ReactNode;
   /** 연락 row 실버튼(전화/문자/길찾기, 손님). */
   contactSlot?: ReactNode;
+
+  // ── §2-1 하단 블록 슬롯 — container 가 균일 스택으로 주입(쿠폰·예약·연락). ──
+  //   전부 optional. 주어지면 CardBody 가 균일 ButtonBlock 스택으로 그림(reservation/contact 는
+  //   "예약 날짜 선택"/"정보 보기" ButtonBlock 으로 래핑). 미주입이면 기존 coupon/슬롯 경로 유지.
+  /** 쿠폰 블록 — 그대로 렌더(이미 카드형). 없으면 기존 coupon prop 경로. */
+  couponBlock?: ReactNode | null;
+  /** 예약 블록 — "예약 날짜 선택" ButtonBlock 펼침 콘텐츠로 주입. */
+  reservationBlock?: ReactNode | null;
+  /** 연락 블록 — "정보 보기" ButtonBlock 펼침 콘텐츠로 주입. */
+  contactBlock?: ReactNode | null;
 };
