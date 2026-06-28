@@ -900,6 +900,16 @@ export function CardStudioPage() {
                   )}
                 </div>
 
+                {/* 거울 5b — 손님 sticky "쿠폰 받기"(fixed bottom-0)를 인라인 시각 stub 으로 미러.
+                    div(onClick 없음 = 시각만). 게이트 = 쿠폰 단독(쿠폰 선택 + 캘린더 미장착) = 손님 !isCombined && isCoupon. */}
+                {applied["coupon"] && selectedCouponId && !applied["calendar"] ? (
+                  <div className="mx-auto w-full max-w-[480px] px-6 pt-3">
+                    <div className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white">
+                      <span className="truncate">쿠폰 받기</span>
+                    </div>
+                  </div>
+                ) : null}
+
                 {/* 거울 5a — 손님 공유 푸터(이 영상으로 만들기·링크 복사·친구에게 보내기·고지·신고)
                     시각 stub. 전부 div(onClick·href 없음 = 시각만). 손님은 페이지 레벨에서 실작동. */}
                 <section className="mx-auto w-full max-w-[480px] space-y-3 px-6 pt-4">
