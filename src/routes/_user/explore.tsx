@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Clock } from "lucide-react";
+import { Clock, LayoutGrid, LayoutList } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
-import { DropFeedCard } from "@/components/drop-feed-card";
+import { ShareCardTile } from "@/components/home/ShareCardTile";
 import { getDiscoverDrops } from "@/lib/feed-queries";
 import { reshareDrop } from "@/lib/reshare-drop";
 import type { DropFeedItem } from "@/components/home-page";
@@ -43,13 +43,15 @@ const TABS: { key: ExploreTab; label: string; empty: string }[] = [
   { key: "all", label: "전체", empty: "아직 공개된 카드가 없어요." },
   { key: "info", label: "정보", empty: "아직 공개된 정보 카드가 없어요." },
   { key: "coupon", label: "쿠폰", empty: "아직 공개된 쿠폰 카드가 없어요." },
-  { key: "commerce", label: "커머스", empty: "아직 공개된 상품 카드가 없어요." },
+  { key: "commerce", label: "상품판매", empty: "아직 공개된 상품 카드가 없어요." },
 ];
 
 function ExplorePage() {
   const data = Route.useLoaderData();
   const navigate = useNavigate();
   const [tab, setTab] = useState<ExploreTab>("all");
+  // 보기 모드 — 그리드(2열) / 리스트(1열). 세션 state 만(localStorage 미사용). 기본 = 그리드.
+  const [view, setView] = useState<"grid" | "list">("grid");
 
   function handleOpenDrop(shareUuid: string) {
     navigate({ to: "/d/$shareUuid", params: { shareUuid } });
@@ -61,14 +63,39 @@ function ExplorePage() {
   return (
     <div className="mx-auto max-w-md px-6 pt-6">
       <header className="mb-4">
-        <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">탐색</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">탐색</h1>
+          {/* 그리드/리스트 토글 — 활성=검정 bg+흰아이콘, 비활성=그레이. 세션 state 만. */}
+          <div className="inline-flex rounded-lg border border-[#E5E5E5] bg-white p-0.5">
+            {([
+              { mode: "grid", Icon: LayoutGrid, label: "그리드 보기" },
+              { mode: "list", Icon: LayoutList, label: "리스트 보기" },
+            ] as const).map(({ mode, Icon, label }) => {
+              const on = view === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setView(mode)}
+                  aria-label={label}
+                  aria-pressed={on}
+                  className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg transition-colors ${
+                    on ? "bg-[#0A0A0A] text-white" : "bg-transparent text-[#A3A3A3] hover:text-[#525252]"
+                  }`}
+                >
+                  <Icon className="size-5" strokeWidth={2} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <p className="mt-2 text-sm font-medium tracking-ko text-[#737373]">
           공개된 카드를 둘러보세요.
         </p>
       </header>
 
-      {/* 4탭 탭바 — 활성=밑줄+검정, 비활성=그레이. */}
-      <div className="mb-3 flex items-center gap-5 border-b border-[#E5E5E5]">
+      {/* 4탭 알약 탭바 — 활성=블루 bg+흰글씨, 비활성=연회색 bg+그레이. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         {TABS.map((t) => {
           const on = tab === t.key;
           return (
@@ -76,10 +103,10 @@ function ExplorePage() {
               key={t.key}
               type="button"
               onClick={() => setTab(t.key)}
-              className={`-mb-px min-h-[44px] border-b-2 text-sm font-bold tracking-ko transition-colors ${
+              className={`min-h-[44px] rounded-lg px-4 text-sm font-bold tracking-ko transition-colors ${
                 on
-                  ? "border-[#0A0A0A] text-[#0A0A0A]"
-                  : "border-transparent text-[#A3A3A3] hover:text-[#525252]"
+                  ? "bg-[#2563EB] text-white"
+                  : "bg-[#F5F5F5] text-[#525252] hover:bg-[#E5E5E5]"
               }`}
             >
               {t.label}
@@ -95,13 +122,15 @@ function ExplorePage() {
       </div>
 
       {drops.length > 0 ? (
-        <div className="space-y-3">
+        // 그리드=2열 / 리스트=1열. 단일 ShareCardTile, grid-cols 만 전환(8pt gap).
+        //   items-stretch(그리드 기본) + ShareCardTile h-full → 같은 행 카드 높이 균일.
+        <div className={`grid items-stretch gap-2 ${view === "grid" ? "grid-cols-2" : "grid-cols-1"}`}>
           {drops.map((drop) => (
-            <DropFeedCard
+            <ShareCardTile
               key={drop.shareUuid}
-              {...drop}
+              drop={drop}
+              purpose={drop.intent}
               onClick={() => handleOpenDrop(drop.shareUuid)}
-              onCtaClick={() => handleOpenDrop(drop.shareUuid)}
               onShare={() =>
                 void reshareDrop({
                   shareUuid: drop.shareUuid,
