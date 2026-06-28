@@ -130,24 +130,34 @@ export const Route = createFileRoute("/_user/home")({
     if (!partner?.id) return { isBusiness, merchant: null, user: null };
     const partnerId = partner.id;
 
-    // 병렬: 오늘의 AI(캐시 SELECT) / 새 예약(RPC) / 제안(pending).
-    const [guideRes, reservationRes, proposalRes] = await Promise.all([
-      supabase
-        .from("guide_history")
-        .select("diagnosis, prescriptions, snapshot_at")
-        .eq("partner_id", partnerId)
-        .order("snapshot_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase.rpc("get_partner_reservations", { p_partner_id: partnerId }),
-      supabase
-        .from("maker_connections")
-        .select(
-          "id, requester:partners!maker_connections_requester_partner_id_fkey(display_name)",
-        )
-        .eq("target_partner_id", partnerId)
-        .eq("status", "pending"),
-    ]);
+    // 병렬: 오늘의 AI(캐시 SELECT) / 새 예약(RPC) / 제안(pending) /
+    //   + 상인홈 새 디자인용 피드(유저 분기와 동일 함수): 추천·내공유·구독 + 구독자 count(partner.index 재사용).
+    const [guideRes, reservationRes, proposalRes, recommendedDrops, sentDrops, followedDrops, subscriberRes] =
+      await Promise.all([
+        supabase
+          .from("guide_history")
+          .select("diagnosis, prescriptions, snapshot_at")
+          .eq("partner_id", partnerId)
+          .order("snapshot_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase.rpc("get_partner_reservations", { p_partner_id: partnerId }),
+        supabase
+          .from("maker_connections")
+          .select(
+            "id, requester:partners!maker_connections_requester_partner_id_fkey(display_name)",
+          )
+          .eq("target_partner_id", partnerId)
+          .eq("status", "pending"),
+        getDiscoverDrops(supabase),
+        getSentDrops(supabase, userId),
+        getFollowedMakerDrops(supabase, userId),
+        supabase
+          .from("maker_follows")
+          .select("*", { count: "exact", head: true })
+          .eq("followed_partner_id", partnerId)
+          .eq("status", "active"),
+      ]);
 
     // 오늘의 AI — guide_history 최신 스냅샷(diagnosis/prescriptions jsonb).
     const guideRow = guideRes.data as { diagnosis: unknown; prescriptions: unknown } | null;
@@ -187,9 +197,21 @@ export const Route = createFileRoute("/_user/home")({
       newReservations,
       newReservationsCount,
       proposals,
+      subscriberCount: subscriberRes.count ?? 0,
     };
 
-    return { isBusiness, merchant, user: null };
+    // 상인홈도 새 디자인의 피드 섹션(오늘 공유·활동 세그먼트)을 user 로 받는다(유저 분기와 동일 슬라이스).
+    //   expiringCoupons 는 상인홈 미사용 → 빈 배열.
+    return {
+      isBusiness,
+      merchant,
+      user: {
+        expiringCoupons: [],
+        followedDrops: followedDrops.slice(0, FOLLOWED_DROP_LIMIT),
+        recommendedDrops: recommendedDrops.slice(0, RECOMMENDED_DROP_LIMIT),
+        sentDrops,
+      },
+    };
   },
   component: HomeRoute,
 });

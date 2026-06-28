@@ -1,6 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Sparkles, Calendar, Users, ChevronRight, ArrowRight, Flame } from "lucide-react";
-import { StoreProfileCard } from "@/components/partner/StoreProfileCard";
+import { Sparkles, Users, ChevronRight, ArrowRight, Flame, Bell } from "lucide-react";
 import { PerformanceBanner } from "@/components/home/PerformanceBanner";
 import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
@@ -41,6 +40,8 @@ export type MerchantHomeData = {
   /** 배지용 pending 예약 총개수(newReservations 상위 N 와 별개). */
   newReservationsCount: number;
   proposals: HomeProposal[];
+  /** 구독자 수 — maker_follows active count(성과 타일용). */
+  subscriberCount: number;
 };
 
 // Slice 4b — 유저(비사업자) 홈 데이터.
@@ -197,59 +198,44 @@ export function RoleHome({
     );
   }
 
+  // 상인 홈 — 유저홈과 동일 언어(성과 3타일 + 추천 그리드 + 활동 세그먼트). 피드 데이터는 user 로 옴(loader 비즈 분기).
+  //   관리(새예약 목록·명함)는 /partner 로 이관 → 홈은 🔔 배지·매장명 줄로 축약. 제안은 컴팩트 유지(액션은 /partner).
+  const recommendedDrops = user?.recommendedDrops ?? [];
+  const sentDrops = user?.sentDrops ?? [];
+  const followedDrops = user?.followedDrops ?? [];
+
   return (
     <div className="mx-auto max-w-md space-y-6 px-6 pt-6 pb-4">
+      {/* 헤더 — LINKDROP + 🔔(pending 새예약 빨간 배지, 0이면 숨김, 클릭→/partner/reservations) + 매장명 줄. */}
       <header>
-        <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">
-          {merchant.partnerName || "내 매장"}
-        </h1>
-        <p className="mt-1 text-sm font-medium tracking-ko text-[#737373]">링고AI가 매장 운영을 도와요</p>
-      </header>
-
-      {/* 1. 링고 매장 진단 (항상 노출 — 진단 or 포인터) */}
-      <TodayAiCard guide={merchant.guide} onGoResults={onGoResults} />
-
-      {/* 2. 새 예약 (있으면) */}
-      {merchant.newReservations.length > 0 ? (
-        <section>
-          <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-            <Calendar className="size-4" strokeWidth={2} />
-            새 예약
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">LINKDROP</h1>
+          <button
+            type="button"
+            onClick={onGoReservations}
+            aria-label="새 예약"
+            className="relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-[#0A0A0A] transition-colors hover:bg-[#F5F5F5]"
+          >
+            <Bell className="size-5" strokeWidth={2} />
             {merchant.newReservationsCount > 0 ? (
-              <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#0A0A0A] px-1.5 text-[11px] font-bold text-white">
+              <span className="absolute right-1.5 top-1.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-[#EF4444] px-1 text-[10px] font-bold text-white">
                 {merchant.newReservationsCount}
               </span>
             ) : null}
-          </h2>
-          <ul className="space-y-2">
-            {merchant.newReservations.map((r) => (
-              <li
-                key={r.reservationId}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-[#E5E5E5] bg-white px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold tracking-ko text-[#0A0A0A]">
-                    {r.customerName?.trim() || "예약 손님"}
-                  </p>
-                  <p className="mt-0.5 text-xs font-medium tracking-ko text-[#737373]">
-                    {r.dateLabel}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={onGoReservations}
-                  className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg border border-[#E5E5E5] bg-white px-3 text-sm font-semibold tracking-ko text-[#0A0A0A] transition-colors hover:bg-[#FAFAFA]"
-                >
-                  확인
-                  <ChevronRight className="size-4" strokeWidth={2} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+          </button>
+        </div>
+        <p className="mt-1 text-sm font-medium tracking-ko text-[#737373]">
+          {merchant.partnerName || "내 매장"}
+        </p>
+      </header>
 
-      {/* 3. 제안 (있으면) */}
+      {/* 성과 스탯 3타일 — 전환·적립·구독자. */}
+      <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />
+
+      {/* 링고AI 매장 진단 (항상 노출 — 진단 or 포인터). */}
+      <TodayAiCard guide={merchant.guide} onGoResults={onGoResults} />
+
+      {/* 제안 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. */}
       {merchant.proposals.length > 0 ? (
         <section>
           <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
@@ -278,16 +264,37 @@ export function RoleHome({
         </section>
       ) : null}
 
-      {/* 4. 명함(작게) — StoreProfileCard 재사용. 쿠폰/구독 행은 생략(축소). */}
-      <StoreProfileCard
-        name={merchant.partnerName || "내 매장"}
-        tier={merchant.tier}
-        businessTypeLabel={null}
-        partnerKind={merchant.partnerKind}
-        address={merchant.address}
-        activeCoupons={[]}
-        note="내 매장 명함"
-      />
+      {/* 오늘 공유하기 좋은 카드 — 추천 영상(있을 때만) 2열 그리드. 유저홈과 동일. */}
+      {recommendedDrops.length > 0 ? (
+        <section>
+          <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
+            <Flame className="size-4" strokeWidth={2} />
+            오늘 공유하기 좋은 카드
+          </h2>
+          <div className="grid grid-cols-2 gap-2">
+            {recommendedDrops.map((drop) => (
+              <ShareCardTile
+                key={drop.shareUuid}
+                drop={drop}
+                onShare={() =>
+                  void reshareDrop({
+                    shareUuid: drop.shareUuid,
+                    title: drop.title,
+                    imageUrl: drop.videoThumbnailUrl,
+                    purpose: drop.intent,
+                  })
+                }
+                onClick={() =>
+                  void navigate({ to: "/d/$shareUuid", params: { shareUuid: drop.shareUuid } })
+                }
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* 활동 세그먼트 — 내 공유 / 구독 토글. 빈상태 자체 처리. */}
+      <HomeActivitySegment sentDrops={sentDrops} followedDrops={followedDrops} />
     </div>
   );
 }
