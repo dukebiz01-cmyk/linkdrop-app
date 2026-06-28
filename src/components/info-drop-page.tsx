@@ -964,6 +964,47 @@ export function InfoDropPage({
       </section>
     ) : null;
 
+  // 3b-2 — 정보 보기(연락) 블록 const 추출. 콘텐츠 0변화, 위치만(handleCtaClick 결선 그대로).
+  //   3b-3 에서 CardBody contactBlock 으로 주입하기 위함.
+  const contactRow =
+    hasPhone || Boolean(safeLocal.address?.trim() || safeLocal.name?.trim()) ? (
+      <section data-testid="secondary-contact-row" className="flex items-stretch gap-2">
+        {hasPhone ? (
+          <button
+            type="button"
+            onClick={() => handleCtaClick("phone")}
+            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
+            aria-label="전화 문의"
+          >
+            <Phone className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+            전화
+          </button>
+        ) : null}
+        {hasPhone ? (
+          <button
+            type="button"
+            onClick={() => handleCtaClick("sms")}
+            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
+            aria-label="문자 문의"
+          >
+            <MessageSquare className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+            문자
+          </button>
+        ) : null}
+        {safeLocal.address?.trim() || safeLocal.name?.trim() ? (
+          <button
+            type="button"
+            onClick={() => handleCtaClick("directions")}
+            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
+            aria-label="길찾기"
+          >
+            <MapPin className="size-5 text-[#0A0A0A]" strokeWidth={2} />
+            길찾기
+          </button>
+        ) : null}
+      </section>
+    ) : null;
+
   return (
     <div
       className={cn(
@@ -1675,43 +1716,7 @@ export function InfoDropPage({
               label="정보 보기"
               icon={<Info className="h-4 w-4" strokeWidth={2} />}
               defaultExpanded={false}
-              expandedContent={
-            <section data-testid="secondary-contact-row" className="flex items-stretch gap-2">
-              {hasPhone ? (
-                <button
-                  type="button"
-                  onClick={() => handleCtaClick("phone")}
-                  className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
-                  aria-label="전화 문의"
-                >
-                  <Phone className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-                  전화
-                </button>
-              ) : null}
-              {hasPhone ? (
-                <button
-                  type="button"
-                  onClick={() => handleCtaClick("sms")}
-                  className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
-                  aria-label="문자 문의"
-                >
-                  <MessageSquare className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-                  문자
-                </button>
-              ) : null}
-              {safeLocal.address?.trim() || safeLocal.name?.trim() ? (
-                <button
-                  type="button"
-                  onClick={() => handleCtaClick("directions")}
-                  className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
-                  aria-label="길찾기"
-                >
-                  <MapPin className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-                  길찾기
-                </button>
-              ) : null}
-            </section>
-              }
+              expandedContent={contactRow}
             />
           )}
 
