@@ -14,9 +14,13 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// 키 정렬(generate-promo-copy 패턴): V2 SECRET_KEY 우선, 레거시 SERVICE_ROLE_KEY 폴백.
+const SUPABASE_SECRET_KEY =
+  Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// 4-B 도매경락 — data.go.kr aT katRealTime2. 미설정 시 도매 소스 graceful skip.
+const WHOLESALE_API_KEY = Deno.env.get("WHOLESALE_API_KEY");
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
@@ -33,6 +37,12 @@ const PRODUCT_CLS_RETAIL = "02"; // 02=소매 (4-B 도매=01 은 다음 단계)
 const COUNTRY_CODE = "1101"; // 서울
 const DEFAULT_TTL_SEC = 86400;
 const FETCH_TIMEOUT_MS = 10_000;
+
+// ── 4-B 도매경락(aT katRealTime2) ──
+//   cond[필드::연산자]=값 표준필터(날짜 EQ 필수). 시장코드 미지정 = 전국 다시장 1회 수신.
+const KAT_BASE = "https://apis.data.go.kr/B552845/katRealTime2/trades2";
+const KAT_NUM_ROWS = 1000; // 전국 다시장 표본 충분히(배추 3,500건 중 1,000 표본 = 8개+ 시장).
+const KAT_LOOKBACK_DAYS = 6; // 주말·휴장 회피: regday 부터 최대 6일 역행해 직전 영업일.
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -87,6 +97,16 @@ type KamisItem = {
   rank_code?: string;
   unit?: string;
   dpr1?: string; // 당일가(콤마 포함)
+};
+
+// 도매경락(katRealTime2) item 한 행(필요 필드만).
+type KatItem = {
+  corp_gds_item_nm?: string; // 품목명
+  scsbd_prc?: string; // 낙찰가(단위수량당)
+  unit_qty?: string; // 단위수량(kg)
+  unit_nm?: string; // 단위명(kg 등)
+  whsl_mrkt_nm?: string; // 도매시장명
+  whsl_mrkt_cd?: string; // 도매시장코드
 };
 
 // 타임아웃 fetch (extract-url-metadata 패턴 차용).
@@ -187,6 +207,111 @@ async function fetchKamisRetail(
   return { source, item_name: itemName };
 }
 
+// "YYYY-MM-DD" + n일 (UTC 단순 가감 — TZ 무관). 영업일 역행 탐색용.
+function addDaysIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const nd = new Date(Date.UTC(y, m - 1, d) + days * 86_400_000);
+  const z = (n: number) => String(n).padStart(2, "0");
+  return `${nd.getUTCFullYear()}-${z(nd.getUTCMonth() + 1)}-${z(nd.getUTCDate())}`;
+}
+
+// 4-B 도매경락 — 전국 도매시장 실시간 경락가. fetchKamisRetail 과 동일 시그니처.
+//   aT katRealTime2/trades2. 시장코드 미지정 → 전국 다시장 1회 수신(범위+평균).
+//   regday 가 주말·휴장이면 며칠 역행해 직전 영업일로 자동 보정.
+//   가공품(들기름 등)은 경락 대상 아님 → 0건 → null 반환(graceful, 소스 미표시).
+async function fetchWholesale(
+  itemName: string,
+  regday: string,
+  apiKey: string,
+): Promise<{ source: PriceSource; item_name: string | null } | null> {
+  // cond[필드::연산자]=값. 대괄호·콜론 인코딩 필수. serviceKey 는 인코딩 1회.
+  const cond = (field: string, op: string, val: string) =>
+    `${encodeURIComponent(`cond[${field}::${op}]`)}=${encodeURIComponent(val)}`;
+
+  // regday 부터 최대 KAT_LOOKBACK_DAYS 역행하며 데이터 있는 영업일 탐색.
+  let usedDate = regday;
+  let items: KatItem[] = [];
+  for (let back = 0; back < KAT_LOOKBACK_DAYS; back++) {
+    const d = addDaysIso(regday, -back);
+    const qs = [
+      `serviceKey=${encodeURIComponent(apiKey)}`,
+      "returnType=JSON",
+      `numOfRows=${KAT_NUM_ROWS}`,
+      "pageNo=1",
+      cond("trd_clcln_ymd", "EQ", d),
+      cond("corp_gds_item_nm", "LIKE", itemName),
+    ].join("&");
+    let json: { response?: { body?: { items?: { item?: KatItem[] } } } };
+    try {
+      const res = await fetchWithTimeout(`${KAT_BASE}?${qs}`);
+      if (!res.ok) {
+        console.error("[get-price-band] KAT non-ok:", res.status);
+        continue;
+      }
+      json = await res.json();
+    } catch (e) {
+      console.error("[get-price-band] KAT fetch error:", String((e as Error).message ?? e));
+      continue;
+    }
+    const arr = json?.response?.body?.items?.item;
+    if (Array.isArray(arr) && arr.length > 0) {
+      items = arr;
+      usedDate = d;
+      break;
+    }
+  }
+  if (items.length === 0) return null; // 데이터 없음(가공품·휴장 연속) → 소스 미표시
+
+  // 품목 정밀 매칭: 괄호 앞 본명(品名) 기준 + 부산물/별종 제외.
+  //   · 괄호 앞 본명으로 비교 → "칼리플라워(꽃양배추)"·"적채(양배추)" 는 본명에 배추 없어 제외.
+  //   · 순/줄기 제외 → "고구마순"·"고구마줄기" 컷(고구마·고구마(국산)는 유지).
+  //   · "양"+itemName 제외 → 양배추/양상추/양파 등 substring 별종 컷(단배추·얼갈이배추는 유지).
+  const matched = items.filter((r) => {
+    if (typeof r.corp_gds_item_nm !== "string") return false;
+    const base = r.corp_gds_item_nm.split("(")[0];
+    return (
+      base.includes(itemName) &&
+      !base.includes("순") &&
+      !base.includes("줄기") &&
+      !base.includes("양" + itemName)
+    );
+  });
+  if (matched.length === 0) return null;
+
+  // kg당 정규화: 낙찰가 ÷ 단위수량 (unit_nm=kg 행만). 그 외 단위 제외.
+  const kgPrices: number[] = [];
+  const markets = new Set<string>();
+  for (const r of matched) {
+    if (r.unit_nm !== "kg") continue;
+    const prc = parsePrice(r.scsbd_prc);
+    const uq = Number(r.unit_qty);
+    if (prc == null || !Number.isFinite(uq) || uq <= 0) continue;
+    kgPrices.push(prc / uq);
+    if (r.whsl_mrkt_nm) markets.add(r.whsl_mrkt_nm);
+  }
+  if (kgPrices.length === 0) return null;
+
+  // 경매 떨이·프리미엄 outlier 가 raw min/max 를 오염(배추 20~10,500원) →
+  //   10~90 백분위로 "대부분 이 범위" 도출. 평균은 rank_note 에.
+  kgPrices.sort((a, b) => a - b);
+  const pct = (p: number) => kgPrices[Math.floor((kgPrices.length - 1) * p)];
+  const low = Math.round(pct(0.1));
+  const high = Math.round(pct(0.9));
+  const avg = Math.round(kgPrices.reduce((s, v) => s + v, 0) / kgPrices.length);
+
+  const source: PriceSource = {
+    source: "도매경락",
+    source_label: "전국 도매시장 경락가",
+    price_type: "wholesale",
+    low: Math.min(low, high),
+    high: Math.max(low, high),
+    unit: "kg",
+    rank_note: `전국 ${markets.size}개 시장 · 평균 ${avg.toLocaleString("ko-KR")}원/kg`,
+    ref_date: usedDate,
+  };
+  return { source, item_name: matched[0]?.corp_gds_item_nm ?? itemName };
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ status: "error", message: "POST only" }, 405);
@@ -267,8 +392,36 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const sources: PriceSource[] = [];
   let itemName: string | null = null;
   if (kamis) {
-    sources.push(kamis.source); // 4-B/4-C 는 여기 추가 push
+    sources.push(kamis.source); // 4-C 인터넷가는 여기 추가 push
     itemName = kamis.item_name;
+  }
+
+  // 2-B) 도매경락 실호출(4-B). WHOLESALE_API_KEY 있을 때만. 품목 한글명은
+  //   kamis 응답 → 없으면 kamis_items 조회(옥수수 등 KAMIS 미조사 품목 대응).
+  if (WHOLESALE_API_KEY) {
+    let wholesaleName = kamis?.item_name ?? null;
+    if (!wholesaleName) {
+      try {
+        const { data: itemRow } = await supabase
+          .from("kamis_items")
+          .select("item_name")
+          .eq("item_code", itemCode)
+          .maybeSingle();
+        wholesaleName = (itemRow as { item_name?: string } | null)?.item_name ?? null;
+      } catch (e) {
+        console.error(
+          "[get-price-band] kamis_items name lookup failed:",
+          String((e as Error).message ?? e),
+        );
+      }
+    }
+    if (wholesaleName) {
+      const wholesale = await fetchWholesale(wholesaleName, regday, WHOLESALE_API_KEY);
+      if (wholesale) {
+        sources.push(wholesale.source);
+        if (!itemName) itemName = wholesale.item_name;
+      }
+    }
   }
 
   const result: PriceBandResult = {
