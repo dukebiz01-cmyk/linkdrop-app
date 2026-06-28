@@ -179,7 +179,6 @@ function ProductNewPage() {
   const [isFresh, setIsFresh] = useState(true);
   const [harvestDate, setHarvestDate] = useState("");
   const [stockLimit, setStockLimit] = useState("");
-  const [priceBandEnabled, setPriceBandEnabled] = useState(false);
   // KAMIS 품목 2단(부류→품목) — 시세(STEP4)·제철(STEP5) 연동 기반. 선택 사항(미선택 허용).
   const [kamisCategoryCode, setKamisCategoryCode] = useState("");
   const [kamisItemCode, setKamisItemCode] = useState("");
@@ -343,7 +342,8 @@ function ProductNewPage() {
           harvest_date: isFresh && harvestDate ? harvestDate : null,
           stock_limit:
             isFresh && Number(stockLimit) >= 1 ? Math.floor(Number(stockLimit)) : null,
-          price_band_enabled: isFresh ? priceBandEnabled : false,
+          // §0 — 손님 카드 시세 노출 영구 금지(표시광고법) → 항상 false.
+          price_band_enabled: false,
           // KAMIS 품목코드 — 신선 + 선택했을 때만. 미선택이면 키 생략(ADDITIVE, 기존 등록 무영향).
           ...(isFresh && kamisItemCode ? { kamis_item_code: kamisItemCode } : {}),
           blocks: [
@@ -567,36 +567,8 @@ function ProductNewPage() {
                   />
                 </label>
 
-                {/* 시세 표시 토글 */}
-                <button
-                  type="button"
-                  onClick={() => setPriceBandEnabled((v) => !v)}
-                  aria-pressed={priceBandEnabled}
-                  className={`flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl border px-3 text-sm font-semibold tracking-ko transition-colors ${
-                    priceBandEnabled
-                      ? "border-action bg-bg text-text-strong"
-                      : "border-border bg-bg text-text-muted hover:border-text-muted"
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <TrendingUp className="size-4" strokeWidth={2} />
-                    시세 표시
-                  </span>
-                  <span
-                    className={`inline-flex h-6 w-10 shrink-0 items-center rounded-full px-0.5 transition-colors ${
-                      priceBandEnabled ? "bg-action" : "bg-border"
-                    }`}
-                  >
-                    <span
-                      className={`size-5 rounded-full bg-bg transition-transform ${
-                        priceBandEnabled ? "translate-x-4" : "translate-x-0"
-                      }`}
-                    />
-                  </span>
-                </button>
-                <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
-                  켜면 카드에 시세 비교가 표시될 예정이에요. (표시는 추후 제공)
-                </p>
+                {/* §0 — 손님 카드 시세 비교 노출은 영구 금지(표시광고법). 생산자 참고용
+                    PriceBandAdvisor(아래 품목 선택 시)만 유지. '손님 노출 토글'은 제거. */}
 
                 {/* 품목 분류 — KAMIS 부류→품목 2단(선택). 시세·제철 연동 기반. 미선택 허용. */}
                 <div className="space-y-2 pt-1">

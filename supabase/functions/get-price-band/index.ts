@@ -19,6 +19,9 @@ const SUPABASE_SECRET_KEY =
   Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // 4-B 도매경락 — data.go.kr aT katRealTime2. 미설정 시 도매 소스 graceful skip.
 const WHOLESALE_API_KEY = Deno.env.get("WHOLESALE_API_KEY");
+// 4-C 인터넷 판매가 — 네이버쇼핑 검색 API(공식). 미설정 시 인터넷 소스 graceful skip.
+const NAVER_CLIENT_ID = Deno.env.get("NAVER_CLIENT_ID") ?? "";
+const NAVER_CLIENT_SECRET = Deno.env.get("NAVER_CLIENT_SECRET") ?? "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -109,12 +112,19 @@ type KatItem = {
   whsl_mrkt_cd?: string; // 도매시장코드
 };
 
-// 타임아웃 fetch (extract-url-metadata 패턴 차용).
-async function fetchWithTimeout(url: string): Promise<Response> {
+// 네이버쇼핑 item(필요 필드만).
+type NaverShopItem = {
+  title?: string; // 상품명(HTML <b> 태그 포함 가능)
+  lprice?: string; // 최저가(판매자 등록가)
+  mallName?: string; // 판매처
+};
+
+// 타임아웃 fetch (extract-url-metadata 패턴 차용). init 옵션 = 네이버 인증 헤더용(추가, 기존 무영향).
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
   try {
-    return await fetch(url, { signal: ac.signal, redirect: "follow" });
+    return await fetch(url, { ...init, signal: ac.signal, redirect: "follow" });
   } finally {
     clearTimeout(timer);
   }
@@ -130,45 +140,54 @@ async function fetchKamisRetail(
   certKey: string,
   certId: string,
 ): Promise<{ source: PriceSource; item_name: string | null } | null> {
-  const params = new URLSearchParams({
-    action: KAMIS_ACTION,
-    p_product_cls_code: PRODUCT_CLS_RETAIL,
-    p_country_code: COUNTRY_CODE,
-    p_regday: regday,
-    p_convert_kg_yn: "N",
-    p_item_category_code: categoryCode,
-    p_cert_key: certKey,
-    p_cert_id: certId, // cert_id 는 @ 포함 → URLSearchParams 가 인코딩 처리
-    p_returntype: "json",
-  });
-  const url = `${KAMIS_BASE}?${params.toString()}`;
-
-  let json: { data?: { error_code?: string; item?: KamisItem[] } };
-  try {
-    const res = await fetchWithTimeout(url);
-    if (!res.ok) {
-      console.error("[get-price-band] KAMIS non-ok:", res.status);
-      return null;
+  // regday 부터 최대 KAT_LOOKBACK_DAYS 역행하며 가격 있는 영업일 탐색.
+  //   KAMIS 소매는 주말·휴일 dpr1="-"(미조사) → 단일 호출이면 주말엔 no_data.
+  //   도매(fetchWholesale)와 동일 역행 패턴으로 직전 영업일 자동 보정.
+  let usedDate = regday;
+  let rows: KamisItem[] = [];
+  for (let back = 0; back < KAT_LOOKBACK_DAYS; back++) {
+    const d = addDaysIso(regday, -back);
+    const params = new URLSearchParams({
+      action: KAMIS_ACTION,
+      p_product_cls_code: PRODUCT_CLS_RETAIL,
+      p_country_code: COUNTRY_CODE,
+      p_regday: d,
+      p_convert_kg_yn: "N",
+      p_item_category_code: categoryCode,
+      p_cert_key: certKey,
+      p_cert_id: certId, // cert_id 는 @ 포함 → URLSearchParams 가 인코딩 처리
+      p_returntype: "json",
+    });
+    let json: { data?: { error_code?: string; item?: KamisItem[] } };
+    try {
+      const res = await fetchWithTimeout(`${KAMIS_BASE}?${params.toString()}`);
+      if (!res.ok) {
+        console.error("[get-price-band] KAMIS non-ok:", res.status);
+        continue;
+      }
+      json = await res.json();
+    } catch (e) {
+      console.error("[get-price-band] KAMIS fetch error:", String((e as Error).message ?? e));
+      continue;
     }
-    json = await res.json();
-  } catch (e) {
-    console.error("[get-price-band] KAMIS fetch error:", String((e as Error).message ?? e));
-    return null;
+    const data = json?.data;
+    // 미조사 품목(예: 옥수수)·오류코드 → 데이터 없음(다음 날로).
+    if (!data || data.error_code !== "000" || !Array.isArray(data.item) || data.item.length === 0) {
+      continue;
+    }
+    // 우리 item_code 매칭 행만.
+    const matched = data.item.filter((r) => r.item_code === itemCode);
+    if (matched.length === 0) continue;
+    // 등급 필터(지정 시) — "04"=상품 / "05"=중품.
+    const ranked = rankCode ? matched.filter((r) => r.rank_code === rankCode) : matched;
+    const candidate = ranked.length > 0 ? ranked : matched;
+    // 가격 1개라도 파싱되면 이 날 채택(주말 "-" 행만 있으면 다음 날로).
+    if (!candidate.some((r) => parsePrice(r.dpr1) != null)) continue;
+    rows = candidate;
+    usedDate = d;
+    break;
   }
-
-  const data = json?.data;
-  // 미조사 품목(예: 옥수수)·오류코드 → 데이터 없음(정상 처리).
-  if (!data || data.error_code !== "000" || !Array.isArray(data.item) || data.item.length === 0) {
-    return null;
-  }
-
-  // 우리 item_code 매칭 행만.
-  const matched = data.item.filter((r) => r.item_code === itemCode);
-  if (matched.length === 0) return null;
-
-  // 등급 필터(지정 시) — "04"=상품 / "05"=중품.
-  const ranked = rankCode ? matched.filter((r) => r.rank_code === rankCode) : matched;
-  const rows = ranked.length > 0 ? ranked : matched;
+  if (rows.length === 0) return null; // 6일 역행에도 가격 없음 → no_data
 
   const sangPum = rows.find((r) => r.rank_code === "04"); // 상품
   const jungPum = rows.find((r) => r.rank_code === "05"); // 중품
@@ -202,7 +221,7 @@ async function fetchKamisRetail(
     high: Math.max(low, high),
     unit,
     rank_note: rankNote,
-    ref_date: regday,
+    ref_date: usedDate,
   };
   return { source, item_name: itemName };
 }
@@ -312,6 +331,91 @@ async function fetchWholesale(
   return { source, item_name: matched[0]?.corp_gds_item_nm ?? itemName };
 }
 
+// 오늘(Asia/Seoul) YYYY-MM-DD — 네이버 실시간 판매가 기준일.
+function todayKstIso(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
+}
+
+// 4-C 인터넷 판매가 — 네이버쇼핑 검색 API(공식, 크롤링 아님). fetchKamisRetail 동일 시그니처.
+//   §0: 출처=네이버쇼핑, 검색어 명시. lprice=판매자 등록 최저가(우리 추천/단정 아님).
+//   가공품(들기름 등)도 잡힘(도매와 달리). 키 없으면 null(graceful).
+async function fetchNaverShop(
+  itemName: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<{ source: PriceSource; item_name: string | null } | null> {
+  // 키 중간 비ASCII 제거(discover-content 패턴) — ByteString 위반 차단.
+  const clean = (s: string) => s.replace(/[^\x21-\x7E]/g, "");
+  const id = clean(clientId);
+  const secret = clean(clientSecret);
+  if (!id || !secret) return null;
+
+  const url = new URL("https://openapi.naver.com/v1/search/shop.json");
+  url.searchParams.set("query", itemName);
+  url.searchParams.set("display", "100");
+  url.searchParams.set("sort", "sim");
+
+  let items: NaverShopItem[] = [];
+  try {
+    const res = await fetchWithTimeout(url.toString(), {
+      headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret },
+    });
+    if (!res.ok) {
+      console.error("[get-price-band] NAVER non-ok:", res.status);
+      return null;
+    }
+    const json = await res.json();
+    items = Array.isArray(json?.items) ? (json.items as NaverShopItem[]) : [];
+  } catch (e) {
+    console.error("[get-price-band] NAVER fetch error:", String((e as Error).message ?? e));
+    return null;
+  }
+  if (items.length === 0) return null;
+
+  // 관련성 필터: itemName 포함 + 별종(양배추류)·가공/부산물 제외. 도매 가드와 동일 취지.
+  const stripTag = (s: string) => s.replace(/<[^>]+>/g, "");
+  const EXCLUDE = ["씨앗", "모종", "종자", "김치", "절임", "즙", "분말", "가루", "효소", "환", "추출"];
+  const perKg: number[] = [];
+  const raw: number[] = [];
+  for (const it of items) {
+    const title = stripTag(it.title ?? "");
+    if (!title.includes(itemName)) continue;
+    if (title.includes("양" + itemName)) continue; // 양배추 등 별종
+    if (EXCLUDE.some((w) => title.includes(w))) continue;
+    const lp = parsePrice(it.lprice);
+    if (lp == null) continue;
+    raw.push(lp);
+    // 중량 추출: "3kg"·"500g" → kg당 환산(가능할 때만).
+    const kgM = title.match(/([\d.]+)\s*kg/i);
+    const gM = title.match(/([\d.]+)\s*g(?![a-zA-Z])/i);
+    let kg: number | null = null;
+    if (kgM) kg = Number(kgM[1]);
+    else if (gM) kg = Number(gM[1]) / 1000;
+    if (kg != null && kg >= 0.1 && kg <= 50) perKg.push(lp / kg);
+  }
+  if (raw.length === 0) return null;
+
+  // 중량표기 상품이 충분(≥10)하면 kg당, 아니면 상품 단가(개당).
+  const useKg = perKg.length >= 10;
+  const arr = (useKg ? perKg : raw).slice().sort((a, b) => a - b);
+  const pct = (p: number) => arr[Math.floor((arr.length - 1) * p)];
+  const low = Math.round(pct(0.1));
+  const high = Math.round(pct(0.9));
+  const avg = Math.round(arr.reduce((s, v) => s + v, 0) / arr.length);
+
+  const source: PriceSource = {
+    source: "네이버쇼핑",
+    source_label: "인터넷 판매가",
+    price_type: "online",
+    low: Math.min(low, high),
+    high: Math.max(low, high),
+    unit: useKg ? "kg" : "개",
+    rank_note: `"${itemName}" 네이버쇼핑 ${arr.length}개 · 판매자 등록가 · 평균 ${avg.toLocaleString("ko-KR")}원`,
+    ref_date: todayKstIso(),
+  };
+  return { source, item_name: itemName };
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ status: "error", message: "POST only" }, 405);
@@ -396,31 +500,41 @@ Deno.serve(async (req: Request): Promise<Response> => {
     itemName = kamis.item_name;
   }
 
-  // 2-B) 도매경락 실호출(4-B). WHOLESALE_API_KEY 있을 때만. 품목 한글명은
-  //   kamis 응답 → 없으면 kamis_items 조회(옥수수 등 KAMIS 미조사 품목 대응).
-  if (WHOLESALE_API_KEY) {
-    let wholesaleName = kamis?.item_name ?? null;
-    if (!wholesaleName) {
-      try {
-        const { data: itemRow } = await supabase
-          .from("kamis_items")
-          .select("item_name")
-          .eq("item_code", itemCode)
-          .maybeSingle();
-        wholesaleName = (itemRow as { item_name?: string } | null)?.item_name ?? null;
-      } catch (e) {
-        console.error(
-          "[get-price-band] kamis_items name lookup failed:",
-          String((e as Error).message ?? e),
-        );
-      }
+  // 품목 한글명 1회 해결 — kamis 응답 → 없으면 kamis_items 조회(옥수수 등 미조사 품목 대응).
+  //   도매(4-B)·인터넷(4-C) 둘 다 이 이름으로 검색.
+  let itemNameKo = kamis?.item_name ?? null;
+  const needName = Boolean(WHOLESALE_API_KEY) || Boolean(NAVER_CLIENT_ID && NAVER_CLIENT_SECRET);
+  if (!itemNameKo && needName) {
+    try {
+      const { data: itemRow } = await supabase
+        .from("kamis_items")
+        .select("item_name")
+        .eq("item_code", itemCode)
+        .maybeSingle();
+      itemNameKo = (itemRow as { item_name?: string } | null)?.item_name ?? null;
+    } catch (e) {
+      console.error(
+        "[get-price-band] kamis_items name lookup failed:",
+        String((e as Error).message ?? e),
+      );
     }
-    if (wholesaleName) {
-      const wholesale = await fetchWholesale(wholesaleName, regday, WHOLESALE_API_KEY);
-      if (wholesale) {
-        sources.push(wholesale.source);
-        if (!itemName) itemName = wholesale.item_name;
-      }
+  }
+
+  // 2-B) 도매경락 실호출(4-B). WHOLESALE_API_KEY + 품목명 있을 때만.
+  if (WHOLESALE_API_KEY && itemNameKo) {
+    const wholesale = await fetchWholesale(itemNameKo, regday, WHOLESALE_API_KEY);
+    if (wholesale) {
+      sources.push(wholesale.source);
+      if (!itemName) itemName = wholesale.item_name;
+    }
+  }
+
+  // 2-C) 인터넷 판매가 실호출(4-C). NAVER 키 + 품목명 있을 때만.
+  if (NAVER_CLIENT_ID && NAVER_CLIENT_SECRET && itemNameKo) {
+    const naver = await fetchNaverShop(itemNameKo, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET);
+    if (naver) {
+      sources.push(naver.source);
+      if (!itemName) itemName = naver.item_name;
     }
   }
 
