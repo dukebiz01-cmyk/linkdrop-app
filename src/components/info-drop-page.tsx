@@ -1317,7 +1317,7 @@ export function InfoDropPage({
                     onClick={onReserveAndClaim}
                     className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-bold tracking-ko text-[#0A0A0A] hover:bg-[#FAFAFA]"
                   >
-                    쿠폰만 받기
+                    쿠폰 받기
                   </button>
                 ) : null}
               </div>
