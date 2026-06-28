@@ -27,8 +27,6 @@ export function CardBody({
   coupon,
   store,
   contactSlot,
-  reservationSlot,
-  ctaSlot,
   couponBlock,
   reservationBlock,
   contactBlock,
@@ -117,9 +115,6 @@ export function CardBody({
           ) : null
         ) : null}
 
-        {/* 예약 캘린더·CTA 실기능 — live 에서만 슬롯 주입(preview 엔 미주입). 예약은 reservationBlock 없을 때만. */}
-        {!reservationBlock && mode === "live" ? (reservationSlot ?? null) : null}
-        {mode === "live" ? (ctaSlot ?? null) : null}
       </div>
     </>
   );

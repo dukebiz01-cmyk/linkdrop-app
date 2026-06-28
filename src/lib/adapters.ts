@@ -452,6 +452,7 @@ export function toCardBodyProps(props: InfoDropPageProps): CardBodyProps {
       reservationUrl: props.local.reservationUrl ?? null,
     },
     purpose: props.variant ? VARIANT_TO_PURPOSE[props.variant] : "정보",
-    // 실기능 슬롯(reservationSlot·ctaSlot·contactSlot)은 4단계에서 container 가 주입(지금 undefined).
+    // 연락 슬롯(contactSlot)·하단 블록 슬롯은 container(info-drop-page)가 주입(지금 undefined).
+    //   reservationSlot·ctaSlot 은 3d 에서 제거(미사용 live전용 안티패턴).
   };
 }

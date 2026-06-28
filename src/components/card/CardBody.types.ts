@@ -52,11 +52,8 @@ export type CardBodyProps = {
   /** 목적 — 정보/쿠폰/예약/구매/상담(drop_purpose 공통 enum). variant 분기 신호. */
   purpose: DropPurpose;
 
-  // ── 실기능 슬롯 — live 에서만 container 가 주입(예약캘린더·CTA·연락 실동작) ──
-  /** 예약 캘린더 실동작(손님). preview 에선 미주입 → CardBody 가 시각 표현만. */
-  reservationSlot?: ReactNode;
-  /** 목적별 CTA 실버튼(손님). */
-  ctaSlot?: ReactNode;
+  // ── 실기능 슬롯 — live 에서만 container 가 주입(연락 실동작) ──
+  //   reservationSlot·ctaSlot 은 3d 에서 제거(§6② 미사용 live전용 안티패턴). 블록 슬롯이 정본.
   /** 연락 row 실버튼(전화/문자/길찾기, 손님). */
   contactSlot?: ReactNode;
 
