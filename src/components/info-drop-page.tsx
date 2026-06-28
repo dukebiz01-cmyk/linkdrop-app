@@ -1195,6 +1195,16 @@ export function InfoDropPage({
                 local,
                 variant,
               } as unknown as InfoDropPageProps)}
+              couponBlock={benefitEventSection}
+              reservationBlock={
+                showCalendar ? (
+                  <div className="space-y-3">
+                    {calendarPanel}
+                    {billingNotice}
+                  </div>
+                ) : null
+              }
+              contactBlock={contactRow}
             />
           </DropCardShell>
         )}
@@ -1241,6 +1251,16 @@ export function InfoDropPage({
                 local,
                 variant,
               } as unknown as InfoDropPageProps)}
+              couponBlock={benefitEventSection}
+              reservationBlock={
+                showCalendar ? (
+                  <div className="space-y-3">
+                    {calendarPanel}
+                    {billingNotice}
+                  </div>
+                ) : null
+              }
+              contactBlock={contactRow}
             />
           </DropCardShell>
         )}
@@ -1339,21 +1359,8 @@ export function InfoDropPage({
               // 하단 블록 균일 스택 — 본문 space-y-6 리듬에 통일(쿠폰 미리보기·예약·쿠폰 받기).
               //   새 블록(상품/타카드) 슬롯인 시 동일 간격 자동 적용. 블록 내부는 0터치.
               <div className="space-y-6">
-                {benefitEventSection}
-                {/* 거울 1b — 항상 펼쳐진 캘린더를 "예약 날짜 선택" 닫힌 버튼 뒤로(제자리 래핑).
-                    펼침 = [캘린더 + (날짜 선택 시)예약하기 + 결제고지] 자기완결 블록.
-                    calendarPanel 내부(ReservationCalendarClient·onCheckAvailability·fallback·mounted)는 0터치. */}
-                <ButtonBlock
-                  label="예약 날짜 선택"
-                  icon={<Calendar className="h-4 w-4" strokeWidth={2} />}
-                  defaultExpanded={false}
-                  expandedContent={
-                    <div className="space-y-3">
-                      {calendarPanel}
-                      {billingNotice}
-                    </div>
-                  }
-                />
+                {/* 손님 하단 블록(쿠폰·예약)은 CardBody couponBlock/reservationBlock 로 이관(3b-3).
+                    IIFE 셸엔 reserveNotice·쿠폰만받기만 잔류(조건 동일, funnel 0터치). */}
                 {!isCoupon ? reserveNotice : null}
                 {/* Phase 1 통합(가-2) — 교집합에서 sticky "쿠폰 받기" 대신 보조 "쿠폰만 받기".
                     예약 없이 claim_coupon 만(기존 onReserveAndClaim 경로 그대로). */}
@@ -1708,17 +1715,7 @@ export function InfoDropPage({
           </section>
         )}
 
-        {/* v7.2 — 보조 연락(전화/문자/길찾기). "정보 보기" ButtonBlock 펼침 뒤로(칩·handleCtaClick 0터치).
-            쿠폰/예약 드롭에만, 매장 정보 있을 때만. 60대 친화 큰 터치. */}
-        {(resolvedVariant === "coupon" || isReservation) &&
-          (hasPhone || Boolean(safeLocal.address?.trim() || safeLocal.name?.trim())) && (
-            <ButtonBlock
-              label="정보 보기"
-              icon={<Info className="h-4 w-4" strokeWidth={2} />}
-              defaultExpanded={false}
-              expandedContent={contactRow}
-            />
-          )}
+        {/* v7.2 보조 연락(정보 보기) → CardBody contactBlock 로 이관(3b-3). 옛 위치 미렌더. */}
 
         {/* c-1 — 순수 쿠폰 카드 + 네이버형 매장(reservation_url 보유) 일 때만 보조 예약 링크.
             예약-목적/결합 카드엔 미렌더(인앱 펀널 우선). 주요 CTA 아닌 서브틀 외부 링크. */}
