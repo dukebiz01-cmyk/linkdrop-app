@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { DropFeedCard } from "@/components/drop-feed-card";
+import { ShareCardTile } from "@/components/home/ShareCardTile";
 import type { DropFeedItem } from "@/components/home-page";
 import { reshareDrop } from "@/lib/reshare-drop";
 
@@ -39,8 +39,8 @@ export function HomeActivitySegment({
 
   return (
     <section>
-      {/* 세그먼트 토글 — 활성 = 검정 bg + 흰 텍스트, 비활성 = 투명 + 그레이. */}
-      <div className="mb-3 inline-flex rounded-lg border border-[#E5E5E5] bg-white p-0.5">
+      {/* 세그먼트 토글 — 탐색 탭과 동일 언어: 각진 사각, 활성 = 블루 bg + 흰 텍스트, 비활성 = 연회색 bg + 그레이. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         {TABS.map((t) => {
           const active = tab === t.id;
           return (
@@ -49,7 +49,7 @@ export function HomeActivitySegment({
               type="button"
               onClick={() => setTab(t.id)}
               className={`min-h-[44px] rounded-lg px-4 text-sm font-bold tracking-ko transition-colors ${
-                active ? "bg-[#0A0A0A] text-white" : "bg-transparent text-[#737373]"
+                active ? "bg-[#2563EB] text-white" : "bg-[#F5F5F5] text-[#525252] hover:bg-[#E5E5E5]"
               }`}
             >
               {t.label}
@@ -59,32 +59,23 @@ export function HomeActivitySegment({
       </div>
 
       {drops.length > 0 ? (
-        <div className="space-y-3">
-          {drops.map((drop) =>
-            tab === "sent" ? (
-              <DropFeedCard
-                key={drop.shareUuid}
-                {...drop}
-                onClick={() => openDrop(drop.shareUuid)}
-                onCtaClick={() => openDrop(drop.shareUuid)}
-                onShare={() =>
-                  void reshareDrop({
-                    shareUuid: drop.shareUuid,
-                    title: drop.title,
-                    imageUrl: drop.videoThumbnailUrl,
-                    purpose: drop.intent,
-                  })
-                }
-              />
-            ) : (
-              <DropFeedCard
-                key={drop.shareUuid}
-                {...drop}
-                onClick={() => openDrop(drop.shareUuid)}
-                onCtaClick={() => openDrop(drop.shareUuid)}
-              />
-            ),
-          )}
+        // 2열 그리드 — 탐색과 동일 언어. ShareCardTile(아크릴) 재사용. 공유=재공유, 클릭=/d 이동.
+        <div className="grid grid-cols-2 gap-2">
+          {drops.map((drop) => (
+            <ShareCardTile
+              key={drop.shareUuid}
+              drop={drop}
+              onClick={() => openDrop(drop.shareUuid)}
+              onShare={() =>
+                void reshareDrop({
+                  shareUuid: drop.shareUuid,
+                  title: drop.title,
+                  imageUrl: drop.videoThumbnailUrl,
+                  purpose: drop.intent,
+                })
+              }
+            />
+          ))}
         </div>
       ) : (
         <p className="rounded-2xl border border-[#E5E5E5] bg-white p-5 text-sm font-medium leading-relaxed tracking-ko text-[#737373]">
