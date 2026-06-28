@@ -234,6 +234,18 @@ function addDaysIso(iso: string, days: number): string {
   return `${nd.getUTCFullYear()}-${z(nd.getUTCMonth() + 1)}-${z(nd.getUTCDate())}`;
 }
 
+// p10~p90 범위 + 절사평균. low/high 는 백분위(범위 그대로), 평균은 그 구간 안의 값만
+//   평균내 outlier(선물세트 등) 우편향 제거 → 평균이 항상 범위 안. 입력은 오름차순 정렬.
+function bandStats(sortedAsc: number[]): { low: number; high: number; avg: number } {
+  const pct = (p: number) => sortedAsc[Math.floor((sortedAsc.length - 1) * p)];
+  const lo = pct(0.1);
+  const hi = pct(0.9);
+  const inBand = sortedAsc.filter((v) => v >= lo && v <= hi);
+  const base = inBand.length > 0 ? inBand : sortedAsc;
+  const avg = base.reduce((s, v) => s + v, 0) / base.length;
+  return { low: Math.round(lo), high: Math.round(hi), avg: Math.round(avg) };
+}
+
 // 4-B 도매경락 — 전국 도매시장 실시간 경락가. fetchKamisRetail 과 동일 시그니처.
 //   aT katRealTime2/trades2. 시장코드 미지정 → 전국 다시장 1회 수신(범위+평균).
 //   regday 가 주말·휴장이면 며칠 역행해 직전 영업일로 자동 보정.
@@ -311,12 +323,9 @@ async function fetchWholesale(
   if (kgPrices.length === 0) return null;
 
   // 경매 떨이·프리미엄 outlier 가 raw min/max 를 오염(배추 20~10,500원) →
-  //   10~90 백분위로 "대부분 이 범위" 도출. 평균은 rank_note 에.
+  //   10~90 백분위 범위 + 절사평균(범위 안 값만). 평균은 rank_note 에.
   kgPrices.sort((a, b) => a - b);
-  const pct = (p: number) => kgPrices[Math.floor((kgPrices.length - 1) * p)];
-  const low = Math.round(pct(0.1));
-  const high = Math.round(pct(0.9));
-  const avg = Math.round(kgPrices.reduce((s, v) => s + v, 0) / kgPrices.length);
+  const { low, high, avg } = bandStats(kgPrices);
 
   const source: PriceSource = {
     source: "도매경락",
@@ -398,10 +407,7 @@ async function fetchNaverShop(
   // 중량표기 상품이 충분(≥10)하면 kg당, 아니면 상품 단가(개당).
   const useKg = perKg.length >= 10;
   const arr = (useKg ? perKg : raw).slice().sort((a, b) => a - b);
-  const pct = (p: number) => arr[Math.floor((arr.length - 1) * p)];
-  const low = Math.round(pct(0.1));
-  const high = Math.round(pct(0.9));
-  const avg = Math.round(arr.reduce((s, v) => s + v, 0) / arr.length);
+  const { low, high, avg } = bandStats(arr);
 
   const source: PriceSource = {
     source: "네이버쇼핑",
