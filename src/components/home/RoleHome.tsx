@@ -1,8 +1,9 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Sparkles, Users, ChevronRight, ArrowRight, Flame, Bell } from "lucide-react";
+import { Sparkles, Users, ChevronRight, ArrowRight, TrendingUp, Bell } from "lucide-react";
 import { PerformanceBanner } from "@/components/home/PerformanceBanner";
 import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
+import { SectionHeader } from "@/components/home/v4-bits";
 import type { DropFeedItem } from "@/components/home-page";
 import { reshareDrop } from "@/lib/reshare-drop";
 
@@ -154,23 +155,29 @@ export function RoleHome({
     // 추천 카드 — loader(getDiscoverDrops)에서 이미 옴. 새 데이터 배선 0. 최신순 단일(HOT 토글은 Phase3).
     const recommendedDrops = user?.recommendedDrops ?? [];
     return (
-      <div className="mx-auto max-w-md space-y-6 px-6 pt-6 pb-4">
-        <header>
-          <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">LINKDROP</h1>
-          <p className="mt-1.5 text-sm font-medium tracking-ko text-[#737373]">링크는 목적을 만나 행동이 된다</p>
+      <div className="mx-auto max-w-md space-y-6 bg-white px-4 pt-6 pb-24">
+        {/* 헤더 — V4 로고마크 + 워드마크(+ 태그라인). 유저홈은 🔔 없음. */}
+        <header className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-9 items-center justify-center rounded-[11px] bg-[#0F172A] shadow-[0_4px_12px_rgba(15,23,42,0.18)]">
+              <span className="text-[17px] font-bold text-white">L</span>
+            </span>
+            <div>
+              <p className="text-[18px] font-bold leading-tight text-[#0F172A]">LinkDrop</p>
+              <p className="text-[11.5px] text-[#64748B]">링크는 목적을 만나 행동이 된다</p>
+            </div>
+          </div>
         </header>
 
         {/* 성과 배너 — 이번 달 내 성과(placeholder, 데이터 배선 추후). 순수 ADDITIVE 최상단. */}
         <PerformanceBanner conversionCount={0} dropyAmount={0} />
 
-        {/* 오늘 공유하기 좋은 카드 — 추천 영상(있을 때만) 2열 그리드. 카드=공유(카톡 재공유)·열기. */}
+        {/* 오늘 공유하기 좋은 카드 — 추천 영상(있을 때만) 2열 그리드. 카드=공유(카톡 재공유)·열기.
+            빈 박스 방지(L12 원칙) — 없으면 섹션 자체 숨김. */}
         {recommendedDrops.length > 0 ? (
           <section>
-            <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-              <Flame className="size-4" strokeWidth={2} />
-              오늘 공유하기 좋은 카드
-            </h2>
-            <div className="grid grid-cols-2 gap-2">
+            <SectionHeader icon={TrendingUp} title="오늘 공유하기 좋은" badge="NEW" />
+            <div className="grid grid-cols-2 gap-3">
               {recommendedDrops.map((drop) => (
                 <ShareCardTile
                   key={drop.shareUuid}
@@ -205,58 +212,62 @@ export function RoleHome({
   const followedDrops = user?.followedDrops ?? [];
 
   return (
-    <div className="mx-auto max-w-md space-y-6 px-6 pt-6 pb-4">
-      {/* 헤더 — LINKDROP + 🔔(pending 새예약 빨간 배지, 0이면 숨김, 클릭→/partner/reservations) + 매장명 줄. */}
-      <header>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-extrabold tracking-ko text-[#0A0A0A]">LINKDROP</h1>
-          <button
-            type="button"
-            onClick={onGoReservations}
-            aria-label="새 예약"
-            className="relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-[#0A0A0A] transition-colors hover:bg-[#F5F5F5]"
-          >
-            <Bell className="size-5" strokeWidth={2} />
-            {merchant.newReservationsCount > 0 ? (
-              <span className="absolute right-1.5 top-1.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-[#EF4444] px-1 text-[10px] font-bold text-white">
-                {merchant.newReservationsCount}
-              </span>
-            ) : null}
-          </button>
+    <div className="mx-auto max-w-md space-y-6 bg-white px-4 pt-6 pb-24">
+      {/* 헤더 — V4 로고마크 + 워드마크 + 매장명(파란 도트) + 🔔(pending 새예약 빨간 배지, 0이면 숨김, 클릭→/partner/reservations). */}
+      <header className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-9 items-center justify-center rounded-[11px] bg-[#0F172A] shadow-[0_4px_12px_rgba(15,23,42,0.18)]">
+            <span className="text-[17px] font-bold text-white">L</span>
+          </span>
+          <div>
+            <p className="text-[18px] font-bold leading-tight text-[#0F172A]">LinkDrop</p>
+            <p className="flex items-center gap-1 text-[11.5px] text-[#64748B]">
+              <span className="size-1.5 rounded-full bg-[#2563EB]" />
+              {merchant.partnerName || "내 매장"}
+            </p>
+          </div>
         </div>
-        <p className="mt-1 text-sm font-medium tracking-ko text-[#737373]">
-          {merchant.partnerName || "내 매장"}
-        </p>
+        <button
+          type="button"
+          onClick={onGoReservations}
+          aria-label="새 예약"
+          className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[#EAEEF3] bg-white text-[#0F172A] transition-colors hover:bg-[#F1F5F9] active:scale-95"
+        >
+          <Bell className="size-[18px]" strokeWidth={2} />
+          {merchant.newReservationsCount > 0 ? (
+            <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-[#EF4444] px-1 text-[10px] font-bold text-white">
+              {merchant.newReservationsCount}
+            </span>
+          ) : null}
+        </button>
       </header>
 
       {/* 성과 스탯 3타일 — 전환·적립·구독자. */}
       <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />
 
-      {/* 링고AI 매장 진단 (항상 노출 — 진단 or 포인터). */}
+      {/* 링고AI 매장 진단 (항상 노출 — 진단 or 포인터). ★TodayAiCard 0터치(기능 유지). */}
       <TodayAiCard guide={merchant.guide} onGoResults={onGoResults} />
 
-      {/* 제안 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. */}
+      {/* 제안 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. 스타일만 V4 톤. */}
       {merchant.proposals.length > 0 ? (
         <section>
-          <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-            <Users className="size-4" strokeWidth={2} />새 제안 {merchant.proposals.length}
-          </h2>
+          <SectionHeader icon={Users} title="새 제안" badge={merchant.proposals.length} />
           <ul className="space-y-2">
             {merchant.proposals.map((p) => (
               <li
                 key={p.connectionId}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-[#E5E5E5] bg-white px-4 py-3"
+                className="flex items-center justify-between gap-3 rounded-2xl border border-[#E8EDF3] bg-white px-4 py-3"
               >
-                <p className="min-w-0 truncate text-sm font-bold tracking-ko text-[#0A0A0A]">
+                <p className="min-w-0 truncate text-sm font-bold tracking-ko text-[#0F172A]">
                   {p.name}
                 </p>
                 <button
                   type="button"
                   onClick={onGoProposals}
-                  className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg border border-[#E5E5E5] bg-white px-3 text-sm font-semibold tracking-ko text-[#0A0A0A] transition-colors hover:bg-[#FAFAFA]"
+                  className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg border border-[#E8EDF3] bg-white px-3 text-sm font-semibold tracking-ko text-[#0F172A] transition-colors hover:bg-[#F1F5F9]"
                 >
                   보기
-                  <ChevronRight className="size-4" strokeWidth={2} />
+                  <ChevronRight className="size-4 text-[#94A3B8]" strokeWidth={2} />
                 </button>
               </li>
             ))}
@@ -264,14 +275,11 @@ export function RoleHome({
         </section>
       ) : null}
 
-      {/* 오늘 공유하기 좋은 카드 — 추천 영상(있을 때만) 2열 그리드. 유저홈과 동일. */}
+      {/* 오늘 공유하기 좋은 카드 — 추천 영상(있을 때만) 2열 그리드. 유저홈과 동일. 빈 박스 방지(L12) — 없으면 숨김. */}
       {recommendedDrops.length > 0 ? (
         <section>
-          <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-            <Flame className="size-4" strokeWidth={2} />
-            오늘 공유하기 좋은 카드
-          </h2>
-          <div className="grid grid-cols-2 gap-2">
+          <SectionHeader icon={TrendingUp} title="오늘 공유하기 좋은" badge="NEW" />
+          <div className="grid grid-cols-2 gap-3">
             {recommendedDrops.map((drop) => (
               <ShareCardTile
                 key={drop.shareUuid}
