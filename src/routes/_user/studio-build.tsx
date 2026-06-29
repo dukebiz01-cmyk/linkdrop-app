@@ -47,6 +47,7 @@ import {
   ExternalLink,
   Copy,
   MessageCircle,
+  Wand2,
   Flag,
 } from "lucide-react";
 
@@ -853,6 +854,39 @@ export function CardStudioPage() {
                   purpose={
                     applied["calendar"] ? "예약" : applied["coupon"] && selectedCouponId ? "쿠폰" : "정보"
                   }
+                  shareFooter={
+                    /* 거울 5a — 손님 공유 푸터(Wand2 주 버튼 + 링크복사/친구에게보내기 아이콘 + 고지 + 신고)
+                       시각 stub. 전부 div(onClick·href 없음 = 시각만). 손님은 CardBody.shareFooter 에 실작동 주입.
+                       클래스는 손님 푸터와 1:1(거울). */
+                    <div data-testid="share-footer">
+                      <div data-testid="share-block" className="mt-4 flex items-center gap-2">
+                        <div
+                          aria-hidden="true"
+                          className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-white text-[#0A0A0A] shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
+                        >
+                          <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
+                        </div>
+                        <div
+                          aria-hidden="true"
+                          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-inset ring-white/25"
+                        >
+                          <Copy className="h-5 w-5" strokeWidth={2.25} />
+                        </div>
+                        <div
+                          aria-hidden="true"
+                          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-inset ring-white/25"
+                        >
+                          <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
+                        </div>
+                      </div>
+                      <p className="mt-3 text-center text-[10px] leading-relaxed text-white/45">
+                        본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
+                      </p>
+                      <div className="mt-2 text-center text-[11px] text-white/50 underline underline-offset-2">
+                        문제 신고
+                      </div>
+                    </div>
+                  }
                 />
 
                 {/* ── preview placeholder (CardBody 밖, 스튜디오 authoring 안내 — 문구·게이트 그대로) ── */}
@@ -936,29 +970,6 @@ export function CardStudioPage() {
                   </div>
                 ) : null}
 
-                {/* 거울 5a — 손님 공유 푸터(이 영상으로 만들기·링크 복사·친구에게 보내기·고지·신고)
-                    시각 stub. 전부 div(onClick·href 없음 = 시각만). 손님은 페이지 레벨에서 실작동. */}
-                <section className="mx-auto w-full max-w-[480px] space-y-3 px-6 pt-4">
-                  <div className="flex items-stretch gap-2">
-                    <div className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A]">
-                      <Plus className="size-5" strokeWidth={2} />이 영상으로 만들기
-                    </div>
-                    <div className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A]">
-                      <Copy className="size-5" strokeWidth={2} />링크 복사
-                    </div>
-                    <div className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl bg-[#0A0A0A] px-2 py-2 text-xs font-semibold tracking-ko text-white">
-                      <MessageCircle className="size-5" strokeWidth={2} />친구에게 보내기
-                    </div>
-                  </div>
-                  <p className="text-center text-[10px] tracking-ko text-white/50">
-                    본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
-                  </p>
-                  <div className="flex justify-center">
-                    <div className="inline-flex items-center gap-1 text-[11px] tracking-ko text-white/70 underline">
-                      <Flag className="size-3.5" strokeWidth={2} />문제 신고
-                    </div>
-                  </div>
-                </section>
             </DropCardShell>
           </div>
         </section>

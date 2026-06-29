@@ -31,6 +31,7 @@ export function CardBody({
   couponBlock,
   reservationBlock,
   contactBlock,
+  shareFooter,
 }: CardBodyProps) {
   return (
     <>
@@ -122,6 +123,9 @@ export function CardBody({
         ) : null}
 
       </div>
+
+      {/* 공유 푸터 — 카드 본문 맨 아래. container 가 주입(손님 실작동 / 스튜디오 div stub). 미주입이면 안 그림. */}
+      {shareFooter ? <div className="mt-6">{shareFooter}</div> : null}
     </>
   );
 }

@@ -20,6 +20,7 @@ import {
   Play,
   Copy,
   MessageCircle,
+  Wand2,
   Check,
   Plus,
   FileText,
@@ -1006,6 +1007,51 @@ export function InfoDropPage({
       </section>
     ) : null;
 
+  // v0 원안 공유 푸터 — 카드 안 아이콘 줄(영상만들기 주 버튼 + 링크복사/친구에게보내기 아이콘 + 고지 + 신고).
+  //   CardBody.shareFooter 슬롯(info/coupon/reservation = 카드 본문 맨 아래)과 비-CardBody variant(purchase/lead)
+  //   페이지 레벨 양쪽에서 동일 마크업 재사용. 핸들러 1:1 보존: handleKakao=체인시드 / handleCopy / create-wizard href / 신고.
+  const shareFooter = (
+    <div data-testid="share-footer">
+      <div data-testid="share-block" className="mt-4 flex items-center gap-2">
+        {videoSourceUrl && !commerce?.selfUpload && (
+          <a
+            href={`/create-wizard?url=${encodeURIComponent(videoSourceUrl)}`}
+            aria-label="이 영상으로 만들기"
+            className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-white text-[#0A0A0A] shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
+          >
+            <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
+          </a>
+        )}
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label="링크 복사"
+          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-inset ring-white/25"
+        >
+          <Copy className="h-5 w-5" strokeWidth={2.25} />
+        </button>
+        <button
+          type="button"
+          onClick={handleKakao}
+          aria-label="친구에게 보내기"
+          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-inset ring-white/25"
+        >
+          <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
+        </button>
+      </div>
+      <p className="mt-3 text-center text-[10px] leading-relaxed text-white/45">
+        본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
+      </p>
+      <button
+        type="button"
+        onClick={() => setIsReportSheetOpen(true)}
+        className="mt-2 mx-auto flex items-center gap-1 text-[11px] text-white/50 underline underline-offset-2"
+      >
+        문제 신고
+      </button>
+    </div>
+  );
+
   return (
     <div
       className={cn(
@@ -1170,6 +1216,7 @@ export function InfoDropPage({
                   </div>
                 ) : undefined
               }
+              shareFooter={shareFooter}
             />
           </DropCardShell>
         )}
@@ -1206,6 +1253,7 @@ export function InfoDropPage({
                 ) : null
               }
               contactBlock={contactRow}
+              shareFooter={shareFooter}
             />
           </DropCardShell>
         )}
@@ -1262,6 +1310,7 @@ export function InfoDropPage({
                 </div>
               }
               contactBlock={contactRow}
+              shareFooter={shareFooter}
             />
           </DropCardShell>
         )}
@@ -1692,82 +1741,12 @@ export function InfoDropPage({
         </section>
       ) : null}
 
-      {/* v7.2 5a — 하단 공유 블록 (모든 드롭 공통).
-            [LinkDrop][링크 복사][친구에게 보내기] 가로 3 버튼.
-            Slice 1: '친구에게 보내기'(= 기존 카카오 재공유) 1차 강조(검정 fill).
-            본문 small 카톡·"나도 이런 정보..." 텍스트 링크·sticky 카톡 분기
-            전부 통합. 60대 친화 큰 터치, #15 검정 미니멀, 이모지 X. */}
-      <section className="mx-auto w-full max-w-[480px] space-y-3 px-6 pt-4">
-        {copyFeedback && (
-          <p
-            className={cn(
-              "flex items-center gap-2 text-sm font-medium",
-              resolvedVariant === "info" ? "text-text-strong" : "text-white",
-            )}
-          >
-            <Check className="size-4 text-intent-success" strokeWidth={2} />
-            {copyFeedback}
-          </p>
-        )}
-        <ErrorMessage message={shareError} />
-
-        <div className="flex items-stretch gap-2" data-testid="share-block">
-          {/* 연결 — '이 영상으로 만들기' = /create-wizard?url= prefill 진입(위저드 자동 메타fetch).
-              selfUpload(자체업로드 상품)은 영상 원본이 없어 숨김. */}
-          {videoSourceUrl && !commerce?.selfUpload ? (
-            <a
-              href={`/create-wizard?url=${encodeURIComponent(videoSourceUrl)}`}
-              className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
-              aria-label="이 영상으로 만들기"
-            >
-              <Plus className="size-5 text-[#0A0A0A]" strokeWidth={2} />이 영상으로 만들기
-            </a>
-          ) : null}
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
-            aria-label="링크 복사"
-          >
-            <Copy className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-            링크 복사
-          </button>
-          {/* Slice 1 — 받은 사람의 재공유(루프 닫기) 1차 액션. 동작은 기존
-              onKakaoShare(=ld_create_share_edge_v3 재공유) 그대로. 검정 fill 로 강조. */}
-          <button
-            type="button"
-            onClick={handleKakao}
-            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl bg-[#0A0A0A] px-2 py-2 text-xs font-bold tracking-ko text-white hover:bg-[#171717]"
-            aria-label="친구에게 보내기"
-          >
-            <MessageCircle className="size-5 text-white" strokeWidth={2} />
-            친구에게 보내기
-          </button>
-        </div>
-
-        <p
-          className={cn(
-            "text-center text-[10px] leading-tight tracking-ko",
-            resolvedVariant === "info" ? "text-[#A3A3A3]" : "text-white/50",
-          )}
-        >
-          본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
-        </p>
-
-        <div className="text-center">
-          <button
-            type="button"
-            onClick={() => setIsReportSheetOpen(true)}
-            className={cn(
-              "inline-flex items-center gap-1 bg-transparent text-[11px] underline underline-offset-2",
-              resolvedVariant === "info" ? "text-[#525252] hover:text-[#0A0A0A]" : "text-white/70 hover:text-white",
-            )}
-          >
-            <Flag size={11} strokeWidth={2} />
-            문제 신고
-          </button>
-        </div>
-      </section>
+      {/* v0 원안 공유 푸터 — 페이지 레벨은 비-CardBody variant(purchase/lead)만 담당(회귀 0).
+            info/coupon/reservation 은 CardBody.shareFooter 슬롯(카드 본문 맨 아래)에서 동일 마크업 렌더.
+            purchase/lead 페이지 배경은 navy(#1E3A8A)라 같은 white-on-navy 푸터 그대로 적용. */}
+      {(resolvedVariant === "purchase" || resolvedVariant === "lead") ? (
+        <section className="mx-auto w-full max-w-[480px] px-6 pt-4">{shareFooter}</section>
+      ) : null}
 
       {/* v7.2 5b — sticky 하단 바: funnelCoupon + onReserveAndClaim 있을
             때만 단일 액션. 카카오톡 공유는 위 공유 블록으로 이전 (sticky 미사용).

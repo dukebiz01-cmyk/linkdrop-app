@@ -69,4 +69,10 @@ export type CardBodyProps = {
   reservationBlock?: ReactNode | null;
   /** 연락 블록 — "정보 보기" ButtonBlock 펼침 콘텐츠로 주입. */
   contactBlock?: ReactNode | null;
+
+  // ── 공유 푸터 슬롯 — 카드 본문 맨 아래(영상만들기·링크복사·친구에게보내기·고지·신고). ──
+  //   container 가 주입: 손님(info-drop)=실작동(handleCopy/handleKakao/href/신고), 스튜디오=div 시각 stub.
+  //   미주입(null)이면 안 그림. CardBody 는 presentational — 슬롯 내용만 카드 맨 아래에 렌더.
+  /** 공유 푸터 — 카드 본문 맨 끝에 렌더. 손님 실작동 / 스튜디오 시각 stub 양쪽 주입. */
+  shareFooter?: ReactNode | null;
 };
