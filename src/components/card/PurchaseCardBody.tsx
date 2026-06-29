@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Check, ShoppingCart, MapPin, CalendarDays, Sprout } from "lucide-react";
 import { AiPriceComparisonCard, type PriceOfferRow } from "@/components/ai-price-comparison-card";
 import { ActionButton } from "@/components/ActionButton";
+import { ImageZoomModal } from "@/components/card/ImageZoomModal";
 import type { InfoDropPageProps } from "@/components/info-drop-page";
 
 /**
@@ -29,16 +31,35 @@ export function PurchaseCardBody({
   onPreorder?: () => void;
   onSellerClick: () => void;
 }) {
+  const [zoomOpen, setZoomOpen] = useState(false);
   return commerce ? (
     // F2 커머스 — 시세·쿠폰 없는 단순 상품 카드(이미지=source, 가격/이름=block, 구매=source url).
     <section data-testid="variant-purchase" className="w-full max-w-full">
       <div className="overflow-hidden rounded-2xl border border-border bg-bg">
         {commerce.imageUrl ? (
-          <img
-            src={commerce.imageUrl}
-            alt=""
-            className="aspect-[4/3] w-full object-cover"
-          />
+          <>
+            {/* 탭하면 전체화면 무크롭 확대(긴 세로 잘림 해소). 카드 안 표시(aspect-[4/3] 크롭)는 그대로. */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setZoomOpen(true);
+              }}
+              className="block w-full cursor-zoom-in"
+            >
+              <img
+                src={commerce.imageUrl}
+                alt=""
+                className="aspect-[4/3] w-full object-cover"
+              />
+            </button>
+            <ImageZoomModal
+              src={commerce.imageUrl}
+              alt={commerce.name}
+              open={zoomOpen}
+              onOpenChange={setZoomOpen}
+            />
+          </>
         ) : null}
         <div className="space-y-3 p-4">
           <p className="text-base font-bold leading-snug tracking-ko text-text-strong">
