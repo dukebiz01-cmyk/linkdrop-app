@@ -1,10 +1,9 @@
-import { X } from "lucide-react";
-import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 /**
  * ImageZoomModal — 이미지를 전체화면 무크롭(object-contain)으로 확대.
  *   Radix @/components/ui/dialog 박막. 긴 세로 이미지 대응(max-h-[90vh]).
- *   닫기 = 바깥탭/ESC(Radix 기본) + 우상단 X(어두운 이미지 위 가시성 위해 dark-bg). src 비면 null(방어).
+ *   닫기 = 바깥탭/ESC + DialogContent built-in X(YouTubeEmbedModal 동일 방식). src 비면 null(방어).
  */
 export function ImageZoomModal({
   src,
@@ -27,15 +26,6 @@ export function ImageZoomModal({
           alt={alt ?? ""}
           className="max-h-[90vh] w-full rounded-lg object-contain"
         />
-        <DialogClose asChild>
-          <button
-            type="button"
-            aria-label="닫기"
-            className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5 text-white transition-colors hover:bg-black/70"
-          >
-            <X className="h-5 w-5" strokeWidth={2} />
-          </button>
-        </DialogClose>
       </DialogContent>
     </Dialog>
   );
