@@ -1294,7 +1294,7 @@ function CouponClaimCard({
                 className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm font-bold text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-50"
               >
                 <Send className="size-4" strokeWidth={2} />
-                친구에게 보내기
+                쿠폰 선물
               </button>
             ) : null}
           </div>
