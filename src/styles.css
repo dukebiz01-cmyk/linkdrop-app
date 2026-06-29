@@ -5,17 +5,22 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system — 13 design philosophy axioms.
+ * Design system — V4 (slate + elevation + blue).
  *
- * Allowed only:
+ * Allowed:
  *  - Spacing: 8pt grid (4/8/12/16/24/32/48)
- *  - Radius: lg=8px, 2xl=16px
- *  - Colors: bg, text 5-step gray, border, action(black),
- *            accent(#4F46E5), intent.* (strip/chip ONLY)
+ *  - Radius: lg=8px, xl=12px, 2xl=16px
+ *  - Colors: slate base — text #0F172A / #64748B / #94A3B8, surface #F1F5F9,
+ *            border #E8EDF3 / #E2E8F0 — + blue accent #2563EB
+ *            + intent tints (chip/strip) + semantic (red #EF4444 / green #10B981 / gold #B07D2B)
  *  - Font weight: medium / semibold / bold / extrabold
  *  - Letter spacing (Korean): -0.02em (tracking-ko)
- *  - Shadow: shadow-soft (modal/dropdown ONLY)
- *  - Hover: border / -translate-y-0.5 only (no scale/shadow)
+ *  - Shadow: card/chip/button elevation allowed —
+ *      card  = 0 1px 2px rgba(15,23,42,.05), 0 4px 12px rgba(15,23,42,.04)
+ *      hover = 0 10px 28px rgba(15,23,42,.1)
+ *      pill  = 0 2px 6px rgba(15,23,42,.16)
+ *      modal = shadow-soft (기존)
+ *  - Hover: border / -translate-y-0.5 / scale + shadow elevation allowed
  */
 
 @theme inline {
@@ -104,26 +109,26 @@
 
 :root {
   /* Surfaces */
-  --bg: #ffffff;
-  --surface: #fafaf9;
+  --bg: #ffffff; /* ★ 카드 배경 — 변경 금지 */
+  --surface: #f1f5f9; /* V4 slate-100 */
 
-  /* 5-step gray (text scale) */
-  --text-strong: #0a0a0a; /* 1: titles, primary text */
+  /* 5-step slate (text scale) — V4 */
+  --text-strong: #0f172a; /* 1: titles, primary text (slate-900) */
   --text: #262626; /* 2: body */
-  --text-muted: #525252; /* 3: secondary */
-  --text-subtle: #a3a3a3; /* 4: placeholder, helper */
-  --text-disabled: #d4d4d4; /* 5: disabled */
+  --text-muted: #64748b; /* 3: secondary (slate-500) */
+  --text-subtle: #94a3b8; /* 4: placeholder, helper (slate-400) */
+  --text-disabled: #cbd5e1; /* 5: disabled (slate-300) */
 
-  /* Border */
-  --border: #e5e5e5;
+  /* Border — V4 slate */
+  --border: #e8edf3;
 
   /* Action (filled primary button — 1 per screen). 검정.
      teal 은 accent 전용 — primary 채워진 버튼 fill 은 검정. 텍스트 색 아님(--text-strong). */
   --action: #0a0a0a;
   --action-foreground: #ffffff;
 
-  /* Accent — single brand color */
-  --accent: #4f46e5;
+  /* Accent — single brand color (V4 blue) */
+  --accent: #2563eb;
   --accent-foreground: #ffffff;
 
   /* Intent — strip/chip only */

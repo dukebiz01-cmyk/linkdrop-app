@@ -74,11 +74,11 @@ When picking a client: route loaders / `beforeLoad` → `getAuthClient()`. Clien
 
 - **Spacing**: only 8pt grid steps (`4/8/12/16/24/32/48`). No `p-2.5`, `gap-13`, etc.
 - **Radius**: only `lg` (8px) and `2xl` (16px) in app code. `sm`/`md`/`xl`/`3xl` exist as aliases solely so shadcn primitives don't break — don't introduce them in feature code.
-- **Colors**: use the token vars (`bg`, `text-strong`/`muted`/`subtle`/`disabled`, `border`, `action`, `accent`, `intent-*`). No raw hex outside the theme block. `intent-*` colors are for strips/chips only, never background or body text.
+- **Colors**: V4 slate tokens (`text-strong` #0F172A, `muted` #64748B, `subtle` #94A3B8, `surface` #F1F5F9, `border` #E8EDF3) + blue `accent` #2563EB + `intent-*` tints (strip/chip only). Component raw hex (`#0F172A`, `#2563EB`, etc.) is allowed for V4 rollout.
 - **Font weight**: only `medium`/`semibold`/`bold`/`extrabold`.
 - **Korean**: `tracking-ko` (-0.02em) is the global letter-spacing; copy is Korean throughout.
-- **Shadow**: `shadow-soft` only, for modals and dropdowns.
-- **Hover**: border change or `-translate-y-0.5` only — no `hover:scale` / `hover:shadow`.
+- **Shadow**: card/chip/button elevation allowed (see `styles.css` shadow tokens). `shadow-soft` for modals/dropdowns.
+- **Hover**: border change / `-translate-y-0.5` / scale + shadow elevation allowed.
 - **Touch targets**: buttons use `min-h-[44px] min-w-[44px]`.
 - **Empty states**: list pages should render `<EmptyState />` rather than nothing.
 - **Error copy**: use `ErrorMessage` + `friendlyErrors` for the standard Korean tone.
