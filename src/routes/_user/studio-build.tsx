@@ -5,6 +5,8 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
 import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
+import { ProductAttachSection } from "@/components/create/step3/ProductAttachSection";
+import type { AttachedProduct } from "@/components/create/types";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
 import { CardBody } from "@/components/card/CardBody";
@@ -233,7 +235,7 @@ const DECK = [
 ].filter((b) => ENABLE_COLOR_PICKER || b.id !== "bgcolor"); // 색 기능 숨김 시 덱에서 bgcolor 제외(배열 원본은 보존)
 
 // 블록 설정 아코디언 대상 — 설정이 필요한 5개만. bgcolor(색=덱 팔레트)·강화 3종 제외.
-const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link"];
+const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link", "product"];
 
 // v0 globals 부재 keyframes 동봉 — 룩 보존용(기존 파일 무수정).
 const STUDIO_BUILD_CSS = `
@@ -265,6 +267,8 @@ export function CardStudioPage() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   // 쿠폰 피커 — 내 쿠폰 여러 개 중 선택(인라인, 색상 팔레트 showColorPicker 패턴 동일).
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
+  // 상품 블록 — 내 등록상품(get_my_products) 선택. 쿠폰 selectedCouponId 패턴. 미리보기·저장 배선은 다음 단계.
+  const [attachedProducts, setAttachedProducts] = useState<AttachedProduct[]>([]);
   const [showCouponPicker, setShowCouponPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
   // S2-a 저장 — POST /api/drops(영상+한마디만). 단축 URL 반환 확인까지.
@@ -1338,6 +1342,32 @@ export function CardStudioPage() {
                               </p>
                             </div>
                           )
+                        ) : block.id === "product" ? (
+                          // 상품 — 내 등록상품(get_my_products) 선택(쿠폰 패턴). ProductAttachSection 재사용(내부 디자인 0터치).
+                          <div className="space-y-3">
+                            {/* 새 상품 등록 — 새 탭(studio state 보존, 풀-네비게이션 금지). */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                window.open("/partner/products/new", "_blank", "noopener,noreferrer")
+                              }
+                              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2.5 text-[13px] font-medium text-[#475569] transition-colors hover:bg-[#F8FAFC]"
+                            >
+                              <Plus className="h-4 w-4" strokeWidth={2} />새 상품 등록
+                            </button>
+                            <ProductAttachSection
+                              value={attachedProducts}
+                              onChange={setAttachedProducts}
+                            />
+                            {/* 확인 — 매듭(아코디언 닫기). 쿠폰 확인 버튼 패턴(V4 잉크). */}
+                            <button
+                              type="button"
+                              onClick={() => setExpandedBlockId(null)}
+                              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0F172A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#1E293B]"
+                            >
+                              <Check className="h-4 w-4" strokeWidth={2.5} />확인
+                            </button>
+                          </div>
                         ) : (
                           <div className="rounded-xl border border-dashed border-[#D4D4D4] bg-[#FAFAFA] px-3 py-5 text-center">
                             <Wrench className="mx-auto h-5 w-5 text-[#A3A3A3]" strokeWidth={1.75} />
