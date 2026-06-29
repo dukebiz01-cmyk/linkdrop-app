@@ -2,21 +2,17 @@ import { Play, Send, Image as ImageIcon } from "lucide-react";
 import type { DropFeedItem } from "@/components/home-page";
 
 /**
- * ShareCardTile — full-bleed 썸네일 + 하단 아크릴판(글래스모피즘) 카드.
- *   유저홈 "오늘 공유하기 좋은 카드" · 탐색 그리드(1/2열) 공용.
+ * ShareCardTile — V4 카드(정사각 썸네일 + 솔리드 정보영역 + 슬레이트 + 도트칩 + 섀도).
+ *   유저홈 "오늘 공유하기 좋은 카드" · 탐색 그리드 공용. (아크릴 오버레이 → V4 솔리드로 교체.)
  *
- * 구조: 루트 relative h-[180px] / 썸네일 absolute inset-0 object-cover(없으면 폴백 아이콘)
- *   / 종류칩(top-left) · 공유 아이콘버튼(top-right) · duration(아크릴판 위) 오버레이
- *   / 하단 아크릴판(absolute bottom-0) = bg-white/72 backdrop-blur-md + 메이커·지역 + 제목.
+ * 구조: 루트 article(group, flex-col, rounded-2xl, border #E8EDF3, V4 카드 섀도, hover -translate+elevation)
+ *   / 썸네일 aspect-square(고정 1:1 → 카드 높이 정렬, group-hover scale) + 상단 스크림
+ *   / 종류칩(top-left, 도트+라벨, purpose 주입 시만) · 공유 아이콘버튼(top-right, 44px 탭) · duration(좌하단)
+ *   / 솔리드 정보영역(메이커·지역 1줄 + 제목 2줄 clamp, min-h 컬럼 정렬).
  *
- * 디자인 공리(styles.css): backdrop-blur 허용(bottom-nav·기존 오버레이 선례) → 사용.
- *   box-shadow 는 shadow-soft(modal/dropdown) 외 금지 → 공유 아이콘은 그림자 없이 border 로.
- * 색 — 형제 팔레트만(#0A0A0A, #525252, #A3A3A3, #E5E5E5, #D4D4D4, #F5F5F5, black, white).
- *   #404040 는 팔레트 미존재 → #525252 폴백. 블루 미사용. Lucide만, 이모지 0.
- *
- * 루트=article(비-button) + onClick → 공유는 내부 button + stopPropagation(중첩 button 금지).
- * onShare = 카톡 재공유(shareUuid 전달). onClick = 카드 열기(옵션).
- * purpose = 종류칩 값(옵셔널). 호출부가 drop.intent/purpose 를 넘길 때만 칩 표시(미주입=칩 없음).
+ * 공리 V4(styles.css 600b062): 슬레이트+섀도+blue accent 허용, raw hex 허용, backdrop-blur 허용. Lucide만, 이모지 0.
+ * 루트=article(비-button) + onClick → 공유만 내부 button + stopPropagation(중첩 button 금지).
+ * ★ props 계약 유지: { drop, purpose?, onShare?, onClick? }. 홈=purpose 미주입(칩X), 탐색=주입(칩O).
  */
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -24,21 +20,25 @@ function formatDuration(sec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-// 종류칩 라벨 — 영문 intent(coupon/reservation/commerce/info)·국문 purpose(쿠폰/예약/구매/정보) 양쪽 매핑.
-//   정보→정보 / 쿠폰·예약→쿠폰 / 구매→상품판매. 그 외(ticket/lead/… )는 null = 칩 숨김.
-function purposeChipLabel(v: string | undefined): string | null {
+type ChipTone = { dot: string; text: string };
+type ChipMeta = { label: string; tone: ChipTone };
+
+// 종류칩 메타 — 영문 intent / 국문 purpose 양쪽 매핑 + V4 톤(도트색·텍스트색).
+//   정보→info톤 / 쿠폰·예약→coupon톤(blue) / 구매→sale톤. 그 외(ticket/lead/…)·미주입 → null(칩 숨김).
+//   ★ 미주입(undefined) → null = 홈은 칩 없음(기존 계약 보존). 탐색만 purpose 주입 → 칩 표시.
+function purposeMeta(v: string | undefined): ChipMeta | null {
   switch (v) {
     case "정보":
     case "info":
-      return "정보";
+      return { label: "정보", tone: { dot: "#64748B", text: "text-[#475569]" } };
     case "쿠폰":
     case "예약":
     case "coupon":
     case "reservation":
-      return "쿠폰";
+      return { label: "쿠폰", tone: { dot: "#2563EB", text: "text-[#1D4ED8]" } };
     case "구매":
     case "commerce":
-      return "상품판매";
+      return { label: "상품판매", tone: { dot: "#0F172A", text: "text-[#0F172A]" } };
     default:
       return null;
   }
@@ -56,77 +56,95 @@ export function ShareCardTile({
   onClick?: () => void;
 }) {
   const isVideo = drop.videoDurationSec > 0;
-  const chipLabel = purposeChipLabel(purpose);
+  const chip = purposeMeta(purpose);
   const hasThumb = Boolean(drop.videoThumbnailUrl);
 
   return (
     <article
-      className="relative h-[180px] cursor-pointer overflow-hidden rounded-2xl border border-[#E5E5E5] transition-colors hover:border-[#D4D4D4]"
+      className="group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-[#E8EDF3] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05),0_4px_12px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#CBD5E1] hover:shadow-[0_10px_28px_rgba(15,23,42,0.1)]"
       onClick={onClick}
     >
-      {/* full-bleed 썸네일 — 없으면 폴백(영상=Play / 사진=Image) */}
-      {hasThumb ? (
-        <img
-          src={drop.videoThumbnailUrl}
-          alt={drop.title}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#F5F5F5]">
-          {isVideo ? (
-            <Play className="h-8 w-8 text-[#A3A3A3]" strokeWidth={1.5} />
-          ) : (
-            <ImageIcon className="h-8 w-8 text-[#A3A3A3]" strokeWidth={1.5} />
-          )}
-        </div>
-      )}
+      {/* 썸네일 — 고정 1:1 정사각(모든 카드 높이 정렬). 없으면 폴백(영상=Play / 사진=Image). */}
+      <div className="relative aspect-square w-full overflow-hidden bg-[#F1F5F9]">
+        {hasThumb ? (
+          <img
+            src={drop.videoThumbnailUrl}
+            alt={drop.title}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-[450ms] ease-[cubic-bezier(0.19,1,0.22,1)] group-hover:scale-[1.05]"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-[#94A3B8]">
+            {isVideo ? (
+              <Play className="h-8 w-8" strokeWidth={1.5} />
+            ) : (
+              <ImageIcon className="h-8 w-8" strokeWidth={1.5} />
+            )}
+          </div>
+        )}
 
-      {/* 종류칩 — top-left, 반투명 흰 아크릴 */}
-      {chipLabel ? (
-        <span className="absolute left-2 top-2 rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-semibold tracking-ko text-[#0A0A0A] backdrop-blur-sm">
-          {chipLabel}
-        </span>
-      ) : null}
+        {/* 상단 스크림 — 칩·공유 가독성. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/30 to-transparent" />
 
-      {/* 공유 — top-right 아이콘 버튼. 탭영역 44px(공리), 가시 원 32px. 카드 열기 방지 stopPropagation. */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onShare?.(drop.shareUuid);
-        }}
-        className="absolute right-1 top-1 flex h-11 w-11 items-center justify-center"
-        aria-label="공유"
-      >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-white/85 text-[#0A0A0A] backdrop-blur-sm transition-colors hover:bg-white">
-          <Send className="h-4 w-4" strokeWidth={2} />
-        </span>
-      </button>
-
-      {/* 하단 아크릴판 — 반투명 흰 + 블러. duration(영상)은 판 바로 위에 띄움(bottom-full). */}
-      <div className="absolute inset-x-0 bottom-0 border-t border-white/50 bg-white/72 px-2.5 py-2.5 backdrop-blur-md backdrop-saturate-150">
-        {isVideo ? (
-          <span className="absolute bottom-full left-2 mb-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] tabular-nums text-white backdrop-blur-sm">
-            {formatDuration(drop.videoDurationSec)}
+        {/* 종류칩 — 좌상단, 도트+라벨(글래스 펄). purpose 주입 시만(홈 미주입=숨김). */}
+        {chip ? (
+          <span
+            className={`absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold shadow-[0_2px_6px_rgba(15,23,42,0.16)] backdrop-blur-sm ${chip.tone.text}`}
+          >
+            <span className="size-1.5 rounded-full" style={{ backgroundColor: chip.tone.dot }} />
+            {chip.label}
           </span>
         ) : null}
 
-        {/* 메이커 · 지역 (1줄) */}
-        <div className="flex min-w-0 items-center gap-1 text-[10px] tracking-ko text-[#525252]">
-          <span className="truncate font-medium">{drop.maker.name}</span>
-          {drop.localName ? (
-            <>
-              <span className="shrink-0">·</span>
-              <span className="truncate">{drop.localName}</span>
-            </>
-          ) : null}
-        </div>
+        {/* 공유 — 우상단 아이콘 버튼. 탭영역 44px, 가시 원 32px. 카드 열기 방지 stopPropagation. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onShare?.(drop.shareUuid);
+          }}
+          className="absolute right-1 top-1 flex h-11 w-11 items-center justify-center"
+          aria-label="공유"
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 shadow-[0_2px_6px_rgba(15,23,42,0.18)] backdrop-blur-sm transition-all duration-150 group-hover:bg-white active:scale-90">
+            <Send
+              className="size-[15px] text-[#0F172A] transition-colors group-hover:text-[#2563EB]"
+              strokeWidth={2}
+            />
+          </span>
+        </button>
 
-        {/* 제목 (2줄 clamp) */}
-        <h3 className="mt-0.5 line-clamp-2 text-[12.5px] font-semibold leading-snug tracking-ko text-[#0A0A0A]">
+        {/* 재생시간 — 좌하단(영상만). */}
+        {isVideo ? (
+          <span className="absolute bottom-2 left-2 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white">
+            {formatDuration(drop.videoDurationSec)}
+          </span>
+        ) : null}
+      </div>
+
+      {/* 정보영역 — 솔리드, 고정 높이 컬럼 정렬(메이커·지역 1줄 + 제목 2줄). */}
+      <div className="flex flex-col px-3 pb-3 pt-2.5">
+        <div className="truncate text-[11px] font-semibold text-[#64748B]">
+          {drop.maker.name}
+          {drop.localName ? ` · ${drop.localName}` : ""}
+        </div>
+        <div className="mt-1 line-clamp-2 min-h-[37px] text-[13.5px] font-semibold leading-[1.4] tracking-[-0.01em] text-[#0F172A]">
           {drop.title}
-        </h3>
+        </div>
       </div>
     </article>
+  );
+}
+
+// 로딩 스켈레톤 — 동일 1:1 비율(탐색/홈 로딩 자리). 펄스만, 인터랙션 없음.
+export function ShareCardTileSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#EAEEF3] bg-white">
+      <div className="aspect-square w-full animate-pulse bg-[#F1F5F9]" />
+      <div className="flex flex-col gap-1.5 px-3 pb-3 pt-2.5">
+        <div className="h-3 w-2/5 animate-pulse rounded bg-[#F1F5F9]" />
+        <div className="h-3.5 w-full animate-pulse rounded bg-[#F1F5F9]" />
+        <div className="h-3.5 w-3/4 animate-pulse rounded bg-[#F1F5F9]" />
+      </div>
+    </div>
   );
 }
