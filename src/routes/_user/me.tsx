@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import type { ComponentType } from "react";
 import { toast } from "sonner";
 import {
   User,
@@ -15,7 +16,7 @@ import {
   Pencil,
   Package,
   Settings,
-  Coins,
+  Diamond,
   Clock,
 } from "lucide-react";
 // Wallet = 쿠폰 지갑 섹션 헤더. Send = 받은 쿠폰 메이커, Heart = 구독한 메이커. Gift = 증정 쿠폰 라벨.
@@ -406,6 +407,36 @@ function couponFilterEmptyText(f: CouponFilter): string {
   }
 }
 
+// V4 내비 카드 — 아이콘칩 + 제목/부제 + chevron. 행동(onClick)은 호출부가 주입.
+function NavCard({
+  icon: Icon,
+  title,
+  subtitle,
+  onClick,
+}: {
+  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
+  title: string;
+  subtitle: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex min-h-[64px] w-full items-center gap-3 rounded-2xl border border-[#E8EDF3] bg-white p-3.5 text-left shadow-[0_1px_2px_rgba(15,23,42,0.05),0_4px_12px_rgba(15,23,42,0.04)] transition-all duration-150 hover:-translate-y-0.5 hover:border-[#CBD5E1] hover:shadow-[0_10px_24px_rgba(15,23,42,0.09)]"
+    >
+      <span className="flex size-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#F1F5F9] text-[#0F172A] transition-colors group-hover:bg-[#EEF3FE] group-hover:text-[#2563EB]">
+        <Icon className="size-5" strokeWidth={2} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[13.5px] font-semibold text-[#0F172A]">{title}</div>
+        <div className="truncate text-[11px] text-[#94A3B8]">{subtitle}</div>
+      </div>
+      <ChevronRight className="size-4 flex-shrink-0 text-[#CBD5E1]" />
+    </button>
+  );
+}
+
 function MePage() {
   const data = Route.useLoaderData();
   const search = Route.useSearch();
@@ -570,38 +601,71 @@ function MePage() {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#F8FAFC] tracking-ko pb-12">
-      <header className="bg-white px-5 py-4 border-b border-[#F1F5F9]">
-        <h1 className="text-lg font-bold text-[#0F172A]">나</h1>
+    <main className="min-h-screen overflow-x-hidden bg-[#F6F8FB] tracking-ko pb-24">
+      <header className="bg-white px-4 py-4 border-b border-[#F1F5F9]">
+        <h1 className="text-[22px] font-bold tracking-[-0.01em] text-[#0F172A]">나</h1>
       </header>
 
-      <div className="space-y-4 px-5 pt-4">
-        {/* ① 내 정보 */}
-        <SectionCard Icon={User} title="내 정보">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-16 w-16">
-              {data.avatarUrl ? <AvatarImage src={data.avatarUrl} alt="프로필 사진" /> : null}
-              <AvatarFallback className="bg-[#F1F5F9] text-xl font-bold text-[#0F172A]">
+      <div className="space-y-4 px-4 pt-4">
+        {/* ① 내 정보 — V4 잉크 히어로(아바타 + 이름/이메일 + 편집 + 자산요약 스트립). 데이터·편집 핸들러 보존. */}
+        <section className="overflow-hidden rounded-3xl bg-[#0F172A] p-5 shadow-[0_12px_30px_rgba(15,23,42,0.22)]">
+          <div className="flex items-center gap-3.5">
+            {data.avatarUrl ? (
+              <img
+                src={data.avatarUrl}
+                alt="프로필 사진"
+                className="size-14 flex-shrink-0 rounded-full object-cover ring-2 ring-white/15 ring-offset-2 ring-offset-[#0F172A]"
+              />
+            ) : (
+              <div className="flex size-14 flex-shrink-0 items-center justify-center rounded-full bg-white text-[20px] font-bold text-[#0F172A] ring-2 ring-white/15 ring-offset-2 ring-offset-[#0F172A]">
                 {getInitial(data.displayName, data.email)}
-              </AvatarFallback>
-            </Avatar>
+              </div>
+            )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-base font-bold text-[#0F172A]">
-                {data.displayName.trim() || "이름을 등록해 보세요"}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-[17px] font-bold text-white">
+                  {data.displayName.trim() || "이름을 등록해 보세요"}
+                </span>
+                {data.isBusiness ? (
+                  <span className="flex-shrink-0 rounded-full bg-[#2563EB] px-2 py-0.5 text-[10px] font-bold text-white">
+                    비즈
+                  </span>
+                ) : null}
+              </div>
               {data.email ? (
-                <p className="truncate text-sm font-medium text-[#64748B]">{data.email}</p>
+                <div className="mt-1 truncate text-[12.5px] text-[#CBD5E1]">{data.email}</div>
               ) : null}
             </div>
             <button
               type="button"
               onClick={() => navigate({ to: "/profile" })}
-              className="flex h-11 min-h-[44px] items-center justify-center rounded-lg border border-[#E5E7EB] px-3 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC]"
+              className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 active:scale-95"
+              aria-label="프로필 편집"
             >
-              편집
+              <Pencil className="size-4" strokeWidth={2} />
             </button>
           </div>
-        </SectionCard>
+
+          {/* 자산요약 스트립 — dropy(준비중·§0 숫자/원화 금지) · 쿠폰(사용가능 수) · 구독(매장 수). */}
+          <div className="mt-5 grid grid-cols-3 overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-inset ring-white/10">
+            <div className="flex flex-col items-center py-3">
+              <span className="text-[13px] font-bold leading-none text-[#60A5FA]">준비중</span>
+              <span className="mt-2 text-[11.5px] font-semibold tracking-wide text-[#B6C2D2]">dropy</span>
+            </div>
+            <div className="flex flex-col items-center border-l border-white/10 py-3">
+              <span className="text-[19px] font-bold leading-none tabular-nums text-white">
+                {usableCount}
+              </span>
+              <span className="mt-2 text-[11.5px] font-semibold tracking-wide text-[#B6C2D2]">쿠폰</span>
+            </div>
+            <div className="flex flex-col items-center border-l border-white/10 py-3">
+              <span className="text-[19px] font-bold leading-none tabular-nums text-white">
+                {subscribedMakers.length}
+              </span>
+              <span className="mt-2 text-[11.5px] font-semibold tracking-wide text-[#B6C2D2]">구독</span>
+            </div>
+          </div>
+        </section>
 
         {/* 작업 A — 내 매장: 비지니스에게 1순위. 프로필 바로 아래로 이동.
             비업주(팬)는 미표시. */}
@@ -618,28 +682,24 @@ function MePage() {
           </SectionCard>
         ) : null}
 
-        {/* 내 주문 — 손님 선주문 상태(읽기전용) 진입. "내 매장" 패턴 미러(additive). */}
-        <SectionCard Icon={Package} title="내 주문">
-          <button
-            type="button"
-            onClick={() => navigate({ to: "/me-orders" })}
-            className="flex w-full min-h-[44px] items-center justify-between rounded-xl bg-[#F8FAFC] px-4 py-3 text-sm font-semibold text-[#0F172A] hover:bg-[#F1F5F9]"
-          >
-            <span>주문 상태 보기</span>
-            <ChevronRight className="size-4 text-[#64748B]" strokeWidth={2} />
-          </button>
-        </SectionCard>
+        {/* 내 주문 — 손님 선주문 상태(읽기전용) 진입. V4 NavCard. 핸들러(/me-orders) 보존. */}
+        <NavCard
+          icon={Package}
+          title="내 주문"
+          subtitle="주문·예약 내역"
+          onClick={() => navigate({ to: "/me-orders" })}
+        />
 
         {/* ② 내 혜택 지갑 — 행동형 헤더 + 상태 필터 칩(2/5). 카드(1/5)·정렬·다른 섹션 무수정.
             필터는 클라이언트 로컬 state, 정렬은 loader 최신순 유지. */}
         <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
           {/* 헤더 — 쿠폰/드로피 공통 */}
           <div className="mb-3 flex items-center gap-2">
-            <Wallet className="size-4 text-[#0E4D42]" strokeWidth={2} />
-            <h3 className="text-base font-bold text-[#0A0A0A]">내지갑</h3>
+            <Wallet className="size-4 text-[#2563EB]" strokeWidth={2} />
+            <h3 className="text-base font-bold text-[#0F172A]">내지갑</h3>
           </div>
 
-          {/* 상위 탭 — 쿠폰 / 드로피. 세그먼트 컨트롤(박스 토글)로 하위 필터칩(둥근 pill)과 위계 분리. */}
+          {/* 상위 탭 — 쿠폰 / 드로피. V4 흰칩 세그먼트(선택=흰 bg+섀도). */}
           <div className="mb-4 flex rounded-xl bg-[#F1F5F9] p-1">
             {(
               [
@@ -653,10 +713,10 @@ function MePage() {
                   key={tab.key}
                   type="button"
                   onClick={() => setWalletTab(tab.key)}
-                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition ${
+                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all ${
                     selected
-                      ? "bg-white text-[#0A0A0A] shadow-sm"
-                      : "text-[#64748B]"
+                      ? "bg-white text-[#0F172A] shadow-[0_1px_3px_rgba(15,23,42,0.1)]"
+                      : "text-[#64748B] hover:text-[#475569]"
                   }`}
                 >
                   {tab.label}
@@ -693,8 +753,8 @@ function MePage() {
                     onClick={() => setCouponFilter(chip.key)}
                     className={`inline-flex min-h-[32px] items-center rounded-full px-3 text-xs font-bold transition-colors ${
                       selected
-                        ? "bg-[#0E4D42] text-white"
-                        : "border border-[#E5E7EB] bg-white text-[#64748B] hover:bg-[#FAFAFA]"
+                        ? "bg-[#0F172A] text-white"
+                        : "border border-[#E2E8F0] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
                     }`}
                   >
                     {chip.label} {chip.count}
@@ -731,10 +791,13 @@ function MePage() {
           )}
 
           {walletTab === "dropy" && (
-            <div className="flex flex-col items-center justify-center gap-1 py-8 text-center">
-              <Coins className="size-6 text-[#64748B]" strokeWidth={2} />
-              <p className="text-base font-bold text-[#0A0A0A]">0 dropy</p>
-              <p className="text-sm font-medium text-[#A3A3A3]">준비 중</p>
+            // ★§0 — dropy 숫자/원화 표시 금지. "준비 중" 안내만.
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+              <span className="flex size-11 items-center justify-center rounded-full bg-[#F1F5F9]">
+                <Diamond className="size-5 text-[#94A3B8]" strokeWidth={2} />
+              </span>
+              <p className="text-[13px] font-semibold text-[#475569]">dropy는 준비 중이에요</p>
+              <p className="text-[12px] text-[#94A3B8]">전환 적립이 시작되면 여기에 표시돼요</p>
             </div>
           )}
         </section>
@@ -1135,9 +1198,9 @@ function CouponClaimCard({
           goDetail();
         }
       }}
-      className={`block cursor-pointer overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white text-left transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0A0A] ${
-        dim ? "opacity-50" : ""
-      } ${active ? "wallet-card-in ring-2 ring-[#0A0A0A]" : ""}`}
+      className={`block cursor-pointer overflow-hidden rounded-2xl border text-left transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F172A] ${
+        usable ? "border-[#EAE2D2] bg-[#FBF8F2]" : "border-[#E2E8F0] bg-[#F8FAFC]"
+      } ${active ? "wallet-card-in ring-2 ring-[#0F172A]" : ""}`}
     >
       <div className="px-4 pb-3 pt-4">
         {/* 상단: 상태 배지 | 받은 날짜 (기존 표기 유지: YY.MM.DD HH:mm) */}
@@ -1162,7 +1225,11 @@ function CouponClaimCard({
         </div>
 
         {/* 혜택 */}
-        <p className="mt-3 flex items-start gap-1.5 text-[22px] font-extrabold leading-snug tracking-[-0.01em] text-[#0F172A]">
+        <p
+          className={`mt-3 flex items-start gap-1.5 text-[22px] font-extrabold leading-snug tracking-[-0.01em] ${
+            dim ? "text-[#94A3B8]" : "text-[#0F172A]"
+          }`}
+        >
           {isGift ? <Gift className="mt-0.5 size-[20px] shrink-0" strokeWidth={2.4} /> : null}
           <span className="min-w-0">{benefit}</span>
         </p>
@@ -1171,7 +1238,9 @@ function CouponClaimCard({
         {conditionLine ? <p className="mt-1 text-xs text-[#94A3B8]">{conditionLine}</p> : null}
 
         {/* 기간 */}
-        {periodLine ? <p className="mt-1.5 text-xs text-[#94A3B8]">{periodLine}</p> : null}
+        {periodLine ? (
+          <p className={`mt-1.5 text-xs ${usable ? "text-[#A07A38]" : "text-[#94A3B8]"}`}>{periodLine}</p>
+        ) : null}
 
         {/* 발신자 라벨 — 매장 직접 / 친구 공유 / 추천. 모든 상태(dim 카드면 같이 흐림). */}
         <div className="mt-2.5">
@@ -1194,7 +1263,7 @@ function CouponClaimCard({
                 e.stopPropagation();
                 goDetail();
               }}
-              className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white hover:bg-[#171717]"
+              className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg bg-[#0F172A] px-4 text-sm font-bold text-white hover:bg-[#1E293B]"
             >
               {ctaLabel}
             </button>
@@ -1204,7 +1273,7 @@ function CouponClaimCard({
                 type="button"
                 onClick={handleSend}
                 disabled={sending}
-                className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#D4D4D4] bg-white px-3 text-sm font-bold text-[#0A0A0A] hover:bg-[#FAFAFA] disabled:opacity-50"
+                className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm font-bold text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-50"
               >
                 <Send className="size-4" strokeWidth={2} />
                 친구에게 보내기
