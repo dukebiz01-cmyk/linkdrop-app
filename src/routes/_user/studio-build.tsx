@@ -51,6 +51,7 @@ import {
   Flag,
   Tag,
   Globe,
+  ShoppingCart,
 } from "lucide-react";
 
 // =============================================================================
@@ -161,8 +162,8 @@ const STUDIO_BLOCKS: StudioBlock[] = [
   },
   {
     id: "productimage",
-    label: "이미지 등록",
-    desc: "본체 이미지로 상품을 보여줘요",
+    label: "상품 이미지",
+    desc: "상품 사진을 올려 카드 본체로",
     detail: "영상 대신 상품 사진이 카드의 본체가 돼요. 신선도와 품질이 잘 드러난 한 장이 주문을 부릅니다.",
     icon: ImageIcon,
     category: "content",
@@ -272,7 +273,7 @@ function getStage(score: number) {
 // 덱 구성은 컴포넌트 내부 useMemo(buildMode 의존)로 이동 — DECK_IDS[buildMode] 기반.
 
 // 블록 설정 아코디언 대상 — 설정이 필요한 5개만. bgcolor(색=덱 팔레트)·강화 3종 제외.
-const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link", "product"];
+const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link", "product", "productimage"];
 
 // v0 globals 부재 keyframes 동봉 — 룩 보존용(기존 파일 무수정).
 const STUDIO_BUILD_CSS = `
@@ -291,6 +292,41 @@ const STUDIO_BUILD_CSS = `
 .animate-scale-in { animation: sb-scale-in 0.25s ease-out both; }
 `;
 
+// 상품 이미지 업로드 — partner.products.new 패턴 복제(공용 export 없음). 새 버킷/RLS/마이그 만들지 않음.
+//   버킷·경로 규칙({uid}/{uuid}.jpg)·클라 리사이즈 동일. RLS INSERT 통과 = 경로 첫 segment auth.uid().
+const PRODUCT_IMAGE_BUCKET = "product-images";
+const PRODUCT_IMAGE_MAX_WIDTH = 1200;
+
+// 클라이언트 캔버스 리사이즈 → JPEG Blob (resizeToJpegBlob 동형). 용량/포맷 정규화 역할.
+async function resizeProductImageToJpeg(file: File): Promise<Blob> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("파일을 읽지 못했어요."));
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("이미지를 불러오지 못했어요."));
+    el.src = dataUrl;
+  });
+  const scale = img.width > PRODUCT_IMAGE_MAX_WIDTH ? PRODUCT_IMAGE_MAX_WIDTH / img.width : 1;
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("이미지 처리에 실패했어요.");
+  ctx.drawImage(img, 0, 0, w, h);
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", 0.8),
+  );
+  if (!blob) throw new Error("이미지 압축에 실패했어요.");
+  return blob;
+}
+
 export function CardStudioPage() {
   // loader 데이터 수신만 — 이번 단계는 배선까지. 화면 하드코딩 치환은 다음 단계.
   const { isBusiness, store, coupons, manageCoupons } = Route.useLoaderData();
@@ -308,6 +344,10 @@ export function CardStudioPage() {
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
   // 상품 블록 — 내 등록상품(get_my_products) 선택. 쿠폰 selectedCouponId 패턴. 미리보기·저장 배선은 다음 단계.
   const [attachedProducts, setAttachedProducts] = useState<AttachedProduct[]>([]);
+  // 커머스 상품 이미지 — productimage 블록 업로드 결과(public URL). 본체 우선 소스.
+  const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
+  const [productImageUploading, setProductImageUploading] = useState(false);
+  const [productImageError, setProductImageError] = useState<string | null>(null);
   const [showCouponPicker, setShowCouponPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
   // S2-a 저장 — POST /api/drops(영상+한마디만). 단축 URL 반환 확인까지.
@@ -374,6 +414,8 @@ export function CardStudioPage() {
     setCardColor(MODE_CARD_COLOR[next]);
     setDropped(false);
     setShowColorPicker(false);
+    setProductImageUrl(null); // 커머스 잔재 방지
+    setProductImageError(null);
   };
 
   const score = useMemo(() => {
@@ -759,6 +801,92 @@ export function CardStudioPage() {
     </div>
   ) : null;
 
+  // 상품 이미지 업로드 — partner.products.new 패턴 복제. product-images/{auth.uid()}/{uuid}.jpg.
+  //   저장(드롭 운반)은 (다). 여기선 업로드 + productImageUrl 반영(미리보기 본체)까지.
+  async function handleProductImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProductImageError(null);
+    setProductImageUploading(true);
+    try {
+      const { getSupabase } = await import("@/lib/supabase");
+      const supabase = getSupabase();
+      if (!supabase) {
+        setProductImageError("업로드를 사용할 수 없어요.");
+        return;
+      }
+      // 세션 hydrate — anon 으로 나가면 RLS(auth.uid() NULL) 차단. 경로 첫 segment = userId.
+      const { data: sess } = await supabase.auth.getSession();
+      const userId = sess.session?.user.id;
+      if (!userId) {
+        setProductImageError("로그인이 필요해요.");
+        return;
+      }
+      const blob = await resizeProductImageToJpeg(file);
+      const path = `${userId}/${crypto.randomUUID()}.jpg`;
+      const { error: upErr } = await supabase.storage.from(PRODUCT_IMAGE_BUCKET).upload(path, blob, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+      if (upErr) {
+        console.error("[studio-build] 상품 이미지 업로드 실패:", upErr);
+        setProductImageError("사진 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      const { data: pub } = supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path);
+      setProductImageUrl(pub.publicUrl);
+    } catch (err) {
+      console.error("[studio-build] 상품 이미지 처리 오류:", err);
+      setProductImageError(err instanceof Error ? err.message : "사진 처리 중 문제가 생겼어요.");
+    } finally {
+      setProductImageUploading(false);
+    }
+  }
+
+  // 상품 본체 stub — 커머스 본체(이미지=본체, 결정가만). 손님 PurchaseCardBody 미러(div=시각만, onClick 0).
+  //   §0: 시세·비교가 금지 — priceKrw(결정가) 하나만. 첫 담은 상품 기준(MVP 1개).
+  const firstProduct = attachedProducts[0];
+  // 본체 이미지 우선순위: 업로드 상품이미지 → 담은 상품 이미지 → placeholder.
+  const productBodyImage = productImageUrl ?? firstProduct?.imageUrl ?? null;
+  const productPreview = firstProduct || productImageUrl ? (
+    <div aria-hidden="true" className="select-none">
+      {/* 본체 이미지 */}
+      {productBodyImage ? (
+        <img src={productBodyImage} alt="" className="aspect-[4/3] w-full rounded-2xl object-cover" />
+      ) : (
+        <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1.5 rounded-2xl bg-white/10 text-white/50">
+          <ImageIcon className="h-7 w-7" strokeWidth={1.5} />
+          <span className="text-[11px]">상품 사진</span>
+        </div>
+      )}
+      <p className="mt-3 text-[18px] font-bold tracking-tight">{firstProduct?.name ?? "상품 이름"}</p>
+      <p className="mt-1 text-[24px] font-extrabold tabular-nums">
+        {firstProduct?.priceKrw != null
+          ? firstProduct.priceKrw.toLocaleString("ko-KR") + "원"
+          : "가격 미정"}
+      </p>
+      {/* 저장 카피 스냅샷(있을 때만) — 헤드라인 + 셀링포인트. */}
+      {firstProduct?.headline ? (
+        <p className="mt-2 text-[14px] font-bold leading-snug text-white/90">{firstProduct.headline}</p>
+      ) : null}
+      {firstProduct?.sellingPoints && firstProduct.sellingPoints.length > 0 ? (
+        <ul className="mt-2 space-y-1.5">
+          {firstProduct.sellingPoints.map((sp, i) => (
+            <li key={i} className="flex items-start gap-2 text-[13px] font-medium text-white/75">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" strokeWidth={2.5} />
+              <span>{sp}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {/* 주문 버튼 stub (preview=비클릭) */}
+      <div className="mt-3 flex min-h-[50px] items-center justify-center gap-2 rounded-2xl bg-white text-[15px] font-bold text-[#0A0A0A]">
+        <ShoppingCart className="h-[18px] w-[18px]" strokeWidth={2.25} />
+        주문하기
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="min-h-screen bg-[#FAFAFA] pb-[150px]">
       <style>{STUDIO_BUILD_CSS}</style>
@@ -908,6 +1036,7 @@ export function CardStudioPage() {
                   taglinePlaceholder="한마디를 입력하면 여기 표시돼요"
                   sellingPoints={pickedPoints}
                   coupon={null}
+                  productBlock={buildMode === "commerce" ? productPreview : null}
                   couponBlock={couponBlockPreview}
                   reservationBlock={reservationBlockPreview}
                   contactBlock={contactBlockPreview}
@@ -1438,6 +1567,57 @@ export function CardStudioPage() {
                             >
                               <Check className="h-4 w-4" strokeWidth={2.5} />확인
                             </button>
+                          </div>
+                        ) : block.id === "productimage" ? (
+                          // 상품 이미지 — product-images 버킷 업로드(partner.products.new 패턴). 본체 반영(WYSIWYG).
+                          <div className="space-y-3">
+                            {productImageUrl ? (
+                              // 업로드 완료 — 썸네일 미리보기 + 다시 올리기.
+                              <div className="overflow-hidden rounded-xl [box-shadow:0_0_0_1px_#E5E5E5]">
+                                <img
+                                  src={productImageUrl}
+                                  alt="업로드한 상품 사진"
+                                  className="aspect-[4/3] w-full object-cover"
+                                />
+                              </div>
+                            ) : null}
+                            <label
+                              className={`flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2.5 text-[13px] font-medium text-[#475569] transition-colors hover:bg-[#F8FAFC] ${
+                                productImageUploading ? "pointer-events-none opacity-60" : ""
+                              }`}
+                            >
+                              {productImageUploading ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2} />
+                                  올리는 중…
+                                </>
+                              ) : (
+                                <>
+                                  <ImageIcon className="h-4 w-4" strokeWidth={2} />
+                                  {productImageUrl ? "다른 사진으로 바꾸기" : "상품 사진 올리기"}
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => void handleProductImageChange(e)}
+                                disabled={productImageUploading}
+                                className="hidden"
+                              />
+                            </label>
+                            {productImageError ? (
+                              <p className="text-center text-[12px] text-[#B91C1C]">{productImageError}</p>
+                            ) : null}
+                            {/* 확인 — 매듭(아코디언 닫기). */}
+                            {productImageUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedBlockId(null)}
+                                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0F172A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#1E293B]"
+                              >
+                                <Check className="h-4 w-4" strokeWidth={2.5} />확인
+                              </button>
+                            ) : null}
                           </div>
                         ) : (
                           <div className="rounded-xl border border-dashed border-[#D4D4D4] bg-[#FAFAFA] px-3 py-5 text-center">

@@ -63,6 +63,9 @@ export type CardBodyProps = {
   // ── §2-1 하단 블록 슬롯 — container 가 균일 스택으로 주입(쿠폰·예약·연락). ──
   //   전부 optional. 주어지면 CardBody 가 균일 ButtonBlock 스택으로 그림(reservation/contact 는
   //   "예약 날짜 선택"/"정보 보기" ButtonBlock 으로 래핑). 미주입이면 기존 coupon/슬롯 경로 유지.
+  /** 상품 블록 — 커머스(구매) 본체. 주어지면 영상 임베드 대신 이 카드가 본체(상품 이미지=본체).
+   *  소비자 카드 결정가(단일가)만 — 시세·비교가 금지. 미주입이면 기존 video 본체 경로. */
+  productBlock?: ReactNode | null;
   /** 쿠폰 블록 — 그대로 렌더(이미 카드형). 없으면 기존 coupon prop 경로. */
   couponBlock?: ReactNode | null;
   /** 예약 블록 — "예약 날짜 선택" ButtonBlock 펼침 콘텐츠로 주입. */

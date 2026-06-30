@@ -28,6 +28,7 @@ export function CardBody({
   coupon,
   store,
   contactSlot,
+  productBlock,
   couponBlock,
   reservationBlock,
   contactBlock,
@@ -35,21 +36,28 @@ export function CardBody({
 }: CardBodyProps) {
   return (
     <>
-      {/* 영상 출처 라벨 — video 데이터에서(하드코딩 제거). video 있을 때만. */}
-      {video ? (
-        <div className="flex items-center gap-1.5 text-[11px] font-medium text-white/75">
-          <Play className="h-3 w-3 fill-white/75" strokeWidth={0} />
-          {video.sourceLabel ?? "YouTube"}
-          {video.title ? ` · ${video.title}` : ""}
-        </div>
-      ) : null}
+      {/* 본체 — 상호배타: 상품 블록(커머스) 있으면 본체가 상품 카드, 없으면 기존 영상 경로(0영향). */}
+      {productBlock ? (
+        productBlock
+      ) : (
+        <>
+          {/* 영상 출처 라벨 — video 데이터에서(하드코딩 제거). video 있을 때만. */}
+          {video ? (
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-white/75">
+              <Play className="h-3 w-3 fill-white/75" strokeWidth={0} />
+              {video.sourceLabel ?? "YouTube"}
+              {video.title ? ` · ${video.title}` : ""}
+            </div>
+          ) : null}
 
-      {/* 영상칸 — video 있을 때만 임베드. 없으면 슬롯 안 그림(placeholder 는 호출부). */}
-      {video ? (
-        <div className="mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/15">
-          <YouTubeLiteEmbed {...video} />
-        </div>
-      ) : null}
+          {/* 영상칸 — video 있을 때만 임베드. 없으면 슬롯 안 그림(placeholder 는 호출부). */}
+          {video ? (
+            <div className="mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/15">
+              <YouTubeLiteEmbed {...video} />
+            </div>
+          ) : null}
+        </>
+      )}
 
       {/* 제목 — 매장명/영상헤드라인. 빈 문자열이면 안 그림. */}
       {title ? <h3 className="mt-4 text-xl font-bold tracking-tight">{title}</h3> : null}
