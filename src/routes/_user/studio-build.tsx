@@ -49,6 +49,8 @@ import {
   MessageCircle,
   Wand2,
   Flag,
+  Tag,
+  Globe,
 } from "lucide-react";
 
 // =============================================================================
@@ -139,12 +141,33 @@ const STUDIO_BLOCKS: StudioBlock[] = [
   },
   {
     id: "product",
-    label: "상품 판매",
-    desc: "상품 한 개 골라 바로 판매",
-    detail: "내가 파는 상품을 카드에 붙여 바로 구매로 이어요. 사진·가격·구매 버튼이 한 장에 담겨요.",
-    icon: ShoppingBag,
+    label: "상품 등록",
+    desc: "이름 · 가격 한 번에",
+    detail: "판매할 상품의 이름과 가격을 입력해 카드에 담아요. 보는 사람이 바로 가격을 확인하고 주문할 수 있어요.",
+    icon: Tag,
     category: "purpose",
-    power: 20,
+    power: 30,
+    isMain: true,
+  },
+  {
+    id: "seasonal",
+    label: "판매 캘린더",
+    desc: "판매 기간·가능일을 한눈에",
+    detail: "상품을 살 수 있는 기간과 판매 가능일을 캘린더로 보여줘요. 지금이 구매 적기라는 걸 알려 주문을 앞당겨요.",
+    icon: Calendar,
+    category: "purpose",
+    power: 30,
+    isMain: true,
+  },
+  {
+    id: "productimage",
+    label: "이미지 등록",
+    desc: "본체 이미지로 상품을 보여줘요",
+    detail: "영상 대신 상품 사진이 카드의 본체가 돼요. 신선도와 품질이 잘 드러난 한 장이 주문을 부릅니다.",
+    icon: ImageIcon,
+    category: "content",
+    power: 28,
+    isMain: true,
   },
   {
     id: "image",
@@ -216,6 +239,24 @@ const CARD_COLORS = [
 
 const ENABLE_COLOR_PICKER = false; // 색 선택 기능 임시 숨김. true로 켜면 팔레트 복원.
 
+// 커머스 3모드 골격 — 모드별 덱 구성/카드색/강조색. STUDIO_BLOCKS(데이터)는 단일 출처, 모드는 id 선택만.
+const blockById = (id: string) => STUDIO_BLOCKS.find((b) => b.id === id)!;
+const DECK_IDS: Record<"general" | "reserve" | "commerce", string[]> = {
+  general: ["content", "image", "link", "bgcolor", "top", "boost", "marketing"],
+  reserve: ["calendar", "content", "coupon", "image", "link", "bgcolor", "top", "boost", "marketing"],
+  commerce: ["product", "productimage", "seasonal", "coupon", "link", "bgcolor", "top", "boost", "marketing"],
+};
+const MODE_CARD_COLOR: Record<"general" | "reserve" | "commerce", string> = {
+  general: CARD_COLORS[CARD_COLORS.length - 1].value,
+  reserve: CARD_COLORS[2].value,
+  commerce: CARD_COLORS[1].value,
+};
+const MODE_ACCENT: Record<"general" | "reserve" | "commerce", string> = {
+  general: "#475569",
+  reserve: "#1D4ED8",
+  commerce: "#0F766E",
+};
+
 const ENHANCE_UNLOCK = 75;
 const POINT = "#1D4ED8"; // 전환력 지표(게이지·별·파워)에만
 const INK = "#0A0A0A";
@@ -228,12 +269,7 @@ function getStage(score: number) {
   return { stars: 1, label: "기본", tone: "아직 약해요" };
 }
 
-// 덱 순서: 주 제작 → 일반 레버 → 강화
-const DECK = [
-  ...STUDIO_BLOCKS.filter((b) => b.isMain),
-  ...STUDIO_BLOCKS.filter((b) => !b.isMain && !b.isPaid),
-  ...STUDIO_BLOCKS.filter((b) => b.isPaid),
-].filter((b) => ENABLE_COLOR_PICKER || b.id !== "bgcolor"); // 색 기능 숨김 시 덱에서 bgcolor 제외(배열 원본은 보존)
+// 덱 구성은 컴포넌트 내부 useMemo(buildMode 의존)로 이동 — DECK_IDS[buildMode] 기반.
 
 // 블록 설정 아코디언 대상 — 설정이 필요한 5개만. bgcolor(색=덱 팔레트)·강화 3종 제외.
 const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link", "product"];
@@ -264,7 +300,9 @@ export function CardStudioPage() {
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   // 방금 켠 블록 id — 코칭이 "방금 켠 블록"에 반응하게(영상/쿠폰 내용검증 우선). 끄면 null.
   const [lastEquippedId, setLastEquippedId] = useState<string | null>(null);
-  const [cardColor, setCardColor] = useState(CARD_COLORS[2].value); // navy(임시 고정). 색 기능 재개 시 CARD_COLORS[1](forest)로 환원
+  // 커머스 3모드 — 퍼블릭/예약·쿠폰/커머스. 덱 구성·카드색·강조색의 단일 스위치.
+  const [buildMode, setBuildMode] = useState<"general" | "reserve" | "commerce">("general");
+  const [cardColor, setCardColor] = useState(MODE_CARD_COLOR.general); // 모드 파생(switchMode 가 갱신). 색 기능 재개 시 팔레트로 환원
   const [showColorPicker, setShowColorPicker] = useState(false);
   // 쿠폰 피커 — 내 쿠폰 여러 개 중 선택(인라인, 색상 팔레트 showColorPicker 패턴 동일).
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
@@ -321,6 +359,23 @@ export function CardStudioPage() {
   // 선택된 쿠폰 — 미선택이면 첫 쿠폰 fallback(장착 시 자동 첫 쿠폰). coupons 비면 undefined.
   const selectedCoupon = coupons.find((c) => c.id === selectedCouponId) ?? coupons[0];
 
+  // 덱 = 현재 모드의 id 목록 → 블록 데이터 매핑(bgcolor 숨김 규칙 보존). 모듈 const DECK 대체.
+  const DECK = useMemo(
+    () => DECK_IDS[buildMode].map(blockById).filter((b) => ENABLE_COLOR_PICKER || b.id !== "bgcolor"),
+    [buildMode],
+  );
+
+  // 모드 전환 — 덱/카드색 교체 + 장착·덱위치 리셋(모드 간 잔상 방지).
+  const switchMode = (next: "general" | "reserve" | "commerce") => {
+    if (next === buildMode) return;
+    setBuildMode(next);
+    setApplied({});
+    setDeckIndex(0);
+    setCardColor(MODE_CARD_COLOR[next]);
+    setDropped(false);
+    setShowColorPicker(false);
+  };
+
   const score = useMemo(() => {
     // 도달가능(덱 노출) non-paid 블록 power 합을 분모로 정규화.
     // bgcolor 숨김 시 분모도 줄어 전부 장착=100%. 색 재개 시 bgcolor 복귀로 분모 자동 복원.
@@ -333,103 +388,84 @@ export function CardStudioPage() {
   const stage = getStage(score);
   const appliedCount = STUDIO_BLOCKS.filter((b) => applied[b.id] && !b.isPaid).length;
 
+  // 코치(lingo) — 모드-인지. 불변식: 현재 buildMode 의 DECK 에 있는 블록만 추천(action·텍스트 둘 다).
+  //   DECK 에 없는 블록(예: 커머스인데 content/calendar)은 절대 가리키지 않는다.
   const lingo = useMemo<{ text: string; short: string; action: string | null; done?: boolean }>(() => {
-    // 실제 내용 검증(A안) — 영상/쿠폰만 진짜 채워짐 확인. 이미지/캘린더는 변수 없어 장착=인정.
-    const hasVideo = !!selectedVideo;
-    const hasRealCoupon = !!selectedCouponId; // 원본 id (selectedCoupon fallback 금지)
-    const hasBody = (applied["content"] ? hasVideo : false) || !!applied["image"]; // 본체 실제 존재
-    const couponOk = applied["coupon"] ? hasRealCoupon : true; // 쿠폰 켰으면 실제 쿠폰 필수
-    const isComplete = hasBody && couponOk;
+    const deckBlocks = DECK; // 현재 모드 덱만
 
-    const nextLever = [...STUDIO_BLOCKS]
-      .filter((b) => !b.isPaid && !applied[b.id])
+    // 거짓완성 차단 — 블록이 '실제로 채워졌는지'(탭 여부 아님). 데이터 state 있으면 그걸로, 없으면 applied 폴백.
+    //   데이터검증: content(selectedVideo)·coupon(selectedCouponId)·product(attachedProducts).
+    //   폴백(전용 데이터 state 없음): image·productimage(업로드 state 미구현)·seasonal(데이터 UI 미구현, (나)/(다)) → applied.
+    const isFilled = (id: string): boolean => {
+      switch (id) {
+        case "content":
+          return !!selectedVideo; // 영상 실제 선택
+        case "coupon":
+          return !!selectedCouponId; // 쿠폰 실제 선택 id
+        case "product":
+          return attachedProducts.length > 0; // 상품 실제 첨부
+        case "image":
+          return !!applied["image"]; // 대표이미지 전용 state 없음 → applied 폴백
+        case "productimage":
+          return !!applied["productimage"]; // 본체이미지 전용 state 없음 → applied 폴백
+        case "seasonal":
+          return !!applied["seasonal"]; // 판매 캘린더 데이터 UI 미구현 → applied 폴백
+        default:
+          return !!applied[id]; // link/bgcolor/유료 등
+      }
+    };
+
+    const nextLever = deckBlocks
+      .filter((b) => !b.isPaid && !isFilled(b.id))
       .sort((a, b) => b.power - a.power)[0];
 
-    // ── 순서: (신규)방금 켠 블록 반응 → 정상추천(미장착 d/e/f) → 실제내용검증 안전망(a/b)
-    //    → 완성(c) → 강화(g/h). c 의 isComplete 게이팅 유지(영상 비면 done:true 불가 = 거짓완성 차단).
-
-    // 0: 방금 켠 블록 반응 — 영상/쿠폰을 막 켰는데 내용 미선택이면 그걸 먼저 안내(딴소리 방지).
-    //    캘린더/이미지는 내용변수 없어 대상 아님(장착=인정) → 정상 추천 흐름으로.
-    if (lastEquippedId === "content" && !hasVideo) {
+    // 핵심(isMain) 미충족부터 — 모드별 본체/목적 블록 우선(탭만 하고 값 빈 것도 미충족).
+    const firstMissingMain = deckBlocks.find((b) => b.isMain && !isFilled(b.id));
+    if (firstMissingMain) {
+      const HINTS: Record<string, string> = {
+        content: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
+        image: "본체 이미지 한 장이면 카드가 확 살아나요. 가장 잘 나온 컷부터 올려보세요.",
+        calendar: "예약 카드인데 누를 곳이 없어요. 예약 캘린더를 장착해야 친구가 바로 행동해요.",
+        product: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
+        productimage: "상품 사진이 본체가 돼요. 신선도와 품질이 드러난 한 장이 주문을 부릅니다.",
+        seasonal: "지금이 구매 적기라는 걸 판매 캘린더로 보여주면 주문이 앞당겨져요.",
+      };
       return {
-        text: "영상 블록을 켰어요 — 실제 영상을 골라야 보낼 수 있어요",
-        short: "영상을 골라주세요",
-        action: "content",
-        done: false,
+        text: HINTS[firstMissingMain.id] ?? `${firstMissingMain.label}부터 장착해보세요.`,
+        short: `${firstMissingMain.label} 추가해요`,
+        action: firstMissingMain.id,
       };
     }
-    if (lastEquippedId === "coupon" && !hasRealCoupon) {
-      return { text: "쿠폰을 골라야 완성돼요", short: "쿠폰을 골라주세요", action: "coupon", done: false };
-    }
-
-    // d: content 미장착
-    if (!applied["content"]) {
+    // 쿠폰 — 덱에 있을 때만(없는 모드에선 추천 금지). 실제 쿠폰 선택 여부로 판정.
+    if (deckBlocks.some((b) => b.id === "coupon") && !isFilled("coupon")) {
       return {
-        text: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
-        short: "영상부터 넣어보세요",
-        action: "content",
-      };
-    }
-    // e: calendar 미장착
-    if (!applied["calendar"]) {
-      return {
-        text: "예약 카드인데 누를 곳이 없어요. 예약 캘린더를 장착해야 친구가 바로 행동해요.",
-        short: "예약 캘린더를 넣어요",
-        action: "calendar",
-      };
-    }
-    // f: coupon 미장착
-    if (!applied["coupon"]) {
-      return {
-        text: "왜 지금 예약해야 하죠? 쿠폰 한 장이면 '누를 이유'가 생겨요.",
+        text: "왜 지금 행동해야 하죠? 쿠폰 한 장이면 '누를 이유'가 생겨요.",
         short: "쿠폰을 연결해요",
         action: "coupon",
       };
     }
-    // 완성 게이트(score>=100) — a/b 안전망은 이 게이트 안에서만 평가.
-    //   제작 중(score<100)엔 a/b 가 안 떠 "영상 골라주세요" 갇힘 해소(0번/d/e/f 만 동작).
-    //   거짓완성 차단 유지: 영상/쿠폰 비면 done:false, isComplete 일 때만 done:true.
-    if (score >= 100) {
-      // a: 영상 블록 켰으나 실제 영상 미선택
-      if (applied["content"] && !hasVideo) {
-        return {
-          text: "영상 블록을 켰어요 — 실제 영상을 골라야 보낼 수 있어요",
-          short: "영상을 골라주세요",
-          action: "content",
-          done: false,
-        };
-      }
-      // b: 쿠폰 블록 켰으나 실제 쿠폰 미선택
-      if (applied["coupon"] && !hasRealCoupon) {
-        return { text: "쿠폰을 골라야 완성돼요", short: "쿠폰을 골라주세요", action: "coupon", done: false };
-      }
-      // c: 100% 완성
-      if (isComplete) {
-        return {
-          text: "완성! 이제 손님에게 보낼 수 있어요",
-          short: "완성! 보낼 수 있어요",
-          action: null,
-          done: true,
-        };
-      }
-    }
-    // g: 75 미만 — 다음 레버 추천
-    if (score < ENHANCE_UNLOCK) {
+    // terminal(done) 가드 — score 만으로 완성 신호 금지. 현재 덱의 핵심(isMain)이 전부 실충족 +
+    //   score>=ENHANCE_UNLOCK 일 때만 done:true. 아니면 아래 레버 안내로 떨어진다(거짓완성 차단).
+    const mainsAllFilled = deckBlocks.filter((b) => b.isMain).every((b) => isFilled(b.id));
+    // 퍼블릭(정보)은 isMain이 없어 mains 게이트가 비므로, 본체인 영상(content)을 핵심 취급(방어적으로 isFilled만 사용).
+    const coreFilled = mainsAllFilled && (buildMode !== "general" || isFilled("content"));
+    if (score >= ENHANCE_UNLOCK && coreFilled) {
       return {
-        text: nextLever
-          ? `${nextLever.label}까지 더하면 전환력이 확 올라가요.`
-          : "거의 다 됐어요. 마무리만 하면 완성!",
-        short: nextLever ? `${nextLever.label} 추가해요` : "조금만 더 채워요",
-        action: nextLever?.id ?? null,
+        text: "전환 레버가 충분해요. 이제 강화(부스트)를 켜면 도달이 늘어요. 지금이 쓸 타이밍.",
+        short: "강화를 켜보세요",
+        action: null,
+        done: true,
       };
     }
-    // h: 75 이상 — 강화
+    // 그 외 — 덱 안 다음 레버 추천(미충족 핵심이 없어도 부족분 채우기 유도).
     return {
-      text: "전환 레버가 충분해요. 이제 강화(부스트)를 켜면 도달이 늘어요. 지금이 쓸 타이밍.",
-      short: "강화를 켜보세요",
-      action: null,
+      text: nextLever
+        ? `${nextLever.label}까지 더하면 전환력이 확 올라가요.`
+        : "핵심부터 채워요. 조금만 더 하면 완성!",
+      short: nextLever ? `${nextLever.label} 추가해요` : "조금만 더 채워요",
+      action: nextLever?.id ?? null,
     };
-  }, [applied, score, selectedVideo, selectedCouponId, lastEquippedId]);
+  }, [applied, score, buildMode, selectedVideo, selectedCouponId, attachedProducts]);
 
   // 블록 설정 아코디언 토글 — 같은 걸 다시 누르면 접힘, 다른 걸 누르면 그것만 펼침.
   const toggleBlockSettings = (id: string) =>
@@ -745,7 +781,7 @@ export function CardStudioPage() {
                   className="rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white"
                   style={{ backgroundColor: INK }}
                 >
-                  예약
+                  {({ general: "퍼블릭", reserve: "예약·쿠폰", commerce: "커머스" })[buildMode]}
                 </span>
               </div>
             </div>
@@ -814,6 +850,30 @@ export function CardStudioPage() {
       )}
 
       <div className="mx-auto max-w-md px-5">
+        {/* ───────── 커머스 3모드 토글 (퍼블릭 / 예약·쿠폰 / 커머스) ───────── */}
+        <div className="mt-5 flex rounded-2xl bg-white p-1 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
+          {[
+            { key: "general", label: "퍼블릭", Icon: Globe },
+            { key: "reserve", label: "예약·쿠폰", Icon: Calendar },
+            { key: "commerce", label: "커머스", Icon: Store },
+          ].map(({ key, label, Icon }) => {
+            const isOn = buildMode === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => switchMode(key as "general" | "reserve" | "commerce")}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-bold transition-all duration-200 ${isOn ? "text-white" : "text-[#737373]"}`}
+                style={isOn ? { backgroundColor: MODE_ACCENT[key as "general" | "reserve" | "commerce"] } : undefined}
+                aria-pressed={isOn}
+              >
+                <Icon className="h-4 w-4" strokeWidth={2.25} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
         {/* ───────── 히어로: 홀로그래픽 메인 카드 (3D 틸트) ───────── */}
         <section ref={heroRef} className="pt-7" style={{ perspective: "1100px" }}>
           {/* forge-float 플로팅은 스튜디오 전용 → 셸 밖 유지. 등급 그림자·홀로 강도(stage 의존)·
