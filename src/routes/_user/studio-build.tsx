@@ -5,7 +5,6 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
 import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
-import { ProductAttachSection } from "@/components/create/step3/ProductAttachSection";
 import type { AttachedProduct } from "@/components/create/types";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
@@ -348,6 +347,9 @@ export function CardStudioPage() {
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
   const [productImageUploading, setProductImageUploading] = useState(false);
   const [productImageError, setProductImageError] = useState<string | null>(null);
+  // 커머스 직접입력(B-2) — 상품명·결정가(단일값). §0: 시세 없음, price_band_enabled:false 고정.
+  const [productName, setProductName] = useState("");
+  const [productPrice, setProductPrice] = useState<number | null>(null);
   const [showCouponPicker, setShowCouponPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
   // S2-a 저장 — POST /api/drops(영상+한마디만). 단축 URL 반환 확인까지.
@@ -416,6 +418,8 @@ export function CardStudioPage() {
     setShowColorPicker(false);
     setProductImageUrl(null); // 커머스 잔재 방지
     setProductImageError(null);
+    setProductName("");
+    setProductPrice(null);
   };
 
   const score = useMemo(() => {
@@ -436,8 +440,8 @@ export function CardStudioPage() {
     const deckBlocks = DECK; // 현재 모드 덱만
 
     // 거짓완성 차단 — 블록이 '실제로 채워졌는지'(탭 여부 아님). 데이터 state 있으면 그걸로, 없으면 applied 폴백.
-    //   데이터검증: content(selectedVideo)·coupon(selectedCouponId)·product(attachedProducts).
-    //   폴백(전용 데이터 state 없음): image·productimage(업로드 state 미구현)·seasonal(데이터 UI 미구현, (나)/(다)) → applied.
+    //   데이터검증: content(selectedVideo)·coupon(selectedCouponId)·product(이름+결정가)·productimage(업로드 URL).
+    //   폴백(전용 데이터 state 없음): image·seasonal(데이터 UI 미구현, 후속) → applied.
     const isFilled = (id: string): boolean => {
       switch (id) {
         case "content":
@@ -445,11 +449,11 @@ export function CardStudioPage() {
         case "coupon":
           return !!selectedCouponId; // 쿠폰 실제 선택 id
         case "product":
-          return attachedProducts.length > 0; // 상품 실제 첨부
+          return !!productName.trim() && (productPrice ?? 0) > 0; // 직접입력: 이름 + 결정가
         case "image":
           return !!applied["image"]; // 대표이미지 전용 state 없음 → applied 폴백
         case "productimage":
-          return !!applied["productimage"]; // 본체이미지 전용 state 없음 → applied 폴백
+          return !!productImageUrl; // 상품 이미지 업로드 URL
         case "seasonal":
           return !!applied["seasonal"]; // 판매 캘린더 데이터 UI 미구현 → applied 폴백
         default:
@@ -507,7 +511,7 @@ export function CardStudioPage() {
       short: nextLever ? `${nextLever.label} 추가해요` : "조금만 더 채워요",
       action: nextLever?.id ?? null,
     };
-  }, [applied, score, buildMode, selectedVideo, selectedCouponId, attachedProducts]);
+  }, [applied, score, buildMode, selectedVideo, selectedCouponId, productName, productPrice, productImageUrl]);
 
   // 블록 설정 아코디언 토글 — 같은 걸 다시 누르면 접힘, 다른 걸 누르면 그것만 펼침.
   const toggleBlockSettings = (id: string) =>
@@ -593,38 +597,73 @@ export function CardStudioPage() {
   //   media_url = selectedVideo.videoId 로 만든 YouTube watch URL(서버가 extract-meta 로 source 처리).
   //   purpose = "정보"(drop_purpose enum 값, 영상만 카드). is_public = false. blocks 미전송(영상은 media_url 본체).
   async function handleSaveDrop() {
-    if (!selectedVideo) {
+    // 6a 영상 게이트 완화 — 비커머스만 영상 필수(커머스는 self_upload 라 영상 없이 저장).
+    if (buildMode !== "commerce" && !selectedVideo) {
       setSaveError("영상을 먼저 선택해주세요.");
       return;
+    }
+    // 6b 커머스 필수 가드 — 사진 + 이름 + 결정가(§0 단일값).
+    if (buildMode === "commerce") {
+      if (!productImageUrl) {
+        setSaveError("상품 사진을 올려주세요.");
+        return;
+      }
+      if (!productName.trim()) {
+        setSaveError("상품 이름을 입력해주세요.");
+        return;
+      }
+      if (!((productPrice ?? 0) > 0)) {
+        setSaveError("가격을 입력해주세요.");
+        return;
+      }
     }
     if (saving) return;
     setSaving(true);
     setSaveError(null);
     try {
-      const mediaUrl = `https://www.youtube.com/watch?v=${selectedVideo.videoId}`;
+      // 6c mediaUrl 은 비커머스에서만(커머스는 selectedVideo null 가능 → .videoId 접근 금지).
+      const mediaUrl = selectedVideo
+        ? `https://www.youtube.com/watch?v=${selectedVideo.videoId}`
+        : null;
       // 쿠폰 붙음 단일 판정 — purpose 결정 + 쿠폰 RPC 둘 다 같은 조건(일관성).
       //   selectedCouponId(원본)로 판단(selectedCoupon fallback 거짓 양성 회피).
       const hasCoupon = applied["coupon"] && !!selectedCouponId;
       // 예약 장착 — 캘린더 블록 장착이면 예약 의도. 슬롯은 캘린더 인라인이 매장 단위로 이미 저장,
       //   손님 화면이 drop.partner_id 로 get_available_slots 조회(슬롯 0개여도 purpose="예약" 유효).
       const hasReservation = !!applied["calendar"];
-      // 상품 장착 — product 블록 켜면 구매(판매) 의도. 상품 데이터·blocks 운반은 다음 단계(S3/S4).
-      const hasProduct = !!applied["product"];
-      // purpose 우선순위: 구매 > 예약 > 쿠폰 > 정보. 상품 장착 시 구매 최우선(판매 카드).
-      //   예약+쿠폰 = "예약"(우선) + 쿠폰은 funnel_coupon_id 로 같이 붙는 통합카드(손님 화면 isReservation + isCoupon&&partnerId).
-      const dropPurpose = hasProduct ? "구매" : hasReservation ? "예약" : hasCoupon ? "쿠폰" : "정보";
+      // purpose 우선순위(비커머스): 예약 > 쿠폰 > 정보. (커머스는 self_upload 서버가 "구매" 고정.)
+      const dropPurpose = hasReservation ? "예약" : hasCoupon ? "쿠폰" : "정보";
+      // 6d body 분기 — 커머스=self_upload(영상 0), 비커머스=기존 media_url 경로(1줄도 안 바꿈).
+      const body =
+        buildMode === "commerce"
+          ? {
+              self_upload: true,
+              image_url: productImageUrl,
+              name: productName.trim(),
+              price_krw: productPrice,
+              price_band_enabled: false, // §0 시세 영구 금지
+              is_public: false,
+              blocks: [
+                {
+                  block_kind: "product",
+                  block_data: { name: productName.trim(), price_krw: productPrice },
+                  position: 0,
+                },
+              ],
+            }
+          : {
+              media_url: mediaUrl,
+              purpose: dropPurpose,
+              curator_message: tagline.trim() || null,
+              is_public: false,
+              // 예약 슬롯 조회(손님 get_available_slots)가 drop.partner_id 기준 — 매장 연결 필수.
+              //   쿠폰·정보에도 매장 연결로 유용. studio-build 는 비즈니스 전제(store 있음).
+              partner_id: store?.id ?? null,
+            };
       const res = await fetch("/api/drops", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          media_url: mediaUrl,
-          purpose: dropPurpose,
-          curator_message: tagline.trim() || null,
-          is_public: false,
-          // 예약 슬롯 조회(손님 get_available_slots)가 drop.partner_id 기준 — 매장 연결 필수.
-          //   쿠폰·정보에도 매장 연결로 유용. studio-build 는 비즈니스 전제(store 있음).
-          partner_id: store?.id ?? null,
-        }),
+        body: JSON.stringify(body),
       });
       const json = (await res.json()) as {
         drop?: { id?: string; share_uuid?: string };
@@ -844,41 +883,23 @@ export function CardStudioPage() {
   }
 
   // 상품 본체 stub — 커머스 본체(이미지=본체, 결정가만). 손님 PurchaseCardBody 미러(div=시각만, onClick 0).
-  //   §0: 시세·비교가 금지 — priceKrw(결정가) 하나만. 첫 담은 상품 기준(MVP 1개).
-  const firstProduct = attachedProducts[0];
-  // 본체 이미지 우선순위: 업로드 상품이미지 → 담은 상품 이미지 → placeholder.
-  const productBodyImage = productImageUrl ?? firstProduct?.imageUrl ?? null;
-  const productPreview = firstProduct || productImageUrl ? (
+  //   §0: 시세·비교가 금지 — 결정가(productPrice) 단일값만. B-2 직접입력 state 연결.
+  const hasProductData = !!productImageUrl || !!productName.trim() || (productPrice ?? 0) > 0;
+  const productPreview = hasProductData ? (
     <div aria-hidden="true" className="select-none">
       {/* 본체 이미지 */}
-      {productBodyImage ? (
-        <img src={productBodyImage} alt="" className="aspect-[4/3] w-full rounded-2xl object-cover" />
+      {productImageUrl ? (
+        <img src={productImageUrl} alt="" className="aspect-[4/3] w-full rounded-2xl object-cover" />
       ) : (
         <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1.5 rounded-2xl bg-white/10 text-white/50">
           <ImageIcon className="h-7 w-7" strokeWidth={1.5} />
           <span className="text-[11px]">상품 사진</span>
         </div>
       )}
-      <p className="mt-3 text-[18px] font-bold tracking-tight">{firstProduct?.name ?? "상품 이름"}</p>
+      <p className="mt-3 text-[18px] font-bold tracking-tight">{productName || "상품 이름"}</p>
       <p className="mt-1 text-[24px] font-extrabold tabular-nums">
-        {firstProduct?.priceKrw != null
-          ? firstProduct.priceKrw.toLocaleString("ko-KR") + "원"
-          : "가격 미정"}
+        {(productPrice ?? 0) > 0 ? productPrice!.toLocaleString("ko-KR") + "원" : "가격 미정"}
       </p>
-      {/* 저장 카피 스냅샷(있을 때만) — 헤드라인 + 셀링포인트. */}
-      {firstProduct?.headline ? (
-        <p className="mt-2 text-[14px] font-bold leading-snug text-white/90">{firstProduct.headline}</p>
-      ) : null}
-      {firstProduct?.sellingPoints && firstProduct.sellingPoints.length > 0 ? (
-        <ul className="mt-2 space-y-1.5">
-          {firstProduct.sellingPoints.map((sp, i) => (
-            <li key={i} className="flex items-start gap-2 text-[13px] font-medium text-white/75">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" strokeWidth={2.5} />
-              <span>{sp}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
       {/* 주문 버튼 stub (preview=비클릭) */}
       <div className="mt-3 flex min-h-[50px] items-center justify-center gap-2 rounded-2xl bg-white text-[15px] font-bold text-[#0A0A0A]">
         <ShoppingCart className="h-[18px] w-[18px]" strokeWidth={2.25} />
@@ -1543,27 +1564,42 @@ export function CardStudioPage() {
                             </div>
                           )
                         ) : block.id === "product" ? (
-                          // 상품 — 내 등록상품(get_my_products) 선택(쿠폰 패턴). ProductAttachSection 재사용(내부 디자인 0터치).
+                          // 상품 — 직접입력(B-2). 이름·결정가만. §0: 시세 없음. 저장은 self_upload(다).
                           <div className="space-y-3">
-                            {/* 새 상품 등록 — 새 탭(studio state 보존, 풀-네비게이션 금지). */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                window.open("/partner/products/new", "_blank", "noopener,noreferrer")
-                              }
-                              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2.5 text-[13px] font-medium text-[#475569] transition-colors hover:bg-[#F8FAFC]"
-                            >
-                              <Plus className="h-4 w-4" strokeWidth={2} />새 상품 등록
-                            </button>
-                            <ProductAttachSection
-                              value={attachedProducts}
-                              onChange={setAttachedProducts}
-                            />
-                            {/* 확인 — 매듭(아코디언 닫기). 쿠폰 확인 버튼 패턴(V4 잉크). */}
+                            <div className="space-y-1.5">
+                              <label className="block text-[11px] text-[#A3A3A3]">상품 이름</label>
+                              <input
+                                type="text"
+                                value={productName}
+                                onChange={(e) => setProductName(e.target.value.slice(0, 80))}
+                                maxLength={80}
+                                placeholder="상품 이름"
+                                className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2.5 text-[14px] outline-none focus:border-[#0A0A0A]"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="block text-[11px] text-[#A3A3A3]">가격</label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min={1}
+                                  value={productPrice ?? ""}
+                                  onChange={(e) =>
+                                    setProductPrice(e.target.value ? Number(e.target.value) : null)
+                                  }
+                                  placeholder="가격"
+                                  className="min-w-0 flex-1 rounded-lg border border-[#E5E5E5] px-3 py-2.5 text-[14px] tabular-nums outline-none focus:border-[#0A0A0A]"
+                                />
+                                <span className="shrink-0 text-[14px] font-semibold text-[#64748B]">원</span>
+                              </div>
+                            </div>
+                            {/* 확인 — 매듭(아코디언 닫기). 이름+가격 채워졌을 때만 활성. */}
                             <button
                               type="button"
                               onClick={() => setExpandedBlockId(null)}
-                              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0F172A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#1E293B]"
+                              disabled={!productName.trim() || !((productPrice ?? 0) > 0)}
+                              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0F172A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#1E293B] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
                             >
                               <Check className="h-4 w-4" strokeWidth={2.5} />확인
                             </button>
