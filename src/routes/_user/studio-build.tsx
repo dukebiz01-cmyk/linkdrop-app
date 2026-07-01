@@ -147,11 +147,11 @@ const STUDIO_BLOCKS: StudioBlock[] = [
   {
     id: "product",
     label: "상품 등록",
-    desc: "이름 · 가격 한 번에",
-    detail: "판매할 상품의 이름과 가격을 입력해 카드에 담아요. 보는 사람이 바로 가격을 확인하고 주문할 수 있어요.",
+    desc: "사진 · 이름 · 가격 한 번에",
+    detail: "상품 사진과 이름·가격을 한 블록에서 등록해요. 사진이 카드 본체가 되고, 보는 사람이 바로 가격을 확인하고 주문할 수 있어요.",
     icon: Tag,
     category: "purpose",
-    power: 30,
+    power: 45, // productimage(28) 흡수 — 사진이 상품 카드 필수라 완성 기여 상향.
     isMain: true,
   },
   {
@@ -162,16 +162,6 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     icon: Calendar,
     category: "purpose",
     power: 30,
-    isMain: true,
-  },
-  {
-    id: "productimage",
-    label: "상품 이미지",
-    desc: "상품 사진을 올려 카드 본체로",
-    detail: "영상 대신 상품 사진이 카드의 본체가 돼요. 신선도와 품질이 잘 드러난 한 장이 주문을 부릅니다.",
-    icon: ImageIcon,
-    category: "content",
-    power: 28,
     isMain: true,
   },
   {
@@ -249,7 +239,7 @@ const blockById = (id: string) => STUDIO_BLOCKS.find((b) => b.id === id)!;
 const DECK_IDS: Record<"general" | "reserve" | "commerce", string[]> = {
   general: ["content", "image", "link", "bgcolor", "top", "boost", "marketing"],
   reserve: ["calendar", "content", "coupon", "image", "link", "bgcolor", "top", "boost", "marketing"],
-  commerce: ["product", "productimage", "seasonal", "coupon", "link", "bgcolor", "top", "boost", "marketing"],
+  commerce: ["product", "seasonal", "coupon", "link", "bgcolor", "top", "boost", "marketing"],
 };
 const MODE_CARD_COLOR: Record<"general" | "reserve" | "commerce", string> = {
   general: CARD_COLORS[CARD_COLORS.length - 1].value,
@@ -277,7 +267,7 @@ function getStage(score: number) {
 // 덱 구성은 컴포넌트 내부 useMemo(buildMode 의존)로 이동 — DECK_IDS[buildMode] 기반.
 
 // 블록 설정 아코디언 대상 — 설정이 필요한 5개만. bgcolor(색=덱 팔레트)·강화 3종 제외.
-const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link", "product", "productimage"];
+const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link", "product"];
 
 // v0 globals 부재 keyframes 동봉 — 룩 보존용(기존 파일 무수정).
 const STUDIO_BUILD_CSS = `
@@ -448,7 +438,7 @@ export function CardStudioPage() {
     const deckBlocks = DECK; // 현재 모드 덱만
 
     // 거짓완성 차단 — 블록이 '실제로 채워졌는지'(탭 여부 아님). 데이터 state 있으면 그걸로, 없으면 applied 폴백.
-    //   데이터검증: content(selectedVideo)·coupon(selectedCouponId)·product(이름+결정가)·productimage(업로드 URL).
+    //   데이터검증: content(selectedVideo)·coupon(selectedCouponId)·product(사진+이름+결정가 통합).
     //   폴백(전용 데이터 state 없음): image·seasonal(데이터 UI 미구현, 후속) → applied.
     const isFilled = (id: string): boolean => {
       switch (id) {
@@ -457,11 +447,10 @@ export function CardStudioPage() {
         case "coupon":
           return !!selectedCouponId; // 쿠폰 실제 선택 id
         case "product":
-          return !!productName.trim() && (productPrice ?? 0) > 0; // 직접입력: 이름 + 결정가
+          // 상품 = 사진 + 이름 + 결정가 통합(productimage 블록 흡수).
+          return !!productImageUrl && !!productName.trim() && (productPrice ?? 0) > 0;
         case "image":
           return !!applied["image"]; // 대표이미지 전용 state 없음 → applied 폴백
-        case "productimage":
-          return !!productImageUrl; // 상품 이미지 업로드 URL
         case "seasonal":
           return !!applied["seasonal"]; // 판매 캘린더 데이터 UI 미구현 → applied 폴백
         default:
@@ -481,7 +470,6 @@ export function CardStudioPage() {
         image: "본체 이미지 한 장이면 카드가 확 살아나요. 가장 잘 나온 컷부터 올려보세요.",
         calendar: "예약 카드인데 누를 곳이 없어요. 예약 캘린더를 장착해야 친구가 바로 행동해요.",
         product: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
-        productimage: "상품 사진이 본체가 돼요. 신선도와 품질이 드러난 한 장이 주문을 부릅니다.",
         seasonal: "지금이 구매 적기라는 걸 판매 캘린더로 보여주면 주문이 앞당겨져요.",
       };
       return {
@@ -1206,7 +1194,13 @@ export function CardStudioPage() {
           <input
             value={tagline}
             onChange={(e) => setTagline(e.target.value.slice(0, TAGLINE_MAX))}
-            placeholder="우리 가게를 한마디로 소개해보세요"
+            placeholder={
+              buildMode === "commerce"
+                ? "이 상품을 한마디로 소개해보세요"
+                : buildMode === "reserve"
+                  ? "예약하고 싶게 한마디 남겨보세요"
+                  : "이 영상을 왜 공유하는지 한마디 남겨보세요"
+            }
             className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2.5 text-[14px] outline-none focus:border-[#0A0A0A]"
           />
           {/* 셀링포인트(보조 설명) — AI가 영상에서 뽑은 키포인트. 탭해서 카드에 추가(최대 3).
@@ -1575,8 +1569,48 @@ export function CardStudioPage() {
                             </div>
                           )
                         ) : block.id === "product" ? (
-                          // 상품 — 직접입력(B-2). 이름·결정가만. §0: 시세 없음. 저장은 self_upload(다).
+                          // 상품 — 사진 + 직접입력(사진·이름·결정가 통합, productimage 블록 흡수). §0: 시세 없음. 저장은 self_upload.
                           <div className="space-y-3">
+                            {/* 상품 사진 — product-images 버킷 업로드. productImageUrl 저장·자동카피(imageUrl) 배선 유지. */}
+                            <div className="space-y-1.5">
+                              <label className="block text-[11px] text-[#A3A3A3]">상품 사진</label>
+                              {productImageUrl ? (
+                                <div className="overflow-hidden rounded-xl [box-shadow:0_0_0_1px_#E5E5E5]">
+                                  <img
+                                    src={productImageUrl}
+                                    alt="업로드한 상품 사진"
+                                    className="aspect-[4/3] w-full object-cover"
+                                  />
+                                </div>
+                              ) : null}
+                              <label
+                                className={`flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2.5 text-[13px] font-medium text-[#475569] transition-colors hover:bg-[#F8FAFC] ${
+                                  productImageUploading ? "pointer-events-none opacity-60" : ""
+                                }`}
+                              >
+                                {productImageUploading ? (
+                                  <>
+                                    <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2} />
+                                    올리는 중…
+                                  </>
+                                ) : (
+                                  <>
+                                    <ImageIcon className="h-4 w-4" strokeWidth={2} />
+                                    {productImageUrl ? "다른 사진으로 바꾸기" : "상품 사진 올리기"}
+                                  </>
+                                )}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => void handleProductImageChange(e)}
+                                  disabled={productImageUploading}
+                                  className="hidden"
+                                />
+                              </label>
+                              {productImageError ? (
+                                <p className="text-center text-[12px] text-[#B91C1C]">{productImageError}</p>
+                              ) : null}
+                            </div>
                             <div className="space-y-1.5">
                               <label className="block text-[11px] text-[#A3A3A3]">상품 이름</label>
                               <input
@@ -1624,57 +1658,6 @@ export function CardStudioPage() {
                             >
                               <Check className="h-4 w-4" strokeWidth={2.5} />확인
                             </button>
-                          </div>
-                        ) : block.id === "productimage" ? (
-                          // 상품 이미지 — product-images 버킷 업로드(partner.products.new 패턴). 본체 반영(WYSIWYG).
-                          <div className="space-y-3">
-                            {productImageUrl ? (
-                              // 업로드 완료 — 썸네일 미리보기 + 다시 올리기.
-                              <div className="overflow-hidden rounded-xl [box-shadow:0_0_0_1px_#E5E5E5]">
-                                <img
-                                  src={productImageUrl}
-                                  alt="업로드한 상품 사진"
-                                  className="aspect-[4/3] w-full object-cover"
-                                />
-                              </div>
-                            ) : null}
-                            <label
-                              className={`flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2.5 text-[13px] font-medium text-[#475569] transition-colors hover:bg-[#F8FAFC] ${
-                                productImageUploading ? "pointer-events-none opacity-60" : ""
-                              }`}
-                            >
-                              {productImageUploading ? (
-                                <>
-                                  <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2} />
-                                  올리는 중…
-                                </>
-                              ) : (
-                                <>
-                                  <ImageIcon className="h-4 w-4" strokeWidth={2} />
-                                  {productImageUrl ? "다른 사진으로 바꾸기" : "상품 사진 올리기"}
-                                </>
-                              )}
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => void handleProductImageChange(e)}
-                                disabled={productImageUploading}
-                                className="hidden"
-                              />
-                            </label>
-                            {productImageError ? (
-                              <p className="text-center text-[12px] text-[#B91C1C]">{productImageError}</p>
-                            ) : null}
-                            {/* 확인 — 매듭(아코디언 닫기). */}
-                            {productImageUrl ? (
-                              <button
-                                type="button"
-                                onClick={() => setExpandedBlockId(null)}
-                                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0F172A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#1E293B]"
-                              >
-                                <Check className="h-4 w-4" strokeWidth={2.5} />확인
-                              </button>
-                            ) : null}
                           </div>
                         ) : (
                           <div className="rounded-xl border border-dashed border-[#D4D4D4] bg-[#FAFAFA] px-3 py-5 text-center">
