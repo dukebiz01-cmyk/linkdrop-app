@@ -6,6 +6,11 @@ import { Toaster } from "@/components/ui/sonner";
 import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
 import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 import type { AttachedProduct } from "@/components/create/types";
+import {
+  ProductCopyEditor,
+  EMPTY_PRODUCT_COPY,
+  type ProductCopyValue,
+} from "@/components/create/ProductCopyEditor";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
 import { CardBody } from "@/components/card/CardBody";
@@ -350,6 +355,8 @@ export function CardStudioPage() {
   // 커머스 직접입력(B-2) — 상품명·결정가(단일값). §0: 시세 없음, price_band_enabled:false 고정.
   const [productName, setProductName] = useState("");
   const [productPrice, setProductPrice] = useState<number | null>(null);
+  // 커머스 홍보 문구(나-1) — headline/sellingPoints. ProductCopyEditor(등록폼과 동일) 제어값.
+  const [productCopy, setProductCopy] = useState<ProductCopyValue>(EMPTY_PRODUCT_COPY);
   const [showCouponPicker, setShowCouponPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
   // S2-a 저장 — POST /api/drops(영상+한마디만). 단축 URL 반환 확인까지.
@@ -420,6 +427,7 @@ export function CardStudioPage() {
     setProductImageError(null);
     setProductName("");
     setProductPrice(null);
+    setProductCopy(EMPTY_PRODUCT_COPY);
   };
 
   const score = useMemo(() => {
@@ -641,6 +649,9 @@ export function CardStudioPage() {
               image_url: productImageUrl,
               name: productName.trim(),
               price_krw: productPrice,
+              // 나-1 홍보 문구 — 서버가 메인 product 블록 block_data 에 머지(빈 값은 서버 생략).
+              headline: productCopy.headline,
+              selling_points: productCopy.sellingPoints,
               price_band_enabled: false, // §0 시세 영구 금지
               is_public: false,
               blocks: [
@@ -1594,6 +1605,16 @@ export function CardStudioPage() {
                                 <span className="shrink-0 text-[14px] font-semibold text-[#64748B]">원</span>
                               </div>
                             </div>
+                            {/* 홍보 문구(나-1) — 등록폼과 동일 ProductCopyEditor. 커머스 모드에서만. */}
+                            {buildMode === "commerce" ? (
+                              <ProductCopyEditor
+                                productName={productName}
+                                priceKrw={productPrice ?? 0}
+                                imageUrl={productImageUrl}
+                                value={productCopy}
+                                onChange={setProductCopy}
+                              />
+                            ) : null}
                             {/* 확인 — 매듭(아코디언 닫기). 이름+가격 채워졌을 때만 활성. */}
                             <button
                               type="button"

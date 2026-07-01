@@ -21,6 +21,7 @@ export const Route = createFileRoute("/api/generate-promo-copy")({
             price_krw?: number | null;
             notes?: string;
             product_id?: string;
+            image_url?: string | null;
           };
           if (!body.product_name || !body.product_name.trim()) {
             return Response.json(
@@ -50,6 +51,7 @@ export const Route = createFileRoute("/api/generate-promo-copy")({
               price_krw: typeof body.price_krw === "number" ? body.price_krw : null,
               notes: (body.notes ?? "").trim(),
               product_id: body.product_id ?? null,
+              image_url: body.image_url ?? null,
               user_id: user.id,
             },
             session?.access_token ?? null,

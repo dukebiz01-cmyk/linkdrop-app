@@ -708,6 +708,7 @@ function ProductNewPage() {
           <ProductCopyEditor
             productName={name}
             priceKrw={Number.isFinite(Number(price)) && Number(price) > 0 ? Number(price) : null}
+            imageUrl={uploadedUrl}
             value={copy}
             onChange={setCopy}
           />

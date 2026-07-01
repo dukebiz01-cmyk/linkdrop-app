@@ -1,6 +1,7 @@
-// generate-promo-copy — 업주 상품(이름·가격·메모) → AI 홍보 카피(헤드라인 + 셀링포인트) (Claude Haiku 4.5)
+// generate-promo-copy — 업주 상품(이름·가격·메모·사진) → AI 홍보 카피(헤드라인 + 셀링포인트) (Claude Sonnet 4.6)
 //
-// POST { product_name, price_krw?, notes?, user_id, product_id? }
+// POST { product_name, price_krw?, notes?, user_id, product_id?, image_url? }
+//   image_url 있으면 서버가 fetch→base64 로 비전 입력(멀티모달). 없으면 텍스트-only(회귀 0).
 // → { headline, selling_points, cached, ai_generation_id }
 //
 // generate-summary 호출 골격 차용(invokeEdge·check_ai_quota·record_ai_generation·비용 KRW).
@@ -13,6 +14,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.27.0";
+import { encodeBase64 } from "jsr:@std/encoding/base64";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SECRET_KEY =
@@ -24,7 +26,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
 });
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-sonnet-4-6";
 const USD_TO_KRW = 1400;
 // generation_type CHECK 기존 값 재사용(DDL 0). response.kind 로 promo 식별.
 const GENERATION_TYPE = "share_message";
@@ -59,6 +61,7 @@ const SYSTEM_PROMPT = `너는 업주 본인 상품을 홍보하는 한국어 카
 4. 독립 리뷰·뉴스·제3자 시점 사칭 절대 금지. 너는 파는 사람 본인이야.
 5. 메모가 비어 있으면 = 상품명·카테고리 수준의 안전한 일반 홍보 카피만. (구체적 미검증 주장 없이.)
 6. 어려운 단어 금지(어르신도 이해). 이모지 금지.
+7. 상품 사진이 함께 주어지면, 사진에서 실제로 보이는 외형·색·상태만 반영해. 사진에 없는 것(효능·원산지 등)은 지어내지 마.
 
 응답 형식 (JSON only, 코드블록·설명 없이 JSON 만):
 {
@@ -77,6 +80,7 @@ Deno.serve(async (req) => {
     notes?: string;
     user_id?: string;
     product_id?: string;
+    image_url?: string | null;
   };
   try {
     body = await req.json();
@@ -122,7 +126,33 @@ Deno.serve(async (req) => {
     `위 정보만 근거로, 업주 1인칭 홍보 헤드라인 1줄과 셀링포인트 3~5개를 만들어줘. ` +
     `정보에 없는 주장은 절대 만들지 마.`;
 
-  // 3) Claude Haiku 호출
+  // 2b) 이미지(선택) — image_url 있으면 서버에서 fetch → base64(비전 입력).
+  //   실패해도 전체 실패 금지 → 이미지 없이 텍스트-only 로 폴백(로그만).
+  //   image_url 없으면 imageBlock=null → 기존 텍스트-only 경로(회귀 0).
+  let imageBlock:
+    | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+    | null = null;
+  const rawImageUrl = (body.image_url ?? "").trim();
+  if (rawImageUrl) {
+    try {
+      const imgRes = await fetch(rawImageUrl);
+      if (imgRes.ok) {
+        const bytes = new Uint8Array(await imgRes.arrayBuffer());
+        const ct = imgRes.headers.get("content-type");
+        const mediaType = ct && ct.startsWith("image/") ? ct.split(";")[0].trim() : "image/jpeg";
+        imageBlock = {
+          type: "image",
+          source: { type: "base64", media_type: mediaType, data: encodeBase64(bytes) },
+        };
+      } else {
+        console.warn("[generate-promo-copy] image fetch non-ok:", imgRes.status);
+      }
+    } catch (imgErr) {
+      console.warn("[generate-promo-copy] image fetch failed:", imgErr);
+    }
+  }
+
+  // 3) Claude 호출 — 이미지 있으면 [text, image] 멀티모달, 없으면 문자열(기존 회귀 0).
   let inTok = 0;
   let outTok = 0;
   let result: { headline: string; selling_points: string[] };
@@ -131,7 +161,14 @@ Deno.serve(async (req) => {
       model: MODEL,
       max_tokens: 500,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        {
+          role: "user",
+          content: imageBlock
+            ? [{ type: "text" as const, text: userPrompt }, imageBlock]
+            : userPrompt,
+        },
+      ],
     });
     inTok = res.usage.input_tokens;
     outTok = res.usage.output_tokens;

@@ -19,6 +19,7 @@ export function ProductCopyEditor({
   productName,
   priceKrw,
   productId,
+  imageUrl,
   value,
   onChange,
 }: {
@@ -26,6 +27,8 @@ export function ProductCopyEditor({
   priceKrw: number | null;
   /** 생성 기록 추적용(선택). */
   productId?: string | null;
+  /** 상품 사진 URL(선택) — 있으면 AI가 사진을 보고 카피 생성(비전). 없으면 텍스트-only. */
+  imageUrl?: string | null;
   value: ProductCopyValue;
   onChange: (next: ProductCopyValue) => void;
 }) {
@@ -50,6 +53,7 @@ export function ProductCopyEditor({
           price_krw: priceKrw,
           notes: notes.trim(),
           product_id: productId ?? null,
+          image_url: imageUrl ?? null,
         }),
       });
       const json = (await res.json()) as {
@@ -117,6 +121,12 @@ export function ProductCopyEditor({
         <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
           <Sparkles className="size-3.5 shrink-0" strokeWidth={2} />
           정보를 입력했으니 AI로 홍보 문구를 만들어보세요.
+        </p>
+      ) : null}
+      {imageUrl ? (
+        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium tracking-ko text-text-muted">
+          <Sparkles className="size-3.5 shrink-0" strokeWidth={2} />
+          상품 사진을 반영해 카피를 만들어요.
         </p>
       ) : null}
       <button
