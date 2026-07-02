@@ -48,6 +48,8 @@ import { Route as ApiDiscoverIndexRouteImport } from './routes/api/discover/inde
 import { Route as PartnerPartnerIndexRouteImport } from './routes/_partner/partner.index'
 import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index'
 import { Route as ApiProductsCopyRouteImport } from './routes/api/products/copy'
+import { Route as ApiHectoOrderRouteImport } from './routes/api/hecto/order'
+import { Route as ApiHectoNotiRouteImport } from './routes/api/hecto/noti'
 import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
 import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
 import { Route as UserResultsShareUuidRouteImport } from './routes/_user/results.$shareUuid'
@@ -264,6 +266,16 @@ const ApiProductsCopyRoute = ApiProductsCopyRouteImport.update({
   path: '/api/products/copy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHectoOrderRoute = ApiHectoOrderRouteImport.update({
+  id: '/api/hecto/order',
+  path: '/api/hecto/order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHectoNotiRoute = ApiHectoNotiRouteImport.update({
+  id: '/api/hecto/noti',
+  path: '/api/hecto/noti',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDropsShareCodeRoute = ApiDropsShareCodeRouteImport.update({
   id: '/api/drops/$shareCode',
   path: '/api/drops/$shareCode',
@@ -436,6 +448,8 @@ export interface FileRoutesByFullPath {
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/hecto/noti': typeof ApiHectoNotiRoute
+  '/api/hecto/order': typeof ApiHectoOrderRoute
   '/api/products/copy': typeof ApiProductsCopyRoute
   '/admin/': typeof AdminAdminIndexRoute
   '/partner/': typeof PartnerPartnerIndexRoute
@@ -497,6 +511,8 @@ export interface FileRoutesByTo {
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/hecto/noti': typeof ApiHectoNotiRoute
+  '/api/hecto/order': typeof ApiHectoOrderRoute
   '/api/products/copy': typeof ApiProductsCopyRoute
   '/admin': typeof AdminAdminIndexRoute
   '/partner': typeof PartnerPartnerIndexRoute
@@ -562,6 +578,8 @@ export interface FileRoutesById {
   '/_user/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/hecto/noti': typeof ApiHectoNotiRoute
+  '/api/hecto/order': typeof ApiHectoOrderRoute
   '/api/products/copy': typeof ApiProductsCopyRoute
   '/_admin/admin/': typeof AdminAdminIndexRoute
   '/_partner/partner/': typeof PartnerPartnerIndexRoute
@@ -625,6 +643,8 @@ export interface FileRouteTypes {
     | '/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/hecto/noti'
+    | '/api/hecto/order'
     | '/api/products/copy'
     | '/admin/'
     | '/partner/'
@@ -686,6 +706,8 @@ export interface FileRouteTypes {
     | '/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/hecto/noti'
+    | '/api/hecto/order'
     | '/api/products/copy'
     | '/admin'
     | '/partner'
@@ -750,6 +772,8 @@ export interface FileRouteTypes {
     | '/_user/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/hecto/noti'
+    | '/api/hecto/order'
     | '/api/products/copy'
     | '/_admin/admin/'
     | '/_partner/partner/'
@@ -786,6 +810,8 @@ export interface RootRouteChildren {
   RClaim_codeRoute: typeof RClaim_codeRoute
   ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
   ApiDropsShareCodeRoute: typeof ApiDropsShareCodeRoute
+  ApiHectoNotiRoute: typeof ApiHectoNotiRoute
+  ApiHectoOrderRoute: typeof ApiHectoOrderRoute
   ApiProductsCopyRoute: typeof ApiProductsCopyRoute
   ApiDiscoverIndexRoute: typeof ApiDiscoverIndexRoute
   ApiDropsIndexRoute: typeof ApiDropsIndexRoute
@@ -1064,6 +1090,20 @@ declare module '@tanstack/react-router' {
       path: '/api/products/copy'
       fullPath: '/api/products/copy'
       preLoaderRoute: typeof ApiProductsCopyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/hecto/order': {
+      id: '/api/hecto/order'
+      path: '/api/hecto/order'
+      fullPath: '/api/hecto/order'
+      preLoaderRoute: typeof ApiHectoOrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/hecto/noti': {
+      id: '/api/hecto/noti'
+      path: '/api/hecto/noti'
+      fullPath: '/api/hecto/noti'
+      preLoaderRoute: typeof ApiHectoNotiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/drops/$shareCode': {
@@ -1362,6 +1402,8 @@ const rootRouteChildren: RootRouteChildren = {
   RClaim_codeRoute: RClaim_codeRoute,
   ApiCouponsClaimRoute: ApiCouponsClaimRoute,
   ApiDropsShareCodeRoute: ApiDropsShareCodeRoute,
+  ApiHectoNotiRoute: ApiHectoNotiRoute,
+  ApiHectoOrderRoute: ApiHectoOrderRoute,
   ApiProductsCopyRoute: ApiProductsCopyRoute,
   ApiDiscoverIndexRoute: ApiDiscoverIndexRoute,
   ApiDropsIndexRoute: ApiDropsIndexRoute,
