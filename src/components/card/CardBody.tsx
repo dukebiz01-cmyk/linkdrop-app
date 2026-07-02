@@ -33,7 +33,8 @@ export function CardBody({
   reservationBlock,
   contactBlock,
   shareFooter,
-}: CardBodyProps) {
+  light = false,
+}: CardBodyProps & { light?: boolean }) {
   return (
     <>
       {/* 본체 — 상호배타: 상품 블록(커머스) 있으면 본체가 상품 카드, 없으면 기존 영상 경로(0영향). */}
@@ -43,8 +44,13 @@ export function CardBody({
         <>
           {/* 영상 출처 라벨 — video 데이터에서(하드코딩 제거). video 있을 때만. */}
           {video ? (
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-white/75">
-              <Play className="h-3 w-3 fill-white/75" strokeWidth={0} />
+            <div
+              className={`flex items-center gap-1.5 text-[11px] font-medium ${light ? "text-text-muted" : "text-white/75"}`}
+            >
+              <Play
+                className={`h-3 w-3 ${light ? "fill-[#64748B]" : "fill-white/75"}`}
+                strokeWidth={0}
+              />
               {video.sourceLabel ?? "YouTube"}
               {video.title ? ` · ${video.title}` : ""}
             </div>
@@ -65,13 +71,17 @@ export function CardBody({
       {/* 태그라인 — 한마디/부제. 채워지면 실제 tagline, 비고 taglinePlaceholder 주입 시 흐린 안내(스튜디오 전용).
           손님은 taglinePlaceholder 미주입 → 둘 다 없으면 안 그림. */}
       {tagline ? (
-        <p className="mt-0.5 text-[13px] text-white/75">{tagline}</p>
+        <p className={`mt-0.5 text-[13px] ${light ? "text-text-strong" : "text-white/75"}`}>
+          {tagline}
+        </p>
       ) : taglinePlaceholder ? (
-        <p className="mt-0.5 text-[13px] text-white/40">{taglinePlaceholder}</p>
+        <p className={`mt-0.5 text-[13px] ${light ? "text-text-subtle" : "text-white/40"}`}>
+          {taglinePlaceholder}
+        </p>
       ) : null}
 
       {/* 셀링포인트 — 배열(SellingPoints 가 내부 map, 빈 배열이면 null). */}
-      <SellingPoints points={sellingPoints} />
+      <SellingPoints points={sellingPoints} light={light} />
 
       {/* 행동영역 — 쿠폰 + 예약 + 연락. 균일 스택(손님 정돈 리듬 space-y-6). */}
       <div className="mt-4 space-y-6">
@@ -84,6 +94,7 @@ export function CardBody({
             icon={<Calendar className="h-4 w-4" strokeWidth={2} />}
             defaultExpanded={false}
             expandedContent={reservationBlock}
+            light={light}
           />
         ) : null}
         {contactBlock ? (
@@ -92,6 +103,7 @@ export function CardBody({
             icon={<Info className="h-4 w-4" strokeWidth={2} />}
             defaultExpanded={false}
             expandedContent={contactBlock}
+            light={light}
           />
         ) : null}
 

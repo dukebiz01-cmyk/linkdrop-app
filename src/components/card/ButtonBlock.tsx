@@ -22,6 +22,7 @@ export function ButtonBlock({
   expandedContent,
   onClick,
   defaultExpanded = false,
+  light = false,
 }: {
   /** 버튼 글씨 (예: "예약 날짜 선택") */
   label: string;
@@ -33,6 +34,8 @@ export function ButtonBlock({
   onClick?: () => void;
   /** 기본 false (닫힘) — 서버·클라 동일 시작 상태 */
   defaultExpanded?: boolean;
+  /** 라이트 카드(밝은 셸)면 무채색 흰알파 대신 라이트 토큰(기본 false = 기존 다크 불변). */
+  light?: boolean;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   // expandedContent 있으면 펼침형, 없으면 onClick 터미널형.
@@ -52,7 +55,7 @@ export function ButtonBlock({
         type="button"
         onClick={handleClick}
         aria-expanded={expandable ? expanded : undefined}
-        className="flex w-full min-h-[56px] items-center justify-center gap-2 rounded-2xl bg-white/12 px-4 py-2 text-base font-bold backdrop-blur transition-colors hover:bg-white/20"
+        className={`flex w-full min-h-[56px] items-center justify-center gap-2 rounded-2xl ${light ? "border border-[#E5E5E5] bg-[#FAFAFA]" : "bg-white/12"} px-4 py-2 text-base font-bold backdrop-blur transition-colors ${light ? "hover:bg-[#F5F5F5]" : "hover:bg-white/20"}`}
       >
         {icon}
         <span>{label}</span>
