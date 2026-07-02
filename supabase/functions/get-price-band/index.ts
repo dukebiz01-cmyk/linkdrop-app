@@ -47,6 +47,12 @@ const KAT_BASE = "https://apis.data.go.kr/B552845/katRealTime2/trades2";
 const KAT_NUM_ROWS = 1000; // 전국 다시장 표본 충분히(배추 3,500건 중 1,000 표본 = 8개+ 시장).
 const KAT_LOOKBACK_DAYS = 6; // 주말·휴장 회피: regday 부터 최대 6일 역행해 직전 영업일.
 
+// ── S4 sale_mode(판매규격) 상수 — 스펙 §4(보수적 기본값, 튜닝 가능) ──
+//   단위가 같을 때만 한 밴드. count/volume 은 규격 정확매칭 후 톨러런스 이내만, 부족하면 숨김.
+const COUNT_TOLERANCE = 0.2; // 선언 30개 → 24~36개 허용
+const VOLUME_TOLERANCE = 0.15; // 선언 500ml → 425~575ml 허용
+const MIN_COMPARABLE = 5; // 비교매물 미만이면 시세 숨김(§0 graceful)
+
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -345,22 +351,167 @@ function todayKstIso(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 }
 
+// ── S4 sale_mode(판매규격) — 단위가 같을 때만 한 밴드(스펙 §2/§3). ──
+type SaleMode = "weight" | "count" | "volume";
+type NaverBandUnit = "krw_per_kg" | "krw_per_listing";
+
+// 스펙 §5 출력 — mode-aware. band=null 이면 숨김(생산자 화면이 "직접 책정" 안내).
+type SaleModeResult = {
+  sale_mode: SaleMode;
+  band: { low: number; avg: number; high: number } | null;
+  band_unit: NaverBandUnit;
+  spec_label: string;
+  source_count: number;
+  sources_used: string[];
+  hidden_reason: null | "insufficient_comparables" | "no_taxonomy";
+};
+
+type NaverShopResult = {
+  source: PriceSource;
+  item_name: string | null;
+  // 밴드 산출용 가격 배열(오름차순). weight=원/kg(또는 legacy 원/개), count/volume=원/listing.
+  comparables: number[];
+  bandUnit: NaverBandUnit;
+};
+
+// 수량 토큰 추출(스펙 3-2): (\d{1,4})\s*(개|입|알|구|과|봉|수|미|포기|통|송이)
+function extractCount(title: string): number | null {
+  const m = title.match(/(\d{1,4})\s*(개|입|알|구|과|봉|수|미|포기|통|송이)/);
+  return m ? Number(m[1]) : null;
+}
+
+// 무게(kg) 추출 — count 보조 매칭(approx_weight_kg)용. "3kg"·"500g"(g→kg).
+function extractWeightKg(title: string): number | null {
+  const kgM = title.match(/([\d.]+)\s*kg/i);
+  if (kgM) return Number(kgM[1]);
+  const gM = title.match(/([\d.]+)\s*g(?![a-zA-Z])/i);
+  if (gM) return Number(gM[1]) / 1000;
+  return null;
+}
+
+// 용량/중량 토큰 추출 + 단위계열(스펙 3-3): ml계열=ml/mL/밀리/리터/L · g계열=g/kg. 교차 금지.
+function extractVolume(title: string): { value: number; family: "ml" | "g" } | null {
+  const m = title.match(/(\d{1,5})\s*(ml|mL|밀리|리터|L|g|kg)/);
+  if (!m) return null;
+  const u = m[2].toLowerCase();
+  const family: "ml" | "g" = u === "g" || u === "kg" ? "g" : "ml";
+  return { value: Number(m[1]), family };
+}
+
+// unit_label → 단위계열. 매칭 안 되면 null(=volume 필터에서 전부 제외).
+function volumeFamilyOf(label: string): "ml" | "g" | null {
+  const l = label.toLowerCase();
+  if (l === "ml" || l === "밀리" || l === "리터" || l === "l") return "ml";
+  if (l === "g" || l === "kg") return "g";
+  return null;
+}
+
+// 품목별 차단어 사전 — generic EXCLUDE 로 못 거르는 동음·파생 상품 컷("옥수수"→"옥수수수염차" 등).
+//   품목명에 등록된 차단어가 제목에 있으면 제외. 미등록 품목 = generic EXCLUDE 만(빈 배열 fallback).
+//   ★ 차단어에 품목명 자체(예: "옥수수")는 절대 넣지 말 것 — 자기 자신을 막음.
+const ITEM_BLOCKLIST: Record<string, string[]> = {
+  "옥수수": ["차", "수염", "뻥튀기", "팝콘", "튀밥", "콘칩", "통조림", "사료", "팝"],
+  "들기름": ["비누", "캡슐", "마사지", "들깨", "샴푸", "화장품"],
+  "참기름": ["비누", "캡슐", "마사지", "샴푸", "화장품"],
+  "고구마": ["말랭이", "스틱", "칩", "라떼", "분말", "케이크", "빵", "순"],
+  "배추": ["겉절이", "포기김치", "묵은지", "씨"],
+};
+
+// 제목이 itemName 의 품목별 차단어 중 하나라도 포함하면 true(=제외). 미등록 품목 → 항상 false.
+//   count/volume(filterBySpec)·weight 네이버 필터 양쪽에서 공통 호출.
+function isBlockedByItem(title: string, itemName: string): boolean {
+  const list = ITEM_BLOCKLIST[itemName] ?? [];
+  return list.some((w) => title.includes(w));
+}
+
+// count/volume 규격 정확매칭 필터(순수, 단위검증 가능). kg환산 STOP — listing 가격 그대로 반환.
+//   공통 제외룰(품목명 포함·양품종·가공/부산물)은 기존 weight 필터와 동일.
+function filterBySpec(
+  items: NaverShopItem[],
+  o: {
+    mode: "count" | "volume";
+    itemName: string;
+    unitQty: number;
+    unitLabel: string;
+    approxWeightKg?: number;
+    stripTag: (s: string) => string;
+    exclude: string[];
+  },
+): number[] {
+  const out: number[] = [];
+  const wantFamily = o.mode === "volume" ? volumeFamilyOf(o.unitLabel) : null;
+  const countLo = o.unitQty * (1 - COUNT_TOLERANCE);
+  const countHi = o.unitQty * (1 + COUNT_TOLERANCE);
+  const volLo = o.unitQty * (1 - VOLUME_TOLERANCE);
+  const volHi = o.unitQty * (1 + VOLUME_TOLERANCE);
+  const wKgLo = o.approxWeightKg != null ? o.approxWeightKg * (1 - COUNT_TOLERANCE) : null;
+  const wKgHi = o.approxWeightKg != null ? o.approxWeightKg * (1 + COUNT_TOLERANCE) : null;
+
+  for (const it of items) {
+    const title = o.stripTag(it.title ?? "");
+    if (!title.includes(o.itemName)) continue;
+    if (title.includes("양" + o.itemName)) continue;
+    if (o.exclude.some((w) => title.includes(w))) continue;
+    if (isBlockedByItem(title, o.itemName)) continue; // 품목별 차단어(옥수수수염차 등)
+    const lp = parsePrice(it.lprice);
+    if (lp == null) continue;
+
+    if (o.mode === "count") {
+      const c = extractCount(title);
+      let ok = c != null && c >= countLo && c <= countHi;
+      // 스펙 3-2 보조: 수량 토큰 없/불일치여도 approx_weight_kg 무게밴드 들면 허용.
+      if (!ok && wKgLo != null && wKgHi != null) {
+        const wkg = extractWeightKg(title);
+        ok = wkg != null && wkg >= wKgLo && wkg <= wKgHi;
+      }
+      if (ok) out.push(lp);
+    } else {
+      // volume — 동일 단위계열만(ml↔g 교차 금지) + ±VOLUME_TOLERANCE. ml/g 정규화 X.
+      const v = extractVolume(title);
+      if (v == null) continue;
+      if (wantFamily == null || v.family !== wantFamily) continue;
+      if (v.value >= volLo && v.value <= volHi) out.push(lp);
+    }
+  }
+  return out;
+}
+
 // 4-C 인터넷 판매가 — 네이버쇼핑 검색 API(공식, 크롤링 아님). fetchKamisRetail 동일 시그니처.
 //   §0: 출처=네이버쇼핑, 검색어 명시. lprice=판매자 등록 최저가(우리 추천/단정 아님).
 //   가공품(들기름 등)도 잡힘(도매와 달리). 키 없으면 null(graceful).
+//   ★ opts 미전달(기존 호출부) = weight 기본 → 기존 동작 100% 보존(하위호환).
 async function fetchNaverShop(
   itemName: string,
   clientId: string,
   clientSecret: string,
-): Promise<{ source: PriceSource; item_name: string | null } | null> {
+  opts?: {
+    mode?: SaleMode;
+    unitQty?: number;
+    unitLabel?: string;
+    approxWeightKg?: number;
+  },
+): Promise<NaverShopResult | null> {
   // 키 중간 비ASCII 제거(discover-content 패턴) — ByteString 위반 차단.
   const clean = (s: string) => s.replace(/[^\x21-\x7E]/g, "");
   const id = clean(clientId);
   const secret = clean(clientSecret);
   if (!id || !secret) return null;
 
+  const mode: SaleMode = opts?.mode ?? "weight";
+  const unitQty = opts?.unitQty;
+  const unitLabel = opts?.unitLabel;
+
+  // 쿼리 규격 바인딩(스펙 3-2/3-3) — count/volume 은 규격을 검색어에 붙여 정확매칭("옥수수 30개").
+  //   weight/기본은 itemName 단독(기존 동작).
+  const specBound =
+    (mode === "count" || mode === "volume") &&
+    typeof unitQty === "number" &&
+    typeof unitLabel === "string" &&
+    unitLabel.length > 0;
+  const query = specBound ? `${itemName} ${unitQty}${unitLabel}` : itemName;
+
   const url = new URL("https://openapi.naver.com/v1/search/shop.json");
-  url.searchParams.set("query", itemName);
+  url.searchParams.set("query", query);
   url.searchParams.set("display", "100");
   url.searchParams.set("sort", "sim");
 
@@ -384,6 +535,36 @@ async function fetchNaverShop(
   // 관련성 필터: itemName 포함 + 별종(양배추류)·가공/부산물 제외. 도매 가드와 동일 취지.
   const stripTag = (s: string) => s.replace(/<[^>]+>/g, "");
   const EXCLUDE = ["씨앗", "모종", "종자", "김치", "절임", "즙", "분말", "가루", "효소", "환", "추출"];
+
+  // ── count/volume: 규격 정확매칭(톨러런스) + kg환산 STOP. listing 가격 그대로 밴드(원/listing). ──
+  if (mode === "count" || mode === "volume") {
+    const comparables = filterBySpec(items, {
+      mode,
+      itemName,
+      unitQty: unitQty ?? 0,
+      unitLabel: unitLabel ?? "",
+      approxWeightKg: opts?.approxWeightKg,
+      stripTag,
+      exclude: EXCLUDE,
+    });
+    if (comparables.length === 0) return null;
+    const arr = comparables.slice().sort((a, b) => a - b);
+    const { low, high, avg } = bandStats(arr);
+    const specText = `${unitQty}${unitLabel}`;
+    const source: PriceSource = {
+      source: "네이버쇼핑",
+      source_label: "인터넷 판매가",
+      price_type: "online",
+      low: Math.min(low, high),
+      high: Math.max(low, high),
+      unit: specText,
+      rank_note: `"${query}" 네이버쇼핑 ${arr.length}건 · 판매자 등록가 · 평균 ${avg.toLocaleString("ko-KR")}원`,
+      ref_date: todayKstIso(),
+    };
+    return { source, item_name: itemName, comparables: arr, bandUnit: "krw_per_listing" };
+  }
+
+  // ── weight/기본: 기존 동작 100% 보존(kg환산, useKg fallback). ──
   const perKg: number[] = [];
   const raw: number[] = [];
   for (const it of items) {
@@ -391,6 +572,7 @@ async function fetchNaverShop(
     if (!title.includes(itemName)) continue;
     if (title.includes("양" + itemName)) continue; // 양배추 등 별종
     if (EXCLUDE.some((w) => title.includes(w))) continue;
+    if (isBlockedByItem(title, itemName)) continue; // 품목별 차단어(옥수수수염차 등) — weight 검색에도 적용
     const lp = parsePrice(it.lprice);
     if (lp == null) continue;
     raw.push(lp);
@@ -419,7 +601,154 @@ async function fetchNaverShop(
     rank_note: `"${itemName}" 네이버쇼핑 ${arr.length}개 · 판매자 등록가 · 평균 ${avg.toLocaleString("ko-KR")}원`,
     ref_date: todayKstIso(),
   };
-  return { source, item_name: itemName };
+  return { source, item_name: itemName, comparables: arr, bandUnit: useKg ? "krw_per_kg" : "krw_per_listing" };
+}
+
+// ── S4 오케스트레이션 — sale_mode 별 소스 분기(스펙 §3). 서로 다른 단위 한 밴드 절대 금지. ──
+//   weight = KAMIS+도매+네이버(전부 원/kg) / count·volume = 네이버만(원/listing).
+//   비교매물 < MIN_COMPARABLE → band=null + hidden_reason. 캐시 미사용(신규 path, 기존 캐시 무영향).
+async function handleSaleMode(
+  saleMode: SaleMode,
+  ctx: {
+    itemCode: string;
+    categoryCode: string;
+    regday: string;
+    rankCode: "04" | "05" | undefined;
+    itemNameKoInput: string | null;
+    unitQty?: number;
+    unitLabel?: string;
+    approxWeightKg?: number;
+  },
+): Promise<SaleModeResult> {
+  const { itemCode, categoryCode, regday, rankCode, unitQty, unitLabel } = ctx;
+  const bandUnit: NaverBandUnit = saleMode === "weight" ? "krw_per_kg" : "krw_per_listing";
+  const specLabel =
+    saleMode === "weight" ? (unitLabel ?? "kg") : `${unitQty ?? ""}${unitLabel ?? ""}`;
+
+  // 품목 한글명 — 입력(itemNameKo) 우선, 없으면 kamis_items 조회. 못 구하면 no_taxonomy.
+  let itemNameKo = ctx.itemNameKoInput;
+  if (!itemNameKo) {
+    try {
+      const { data: itemRow } = await supabase
+        .from("kamis_items")
+        .select("item_name")
+        .eq("item_code", itemCode)
+        .maybeSingle();
+      itemNameKo = (itemRow as { item_name?: string } | null)?.item_name ?? null;
+    } catch (e) {
+      console.error("[get-price-band] kamis_items name lookup failed:", String((e as Error).message ?? e));
+    }
+  }
+  if (!itemNameKo) {
+    return {
+      sale_mode: saleMode,
+      band: null,
+      band_unit: bandUnit,
+      spec_label: specLabel,
+      source_count: 0,
+      sources_used: [],
+      hidden_reason: "no_taxonomy",
+    };
+  }
+
+  const naverOn = Boolean(NAVER_CLIENT_ID && NAVER_CLIENT_SECRET);
+
+  // ── count / volume: 네이버만(KAMIS=원/포기·도매=원/kg → 단위 불일치 → 제외). ──
+  if (saleMode === "count" || saleMode === "volume") {
+    const naver = naverOn
+      ? await fetchNaverShop(itemNameKo, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, {
+          mode: saleMode,
+          unitQty,
+          unitLabel,
+          approxWeightKg: ctx.approxWeightKg,
+        })
+      : null;
+    const comps = naver?.comparables ?? [];
+    if (comps.length < MIN_COMPARABLE) {
+      return {
+        sale_mode: saleMode,
+        band: null,
+        band_unit: "krw_per_listing",
+        spec_label: specLabel,
+        source_count: comps.length,
+        sources_used: comps.length > 0 ? ["naver"] : [],
+        hidden_reason: "insufficient_comparables",
+      };
+    }
+    const { low, high, avg } = bandStats(comps); // fetchNaverShop 이 이미 오름차순 정렬
+    return {
+      sale_mode: saleMode,
+      band: { low, avg, high },
+      band_unit: "krw_per_listing",
+      spec_label: specLabel,
+      source_count: comps.length,
+      sources_used: ["naver"],
+      hidden_reason: null,
+    };
+  }
+
+  // ── weight: KAMIS + 도매 + 네이버, 전부 원/kg 만 밴드에 합침(다른 단위 절대 미혼입). ──
+  const certKey = Deno.env.get("KAMIS_CERT_KEY");
+  const certId = Deno.env.get("KAMIS_CERT_ID");
+  const used: string[] = [];
+  const kgPoints: number[] = [];
+  let naverComparableCount = 0;
+  let trustedSources = 0; // KAMIS/도매 = 신뢰소스(있으면 네이버 얇아도 표시 OK).
+
+  if (certKey && certId) {
+    const kamis = await fetchKamisRetail(itemCode, categoryCode, regday, rankCode, certKey, certId);
+    if (kamis) {
+      used.push("kamis");
+      trustedSources++;
+      kgPoints.push(kamis.source.low, kamis.source.high);
+    }
+  }
+  if (WHOLESALE_API_KEY) {
+    const wholesale = await fetchWholesale(itemNameKo, regday, WHOLESALE_API_KEY);
+    if (wholesale) {
+      used.push("wholesale");
+      trustedSources++;
+      kgPoints.push(wholesale.source.low, wholesale.source.high);
+    }
+  }
+  if (naverOn) {
+    const naver = await fetchNaverShop(itemNameKo, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, {
+      mode: "weight",
+      unitQty,
+      unitLabel,
+    });
+    // weight 밴드 = 원/kg 만. 네이버가 kg 정규화(krw_per_kg)했을 때만 채택(개당이면 단위 불일치 → 제외).
+    if (naver && naver.bandUnit === "krw_per_kg") {
+      used.push("naver");
+      naverComparableCount = naver.comparables.length;
+      kgPoints.push(...naver.comparables);
+    }
+  }
+
+  // 게이트(스펙 3-1): 신뢰소스(KAMIS·도매) 있으면 표시 OK / 네이버 단독이면 ≥ MIN_COMPARABLE.
+  const naverOnly = trustedSources === 0;
+  if (kgPoints.length === 0 || (naverOnly && naverComparableCount < MIN_COMPARABLE)) {
+    return {
+      sale_mode: "weight",
+      band: null,
+      band_unit: "krw_per_kg",
+      spec_label: specLabel,
+      source_count: used.length,
+      sources_used: used,
+      hidden_reason: "insufficient_comparables",
+    };
+  }
+  const sorted = kgPoints.slice().sort((a, b) => a - b);
+  const { low, high, avg } = bandStats(sorted);
+  return {
+    sale_mode: "weight",
+    band: { low, avg, high },
+    band_unit: "krw_per_kg",
+    spec_label: specLabel,
+    source_count: used.length,
+    sources_used: used,
+    hidden_reason: null,
+  };
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -431,6 +760,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     category_code?: string;
     regday?: string;
     rank_code?: string;
+    // S4 판매규격(없으면 weight = 기존 동작).
+    sale_mode?: string;
+    unit_qty?: number;
+    unit_label?: string;
+    approx_weight_kg?: number;
+    itemNameKo?: string;
   };
   try {
     body = await req.json();
@@ -452,6 +787,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
       : yesterdayKst();
   const rankCode =
     body.rank_code === "04" || body.rank_code === "05" ? body.rank_code : undefined;
+
+  // ── S4: sale_mode 명시 시에만 신규 규격인지 path. 없으면/이상값이면 아래 기존 path 그대로(하위호환). ──
+  const saleMode: SaleMode | null =
+    body.sale_mode === "weight" || body.sale_mode === "count" || body.sale_mode === "volume"
+      ? body.sale_mode
+      : null;
+  if (saleMode) {
+    const result = await handleSaleMode(saleMode, {
+      itemCode,
+      categoryCode,
+      regday,
+      rankCode,
+      itemNameKoInput: typeof body.itemNameKo === "string" ? body.itemNameKo.trim() || null : null,
+      unitQty: typeof body.unit_qty === "number" ? body.unit_qty : undefined,
+      unitLabel: typeof body.unit_label === "string" ? body.unit_label : undefined,
+      approxWeightKg: typeof body.approx_weight_kg === "number" ? body.approx_weight_kg : undefined,
+    });
+    return jsonResponse(result);
+  }
 
   // cert 미설정 → unconfigured (검증 통과로 처리 금지).
   const certKey = Deno.env.get("KAMIS_CERT_KEY");
