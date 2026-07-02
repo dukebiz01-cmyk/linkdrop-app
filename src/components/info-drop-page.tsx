@@ -1175,6 +1175,9 @@ export function InfoDropPage({
             holoOpacity={0.45}
             boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
           >
+            {/* C8② — 흰 카드(#FFFFFF) 미러: CardBody 제목 h3(색 미명시, 부모 text-white 상속)이
+                흰-위-흰 되는 것 방지. 스튜디오(studio-build) 동일 패턴. navy(false)면 undefined→회귀 0. */}
+            <div className={isLightCard ? "text-[#0F172A]" : undefined}>
             <CardBody
               light={isLightCard}
               {...toCardBodyProps({
@@ -1223,6 +1226,7 @@ export function InfoDropPage({
               }
               shareFooter={shareFooter}
             />
+            </div>
           </DropCardShell>
         )}
         {resolvedVariant === "coupon" && (
@@ -1235,6 +1239,8 @@ export function InfoDropPage({
             holoOpacity={0.45}
             boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
           >
+            {/* C8② — 흰 카드 제목 흰-위-흰 방지(info 동일 패턴). navy면 undefined→회귀 0. */}
+            <div className={isLightCard ? "text-[#0F172A]" : undefined}>
             <CardBody
               light={isLightCard}
               {...toCardBodyProps({
@@ -1261,6 +1267,7 @@ export function InfoDropPage({
               contactBlock={contactRow}
               shareFooter={shareFooter}
             />
+            </div>
           </DropCardShell>
         )}
         {isReservation && (
@@ -1295,6 +1302,8 @@ export function InfoDropPage({
             holoOpacity={0.45}
             boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
           >
+            {/* C8② — 흰 카드 제목 흰-위-흰 방지(info 동일 패턴). navy면 undefined→회귀 0. */}
+            <div className={isLightCard ? "text-[#0F172A]" : undefined}>
             <CardBody
               light={isLightCard}
               {...toCardBodyProps({
@@ -1319,6 +1328,7 @@ export function InfoDropPage({
               contactBlock={contactRow}
               shareFooter={shareFooter}
             />
+            </div>
           </DropCardShell>
         )}
 
