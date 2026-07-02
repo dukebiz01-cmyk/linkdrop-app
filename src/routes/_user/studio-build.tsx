@@ -1875,7 +1875,7 @@ export function CardStudioPage() {
               className="h-full rounded-full transition-all duration-500 ease-out"
               style={{
                 width: `${score}%`,
-                background: `linear-gradient(90deg, ${accent}, #60A5FA, ${accent})`,
+                backgroundImage: `linear-gradient(90deg, ${accent}, ${accent}CC, ${accent})`,
                 backgroundSize: "200% 100%",
                 animation: score > 0 ? "gauge-shine 2.4s linear infinite" : undefined,
               }}
