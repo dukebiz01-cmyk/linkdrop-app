@@ -40,7 +40,7 @@ type LoaderData = {
 
 
 export const Route = createFileRoute("/_partner/partner/preorders")({
-  head: () => ({ meta: [{ title: "선주문 관리 — LinkDrop" }] }),
+  head: () => ({ meta: [{ title: "주문예약 관리 — LinkDrop" }] }),
   loader: async (): Promise<LoaderData> => {
     const empty: LoaderData = { preorders: [] };
     const supabase = await getAuthClient();
@@ -140,7 +140,7 @@ function PartnerPreordersPage() {
       id,
       "confirm_preorder",
       { p_preorder_id: id },
-      "선주문을 확정했어요.",
+      "주문예약을 확정했어요.",
       "확정 처리에 실패했어요. 잠시 후 다시 시도해 주세요.",
     );
   }
@@ -158,7 +158,7 @@ function PartnerPreordersPage() {
       id,
       "cancel_preorder",
       { p_preorder_id: id, p_reason: "" },
-      "선주문을 취소했어요.",
+      "주문예약을 취소했어요.",
       "취소 처리에 실패했어요. 잠시 후 다시 시도해 주세요.",
     );
   }
@@ -173,15 +173,15 @@ function PartnerPreordersPage() {
           <ArrowLeft className="size-3" strokeWidth={2} />
           판매관리
         </Link>
-        <h1 className="mt-1 text-lg font-bold text-text-strong">선주문 관리</h1>
-        <p className="mt-0.5 text-xs text-text-muted">들어온 선주문을 확인하고 처리해요</p>
+        <h1 className="mt-1 text-lg font-bold text-text-strong">주문예약 관리</h1>
+        <p className="mt-0.5 text-xs text-text-muted">들어온 주문예약을 확인하고 처리해요</p>
       </header>
 
       <div className="space-y-4 px-5 pt-4">
         {/* 신규 선주문 (pending) — 미처리 개수 배지(모노크롬). 0이면 배지 없음 + 빈 상태. */}
         <section>
           <div className="mb-2 flex items-center gap-2 px-1">
-            <h2 className="text-sm font-semibold text-text-strong">신규 선주문</h2>
+            <h2 className="text-sm font-semibold text-text-strong">신규 주문예약</h2>
             {pending.length > 0 ? (
               <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-action px-1.5 text-[11px] font-bold text-action-foreground">
                 {pending.length}
@@ -190,7 +190,7 @@ function PartnerPreordersPage() {
           </div>
           {pending.length === 0 ? (
             <div className="rounded-2xl border border-border bg-bg p-6 text-center">
-              <p className="text-sm text-text-muted">아직 받은 선주문이 없어요.</p>
+              <p className="text-sm text-text-muted">아직 받은 주문예약이 없어요.</p>
             </div>
           ) : (
             <ul className="space-y-3">

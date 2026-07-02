@@ -92,7 +92,7 @@ export function PreorderSheet({
         const m = error.message ?? "";
         setErrorMsg(
           m.includes("마감")
-            ? "선주문이 마감됐어요. (수량 한정)"
+            ? "주문예약이 마감됐어요. (수량 한정)"
             : m.includes("로그인")
               ? "로그인이 필요해요. 다시 시도해 주세요."
               : m.includes("가격")
@@ -116,7 +116,7 @@ export function PreorderSheet({
         {step === "form" ? (
           <div className="space-y-4">
             <header>
-              <SheetTitle className="text-lg font-bold tracking-ko text-text-strong">선주문하기</SheetTitle>
+              <SheetTitle className="text-lg font-bold tracking-ko text-text-strong">주문예약</SheetTitle>
               <p className="mt-1 text-sm font-medium tracking-ko text-text-muted">
                 결제는 농가와 직접 확정해요. 주문을 보내면 농가가 연락드려요.
               </p>

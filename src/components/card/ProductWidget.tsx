@@ -142,7 +142,7 @@ export function ProductWidget({
             //   PreorderSheet(발송일·수량·결제 스텁) 오픈 + create_preorder 호출을 핸들.
             <ActionButton type="button" className="w-full gap-2" onClick={() => onPreorder?.()}>
               <ShoppingCart className="size-4" strokeWidth={2} />
-              선주문하기
+              주문예약
             </ActionButton>
           ) : (
             <ActionButton

@@ -92,13 +92,13 @@ function MyOrdersPage() {
           나
         </Link>
         <h1 className="mt-1 text-lg font-bold text-text-strong">내 주문</h1>
-        <p className="mt-0.5 text-xs text-text-muted">선주문한 상품의 진행 상태예요</p>
+        <p className="mt-0.5 text-xs text-text-muted">주문예약한 상품의 진행 상태예요</p>
       </header>
 
       <div className="space-y-4 px-5 pt-4">
         {data.preorders.length === 0 ? (
           <div className="rounded-2xl border border-border bg-bg p-6 text-center">
-            <p className="text-sm text-text-muted">아직 주문한 선주문이 없어요.</p>
+            <p className="text-sm text-text-muted">아직 주문예약 내역이 없어요.</p>
           </div>
         ) : (
           <>

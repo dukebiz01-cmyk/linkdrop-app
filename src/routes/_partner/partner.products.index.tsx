@@ -199,7 +199,7 @@ function ProductsIndexPage() {
         >
           <span className="inline-flex items-center gap-2">
             <ClipboardList className="size-4" strokeWidth={2} />
-            받은 선주문 보기
+            받은 주문예약 보기
           </span>
           <ChevronRight className="size-4 text-text-subtle" strokeWidth={2} />
         </Link>

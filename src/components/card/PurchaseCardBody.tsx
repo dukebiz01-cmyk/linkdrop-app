@@ -142,7 +142,7 @@ export function PurchaseCardBody({
               onClick={() => onPreorder?.()}
             >
               <ShoppingCart className="size-4" strokeWidth={2} />
-              선주문하기
+              주문예약
             </ActionButton>
           ) : (
             <ActionButton
