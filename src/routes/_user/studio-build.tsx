@@ -1174,7 +1174,8 @@ export function CardStudioPage() {
                   title={buildMode === "commerce" ? "" : (store?.display_name ?? "")}
                   tagline={tagline}
                   taglinePlaceholder="한마디를 입력하면 여기 표시돼요"
-                  sellingPoints={pickedPoints}
+                  // C9 — 영상 유래 셀링포인트는 커머스 카드에 누수 금지(상품은 productBlock 자체 셀링).
+                  sellingPoints={buildMode === "commerce" ? [] : pickedPoints}
                   coupon={null}
                   productBlock={buildMode === "commerce" ? productPreview : null}
                   couponBlock={couponBlockPreview}
@@ -1343,12 +1344,13 @@ export function CardStudioPage() {
           {/* 셀링포인트(보조 설명) — AI가 영상에서 뽑은 키포인트. 탭해서 카드에 추가(최대 3).
               ★ 한마디(카피)는 위 직접입력 유지 — AI는 셀링포인트만. 저장은 다음 단계(미리보기까지). */}
           <div className="mt-3">
-            {aiLoading ? (
+            {/* C9 — 영상 유래 요약 UI는 비커머스(general/reserve)에서만. 커머스는 하단 상품 카피 안내로 낙하(따라다님 차단). */}
+            {aiLoading && buildMode !== "commerce" ? (
               <div className="flex items-center gap-1.5 text-[12px] text-[#A3A3A3]">
                 <Sparkles className="h-3 w-3" strokeWidth={1.75} />
                 링고AI가 영상에서 추천 문구 찾는 중…
               </div>
-            ) : aiKeyPoints.length > 0 ? (
+            ) : aiKeyPoints.length > 0 && buildMode !== "commerce" ? (
               <>
                 <div className="mb-1.5 text-[11px] text-[#A3A3A3]">
                   셀링포인트 — 탭해서 카드에 추가 (최대 {MAX_POINTS})
@@ -1383,7 +1385,7 @@ export function CardStudioPage() {
                   })}
                 </div>
               </>
-            ) : selectedVideo ? (
+            ) : selectedVideo && buildMode !== "commerce" ? (
               // 영상은 있으나 키포인트 없음(AI 실패 등) — 한마디 직접입력 안내.
               <div className="flex items-center gap-1.5 text-[11px] text-[#A3A3A3]">
                 <Sparkles className="h-3 w-3" strokeWidth={1.75} />
