@@ -7,6 +7,7 @@ import type { InfoDropPageProps } from "@/components/info-drop-page";
 import type { PriceOfferRow } from "@/components/ai-price-comparison-card";
 import type { DropViewVariant } from "@/lib/mock-data";
 import type { CardBodyProps, VideoSlot } from "@/components/card/CardBody.types";
+import type { ProductWidgetProps } from "@/components/card/ProductWidget";
 import type { CouponPreviewCoupon } from "@/components/receiver/CouponPreview";
 import type { DropPurpose } from "@/lib/types";
 import { parseVideoUrl } from "@/lib/video-metadata";
@@ -454,5 +455,32 @@ export function toCardBodyProps(props: InfoDropPageProps): CardBodyProps {
     purpose: props.variant ? VARIANT_TO_PURPOSE[props.variant] : "정보",
     // 연락 슬롯(contactSlot)·하단 블록 슬롯은 container(info-drop-page)가 주입(지금 undefined).
     //   reservationSlot·ctaSlot 은 3d 에서 제거(미사용 live전용 안티패턴).
+  };
+}
+
+/** 손님 InfoDropPageProps → ProductWidgetProps. props.commerce(이미 buildCommerce 로 만든 구매 데이터) + local(산지) 매핑.
+ *  C1 신규(호출 0 — C2 에서 손님 purchase 분기가 CardBody.productBlock 으로 주입). onPreorder 는 container 가 주입.
+ *  ※ buildCommerce 는 DropDetailRpc 입력용 — 여기선 이미 변환된 props.commerce 를 재사용(중복 변환 회피). */
+export function buildProductWidget(props: InfoDropPageProps): ProductWidgetProps {
+  const c = props.commerce;
+  // 구매 데이터 없으면(purpose≠구매 등) 최소 형태 — title/가격미정. (C2 는 purchase 에서만 호출.)
+  if (!c) {
+    return { name: props.title, priceKrw: null };
+  }
+  return {
+    name: c.name,
+    priceKrw: c.priceKrw,
+    media: { type: "image", imageUrl: c.imageUrl },
+    imageUrl: c.imageUrl,
+    headline: c.headline,
+    sellingPoints: c.sellingPoints,
+    isFresh: c.isFresh,
+    harvestDate: c.harvestDate,
+    stockLimit: c.stockLimit,
+    local: props.local
+      ? { name: props.local.name, address: props.local.address, distance: props.local.distance }
+      : undefined,
+    selfUpload: c.selfUpload,
+    buyUrl: c.buyUrl,
   };
 }
