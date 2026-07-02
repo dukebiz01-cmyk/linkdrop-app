@@ -1,6 +1,8 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAuthClient } from "@/lib/auth-context";
+import { getSupabase } from "@/lib/supabase";
+import { PriceBandAdvisor, type PriceBandResult } from "@/components/commerce/PriceBandAdvisor";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
@@ -248,6 +250,10 @@ const MODE_CARD_COLOR: Record<"general" | "reserve" | "commerce", string> = {
   reserve: "#FFFFFF",
   commerce: "#FFFFFF",
 };
+// KAMIS 품목 분류(시세 연동) — 등록폼과 동일. 라이브 DB kamis_categories/kamis_items, types.ts 미반영 → as never 캐스트.
+type KamisCategory = { category_code: string; category_name: string };
+type KamisItem = { item_code: string; item_name: string };
+
 const MODE_ACCENT: Record<"general" | "reserve" | "commerce", string> = {
   general: "#475569",
   reserve: "#1D4ED8",
@@ -353,6 +359,13 @@ export function CardStudioPage() {
   const [productPrice, setProductPrice] = useState<number | null>(null);
   // 커머스 홍보 문구(나-1) — headline/sellingPoints. ProductCopyEditor(등록폼과 동일) 제어값.
   const [productCopy, setProductCopy] = useState<ProductCopyValue>(EMPTY_PRODUCT_COPY);
+  // S4-2 커머스 시세 참고(§0: 제작화면 전용, 손님·저장 미포함). 등록폼과 동일 KAMIS 2단 + get-price-band.
+  const [kamisCategoryCode, setKamisCategoryCode] = useState("");
+  const [kamisItemCode, setKamisItemCode] = useState("");
+  const [kamisCategories, setKamisCategories] = useState<KamisCategory[]>([]);
+  const [kamisItems, setKamisItems] = useState<KamisItem[]>([]);
+  const [priceBand, setPriceBand] = useState<PriceBandResult | null>(null);
+  const [priceBandLoading, setPriceBandLoading] = useState(false);
   const [showCouponPicker, setShowCouponPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
   // S2-a 저장 — POST /api/drops(영상+한마디만). 단축 URL 반환 확인까지.
@@ -424,7 +437,87 @@ export function CardStudioPage() {
     setProductName("");
     setProductPrice(null);
     setProductCopy(EMPTY_PRODUCT_COPY);
+    setKamisCategoryCode(""); // 시세 참고 잔재 방지
+    setKamisItemCode("");
+    setPriceBand(null);
   };
+
+  // S4-2 KAMIS 부류 1회 로드 (등록폼 107-120 복제). types.ts 미반영 → as never.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const supabase = getSupabase();
+      if (!supabase) return;
+      const { data } = await supabase
+        .from("kamis_categories" as never)
+        .select("category_code, category_name")
+        .order("sort_order");
+      if (!cancelled) setKamisCategories((data as unknown as KamisCategory[] | null) ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 부류 선택 시 품목 로드 (등록폼 122-140 복제). 부류 비면 품목 비움.
+  useEffect(() => {
+    if (!kamisCategoryCode) {
+      setKamisItems([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const supabase = getSupabase();
+      if (!supabase) return;
+      const { data } = await supabase
+        .from("kamis_items" as never)
+        .select("item_code, item_name")
+        .eq("category_code", kamisCategoryCode)
+        .order("sort_order");
+      if (!cancelled) setKamisItems((data as unknown as KamisItem[] | null) ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [kamisCategoryCode]);
+
+  // 품목 선택 시 KAMIS 소매 시세 조회 (등록폼 144-175 복제). §0: 참고용, 저장·손님 미포함.
+  useEffect(() => {
+    if (!kamisItemCode || !kamisCategoryCode) {
+      setPriceBand(null);
+      return;
+    }
+    let cancelled = false;
+    setPriceBandLoading(true);
+    void (async () => {
+      const fail: PriceBandResult = {
+        status: "error",
+        item_code: kamisItemCode,
+        item_name: null,
+        sources: [],
+        cached: false,
+      };
+      try {
+        const supabase = getSupabase();
+        if (!supabase) {
+          if (!cancelled) setPriceBand(fail);
+          return;
+        }
+        const { data, error } = await supabase.functions.invoke("get-price-band", {
+          body: { item_code: kamisItemCode, category_code: kamisCategoryCode },
+        });
+        if (cancelled) return;
+        setPriceBand(error || !data ? fail : (data as PriceBandResult));
+      } catch {
+        if (!cancelled) setPriceBand(fail);
+      } finally {
+        if (!cancelled) setPriceBandLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [kamisItemCode, kamisCategoryCode]);
 
   const score = useMemo(() => {
     // 도달가능(덱 노출) non-paid 블록 power 합을 분모로 정규화.
@@ -913,7 +1006,23 @@ export function CardStudioPage() {
         selfUpload
       />
     </div>
-  ) : null;
+  ) : (
+    // C6b — 커머스 상품 미장착 시 빈 카드 방지: 본체 자리(ProductWidget 교체 슬롯)에 상품 placeholder.
+    //   시각 = 영상 placeholder 패턴 재사용(라이트 accent 틴트 / 다크 흰알파). aria-hidden 시각만.
+    <div aria-hidden="true" className="select-none">
+      <div
+        className={`flex aspect-[4/3] w-full flex-col items-center justify-center gap-1.5 rounded-2xl ring-1 ${isLightCard ? "text-text-subtle" : "bg-white/10 ring-white/15 text-white/45"}`}
+        style={
+          isLightCard
+            ? ({ backgroundColor: `${accent}08`, "--tw-ring-color": `${accent}30` } as React.CSSProperties)
+            : undefined
+        }
+      >
+        <Tag className="h-7 w-7" strokeWidth={1.5} />
+        <span className="text-[11px] font-medium">덱에서 상품 등록을 장착하세요</span>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] pb-[150px]">
@@ -1648,6 +1757,50 @@ export function CardStudioPage() {
                                 className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2.5 text-[14px] outline-none focus:border-[#0A0A0A]"
                               />
                             </div>
+                            {/* S4-2 시세 참고 — 품목 선택 시 KAMIS 시세(§0: 제작화면 전용, 저장·손님 미포함).
+                                가격 정하기 전 참고하도록 가격 입력란 위에 배치. 등록폼 검증 패턴 복제. */}
+                            {buildMode === "commerce" ? (
+                              <div className="space-y-1.5">
+                                <label className="block text-[11px] text-[#A3A3A3]">
+                                  품목 분류 <span className="text-[#C4C4C4]">(선택 · 시세 참고용)</span>
+                                </label>
+                                <select
+                                  aria-label="부류 선택"
+                                  value={kamisCategoryCode}
+                                  onChange={(e) => {
+                                    setKamisCategoryCode(e.target.value);
+                                    setKamisItemCode(""); // 부류 바뀌면 품목 초기화(stale 방지)
+                                  }}
+                                  className="w-full min-h-[44px] rounded-lg border border-[#E5E5E5] bg-white px-3 text-[14px] outline-none focus:border-[#0A0A0A]"
+                                >
+                                  <option value="">부류 선택</option>
+                                  {kamisCategories.map((c) => (
+                                    <option key={c.category_code} value={c.category_code}>
+                                      {c.category_name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {kamisCategoryCode && kamisItems.length > 0 ? (
+                                  <select
+                                    aria-label="품목 선택"
+                                    value={kamisItemCode}
+                                    onChange={(e) => setKamisItemCode(e.target.value)}
+                                    className="w-full min-h-[44px] rounded-lg border border-[#E5E5E5] bg-white px-3 text-[14px] outline-none focus:border-[#0A0A0A]"
+                                  >
+                                    <option value="">품목 선택</option>
+                                    {kamisItems.map((it) => (
+                                      <option key={it.item_code} value={it.item_code}>
+                                        {it.item_name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : null}
+                                {/* KAMIS 소매 시세 어드바이저 — 품목 선택 시만. 농가 가격 참고용(§0). */}
+                                {kamisItemCode ? (
+                                  <PriceBandAdvisor priceBand={priceBand} loading={priceBandLoading} />
+                                ) : null}
+                              </div>
+                            ) : null}
                             <div className="space-y-1.5">
                               <label className="block text-[11px] text-[#A3A3A3]">가격</label>
                               <div className="flex items-center gap-2">
