@@ -1284,13 +1284,17 @@ export function CardStudioPage() {
                     CardBody.shareFooter prop 에서 형제로 이동 — 시각 stub(onClick·href 없음). 클래스는 손님 푸터와 1:1. */}
                 <div className="mt-6" data-testid="share-footer">
                   <div data-testid="share-block" className="mt-4 flex items-center gap-2">
-                    <div
-                      aria-hidden="true"
-                      className="flex h-12 flex-1 items-center justify-center rounded-2xl text-white shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
-                      style={{ backgroundColor: MODE_ACCENT[buildMode] }}
-                    >
-                      <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
-                    </div>
+                    {/* C6c 거울 — Wand2 '만들기' 는 손님 조건(videoSourceUrl && !selfUpload) 미러:
+                        커머스(=self_upload)에선 숨김. general/reserve 는 기존대로 표시(회귀 0). */}
+                    {buildMode !== "commerce" ? (
+                      <div
+                        aria-hidden="true"
+                        className="flex h-12 flex-1 items-center justify-center rounded-2xl text-white shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
+                        style={{ backgroundColor: MODE_ACCENT[buildMode] }}
+                      >
+                        <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
+                      </div>
+                    ) : null}
                     <div
                       aria-hidden="true"
                       className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
