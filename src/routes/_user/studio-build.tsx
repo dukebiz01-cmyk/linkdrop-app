@@ -242,10 +242,11 @@ const DECK_IDS: Record<"general" | "reserve" | "commerce", string[]> = {
   reserve: ["calendar", "content", "coupon", "image", "link", "bgcolor", "top", "boost", "marketing"],
   commerce: ["product", "seasonal", "coupon", "link", "bgcolor", "top", "boost", "marketing"],
 };
+// v0 CARD_BASE — 세 모드 기본 카드색 흰색 통일. CARD_COLORS 팔레트는 유지(사용자가 다크색 선택 가능).
 const MODE_CARD_COLOR: Record<"general" | "reserve" | "commerce", string> = {
-  general: CARD_COLORS[CARD_COLORS.length - 1].value,
-  reserve: CARD_COLORS[2].value,
-  commerce: CARD_COLORS[1].value,
+  general: "#FFFFFF",
+  reserve: "#FFFFFF",
+  commerce: "#FFFFFF",
 };
 const MODE_ACCENT: Record<"general" | "reserve" | "commerce", string> = {
   general: "#475569",
@@ -334,6 +335,8 @@ export function CardStudioPage() {
   // 커머스 3모드 — 퍼블릭/예약·쿠폰/커머스. 덱 구성·카드색·강조색의 단일 스위치.
   const [buildMode, setBuildMode] = useState<"general" | "reserve" | "commerce">("general");
   const [cardColor, setCardColor] = useState(MODE_CARD_COLOR.general); // 모드 파생(switchMode 가 갱신). 색 기능 재개 시 팔레트로 환원
+  // 라이트 카드(흰 셸) 여부 — 흰 셸이면 CardBody·stub 텍스트를 어두운 토큰으로. 다크색 선택 시 false=기존 동작.
+  const isLightCard = cardColor === "#FFFFFF";
   const [showColorPicker, setShowColorPicker] = useState(false);
   // 쿠폰 피커 — 내 쿠폰 여러 개 중 선택(인라인, 색상 팔레트 showColorPicker 패턴 동일).
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
@@ -799,10 +802,10 @@ export function CardStudioPage() {
     selectedCouponId && selectedCoupon ? (
       <section className="space-y-3">
         <div className="space-y-2">
-          <h2 className="text-sm font-bold tracking-ko text-white">예약하면 받는 혜택</h2>
+          <h2 className={`text-sm font-bold tracking-ko ${isLightCard ? "text-text-strong" : "text-white"}`}>예약하면 받는 혜택</h2>
           <div className="space-y-3">
             <CouponPreview coupon={{ ...selectedCoupon, title: selectedCoupon.title ?? "" }} />
-            <p className="text-xs font-medium tracking-ko text-white/70">
+            <p className={`text-xs font-medium tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}>
               예약을 신청하면 쿠폰이 지갑에 담겨요.
             </p>
           </div>
@@ -835,7 +838,13 @@ export function CardStudioPage() {
     ) : null;
   // 예약 stub — 정적 안내(실 캘린더 RPC X). CardBody 가 "예약 날짜 선택" ButtonBlock 으로 래핑.
   const reservationBlockPreview = applied["calendar"] ? (
-    <div className="rounded-xl border border-white/20 bg-white/5 px-3 py-4 text-center text-[13px] text-white/70">
+    <div
+      className={`rounded-xl px-3 py-4 text-center text-[13px] ${
+        isLightCard
+          ? "border border-[#E5E5E5] bg-[#FAFAFA] text-text-muted"
+          : "border border-white/20 bg-white/5 text-white/70"
+      }`}
+    >
       손님이 여기서 예약 날짜를 골라요
     </div>
   ) : null;
@@ -1044,9 +1053,12 @@ export function CardStudioPage() {
               }
             >
                 {/* 카드 본체 = 단일 CardBody(실콘텐츠만). 손님 /d 도 4단계에서 같은 CardBody 채택. */}
+                {/* 라이트 셸 — 상속 텍스트(제목 h3·ButtonBlock 라벨)를 어두운 색으로. 다크 셸이면 undefined=기존 흰 상속. */}
+                <div className={isLightCard ? "text-[#0F172A]" : undefined}>
                 <CardBody
                   mode="preview"
                   cardColor={cardColor}
+                  light={isLightCard}
                   video={selectedVideo}
                   title={store?.display_name ?? ""}
                   tagline={tagline}
@@ -1060,48 +1072,16 @@ export function CardStudioPage() {
                   purpose={
                     applied["calendar"] ? "예약" : applied["coupon"] && selectedCouponId ? "쿠폰" : "정보"
                   }
-                  shareFooter={
-                    /* 거울 5a — 손님 공유 푸터(Wand2 주 버튼 + 링크복사/친구에게보내기 아이콘 + 고지 + 신고)
-                       시각 stub. 전부 div(onClick·href 없음 = 시각만). 손님은 CardBody.shareFooter 에 실작동 주입.
-                       클래스는 손님 푸터와 1:1(거울). */
-                    <div data-testid="share-footer">
-                      <div data-testid="share-block" className="mt-4 flex items-center gap-2">
-                        <div
-                          aria-hidden="true"
-                          className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-white text-[#0A0A0A] shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
-                        >
-                          <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
-                        </div>
-                        <div
-                          aria-hidden="true"
-                          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-inset ring-white/25"
-                        >
-                          <Copy className="h-5 w-5" strokeWidth={2.25} />
-                        </div>
-                        <div
-                          aria-hidden="true"
-                          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-inset ring-white/25"
-                        >
-                          <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
-                        </div>
-                      </div>
-                      <p className="mt-3 text-center text-[10px] leading-relaxed text-white/45">
-                        본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
-                      </p>
-                      <div className="mt-2 text-center text-[11px] text-white/50 underline underline-offset-2">
-                        문제 신고
-                      </div>
-                    </div>
-                  }
                 />
+                </div>
 
                 {/* ── preview placeholder (CardBody 밖, 스튜디오 authoring 안내 — 문구·게이트 그대로) ── */}
                 {/* 영상 슬롯 — 미선택 시. selectedVideo 있으면 CardBody 가 임베드. */}
                 {!selectedVideo && (
-                  <div className="mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl bg-white/10 ring-1 ring-white/15">
+                  <div className={`mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl ring-1 ${isLightCard ? "bg-[#FAFAFA] ring-[#E5E5E5]" : "bg-white/10 ring-white/15"}`}>
                     {applied["content"] ? (
                       // 영상 블록 장착했지만 미선택 — 아래 설정에서 검색·선택 유도(가짜 영상 표시 안 함).
-                      <div className="flex flex-col items-center gap-1.5 text-white/45">
+                      <div className={`flex flex-col items-center gap-1.5 ${isLightCard ? "text-text-subtle" : "text-white/45"}`}>
                         <Video className="h-7 w-7" strokeWidth={1.5} />
                         <span className="text-[11px] font-medium">아래에서 영상을 검색해 선택하세요</span>
                       </div>
@@ -1113,7 +1093,7 @@ export function CardStudioPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-1.5 text-white/45">
+                      <div className={`flex flex-col items-center gap-1.5 ${isLightCard ? "text-text-subtle" : "text-white/45"}`}>
                         <ImageIcon className="h-7 w-7" strokeWidth={1.5} />
                         <span className="text-[11px] font-medium">덱에서 콘텐츠를 장착하세요</span>
                       </div>
@@ -1131,12 +1111,12 @@ export function CardStudioPage() {
                     <div className="animate-slide-up space-y-2">
                       {coupons.length > 0 ? (
                         // 쿠폰은 있으나 미선택 — 아래 설정에서 고르도록 안내.
-                        <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55">
+                        <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed border-[#E5E5E5] text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}>
                           아래에서 쿠폰을 선택하세요
                         </div>
                       ) : (
                         // 매장에 활성 쿠폰 없음.
-                        <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55">
+                        <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed border-[#E5E5E5] text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}>
                           매장에 활성 쿠폰이 없어요
                         </div>
                       )}
@@ -1144,12 +1124,12 @@ export function CardStudioPage() {
                   )}
                   {applied["link"] &&
                     !(store?.contact_phone || store?.address || store?.reservation_url) && (
-                      <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55 animate-slide-up">
+                      <div className={`rounded-xl py-3 text-center text-[12px] animate-slide-up ${isLightCard ? "border border-dashed border-[#E5E5E5] text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}>
                         매장 정보를 등록하면 표시돼요
                       </div>
                     )}
                   {!applied["calendar"] && !applied["coupon"] && !applied["link"] && (
-                    <div className="rounded-xl border border-dashed border-white/25 py-3 text-center text-[12px] text-white/55">
+                    <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed border-[#E5E5E5] text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}>
                       목적 카드를 장착하면 여기에 행동 버튼이 생겨요
                     </div>
                   )}
@@ -1159,7 +1139,10 @@ export function CardStudioPage() {
                     div(onClick 없음 = 시각만). 게이트 = 쿠폰 단독(쿠폰 선택 + 캘린더 미장착) = 손님 !isCombined && isCoupon. */}
                 {applied["coupon"] && selectedCouponId && !applied["calendar"] ? (
                   <div className="mx-auto w-full max-w-[480px] px-6 pt-3">
-                    <div className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white">
+                    <div
+                      className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 text-base font-bold text-white"
+                      style={{ backgroundColor: MODE_ACCENT[buildMode] }}
+                    >
                       <span className="truncate">쿠폰 받기</span>
                     </div>
                   </div>
@@ -1175,6 +1158,38 @@ export function CardStudioPage() {
                     </div>
                   </div>
                 ) : null}
+
+                {/* 거울 5a — 공유 푸터 stub. 손님 카드 정합상 본체·placeholder 아래(맨 끝)로 배치(C4b 재배치).
+                    CardBody.shareFooter prop 에서 형제로 이동 — 시각 stub(onClick·href 없음). 클래스는 손님 푸터와 1:1. */}
+                <div className="mt-6" data-testid="share-footer">
+                  <div data-testid="share-block" className="mt-4 flex items-center gap-2">
+                    <div
+                      aria-hidden="true"
+                      className="flex h-12 flex-1 items-center justify-center rounded-2xl text-white shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
+                      style={{ backgroundColor: MODE_ACCENT[buildMode] }}
+                    >
+                      <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
+                    </div>
+                    <div
+                      aria-hidden="true"
+                      className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
+                    >
+                      <Copy className="h-5 w-5" strokeWidth={2.25} />
+                    </div>
+                    <div
+                      aria-hidden="true"
+                      className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
+                    >
+                      <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
+                    </div>
+                  </div>
+                  <p className={`mt-3 text-center text-[10px] leading-relaxed ${isLightCard ? "text-text-subtle" : "text-white/45"}`}>
+                    본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
+                  </p>
+                  <div className={`mt-2 text-center text-[11px] underline underline-offset-2 ${isLightCard ? "text-text-subtle" : "text-white/50"}`}>
+                    문제 신고
+                  </div>
+                </div>
 
             </DropCardShell>
           </div>
@@ -1252,7 +1267,9 @@ export function CardStudioPage() {
             ) : (
               <div className="flex items-center gap-1.5 text-[11px] text-[#A3A3A3]">
                 <Sparkles className="h-3 w-3" strokeWidth={1.75} />
-                영상을 선택하면 추천 문구가 나와요
+                {buildMode === "commerce"
+                  ? "상품 사진을 등록하면 카피를 만들어요"
+                  : "영상을 선택하면 추천 문구가 나와요"}
               </div>
             )}
           </div>
