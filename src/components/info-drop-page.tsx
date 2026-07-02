@@ -707,6 +707,9 @@ export function InfoDropPage({
   const resolvedVariant: DropViewVariant =
     variant && VARIANT_PAGE_COPY[variant] ? variant : intentToVariant(safeIntent);
   const pageCopy = VARIANT_PAGE_COPY[resolvedVariant] ?? VARIANT_PAGE_COPY.info;
+  // C5 — 흰 셸 미러: 메이커가 흰 카드(#FFFFFF) 저장 시 손님도 라이트 텍스트로(스튜디오 C4b와 동일 판정).
+  //   기존 카드(cardColor null/navy 등) → false → 비-info 다크 셸 기존 흰 텍스트 그대로(회귀 0).
+  const isLightCard = cardColor === "#FFFFFF";
   const purposeLabel = pageCopy.label;
   const safeMaker = {
     ...DEFAULT_MAKER,
@@ -892,7 +895,7 @@ export function InfoDropPage({
   // 예약 활성 버튼은 캘린더 내부(reservation-calendar-page)의 단일 [예약하기]로 일원화
   //   (중복 제거). 여기선 슬롯 흐름이 깨졌을 때(onReservationRequest 부재) 안전 안내 1줄만.
   const reserveNotice = !onReservationRequest ? (
-    <p className="text-xs font-medium tracking-ko text-white/70">
+    <p className={`text-xs font-medium tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}>
       예약 신청을 받을 수 없는 매장이에요.
     </p>
   ) : null;
@@ -901,7 +904,7 @@ export function InfoDropPage({
   const billingNotice = (
     <p
       data-testid="billing-notice"
-      className="text-[12px] leading-relaxed tracking-ko text-white/55"
+      className={`text-[12px] leading-relaxed tracking-ko ${isLightCard ? "text-text-muted" : "text-white/55"}`}
     >
       결제는 매장에서 직접 진행돼요. 자세한 내용은 매장에 문의해 주세요.
     </p>
@@ -910,7 +913,7 @@ export function InfoDropPage({
   const couponPanel = funnelCoupon ? (
     <div className="space-y-3">
       <CouponPreview coupon={funnelCoupon} />
-      <p className="text-xs font-medium tracking-ko text-white/70">
+      <p className={`text-xs font-medium tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}>
         예약을 신청하면 쿠폰이 지갑에 담겨요.
       </p>
     </div>
@@ -932,7 +935,7 @@ export function InfoDropPage({
       <section data-testid="benefit-event-section" className="space-y-3">
         {funnelCoupon ? (
           <div className="space-y-2">
-            <h2 className="text-sm font-bold tracking-ko text-white">
+            <h2 className={`text-sm font-bold tracking-ko ${isLightCard ? "text-text-strong" : "text-white"}`}>
               예약하면 받는 혜택
             </h2>
             {couponPanel}
@@ -940,7 +943,7 @@ export function InfoDropPage({
         ) : null}
         {hasEvents ? (
           <div className="space-y-2">
-            <h2 className="text-sm font-bold tracking-ko text-white">
+            <h2 className={`text-sm font-bold tracking-ko ${isLightCard ? "text-text-strong" : "text-white"}`}>
               진행 이벤트
             </h2>
             <ul className="space-y-2">
@@ -1018,7 +1021,7 @@ export function InfoDropPage({
           <a
             href={`/create-wizard?url=${encodeURIComponent(videoSourceUrl)}`}
             aria-label="이 영상으로 만들기"
-            className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-white text-[#0A0A0A] shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
+            className={`flex h-12 flex-1 items-center justify-center rounded-2xl shadow-[0_4px_14px_rgba(0,0,0,0.18)] ${isLightCard ? "bg-[#0A0A0A] text-white" : "bg-white text-[#0A0A0A]"}`}
           >
             <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
           </a>
@@ -1027,7 +1030,7 @@ export function InfoDropPage({
           type="button"
           onClick={handleCopy}
           aria-label="링크 복사"
-          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-inset ring-white/25"
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
         >
           <Copy className="h-5 w-5" strokeWidth={2.25} />
         </button>
@@ -1035,18 +1038,18 @@ export function InfoDropPage({
           type="button"
           onClick={handleKakao}
           aria-label="친구에게 보내기"
-          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-inset ring-white/25"
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
         >
           <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
         </button>
       </div>
-      <p className="mt-3 text-center text-[10px] leading-relaxed text-white/45">
+      <p className={`mt-3 text-center text-[10px] leading-relaxed ${isLightCard ? "text-text-subtle" : "text-white/45"}`}>
         본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
       </p>
       <button
         type="button"
         onClick={() => setIsReportSheetOpen(true)}
-        className="mt-2 mx-auto flex items-center gap-1 text-[11px] text-white/50 underline underline-offset-2"
+        className={`mt-2 mx-auto flex items-center gap-1 text-[11px] underline underline-offset-2 ${isLightCard ? "text-text-subtle" : "text-white/50"}`}
       >
         문제 신고
       </button>
@@ -1082,14 +1085,14 @@ export function InfoDropPage({
             <p
               className={cn(
                 "text-sm font-bold tracking-ko",
-                resolvedVariant === "info" ? "text-text-strong" : "text-white",
+                resolvedVariant === "info" || isLightCard ? "text-text-strong" : "text-white",
               )}
             >
               {safeMaker.name}
               <span
                 className={cn(
                   "font-medium",
-                  resolvedVariant === "info" ? "text-text-muted" : "text-white/70",
+                  resolvedVariant === "info" || isLightCard ? "text-text-muted" : "text-white/70",
                 )}
               >
                 님이 보냈어요
@@ -1100,7 +1103,7 @@ export function InfoDropPage({
               <p
                 className={cn(
                   "text-xs font-medium tracking-ko",
-                  resolvedVariant === "info" ? "text-text-subtle" : "text-white/60",
+                  resolvedVariant === "info" || isLightCard ? "text-text-subtle" : "text-white/60",
                 )}
               >
                 LinkDrop으로 공유된 영상
@@ -1173,6 +1176,7 @@ export function InfoDropPage({
             boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
           >
             <CardBody
+              light={isLightCard}
               {...toCardBodyProps({
                 videoSourceUrl,
                 videoThumbnailUrl,
@@ -1232,6 +1236,7 @@ export function InfoDropPage({
             boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
           >
             <CardBody
+              light={isLightCard}
               {...toCardBodyProps({
                 videoSourceUrl,
                 videoThumbnailUrl,
@@ -1268,13 +1273,13 @@ export function InfoDropPage({
             >
               {pageCopy.label}
             </span>
-            <h2 className="text-xl font-extrabold leading-snug tracking-ko text-white">
+            <h2 className={`text-xl font-extrabold leading-snug tracking-ko ${isLightCard ? "text-text-strong" : "text-white"}`}>
               {pageCopy.sectionTitle}
             </h2>
-            <p className="text-sm font-medium leading-relaxed tracking-ko text-white/70">
+            <p className={`text-sm font-medium leading-relaxed tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}>
               {reservationGuide}
             </p>
-            <p className="text-xs font-medium text-white/60">{safeLocal.name}</p>
+            <p className={`text-xs font-medium ${isLightCard ? "text-text-subtle" : "text-white/60"}`}>{safeLocal.name}</p>
           </section>
         )}
 
@@ -1291,6 +1296,7 @@ export function InfoDropPage({
             boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
           >
             <CardBody
+              light={isLightCard}
               {...toCardBodyProps({
                 videoSourceUrl,
                 videoThumbnailUrl,
@@ -1560,7 +1566,7 @@ export function InfoDropPage({
             <h2
               className={cn(
                 "text-sm font-bold tracking-ko",
-                resolvedVariant === "info" ? "text-text-strong" : "text-white",
+                resolvedVariant === "info" || isLightCard ? "text-text-strong" : "text-white",
               )}
             >
               관련 상품
@@ -1626,7 +1632,7 @@ export function InfoDropPage({
             <h2
               className={cn(
                 "text-sm font-bold tracking-ko",
-                resolvedVariant === "info" ? "text-text-strong" : "text-white",
+                resolvedVariant === "info" || isLightCard ? "text-text-strong" : "text-white",
               )}
             >
               {pageCopy.ctaHeading}
@@ -1670,7 +1676,7 @@ export function InfoDropPage({
             target="_blank"
             rel="noopener noreferrer"
             data-testid="coupon-naver-reservation"
-            className="flex items-center justify-center gap-1.5 text-xs font-medium tracking-ko text-white/60 underline-offset-2 transition-colors hover:text-white/80 hover:underline"
+            className={`flex items-center justify-center gap-1.5 text-xs font-medium tracking-ko underline-offset-2 transition-colors ${isLightCard ? "text-text-muted hover:text-text-strong" : "text-white/60 hover:text-white/80"} hover:underline`}
           >
             <ExternalLink className="size-3.5" strokeWidth={2} />
             네이버에서 예약하기
