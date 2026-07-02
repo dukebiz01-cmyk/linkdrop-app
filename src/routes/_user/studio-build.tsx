@@ -14,6 +14,7 @@ import {
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
 import { CardBody } from "@/components/card/CardBody";
+import { ProductWidget } from "@/components/card/ProductWidget";
 import { CouponPreview } from "@/components/receiver/CouponPreview";
 import type { VideoSlot } from "@/components/card/CardBody.types";
 import {
@@ -881,29 +882,25 @@ export function CardStudioPage() {
     }
   }
 
-  // 상품 본체 stub — 커머스 본체(이미지=본체, 결정가만). 손님 PurchaseCardBody 미러(div=시각만, onClick 0).
-  //   §0: 시세·비교가 금지 — 결정가(productPrice) 단일값만. B-2 직접입력 state 연결.
+  // 상품 본체 — C3: 손님과 동일 공유 위젯(ProductWidget) = WYSIWYG. preview 라 콜백 없음(선주문 버튼 보이되 무동작).
+  //   §0: 시세·비교가 금지 — 결정가(productPrice) 단일값만. 커머스 저장=self_upload 라 selfUpload 고정.
   const hasProductData = !!productImageUrl || !!productName.trim() || (productPrice ?? 0) > 0;
   const productPreview = hasProductData ? (
     <div aria-hidden="true" className="select-none">
-      {/* 본체 이미지 */}
-      {productImageUrl ? (
-        <img src={productImageUrl} alt="" className="aspect-[4/3] w-full rounded-2xl object-cover" />
-      ) : (
-        <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1.5 rounded-2xl bg-white/10 text-white/50">
-          <ImageIcon className="h-7 w-7" strokeWidth={1.5} />
-          <span className="text-[11px]">상품 사진</span>
-        </div>
-      )}
-      <p className="mt-3 text-[18px] font-bold tracking-tight">{productName || "상품 이름"}</p>
-      <p className="mt-1 text-[24px] font-extrabold tabular-nums">
-        {(productPrice ?? 0) > 0 ? productPrice!.toLocaleString("ko-KR") + "원" : "가격 미정"}
-      </p>
-      {/* 주문 버튼 stub (preview=비클릭) */}
-      <div className="mt-3 flex min-h-[50px] items-center justify-center gap-2 rounded-2xl bg-white text-[15px] font-bold text-[#0A0A0A]">
-        <ShoppingCart className="h-[18px] w-[18px]" strokeWidth={2.25} />
-        주문하기
-      </div>
+      <ProductWidget
+        name={productName || "상품 이름"}
+        priceKrw={(productPrice ?? 0) > 0 ? productPrice : null}
+        media={{ type: "image", imageUrl: productImageUrl ?? undefined }}
+        imageUrl={productImageUrl ?? undefined}
+        headline={productCopy.headline || undefined}
+        sellingPoints={productCopy.sellingPoints.length ? productCopy.sellingPoints : undefined}
+        local={
+          store?.display_name
+            ? { name: store.display_name, address: store.address ?? undefined }
+            : undefined
+        }
+        selfUpload
+      />
     </div>
   ) : null;
 
