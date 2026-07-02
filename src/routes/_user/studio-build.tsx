@@ -337,6 +337,8 @@ export function CardStudioPage() {
   const [cardColor, setCardColor] = useState(MODE_CARD_COLOR.general); // 모드 파생(switchMode 가 갱신). 색 기능 재개 시 팔레트로 환원
   // 라이트 카드(흰 셸) 여부 — 흰 셸이면 CardBody·stub 텍스트를 어두운 토큰으로. 다크색 선택 시 false=기존 동작.
   const isLightCard = cardColor === "#FFFFFF";
+  // C4d — 현재 모드 목적색(v0 MODE_ACCENT). 뱃지·별·게이지·placeholder 틴트에 사용(동적 hex → style 속성).
+  const accent = MODE_ACCENT[buildMode];
   const [showColorPicker, setShowColorPicker] = useState(false);
   // 쿠폰 피커 — 내 쿠폰 여러 개 중 선택(인라인, 색상 팔레트 showColorPicker 패턴 동일).
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
@@ -933,7 +935,7 @@ export function CardStudioPage() {
                 <span className="text-[#D4D4D4]">·</span>
                 <span
                   className="rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white"
-                  style={{ backgroundColor: INK }}
+                  style={{ backgroundColor: accent }}
                 >
                   {({ general: "퍼블릭", reserve: "예약·쿠폰", commerce: "커머스" })[buildMode]}
                 </span>
@@ -947,8 +949,8 @@ export function CardStudioPage() {
                 key={i}
                 className="h-4 w-4 transition-all duration-300"
                 style={{
-                  fill: i < stage.stars ? POINT : "transparent",
-                  color: i < stage.stars ? POINT : "#D4D4D4",
+                  fill: i < stage.stars ? accent : "transparent",
+                  color: i < stage.stars ? accent : "#D4D4D4",
                 }}
                 strokeWidth={2}
               />
@@ -1060,7 +1062,7 @@ export function CardStudioPage() {
                   cardColor={cardColor}
                   light={isLightCard}
                   video={selectedVideo}
-                  title={store?.display_name ?? ""}
+                  title={buildMode === "commerce" ? "" : (store?.display_name ?? "")}
                   tagline={tagline}
                   taglinePlaceholder="한마디를 입력하면 여기 표시돼요"
                   sellingPoints={pickedPoints}
@@ -1076,9 +1078,17 @@ export function CardStudioPage() {
                 </div>
 
                 {/* ── preview placeholder (CardBody 밖, 스튜디오 authoring 안내 — 문구·게이트 그대로) ── */}
-                {/* 영상 슬롯 — 미선택 시. selectedVideo 있으면 CardBody 가 임베드. */}
-                {!selectedVideo && (
-                  <div className={`mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl ring-1 ${isLightCard ? "bg-[#FAFAFA] ring-[#E5E5E5]" : "bg-white/10 ring-white/15"}`}>
+                {/* 영상 슬롯 — 미선택 시. selectedVideo 있으면 CardBody 가 임베드.
+                    커머스는 본체=ProductWidget 상품사진이라 영상 placeholder 무의미 → 게이트. */}
+                {!selectedVideo && buildMode !== "commerce" && (
+                  <div
+                    className={`mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl ring-1 ${isLightCard ? "" : "bg-white/10 ring-white/15"}`}
+                    style={
+                      isLightCard
+                        ? ({ backgroundColor: `${accent}08`, "--tw-ring-color": `${accent}30` } as React.CSSProperties)
+                        : undefined
+                    }
+                  >
                     {applied["content"] ? (
                       // 영상 블록 장착했지만 미선택 — 아래 설정에서 검색·선택 유도(가짜 영상 표시 안 함).
                       <div className={`flex flex-col items-center gap-1.5 ${isLightCard ? "text-text-subtle" : "text-white/45"}`}>
@@ -1104,19 +1114,20 @@ export function CardStudioPage() {
                 {/* 한마디 placeholder — CardBody tagline 슬롯으로 이관(taglinePlaceholder).
                     제목 바로 밑(채워진 tagline 과 같은 위치)에 표시 → 거울 위치 정합. */}
 
-                {/* 행동영역 placeholder — 쿠폰/연락/목적 미장착 안내(문구·게이트 그대로). */}
+                {/* 행동영역 placeholder — 쿠폰/연락/목적 미장착 안내. 커머스는 행동=ProductWidget 선주문하기 → 게이트. */}
+                {buildMode !== "commerce" && (
                 <div className="mt-4 space-y-2">
                   {/* 거울 1c — 예약 "예약 날짜 선택" ButtonBlock 은 CardBody reservationBlock 로 이관(3c). 여기선 미렌더. */}
                   {applied["coupon"] && !(selectedCouponId && selectedCoupon) && (
                     <div className="animate-slide-up space-y-2">
                       {coupons.length > 0 ? (
                         // 쿠폰은 있으나 미선택 — 아래 설정에서 고르도록 안내.
-                        <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed border-[#E5E5E5] text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}>
+                        <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`} style={isLightCard ? { borderColor: `${accent}30` } : undefined}>
                           아래에서 쿠폰을 선택하세요
                         </div>
                       ) : (
                         // 매장에 활성 쿠폰 없음.
-                        <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed border-[#E5E5E5] text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}>
+                        <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`} style={isLightCard ? { borderColor: `${accent}30` } : undefined}>
                           매장에 활성 쿠폰이 없어요
                         </div>
                       )}
@@ -1124,16 +1135,17 @@ export function CardStudioPage() {
                   )}
                   {applied["link"] &&
                     !(store?.contact_phone || store?.address || store?.reservation_url) && (
-                      <div className={`rounded-xl py-3 text-center text-[12px] animate-slide-up ${isLightCard ? "border border-dashed border-[#E5E5E5] text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}>
+                      <div className={`rounded-xl py-3 text-center text-[12px] animate-slide-up ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`} style={isLightCard ? { borderColor: `${accent}30` } : undefined}>
                         매장 정보를 등록하면 표시돼요
                       </div>
                     )}
                   {!applied["calendar"] && !applied["coupon"] && !applied["link"] && (
-                    <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed border-[#E5E5E5] text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}>
+                    <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`} style={isLightCard ? { borderColor: `${accent}30` } : undefined}>
                       목적 카드를 장착하면 여기에 행동 버튼이 생겨요
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* 거울 5b — 손님 sticky "쿠폰 받기"(fixed bottom-0)를 인라인 시각 stub 으로 미러.
                     div(onClick 없음 = 시각만). 게이트 = 쿠폰 단독(쿠폰 선택 + 캘린더 미장착) = 손님 !isCombined && isCoupon. */}
@@ -1696,7 +1708,7 @@ export function CardStudioPage() {
               <span className="text-[14px] font-bold text-[#0A0A0A]">{stage.label}</span>
               <span className="text-[11px] text-[#A3A3A3]">전환력 · {stage.tone}</span>
             </div>
-            <span className="text-[22px] font-bold tabular-nums" style={{ color: POINT }}>
+            <span className="text-[22px] font-bold tabular-nums" style={{ color: accent }}>
               {score}
               <span className="text-[13px] font-semibold text-[#A3A3A3]">/100</span>
             </span>
@@ -1706,7 +1718,7 @@ export function CardStudioPage() {
               className="h-full rounded-full transition-all duration-500 ease-out"
               style={{
                 width: `${score}%`,
-                background: `linear-gradient(90deg, ${POINT}, #60A5FA, ${POINT})`,
+                background: `linear-gradient(90deg, ${accent}, #60A5FA, ${accent})`,
                 backgroundSize: "200% 100%",
                 animation: score > 0 ? "gauge-shine 2.4s linear infinite" : undefined,
               }}
@@ -1775,7 +1787,7 @@ export function CardStudioPage() {
                   style={{
                     boxShadow: isCenter
                       ? isOn
-                        ? `0 22px 48px -12px rgba(15,23,42,0.3), 0 0 0 2px ${INK}`
+                        ? `0 22px 48px -12px rgba(15,23,42,0.3), 0 0 0 2px ${accent}`
                         : "0 22px 48px -12px rgba(15,23,42,0.22), 0 0 0 1px #EDEDED"
                       : "0 10px 24px -10px rgba(15,23,42,0.18), 0 0 0 1px #EDEDED",
                   }}
@@ -1790,16 +1802,16 @@ export function CardStudioPage() {
                           ? "text-white"
                           : "bg-[#F5F5F5] text-[#525252]"
                       }`}
-                      style={block.isMain && !block.isPaid ? { backgroundColor: INK } : undefined}
+                      style={block.isMain && !block.isPaid ? { backgroundColor: accent } : undefined}
                     >
                       {block.isPaid ? "강화" : block.isMain ? "핵심" : "레버"}
                     </span>
                     {block.power > 0 ? (
                       <span
                         className="flex items-center gap-0.5 text-[15px] font-bold tabular-nums"
-                        style={{ color: POINT }}
+                        style={{ color: accent }}
                       >
-                        <Zap className="h-4 w-4" strokeWidth={2.5} fill={POINT} />+{block.power}
+                        <Zap className="h-4 w-4" strokeWidth={2.5} fill={accent} />+{block.power}
                       </span>
                     ) : (
                       <span className="text-[12px] font-bold text-[#A3A3A3]">도달↑</span>
@@ -1832,7 +1844,7 @@ export function CardStudioPage() {
                   {isOn && !locked && (
                     <div
                       className="chip-pop absolute -right-1.5 -top-1.5 flex h-7 w-7 items-center justify-center rounded-full text-white"
-                      style={{ backgroundColor: INK, boxShadow: "0 4px 10px rgba(15,23,42,0.25)" }}
+                      style={{ backgroundColor: accent, boxShadow: "0 4px 10px rgba(15,23,42,0.25)" }}
                     >
                       <Check className="h-4 w-4" strokeWidth={3} />
                     </div>
@@ -1855,7 +1867,7 @@ export function CardStudioPage() {
                     }}
                   >
                     <div className="flex items-center gap-1.5">
-                      <Sparkles className="h-3.5 w-3.5" style={{ color: POINT }} strokeWidth={2.5} />
+                      <Sparkles className="h-3.5 w-3.5" style={{ color: accent }} strokeWidth={2.5} />
                       <span className="text-[12px] font-bold text-[#0A0A0A]">{block.label}</span>
                     </div>
                     <p className="mt-1.5 text-[12.5px] font-medium leading-[1.5] text-[#1F2937]">
@@ -1878,7 +1890,7 @@ export function CardStudioPage() {
               className="h-1.5 rounded-full transition-all duration-300"
               style={{
                 width: i === deckIndex ? 20 : 6,
-                backgroundColor: i === deckIndex ? INK : "#D4D4D4",
+                backgroundColor: i === deckIndex ? accent : "#D4D4D4",
               }}
             />
           ))}
