@@ -64,10 +64,11 @@ import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import { CouponPreview } from "@/components/receiver/CouponPreview";
 import { CardBody } from "@/components/card/CardBody";
 import { PurchaseCardBody } from "@/components/card/PurchaseCardBody";
+import { ProductWidget } from "@/components/card/ProductWidget";
 import { CardActionButton } from "@/components/card/CardActionButton";
 import { DropCardShell } from "@/components/card/DropCardShell";
 import { ButtonBlock } from "@/components/card/ButtonBlock";
-import { toCardBodyProps } from "@/lib/adapters";
+import { toCardBodyProps, buildProductWidget } from "@/lib/adapters";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
 import { trackReceiverEvent } from "@/lib/event-tracking";
@@ -1465,18 +1466,28 @@ export function InfoDropPage({
           </Accordion>
         )}
 
-        {resolvedVariant === "purchase" && (
-          <PurchaseCardBody
-            commerce={commerce}
-            title={safeTitle}
-            local={local}
-            productName={productName}
-            brandGuess={brandGuess}
-            priceOffers={priceOffers}
-            onPreorder={onPreorder}
-            onSellerClick={() => handleCtaClick("seller")}
-          />
-        )}
+        {resolvedVariant === "purchase" &&
+          (commerce ? (
+            // C2: commerce 있으면 공유 ProductWidget(스튜디오와 동일 위젯). 흰 카드 현행 유지.
+            //   buildProductWidget 은 commerce/title/local 만 읽음 → 필요한 필드로 재구성해 전달.
+            <ProductWidget
+              {...buildProductWidget({ commerce, title: safeTitle, local } as InfoDropPageProps)}
+              onPreorder={onPreorder}
+              onSellerClick={() => handleCtaClick("seller")}
+            />
+          ) : (
+            // commerce 없음(외부 스크랩·mock) → 기존 PurchaseCardBody = AiPriceComparisonCard 시세 fallback 보존.
+            <PurchaseCardBody
+              commerce={commerce}
+              title={safeTitle}
+              local={local}
+              productName={productName}
+              brandGuess={brandGuess}
+              priceOffers={priceOffers}
+              onPreorder={onPreorder}
+              onSellerClick={() => handleCtaClick("seller")}
+            />
+          ))}
 
         {/* B 상품 홍보 카드 — 리치(큰 이미지 + 헤드라인 + 셀링포인트 + 구매버튼). "관련 상품"보다 상단·강조.
             업주 1인칭 홍보물. 탭/구매 → 그 상품 카드(/d/{refShareUuid}). 없으면 미표시. */}
