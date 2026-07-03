@@ -10,6 +10,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getHectoConfig } from "@/server/payments/hecto/config";
 import { buildNotiVerifyHash, splitTrdDtm } from "@/server/payments/hecto/order";
+// v2 원장 — service-role INSERT(/api/drops self_upload 와 동일 패턴, RLS 우회).
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 function pick(form: FormData, ...names: string[]): string {
   for (const n of names) {
@@ -68,7 +71,58 @@ export const Route = createFileRoute("/api/hecto/noti")({
             });
           }
 
-          // 성공 수신 확인 → 헥토 재전송 중단을 위해 본문 "OK"(대문자 정확히).
+          // 해시 일치 → 원장(payment_notifications) UPSERT. 멱등키 = (provider, mcht_trd_no).
+          //   신규=INSERT(count 1), 중복=received_count+1 (헥토 재전송은 순차 → read-modify-write 안전).
+          //   payment_notifications 는 gen types 미반영(신설) → 느슨 타입 클라이언트로 접근(studio kamis 관례).
+          //   DB 오류 시 "OK" 금지 → 500(헥토가 자연 재시도). 해시 불일치는 위에서 이미 400.
+          const trdNo = pick(form, "trdNo");
+          const method = pick(form, "method");
+          const trdAmtKrw = /^\d+$/.test(trdAmt) ? Number.parseInt(trdAmt, 10) : null;
+          const nowIso = new Date().toISOString();
+          const admin = supabaseAdmin as unknown as SupabaseClient;
+          try {
+            const ins = await admin.from("payment_notifications").insert({
+              provider: "hecto",
+              mcht_trd_no: mchtTrdNo,
+              trd_no: trdNo || null,
+              out_stat_cd: outStatCd,
+              method: method || null,
+              trd_amt_krw: trdAmtKrw,
+              hash_matched: true,
+              raw_params: fields,
+              last_received_at: nowIso,
+            });
+            if (ins.error) {
+              if (ins.error.code === "23505") {
+                // 멱등 충돌 = 중복 수신 → received_count 증가 + 최신 수신정보 갱신.
+                const sel = await admin
+                  .from("payment_notifications")
+                  .select("received_count")
+                  .eq("provider", "hecto")
+                  .eq("mcht_trd_no", mchtTrdNo)
+                  .single();
+                if (sel.error) throw sel.error;
+                const prev =
+                  (sel.data as { received_count?: number } | null)?.received_count ?? 1;
+                const upd = await admin
+                  .from("payment_notifications")
+                  .update({ received_count: prev + 1, last_received_at: nowIso, raw_params: fields })
+                  .eq("provider", "hecto")
+                  .eq("mcht_trd_no", mchtTrdNo);
+                if (upd.error) throw upd.error;
+              } else {
+                throw ins.error;
+              }
+            }
+          } catch (dbErr) {
+            console.error("[api/hecto/noti] payment_notifications write failed", dbErr);
+            return new Response("DB_ERROR", {
+              status: 500,
+              headers: { "content-type": "text/plain; charset=utf-8" },
+            });
+          }
+
+          // 저장 성공(신규/중복 무관) → 헥토 재전송 중단을 위해 본문 "OK"(대문자 정확히).
           return new Response("OK", {
             status: 200,
             headers: { "content-type": "text/plain; charset=utf-8" },

@@ -42,6 +42,7 @@ docs/*secret*.txt
 docs/*credentials*
 *.key
 *.pem
+.env
 .env.*.local
 secrets/
 
