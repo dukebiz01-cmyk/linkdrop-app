@@ -160,9 +160,13 @@ function HectoTestPage() {
   const [useBusy, setUseBusy] = useState(false);
   const [useResult, setUseResult] = useState("");
   const [useError, setUseError] = useState("");
+  // c2.1 — 충전 진행 상태(폴링) + 잔액 조회 실패(버튼 잠금과 분리, 표시만).
+  const [chargeStatus, setChargeStatus] = useState("");
+  const [balanceError, setBalanceError] = useState("");
 
-  // 진행 중 잠금 — 주문/로드/호출 단계에서만 버튼 비활성. error/idle/ready 는 다시 누를 수 있어야 함.
-  const busy = phase === "ordering" || phase === "sdk-loading" || phase === "paying";
+  // c2.1 — 진행 중 잠금 = 주문 생성·SDK 로드 단계만. "paying"(결제창 팝업 호출됨)은 제외 →
+  //   팝업이 별창에서 뜬 뒤 버튼 재활성(결제창 닫힘 후 영구 잠금 해소). idle/ready/error 도 클릭 가능.
+  const busy = phase === "ordering" || phase === "sdk-loading";
 
   // ① eager 선로딩 — 페이지 열리면 sdkUrl 확보 후 즉시 SDK 로드(클릭 전에 준비 완료 목표).
   useEffect(() => {
@@ -195,6 +199,36 @@ function HectoTestPage() {
       cancelled = true;
     };
   }, []);
+
+  // CASH-c2/c2.1 — 내 캐시 잔액(본인 SELECT 정책). 값 반환(폴링용) + 실패는 표시만(③ 버튼 잠금 X).
+  const refreshBalance = useCallback(async (): Promise<{ paid: number; bonus: number } | null> => {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+    const { data: sess } = await supabase.auth.getSession();
+    const uid = sess.session?.user.id;
+    if (!uid) return null;
+    try {
+      const sb = supabase as unknown as SupabaseClient;
+      const { data, error } = await sb
+        .from("cash_wallets")
+        .select("paid_balance, bonus_balance")
+        .eq("user_id", uid)
+        .maybeSingle();
+      if (error) throw error;
+      const row = (data as { paid_balance?: number; bonus_balance?: number } | null) ?? null;
+      const b = { paid: row?.paid_balance ?? 0, bonus: row?.bonus_balance ?? 0 };
+      setBalance(b);
+      setBalanceError("");
+      return b;
+    } catch (e) {
+      console.warn("[hecto-test] balance fetch failed", e);
+      setBalanceError("조회 실패·재시도");
+      return null;
+    }
+  }, []);
+  useEffect(() => {
+    void refreshBalance();
+  }, [refreshBalance]);
 
   // CASH-c2 — 주문 생성→SDK→pay 공통 흐름(일반 테스트결제·캐시충전 공유, orderBody 만 다름).
   const runOrderPay = useCallback(
@@ -254,25 +288,48 @@ function HectoTestPage() {
     void runOrderPay({ amountKrw: 1000, orderName: "링크드랍 테스트결제" });
   }, [runOrderPay, phase, busy]);
 
-  // CASH-c2 — 캐시 충전: 세션 user id 를 body.userId 로 → order 가 mchtParam(uid=) 실어 결제창 호출.
+  // CASH-c2/c2.1 — 캐시 충전: 세션 uid → mchtParam(uid=) 결제창 호출 후, 팝업 닫힘 대비 잔액 폴링.
   const onCharge = useCallback(async () => {
+    console.log("[hecto-test] charge click", { phase, busy }); // ④ 클릭 로그
+    if (busy) return;
     const amountKrw = Number(chargeAmount);
     if (!Number.isFinite(amountKrw) || amountKrw <= 0) {
-      setErrorMsg("충전 금액이 올바르지 않아요.");
-      setPhase("error");
+      setChargeStatus("충전 금액이 올바르지 않아요.");
       return;
     }
     const supabase = getSupabase();
-    if (!supabase) return;
-    const { data: sess } = await supabase.auth.getSession();
-    const uid = sess.session?.user.id;
-    if (!uid) {
-      setErrorMsg("로그인이 필요해요.");
-      setPhase("error");
+    if (!supabase) {
+      setChargeStatus("로그인이 필요해요.");
       return;
     }
-    void runOrderPay({ amountKrw, orderName: "캐시 충전", purpose: "cash_charge", userId: uid });
-  }, [chargeAmount, runOrderPay]);
+    setChargeStatus("");
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const uid = sess.session?.user.id;
+      if (!uid) {
+        setChargeStatus("로그인이 필요해요.");
+        return;
+      }
+      // 충전 전 잔액 기준(폴링 델타 판정).
+      const beforeBal = await refreshBalance();
+      const before = beforeBal ? beforeBal.paid + beforeBal.bonus : 0;
+      // 결제창 호출 — runOrderPay 내부 try/catch 로 phase 는 항상 비-busy(paying/error)로 정착.
+      await runOrderPay({ amountKrw, orderName: "캐시 충전", purpose: "cash_charge", userId: uid });
+      // ② 팝업 닫힘 대비 — 노티 반영 폴링(3회·3초). 반영되면 완료, 아니면 대기 안내.
+      setChargeStatus("결제창 종료 — 캐시 반영 확인 중…");
+      for (let i = 0; i < 3; i += 1) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const b = await refreshBalance();
+        if (b && b.paid + b.bonus >= before + amountKrw) {
+          setChargeStatus(`충전 완료 +${amountKrw.toLocaleString("ko-KR")}캐시`);
+          return;
+        }
+      }
+      setChargeStatus("반영 대기 — 새로고침으로 확인하세요. (노티 지연 가능)");
+    } catch (e) {
+      setChargeStatus(`오류: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [busy, phase, chargeAmount, runOrderPay, refreshBalance]);
 
   // v1.6 — 서버→헥토 APICancel.do 취소 호출. 별개 라우트 /api/hecto/cancel-tx.
   const onCancel = useCallback(async () => {
@@ -305,28 +362,9 @@ function HectoTestPage() {
     }
   }, [cancelOrgTrdNo, cancelAmount]);
 
-  // CASH-c2 — 내 캐시 잔액(본인 SELECT 정책). gen types 미반영 테이블 → 느슨 클라이언트로 조회.
-  const refreshBalance = useCallback(async () => {
-    const supabase = getSupabase();
-    if (!supabase) return;
-    const { data: sess } = await supabase.auth.getSession();
-    const uid = sess.session?.user.id;
-    if (!uid) return;
-    const sb = supabase as unknown as SupabaseClient;
-    const { data } = await sb
-      .from("cash_wallets")
-      .select("paid_balance, bonus_balance")
-      .eq("user_id", uid)
-      .maybeSingle();
-    const row = (data as { paid_balance?: number; bonus_balance?: number } | null) ?? null;
-    setBalance({ paid: row?.paid_balance ?? 0, bonus: row?.bonus_balance ?? 0 });
-  }, []);
-  useEffect(() => {
-    void refreshBalance();
-  }, [refreshBalance]);
-
   // CASH-c2 — 캐시 사용(차감) 테스트. 서버 라우트가 세션 인증 → use_cash(auth.uid()) 호출.
   const onUse = useCallback(async () => {
+    console.log("[hecto-test] use click", { useBusy, useSku, useAmount }); // ④ 클릭 로그
     const amount = Number(useAmount);
     if (!useSku) {
       setUseError("SKU를 선택하세요.");
@@ -410,6 +448,16 @@ function HectoTestPage() {
               ? `${(balance.paid + balance.bonus).toLocaleString("ko-KR")}원 (유료 ${balance.paid.toLocaleString("ko-KR")} · 보너스 ${balance.bonus.toLocaleString("ko-KR")})`
               : "조회 중…"}
           </p>
+          {/* ③ 잔액 조회 실패는 표시만(버튼 잠금과 분리). 탭하면 재조회. */}
+          {balanceError && (
+            <button
+              type="button"
+              onClick={() => void refreshBalance()}
+              className="w-fit text-xs tracking-ko text-[#DC2626] underline underline-offset-2"
+            >
+              {balanceError}
+            </button>
+          )}
           <label className="flex flex-col gap-1 text-xs tracking-ko text-[#64748B]">
             충전 금액 (원)
             <input
@@ -428,6 +476,12 @@ function HectoTestPage() {
           >
             {busy ? "처리 중…" : "충전하기"}
           </button>
+          {/* ② 충전 진행/폴링 상태 — 결제창 종료 후 반영 확인·안내. */}
+          {chargeStatus && (
+            <p className="rounded-lg bg-[#F8FAFC] px-3 py-2 font-mono text-xs text-[#0F172A]">
+              {chargeStatus}
+            </p>
+          )}
           <p className="rounded-lg bg-[#F8FAFC] p-3 text-[11px] leading-relaxed tracking-ko text-[#64748B]">
             본 캐시는 링크드롭 콘텐츠 이용 전용이며 현금 환급되지 않습니다. 결제 취소 시에만 해당 금액이
             차감·취소됩니다.
