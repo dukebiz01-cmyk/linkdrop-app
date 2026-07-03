@@ -22,6 +22,10 @@ export interface CreateCardOrderInput {
   nextUrl?: string;
   /** 결제 취소 후 이동 URL. 미지정 시 자리표시. */
   cancUrl?: string;
+  /** CASH-c1 — 충전 주문이면 "cash_charge". 주문번호 프리픽스 LD → LDW(노티 분기용). 미지정=일반결제(LD). */
+  purpose?: "cash_charge";
+  /** CASH-c1 — 헥토 mchtParam(상점 예약필드, 노티로 원값 반환). 충전 user 식별(uid=<user_id>) 운반용. */
+  mchtParam?: string;
 }
 
 export interface CardOrder {
@@ -44,6 +48,8 @@ export interface CardOrder {
   orderName: string;
   /** v1.5 — 결제창 SDK 스크립트 URL(클라 페이지가 로드). */
   sdkUrl: string;
+  /** CASH-c1 — 결제창 pay() 에 실어 보낼 mchtParam(노티로 원값 반환). 없으면 미전송. */
+  mchtParam?: string;
 }
 
 /** Date → KST(UTC+9) 기준 {yyyyMMdd, HHmmss}. */
@@ -59,10 +65,10 @@ function toKstParts(d: Date): { trdDt: string; trdTm: string } {
   return { trdDt: `${yyyy}${MM}${dd}`, trdTm: `${HH}${mm}${ss}` };
 }
 
-/** LD + yyyyMMddHHmmss(KST) + 랜덤4자리 = 유일 주문번호. */
-function genMchtTrdNo(trdDt: string, trdTm: string): string {
+/** {prefix} + yyyyMMddHHmmss(KST) + 랜덤4자리 = 유일 주문번호. (일반=LD, 충전=LDW) */
+function genMchtTrdNo(trdDt: string, trdTm: string, prefix: string): string {
   const rand4 = String(Math.floor(1000 + Math.random() * 9000));
-  return `LD${trdDt}${trdTm}${rand4}`;
+  return `${prefix}${trdDt}${trdTm}${rand4}`;
 }
 
 export async function createCardOrder(input: CreateCardOrderInput): Promise<CardOrder> {
@@ -72,7 +78,9 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
   const nextUrl = input.nextUrl ?? `${cfg.notiBase}/api/hecto/next`;
   const cancUrl = input.cancUrl ?? `${cfg.notiBase}/api/hecto/cancel`;
   const { trdDt, trdTm } = toKstParts(input.now ?? new Date());
-  const mchtTrdNo = input.mchtTrdNo ?? genMchtTrdNo(trdDt, trdTm);
+  // CASH-c1 — 충전 주문(cash_charge)은 LDW 프리픽스 채번(노티가 LDW 로 캐시발행 분기). 일반은 기존 LD.
+  const prefix = input.purpose === "cash_charge" ? "LDW" : "LD";
+  const mchtTrdNo = input.mchtTrdNo ?? genMchtTrdNo(trdDt, trdTm, prefix);
 
   // 금액 평문(정수 문자열). 암호화(trdAmt)와 해시(pktHash) 둘 다 이 평문을 입력으로 쓴다.
   const plainAmount = String(Math.trunc(input.amountKrw));
@@ -97,6 +105,7 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
     cancUrl,
     orderName: input.orderName,
     sdkUrl: cfg.payWindowSdkUrl,
+    mchtParam: input.mchtParam,
   };
 }
 

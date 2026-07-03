@@ -122,6 +122,45 @@ export const Route = createFileRoute("/api/hecto/noti")({
             });
           }
 
+          // CASH-c1 — 충전 노티(mcht_trd_no LDW 프리픽스 + 승인성공 0021)면 캐시 발행(멱등).
+          //   user 식별 = mchtParam(헥토가 원값 반환)의 uid=<user_id>. grant_cash_charge 는 service_role 전용.
+          //   발행 실패 시 "OK" 금지 → 500(헥토 재전송 = 자연 재시도, charge_idem 로 재시도도 멱등).
+          if (outStatCd === "0021" && mchtTrdNo.startsWith("LDW")) {
+            const mchtParam = pick(form, "mchtParam");
+            const uid = new URLSearchParams(mchtParam).get("uid") ?? "";
+            if (!uid || trdAmtKrw == null || trdAmtKrw <= 0) {
+              console.error("[api/hecto/noti] cash charge missing uid/amount", {
+                mchtTrdNo,
+                hasUid: Boolean(uid),
+                trdAmtKrw,
+              });
+              return new Response("CASH_ARGS", {
+                status: 500,
+                headers: { "content-type": "text/plain; charset=utf-8" },
+              });
+            }
+            try {
+              const rpc = await admin.rpc("grant_cash_charge", {
+                p_user: uid,
+                p_amount: trdAmtKrw,
+                p_mcht_trd_no: mchtTrdNo,
+              });
+              if (rpc.error) throw rpc.error;
+              // 발행 성공(멱등 포함) → processed_at 기록.
+              await admin
+                .from("payment_notifications")
+                .update({ processed_at: nowIso })
+                .eq("provider", "hecto")
+                .eq("mcht_trd_no", mchtTrdNo);
+            } catch (chargeErr) {
+              console.error("[api/hecto/noti] grant_cash_charge failed", chargeErr);
+              return new Response("CASH_ERROR", {
+                status: 500,
+                headers: { "content-type": "text/plain; charset=utf-8" },
+              });
+            }
+          }
+
           // 저장 성공(신규/중복 무관) → 헥토 재전송 중단을 위해 본문 "OK"(대문자 정확히).
           return new Response("OK", {
             status: 200,
