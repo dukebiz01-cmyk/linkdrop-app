@@ -56,6 +56,7 @@ import { Route as ApiHectoCancelTxRouteImport } from './routes/api/hecto/cancel-
 import { Route as ApiHectoCancelRouteImport } from './routes/api/hecto/cancel'
 import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
 import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
+import { Route as ApiCashUseRouteImport } from './routes/api/cash/use'
 import { Route as UserResultsShareUuidRouteImport } from './routes/_user/results.$shareUuid'
 import { Route as UserCouponClaim_codeRouteImport } from './routes/_user/coupon.$claim_code'
 import { Route as UserCardEditShareUuidRouteImport } from './routes/_user/card-edit.$shareUuid'
@@ -310,6 +311,11 @@ const ApiCouponsClaimRoute = ApiCouponsClaimRouteImport.update({
   path: '/api/coupons/claim',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCashUseRoute = ApiCashUseRouteImport.update({
+  id: '/api/cash/use',
+  path: '/api/cash/use',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UserResultsShareUuidRoute = UserResultsShareUuidRouteImport.update({
   id: '/results/$shareUuid',
   path: '/results/$shareUuid',
@@ -471,6 +477,7 @@ export interface FileRoutesByFullPath {
   '/card-edit/$shareUuid': typeof UserCardEditShareUuidRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
+  '/api/cash/use': typeof ApiCashUseRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/api/hecto/cancel': typeof ApiHectoCancelRoute
@@ -538,6 +545,7 @@ export interface FileRoutesByTo {
   '/card-edit/$shareUuid': typeof UserCardEditShareUuidRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
+  '/api/cash/use': typeof ApiCashUseRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/api/hecto/cancel': typeof ApiHectoCancelRoute
@@ -609,6 +617,7 @@ export interface FileRoutesById {
   '/_user/card-edit/$shareUuid': typeof UserCardEditShareUuidRoute
   '/_user/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/_user/results/$shareUuid': typeof UserResultsShareUuidRoute
+  '/api/cash/use': typeof ApiCashUseRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/api/hecto/cancel': typeof ApiHectoCancelRoute
@@ -678,6 +687,7 @@ export interface FileRouteTypes {
     | '/card-edit/$shareUuid'
     | '/coupon/$claim_code'
     | '/results/$shareUuid'
+    | '/api/cash/use'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
     | '/api/hecto/cancel'
@@ -745,6 +755,7 @@ export interface FileRouteTypes {
     | '/card-edit/$shareUuid'
     | '/coupon/$claim_code'
     | '/results/$shareUuid'
+    | '/api/cash/use'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
     | '/api/hecto/cancel'
@@ -815,6 +826,7 @@ export interface FileRouteTypes {
     | '/_user/card-edit/$shareUuid'
     | '/_user/coupon/$claim_code'
     | '/_user/results/$shareUuid'
+    | '/api/cash/use'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
     | '/api/hecto/cancel'
@@ -856,6 +868,7 @@ export interface RootRouteChildren {
   DShareUuidRoute: typeof DShareUuidRoute
   DTestRoute: typeof DTestRoute
   RClaim_codeRoute: typeof RClaim_codeRoute
+  ApiCashUseRoute: typeof ApiCashUseRoute
   ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
   ApiDropsShareCodeRoute: typeof ApiDropsShareCodeRoute
   ApiHectoCancelRoute: typeof ApiHectoCancelRoute
@@ -1199,6 +1212,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCouponsClaimRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cash/use': {
+      id: '/api/cash/use'
+      path: '/api/cash/use'
+      fullPath: '/api/cash/use'
+      preLoaderRoute: typeof ApiCashUseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_user/results/$shareUuid': {
       id: '/_user/results/$shareUuid'
       path: '/results/$shareUuid'
@@ -1481,6 +1501,7 @@ const rootRouteChildren: RootRouteChildren = {
   DShareUuidRoute: DShareUuidRoute,
   DTestRoute: DTestRoute,
   RClaim_codeRoute: RClaim_codeRoute,
+  ApiCashUseRoute: ApiCashUseRoute,
   ApiCouponsClaimRoute: ApiCouponsClaimRoute,
   ApiDropsShareCodeRoute: ApiDropsShareCodeRoute,
   ApiHectoCancelRoute: ApiHectoCancelRoute,

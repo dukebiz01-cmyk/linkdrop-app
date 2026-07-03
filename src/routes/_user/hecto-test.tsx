@@ -2,10 +2,26 @@
 //   POST /api/hecto/order 로 결제창 호출 파라미터(암호화 금액 + 무결성 해시)를 받고,
 //   결제창 SDK(SETTLE_PG)를 서버가 알려준 sdkUrl 에서 로드해 SETTLE_PG.pay() 로 팝업을 띄운다.
 //   ⚠️ 주문 확정은 이 화면(리턴)이 아니라 서버-서버 노티(/api/hecto/noti) 기준.
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getAuthClient } from "@/lib/auth-context";
+import { getSupabase } from "@/lib/supabase";
 
-export const Route = createFileRoute("/_user/hecto-test")({ component: HectoTestPage });
+export const Route = createFileRoute("/_user/hecto-test")({
+  // CASH-c2 — 운영 가드: 파트너 오너만 접근(테스트베드). 비대상=홈. (_partner.tsx is_active_partner_owner 패턴 재사용)
+  beforeLoad: async () => {
+    const supabase = await getAuthClient();
+    if (!supabase) return; // 로컬 미설정 시 통과(앱 렌더 보장 — 기존 관례)
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) return; // 세션 없음 = 부모 _user 가 /login 처리
+    const { data: isOwner } = await supabase.rpc("is_active_partner_owner", {
+      _user_id: data.session.user.id,
+    });
+    if (!isOwner) throw redirect({ to: "/home" });
+  },
+  component: HectoTestPage,
+});
 
 /** POST /api/hecto/order 응답 형태 (server: CardOrder 미러). */
 interface OrderResponse {
@@ -22,6 +38,8 @@ interface OrderResponse {
   cancUrl: string;
   orderName: string;
   sdkUrl: string;
+  /** CASH-c2 — 충전 주문이면 mchtParam(uid=…), 결제창 pay() 에 실어 노티로 회수. */
+  mchtParam?: string;
 }
 
 /** POST /api/hecto/cancel-tx 응답 형태 (취소 결과). */
@@ -134,6 +152,15 @@ function HectoTestPage() {
   const [cancelResult, setCancelResult] = useState<CancelTxResult | null>(null);
   const [cancelError, setCancelError] = useState("");
 
+  // CASH-c2 — 캐시 잔액 + 충전/사용 상태.
+  const [balance, setBalance] = useState<{ paid: number; bonus: number } | null>(null);
+  const [chargeAmount, setChargeAmount] = useState("1000");
+  const [useSku, setUseSku] = useState("boost");
+  const [useAmount, setUseAmount] = useState("100");
+  const [useBusy, setUseBusy] = useState(false);
+  const [useResult, setUseResult] = useState("");
+  const [useError, setUseError] = useState("");
+
   // 진행 중 잠금 — 주문/로드/호출 단계에서만 버튼 비활성. error/idle/ready 는 다시 누를 수 있어야 함.
   const busy = phase === "ordering" || phase === "sdk-loading" || phase === "paying";
 
@@ -169,54 +196,83 @@ function HectoTestPage() {
     };
   }, []);
 
-  const onPay = useCallback(async () => {
+  // CASH-c2 — 주문 생성→SDK→pay 공통 흐름(일반 테스트결제·캐시충전 공유, orderBody 만 다름).
+  const runOrderPay = useCallback(
+    async (orderBody: Record<string, unknown>) => {
+      if (busy) return;
+      setErrorMsg("");
+      setPhase("ordering");
+      try {
+        const res = await fetch("/api/hecto/order", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(orderBody),
+        });
+        if (!res.ok) {
+          const err = (await res.json().catch(() => ({}))) as { message?: string };
+          throw new Error(err.message ?? `주문 생성 실패 (HTTP ${res.status})`);
+        }
+        const order = (await res.json()) as OrderResponse;
+
+        setPhase("sdk-loading");
+        const pg = await ensureSdkLoaded(order.sdkUrl);
+
+        setPhase("sdk-ready");
+        pg.pay({
+          env: order.env,
+          mchtId: order.mchtId,
+          method: "card",
+          trdDt: order.trdDt,
+          trdTm: order.trdTm,
+          mchtTrdNo: order.mchtTrdNo,
+          trdAmt: order.trdAmt,
+          pktHash: order.pktHash,
+          // SDK 필수: 상점명(국문/영문) + 상품명(주문명 매핑). mchtEName = 서버 필수(1007 방지).
+          mchtName: "링크드롭",
+          mchtEName: "LinkDrop",
+          pmtPrdtNm: order.orderName,
+          notiUrl: order.notiUrl,
+          nextUrl: order.nextUrl,
+          cancUrl: order.cancUrl,
+          // CASH-c2 — 충전 주문이면 mchtParam(uid=)을 결제창에 실어 노티로 회수.
+          ...(order.mchtParam ? { mchtParam: order.mchtParam } : {}),
+          ui: { type: "popup", width: 430, height: 660 },
+        });
+        setPhase("paying");
+      } catch (e) {
+        // ③ 실패 시 반드시 잠금 해제 + 재시도 노출.
+        setErrorMsg(e instanceof Error ? e.message : String(e));
+        setPhase("error");
+      }
+    },
+    [busy],
+  );
+
+  const onPay = useCallback(() => {
     // ④ 향후 진단용 — 클릭 시점 상태 1줄.
     console.log("[hecto-test] pay click", { phase, busy, hasSdk: Boolean(getSettlePg()) });
-    if (busy) return;
+    void runOrderPay({ amountKrw: 1000, orderName: "링크드랍 테스트결제" });
+  }, [runOrderPay, phase, busy]);
 
-    setErrorMsg("");
-    setPhase("ordering");
-    try {
-      const res = await fetch("/api/hecto/order", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amountKrw: 1000, orderName: "링크드랍 테스트결제" }),
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(err.message ?? `주문 생성 실패 (HTTP ${res.status})`);
-      }
-      const order = (await res.json()) as OrderResponse;
-
-      setPhase("sdk-loading");
-      const pg = await ensureSdkLoaded(order.sdkUrl);
-
-      setPhase("sdk-ready");
-      pg.pay({
-        env: order.env,
-        mchtId: order.mchtId,
-        method: "card",
-        trdDt: order.trdDt,
-        trdTm: order.trdTm,
-        mchtTrdNo: order.mchtTrdNo,
-        trdAmt: order.trdAmt,
-        pktHash: order.pktHash,
-        // SDK 필수: 상점명(국문/영문) + 상품명(주문명 매핑). mchtEName = 서버 필수(1007 방지).
-        mchtName: "링크드롭",
-        mchtEName: "LinkDrop",
-        pmtPrdtNm: order.orderName,
-        notiUrl: order.notiUrl,
-        nextUrl: order.nextUrl,
-        cancUrl: order.cancUrl,
-        ui: { type: "popup", width: 430, height: 660 },
-      });
-      setPhase("paying");
-    } catch (e) {
-      // ③ 실패 시 반드시 잠금 해제 + 재시도 노출.
-      setErrorMsg(e instanceof Error ? e.message : String(e));
+  // CASH-c2 — 캐시 충전: 세션 user id 를 body.userId 로 → order 가 mchtParam(uid=) 실어 결제창 호출.
+  const onCharge = useCallback(async () => {
+    const amountKrw = Number(chargeAmount);
+    if (!Number.isFinite(amountKrw) || amountKrw <= 0) {
+      setErrorMsg("충전 금액이 올바르지 않아요.");
       setPhase("error");
+      return;
     }
-  }, [phase, busy]);
+    const supabase = getSupabase();
+    if (!supabase) return;
+    const { data: sess } = await supabase.auth.getSession();
+    const uid = sess.session?.user.id;
+    if (!uid) {
+      setErrorMsg("로그인이 필요해요.");
+      setPhase("error");
+      return;
+    }
+    void runOrderPay({ amountKrw, orderName: "캐시 충전", purpose: "cash_charge", userId: uid });
+  }, [chargeAmount, runOrderPay]);
 
   // v1.6 — 서버→헥토 APICancel.do 취소 호출. 별개 라우트 /api/hecto/cancel-tx.
   const onCancel = useCallback(async () => {
@@ -248,6 +304,57 @@ function HectoTestPage() {
       setCancelBusy(false);
     }
   }, [cancelOrgTrdNo, cancelAmount]);
+
+  // CASH-c2 — 내 캐시 잔액(본인 SELECT 정책). gen types 미반영 테이블 → 느슨 클라이언트로 조회.
+  const refreshBalance = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    const { data: sess } = await supabase.auth.getSession();
+    const uid = sess.session?.user.id;
+    if (!uid) return;
+    const sb = supabase as unknown as SupabaseClient;
+    const { data } = await sb
+      .from("cash_wallets")
+      .select("paid_balance, bonus_balance")
+      .eq("user_id", uid)
+      .maybeSingle();
+    const row = (data as { paid_balance?: number; bonus_balance?: number } | null) ?? null;
+    setBalance({ paid: row?.paid_balance ?? 0, bonus: row?.bonus_balance ?? 0 });
+  }, []);
+  useEffect(() => {
+    void refreshBalance();
+  }, [refreshBalance]);
+
+  // CASH-c2 — 캐시 사용(차감) 테스트. 서버 라우트가 세션 인증 → use_cash(auth.uid()) 호출.
+  const onUse = useCallback(async () => {
+    const amount = Number(useAmount);
+    if (!useSku) {
+      setUseError("SKU를 선택하세요.");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setUseError("사용 금액이 올바르지 않아요.");
+      return;
+    }
+    setUseBusy(true);
+    setUseError("");
+    setUseResult("");
+    try {
+      const res = await fetch("/api/cash/use", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sku: useSku, amount }),
+      });
+      const json = (await res.json()) as { error?: string; message?: string; result?: unknown };
+      if (!res.ok) throw new Error(json.message ?? json.error ?? `사용 실패 (HTTP ${res.status})`);
+      setUseResult(JSON.stringify(json.result ?? json));
+      await refreshBalance();
+    } catch (e) {
+      setUseError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUseBusy(false);
+    }
+  }, [useSku, useAmount, refreshBalance]);
 
   const statusText = phase === "error" && errorMsg ? `로드 실패 — ${errorMsg}` : PHASE_LABEL[phase];
 
@@ -294,6 +401,77 @@ function HectoTestPage() {
           ⚠️ 주문 확정은 <span className="font-semibold text-[#0F172A]">노티(서버-서버 통보) 기준</span>
           입니다. 결제창의 완료/취소 리턴은 참고용이며 위·변조 가능합니다.
         </p>
+
+        {/* CASH-c2 — 내 캐시 잔액(본인 SELECT 정책) + 충전 */}
+        <div className="flex flex-col gap-3 rounded-lg border border-[#D7DEE7] p-4">
+          <h2 className="text-base font-bold tracking-ko text-[#0F172A]">내 캐시</h2>
+          <p className="font-mono text-sm text-[#0F172A]">
+            {balance
+              ? `${(balance.paid + balance.bonus).toLocaleString("ko-KR")}원 (유료 ${balance.paid.toLocaleString("ko-KR")} · 보너스 ${balance.bonus.toLocaleString("ko-KR")})`
+              : "조회 중…"}
+          </p>
+          <label className="flex flex-col gap-1 text-xs tracking-ko text-[#64748B]">
+            충전 금액 (원)
+            <input
+              type="number"
+              value={chargeAmount}
+              onChange={(e) => setChargeAmount(e.target.value)}
+              min={1}
+              className="min-h-[44px] rounded-lg border border-[#D7DEE7] bg-[#FFFFFF] px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8]"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={onCharge}
+            disabled={busy}
+            className="min-h-[44px] rounded-lg bg-[#171717] px-6 font-semibold tracking-ko text-[#FFFFFF] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {busy ? "처리 중…" : "충전하기"}
+          </button>
+          <p className="rounded-lg bg-[#F8FAFC] p-3 text-[11px] leading-relaxed tracking-ko text-[#64748B]">
+            본 캐시는 링크드롭 콘텐츠 이용 전용이며 현금 환급되지 않습니다. 결제 취소 시에만 해당 금액이
+            차감·취소됩니다.
+          </p>
+        </div>
+
+        {/* CASH-c2 — 캐시 사용(차감) 테스트. 실 부스트 효과 적용은 c2.5. */}
+        <div className="flex flex-col gap-3 rounded-lg border border-[#D7DEE7] p-4">
+          <h2 className="text-base font-bold tracking-ko text-[#0F172A]">캐시 사용 (테스트)</h2>
+          <label className="flex flex-col gap-1 text-xs tracking-ko text-[#64748B]">
+            SKU
+            <select
+              value={useSku}
+              onChange={(e) => setUseSku(e.target.value)}
+              className="min-h-[44px] rounded-lg border border-[#D7DEE7] bg-[#FFFFFF] px-3 text-sm text-[#0F172A]"
+            >
+              <option value="boost">boost</option>
+              <option value="ai_pack">ai_pack</option>
+              <option value="studio_premium">studio_premium</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs tracking-ko text-[#64748B]">
+            사용 금액 (원)
+            <input
+              type="number"
+              value={useAmount}
+              onChange={(e) => setUseAmount(e.target.value)}
+              min={1}
+              className="min-h-[44px] rounded-lg border border-[#D7DEE7] bg-[#FFFFFF] px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8]"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={onUse}
+            disabled={useBusy}
+            className="min-h-[44px] rounded-lg bg-[#171717] px-6 font-semibold tracking-ko text-[#FFFFFF] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {useBusy ? "사용 중…" : "사용"}
+          </button>
+          {useError && <p className="text-sm tracking-ko text-[#DC2626]">오류: {useError}</p>}
+          {useResult && (
+            <p className="rounded-lg bg-[#F8FAFC] p-3 font-mono text-xs text-[#0F172A]">{useResult}</p>
+          )}
+        </div>
 
         {/* v1.6 — 취소 테스트 (서버→헥토 APICancel.do). 결제창 리턴 수신 /api/hecto/cancel 과 별개. */}
         <div className="flex flex-col gap-3 rounded-lg border border-[#D7DEE7] p-4">
