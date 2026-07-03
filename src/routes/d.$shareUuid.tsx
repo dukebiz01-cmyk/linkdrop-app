@@ -377,7 +377,12 @@ function DropPage() {
   //   · userId 없음 → 카카오 OAuth ?coupon=1 복귀 → useEffect 가 1 회 자동 발급
   // claim_coupon = (coupon_id, share_event_id, catcher_user_id) UNIQUE 멱등(#21).
   // visitor / 연락처 불필요. 달력 회귀 인상 0.
-  const funnelCoupon = detail.coupon ?? null;
+  // S11+S14 — 쿠폰은 쿠폰·예약 목적에서만 렌더(예약+쿠폰 동시 장착 = 정당, studio dropPurpose 예약 우선). 정보 레거시는 계속 차단.
+  //   purpose 비교는 파일 관례(L638-644)와 동일: 저장값 소문자화 후 KO/EN 둘 다 허용.
+  const isCouponPurpose = ["coupon", "쿠폰", "reservation", "예약"].includes(
+    String(detail.drop?.purpose ?? "").toLowerCase(),
+  );
+  const funnelCoupon = isCouponPurpose ? (detail.coupon ?? null) : null;
   const navigate = useNavigate();
   const claimedRef = useRef(false);
   const reserveResumeRef = useRef(false);

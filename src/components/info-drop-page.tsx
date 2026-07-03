@@ -74,6 +74,7 @@ import { cn } from "@/lib/utils";
 import { trackReceiverEvent } from "@/lib/event-tracking";
 import { getBadgeLabel, getBadgeColor, type OfficialStatus } from "@/lib/helpers/drop-status";
 import { AbuseReportSheet } from "@/components/abuse-report-sheet";
+import { VARIANT_ACCENT } from "@/lib/mode-accent";
 
 // ============================================================
 // Types
@@ -710,6 +711,9 @@ export function InfoDropPage({
   // C5 — 흰 셸 미러: 메이커가 흰 카드(#FFFFFF) 저장 시 손님도 라이트 텍스트로(스튜디오 C4b와 동일 판정).
   //   기존 카드(cardColor null/navy 등) → false → 비-info 다크 셸 기존 흰 텍스트 그대로(회귀 0).
   const isLightCard = cardColor === "#FFFFFF";
+  // C13 S4b — 목적색(스튜디오 MODE_ACCENT 와 단일 소스). 1차 CTA(Wand2·sticky 쿠폰받기·주문예약) 배경에 전파.
+  //   미매핑 변형이면 검정(#0A0A0A) 폴백 = 기존 색 유지(회귀 0).
+  const accent = VARIANT_ACCENT[resolvedVariant] ?? "#0A0A0A";
   const purposeLabel = pageCopy.label;
   const safeMaker = {
     ...DEFAULT_MAKER,
@@ -1014,18 +1018,65 @@ export function InfoDropPage({
   // v0 원안 공유 푸터 — 카드 안 아이콘 줄(영상만들기 주 버튼 + 링크복사/친구에게보내기 아이콘 + 고지 + 신고).
   //   CardBody.shareFooter 슬롯(info/coupon/reservation = 카드 본문 맨 아래)과 비-CardBody variant(purchase/lead)
   //   페이지 레벨 양쪽에서 동일 마크업 재사용. 핸들러 1:1 보존: handleKakao=체인시드 / handleCopy / create-wizard href / 신고.
+  // S7 — 형님 확정 A: AI요약을 카드 내부·푸터 위로(preFooterSlot). 스튜디오 정본(AI콘텐츠=푸터 위)과 정합.
+  //   기존 카드 밖 아코디언(구 :1458 위치)에서 이 변수로 추출 — 게이트/내부 로직/스타일 불변, 위치만 이동.
+  const aiSummaryAccordion =
+    !isReservation && !commerce?.selfUpload ? (
+      <Accordion
+        type="single"
+        collapsible
+        className="rounded-2xl border border-border bg-surface px-4"
+      >
+        <AccordionItem value="ai-summary" className="border-b-0">
+          <AccordionTrigger className="hover:no-underline">
+            <span className="flex items-center gap-2">
+              <Sparkles className="size-4 text-accent" strokeWidth={2} />
+              <span className="text-sm font-bold tracking-ko text-text-strong">영상 요약</span>
+            </span>
+          </AccordionTrigger>
+          <AccordionContent>
+            <p className="text-base font-semibold leading-relaxed tracking-ko text-text-strong">
+              {summaryLine}
+            </p>
+            {points.length > 0 && resolvedVariant !== "info" && resolvedVariant !== "coupon" && (
+              <ul className="mt-4 space-y-2 border-t border-border pt-4">
+                {points.map((point) => (
+                  <li
+                    key={point}
+                    className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-strong"
+                  >
+                    <Check className="mt-0.5 size-4 shrink-0 text-accent" strokeWidth={2} />
+                    {point}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    ) : null;
+
   const shareFooter = (
     <div data-testid="share-footer">
       <div data-testid="share-block" className="mt-4 flex items-center gap-2">
-        {videoSourceUrl && !commerce?.selfUpload && (
-          <a
-            href={`/create-wizard?url=${encodeURIComponent(videoSourceUrl)}`}
-            aria-label="이 영상으로 만들기"
-            className={`flex h-12 flex-1 items-center justify-center rounded-2xl shadow-[0_4px_14px_rgba(0,0,0,0.18)] ${isLightCard ? "bg-[#0A0A0A] text-white" : "bg-white text-[#0A0A0A]"}`}
-          >
-            <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
-          </a>
-        )}
+        {/* S5b — 형님 확정 A: 푸터 4면 동일. 영상 무 카드는 Wand2=나도 만들기(스튜디오 진입, 캐처→드로퍼 루프). */}
+        {/* S5c — 형님 확정(a): purpose=resolvedVariant 전파. 비사업자 강등 게이트는 위저드가 담당. */}
+        {/* S9 — 새 탭: 보던 카드 보존 + 위저드 작업 보호 (리포 확립 패턴: 외부 진입=새 탭) */}
+        <a
+          href={
+            videoSourceUrl && !commerce?.selfUpload
+              ? `/create-wizard?url=${encodeURIComponent(videoSourceUrl)}&purpose=${resolvedVariant}`
+              : `/create-wizard?purpose=${resolvedVariant}`
+          }
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={videoSourceUrl && !commerce?.selfUpload ? "이 영상으로 만들기" : "나도 만들기"}
+          // C13 S4b — 라이트 카드는 목적색(accent) bg+흰글씨(스튜디오 MODE_ACCENT 미러). 다크 레거시는 기존 흰 버튼 보존.
+          className={`flex h-12 flex-1 items-center justify-center rounded-2xl shadow-[0_4px_14px_rgba(0,0,0,0.18)] ${isLightCard ? "text-white" : "bg-white text-[#0A0A0A]"}`}
+          style={isLightCard ? { backgroundColor: accent } : undefined}
+        >
+          <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
+        </a>
         <button
           type="button"
           onClick={handleCopy}
@@ -1193,38 +1244,9 @@ export function InfoDropPage({
                 local,
                 variant,
               } as unknown as InfoDropPageProps)}
-              contactSlot={
-                // 손님 실동작 연락 칩 — 스튜디오 CardActionButton 모양 공유 + onClick=handleCtaClick(실제 tel:/지도/예약).
-                //   데이터(전화·주소·예약URL) 없으면 undefined → 버튼 0(일반 info 안전).
-                hasPhone || safeLocal.address?.trim() || local?.reservationUrl ? (
-                  <div className="flex gap-2">
-                    {hasPhone ? (
-                      <CardActionButton
-                        icon={<Phone className="size-4" strokeWidth={2} />}
-                        label="전화"
-                        onClick={() => handleCtaClick("phone")}
-                      />
-                    ) : null}
-                    {safeLocal.address?.trim() ? (
-                      <CardActionButton
-                        icon={<MapPin className="size-4" strokeWidth={2} />}
-                        label="길찾기"
-                        onClick={() => handleCtaClick("directions")}
-                      />
-                    ) : null}
-                    {local?.reservationUrl ? (
-                      <CardActionButton
-                        icon={<ExternalLink className="size-4" strokeWidth={2} />}
-                        label="예약"
-                        onClick={() =>
-                          window.open(local.reservationUrl as string, "_blank", "noopener,noreferrer")
-                        }
-                      />
-                    ) : null}
-                  </div>
-                ) : undefined
-              }
+              // S13 — 형님 확정: 정보 카드에 전화·길찾기·예약 칩 없음(양면 거울). contactSlot 미전달.
               shareFooter={shareFooter}
+              preFooterSlot={aiSummaryAccordion}
             />
             </div>
           </DropCardShell>
@@ -1266,6 +1288,7 @@ export function InfoDropPage({
               }
               contactBlock={contactRow}
               shareFooter={shareFooter}
+              preFooterSlot={aiSummaryAccordion}
             />
             </div>
           </DropCardShell>
@@ -1408,7 +1431,8 @@ export function InfoDropPage({
           </section>
         )}
 
-        {makerMessage && resolvedVariant !== "info" && resolvedVariant !== "coupon" && resolvedVariant !== "reservation" && (
+        {/* C13 S3 — 한마디(makerMessage): purchase 는 위젯 아래로 이동(아래 별도 블록). 여기선 lead 만(기존 위치 유지). */}
+        {makerMessage && resolvedVariant !== "info" && resolvedVariant !== "coupon" && resolvedVariant !== "reservation" && resolvedVariant !== "purchase" && (
           <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium italic leading-relaxed tracking-ko text-text-muted">
             &quot;{makerMessage}&quot;
           </p>
@@ -1445,42 +1469,8 @@ export function InfoDropPage({
             );
           })()}
 
-        {/* 3. AI 요약 — CC#3 progressive disclosure: 핵심(영상·혜택·예약) 아래로 이동(부가).
-            예약 variant는 캘린더 흐름에 집중, selfUpload(자체업로드 상품)은 숨김(게이트 그대로). */}
-        {!isReservation && !commerce?.selfUpload && (
-          <Accordion
-            type="single"
-            collapsible
-            className="rounded-2xl border border-border bg-surface px-4"
-          >
-            <AccordionItem value="ai-summary" className="border-b-0">
-              <AccordionTrigger className="hover:no-underline">
-                <span className="flex items-center gap-2">
-                  <Sparkles className="size-4 text-accent" strokeWidth={2} />
-                  <span className="text-sm font-bold tracking-ko text-text-strong">영상 요약</span>
-                </span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <p className="text-base font-semibold leading-relaxed tracking-ko text-text-strong">
-                  {summaryLine}
-                </p>
-                {points.length > 0 && resolvedVariant !== "info" && resolvedVariant !== "coupon" && (
-                  <ul className="mt-4 space-y-2 border-t border-border pt-4">
-                    {points.map((point) => (
-                      <li
-                        key={point}
-                        className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-strong"
-                      >
-                        <Check className="mt-0.5 size-4 shrink-0 text-accent" strokeWidth={2} />
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        )}
+        {/* S7 — AI 요약 아코디언은 info/coupon 카드 내부(CardBody preFooterSlot)로 이동.
+            정의: 상단 aiSummaryAccordion const. 여기(카드 밖) 직접 렌더 제거. */}
 
         {resolvedVariant === "purchase" &&
           (commerce ? (
@@ -1488,6 +1478,7 @@ export function InfoDropPage({
             //   buildProductWidget 은 commerce/title/local 만 읽음 → 필요한 필드로 재구성해 전달.
             <ProductWidget
               {...buildProductWidget({ commerce, title: safeTitle, local } as InfoDropPageProps)}
+              accent={accent}
               onPreorder={onPreorder}
               onSellerClick={() => handleCtaClick("seller")}
             />
@@ -1504,6 +1495,13 @@ export function InfoDropPage({
               onSellerClick={() => handleCtaClick("seller")}
             />
           ))}
+
+        {/* C13 S3(🅱) — purchase 한마디는 위젯 아래(스튜디오 tagline 슬롯=위젯 아래와 정합). */}
+        {resolvedVariant === "purchase" && makerMessage && (
+          <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium italic leading-relaxed tracking-ko text-text-muted">
+            &quot;{makerMessage}&quot;
+          </p>
+        )}
 
         {/* B 상품 홍보 카드 — 리치(큰 이미지 + 헤드라인 + 셀링포인트 + 구매버튼). "관련 상품"보다 상단·강조.
             업주 1인칭 홍보물. 탭/구매 → 그 상품 카드(/d/{refShareUuid}). 없으면 미표시. */}
@@ -1768,6 +1766,12 @@ export function InfoDropPage({
         </section>
       ) : null}
 
+      {/* S16r — S7 이동 회귀 복원: CardBody 미사용 변형(purchase/lead)은 페이지레벨 렌더(위젯 아래·푸터 위).
+            selfUpload 게이트 유지(aiSummaryAccordion 이 null 이면 미표시). info/coupon 은 preFooterSlot 담당이라 이중 렌더 없음. */}
+      {(resolvedVariant === "purchase" || resolvedVariant === "lead") && aiSummaryAccordion ? (
+        <section className="mx-auto w-full max-w-[480px] px-6 pt-4">{aiSummaryAccordion}</section>
+      ) : null}
+
       {/* v0 원안 공유 푸터 — 페이지 레벨은 비-CardBody variant(purchase/lead)만 담당(회귀 0).
             info/coupon/reservation 은 CardBody.shareFooter 슬롯(카드 본문 맨 아래)에서 동일 마크업 렌더.
             purchase/lead 페이지 배경은 navy(#1E3A8A)라 같은 white-on-navy 푸터 그대로 적용. */}
@@ -1785,7 +1789,9 @@ export function InfoDropPage({
               type="button"
               onClick={onReserveAndClaim}
               data-testid="cta-sticky-primary"
-              className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#0A0A0A] px-4 text-base font-bold text-white hover:bg-[#171717]"
+              // C13 S4b — 목적색(accent) bg. isCoupon 전용이라 accent 항상 정의됨(text-white 유지).
+              className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 text-base font-bold text-white"
+              style={{ backgroundColor: accent }}
             >
               <span className="truncate">쿠폰 받기</span>
             </button>

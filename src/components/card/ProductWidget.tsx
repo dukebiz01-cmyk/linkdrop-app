@@ -1,7 +1,13 @@
 import { useState } from "react";
-import { Check, ShoppingCart, MapPin, CalendarDays, Sprout, Video } from "lucide-react";
+import { Check, ShoppingCart, MapPin, CalendarDays, Sprout, Video, Sparkles } from "lucide-react";
 import { ActionButton } from "@/components/ActionButton";
 import { ImageZoomModal } from "@/components/card/ImageZoomModal";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import type { VideoSlot } from "@/components/card/CardBody.types";
 
 /**
@@ -31,6 +37,8 @@ export interface ProductWidgetProps {
   buyUrl?: string;
   onPreorder?: () => void;
   onSellerClick?: () => void;
+  /** C13 S4c — 목적색(카드 accent). 주어지면 1차 CTA 배경에 적용. 미지정=기존 bg-action(검정) 그대로. */
+  accent?: string;
 }
 
 export function ProductWidget({
@@ -47,8 +55,11 @@ export function ProductWidget({
   selfUpload,
   buyUrl,
   onPreorder,
+  accent,
 }: ProductWidgetProps) {
   const [zoomOpen, setZoomOpen] = useState(false);
+  // C13 S4c — accent 있으면 1차 CTA 배경을 목적색으로(인라인이 bg-action 오버라이드). 미지정=무행동.
+  const ctaStyle = accent ? { backgroundColor: accent } : undefined;
   // 본체 미디어 결정 — media 우선, 없으면 imageUrl 폴백. video 는 ③단계.
   const isVideo = media?.type === "video";
   const bodyImage = media?.imageUrl ?? imageUrl ?? "";
@@ -118,29 +129,52 @@ export function ProductWidget({
               ) : null}
             </div>
           ) : null}
-          {/* 나-2 — 상품 저장 카피(나-1). 있으면 헤드라인+셀링포인트 리치 표시(없으면 회귀 0). */}
-          {headline ? (
-            <p className="text-base font-bold leading-snug tracking-ko text-text-strong">
-              {headline}
-            </p>
-          ) : null}
-          {sellingPoints && sellingPoints.length > 0 ? (
-            <ul className="space-y-1.5">
-              {sellingPoints.map((sp, i) => (
-                <li
-                  key={i}
-                  className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-muted"
-                >
-                  <Check className="mt-0.5 size-4 shrink-0 text-text-strong" strokeWidth={2.5} />
-                  <span>{sp}</span>
-                </li>
-              ))}
-            </ul>
+          {/* S16b — 형님 확정 B: 상품 AI 문구 아코디언화(progressive disclosure). ProductWidget 공용 = 손님·스튜디오 자동 거울. */}
+          {/* 나-2 — 상품 저장 카피(나-1: 헤드라인+셀링포인트). 둘 다 없으면 아코디언 자체 미렌더(빈 버튼 금지). */}
+          {headline || (sellingPoints && sellingPoints.length > 0) ? (
+            <Accordion
+              type="single"
+              collapsible
+              className="rounded-2xl border border-border bg-surface px-4"
+            >
+              <AccordionItem value="product-ai-summary" className="border-b-0">
+                <AccordionTrigger className="hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    <Sparkles
+                      className="size-4 text-accent"
+                      strokeWidth={2}
+                      style={accent ? { color: accent } : undefined}
+                    />
+                    <span className="text-sm font-bold tracking-ko text-text-strong">AI 요약</span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent>
+                  {headline ? (
+                    <p className="text-base font-bold leading-snug tracking-ko text-text-strong">
+                      {headline}
+                    </p>
+                  ) : null}
+                  {sellingPoints && sellingPoints.length > 0 ? (
+                    <ul className="mt-2 space-y-1.5">
+                      {sellingPoints.map((sp, i) => (
+                        <li
+                          key={i}
+                          className="flex items-start gap-2 text-sm font-medium tracking-ko text-text-muted"
+                        >
+                          <Check className="mt-0.5 size-4 shrink-0 text-text-strong" strokeWidth={2.5} />
+                          <span>{sp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           ) : null}
           {selfUpload ? (
             // ③b 자체업로드 상품 — 1차 버튼 = 선주문하기. 부모(d.$shareUuid)가 로그인 강제 +
             //   PreorderSheet(발송일·수량·결제 스텁) 오픈 + create_preorder 호출을 핸들.
-            <ActionButton type="button" className="w-full gap-2" onClick={() => onPreorder?.()}>
+            <ActionButton type="button" className="w-full gap-2" style={ctaStyle} onClick={() => onPreorder?.()}>
               <ShoppingCart className="size-4" strokeWidth={2} />
               주문예약
             </ActionButton>
@@ -148,6 +182,7 @@ export function ProductWidget({
             <ActionButton
               type="button"
               className="w-full"
+              style={ctaStyle}
               onClick={() => {
                 if (typeof window !== "undefined" && buyUrl && buyUrl !== "#") {
                   window.open(buyUrl, "_blank", "noopener,noreferrer");

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 /**
  * ButtonBlock — 거울 카드의 공유 버튼-블록 primitive (presentational).
@@ -23,6 +23,7 @@ export function ButtonBlock({
   onClick,
   defaultExpanded = false,
   light = false,
+  showCollapseFooter = false,
 }: {
   /** 버튼 글씨 (예: "예약 날짜 선택") */
   label: string;
@@ -36,6 +37,8 @@ export function ButtonBlock({
   defaultExpanded?: boolean;
   /** 라이트 카드(밝은 셸)면 무채색 흰알파 대신 라이트 토큰(기본 false = 기존 다크 불변). */
   light?: boolean;
+  /** S15 — true면 펼친 내용 하단에 "접기" 버튼(긴 캘린더용). 기본 false=무행동. */
+  showCollapseFooter?: boolean;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   // expandedContent 있으면 펼침형, 없으면 onClick 터미널형.
@@ -67,7 +70,25 @@ export function ButtonBlock({
         ) : null}
       </button>
       {/* 인라인 펼침 — 시트 아님. 사용자 탭(클라) 후에만 렌더 = SSR/하이드레이션 안전. */}
-      {expandable && expanded ? <div>{expandedContent}</div> : null}
+      {expandable && expanded ? (
+        <div>
+          {expandedContent}
+          {/* S15 — 긴 콘텐츠 하단 접기(시설정보 접기 패턴 동일 톤). stopPropagation 로 상위 클릭 재토글 차단. */}
+          {showCollapseFooter ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(false);
+              }}
+              className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-sm font-bold tracking-ko text-text-muted transition-colors hover:border-text-muted hover:text-text-strong"
+            >
+              <ChevronUp className="size-4" strokeWidth={2} />
+              접기
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

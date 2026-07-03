@@ -5,6 +5,7 @@ import { CouponPreview } from "@/components/receiver/CouponPreview";
 import { CardActionButton } from "@/components/card/CardActionButton";
 import { ButtonBlock } from "@/components/card/ButtonBlock";
 import type { CardBodyProps } from "@/components/card/CardBody.types";
+import type { ReactNode } from "react";
 
 /**
  * CardBody — 카드 본체(presentational, 실콘텐츠 전용).
@@ -33,8 +34,9 @@ export function CardBody({
   reservationBlock,
   contactBlock,
   shareFooter,
+  preFooterSlot,
   light = false,
-}: CardBodyProps & { light?: boolean }) {
+}: CardBodyProps & { light?: boolean; preFooterSlot?: ReactNode }) {
   return (
     <>
       {/* 본체 — 상호배타: 상품 블록(커머스) 있으면 본체가 상품 카드, 없으면 기존 영상 경로(0영향). */}
@@ -95,6 +97,8 @@ export function CardBody({
             defaultExpanded={false}
             expandedContent={reservationBlock}
             light={light}
+            // S15 — 형님 확정: 긴 캘린더 하단 접기 어포던스(기본 false, 캘린더만 on).
+            showCollapseFooter={true}
           />
         ) : null}
         {contactBlock ? (
@@ -144,6 +148,8 @@ export function CardBody({
 
       </div>
 
+      {/* S7 — 형님 확정 A: AI요약을 카드 내부·푸터 위로(preFooterSlot). 스튜디오 정본(AI콘텐츠=푸터 위)과 정합. */}
+      {preFooterSlot ?? null}
       {/* 공유 푸터 — 카드 본문 맨 아래. container 가 주입(손님 실작동 / 스튜디오 div stub). 미주입이면 안 그림. */}
       {shareFooter ? <div className="mt-6">{shareFooter}</div> : null}
     </>
