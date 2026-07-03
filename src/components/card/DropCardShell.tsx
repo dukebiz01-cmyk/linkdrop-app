@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+const ENABLE_HOLO_RAINBOW = false; // S6 — 형님 확정: 순백 카드. 무지개 틴트 dormant(되살리기 가능)
+
 /**
  * DropCardShell — 색을 입은 3D 카드 프레임(표시 전용, 재사용).
  *
@@ -80,14 +82,16 @@ export function DropCardShell({
             background: `radial-gradient(circle at ${tilt.gx}% ${tilt.gy}%, rgba(255,255,255,0.5), transparent 45%)`,
           }}
         />
-        {/* 무지개 홀로 틴트 */}
-        <div
-          className="absolute inset-0 mix-blend-overlay"
-          style={{
-            background:
-              "linear-gradient(115deg, transparent 20%, rgba(56,189,248,0.7) 38%, rgba(168,85,247,0.6) 52%, rgba(244,114,182,0.6) 64%, transparent 82%)",
-          }}
-        />
+        {/* 무지개 홀로 틴트 — S6 dormant(ENABLE_HOLO_RAINBOW). 흰 스페큘러/holo-sweep 무채색 광택은 보존. */}
+        {ENABLE_HOLO_RAINBOW && (
+          <div
+            className="absolute inset-0 mix-blend-overlay"
+            style={{
+              background:
+                "linear-gradient(115deg, transparent 20%, rgba(56,189,248,0.7) 38%, rgba(168,85,247,0.6) 52%, rgba(244,114,182,0.6) 64%, transparent 82%)",
+            }}
+          />
+        )}
         {/* 광택 스윕 */}
         <div className="holo-sweep absolute -inset-y-4 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/35 to-transparent" />
       </div>
