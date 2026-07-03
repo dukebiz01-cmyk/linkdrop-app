@@ -52,6 +52,7 @@ import { Route as ApiProductsCopyRouteImport } from './routes/api/products/copy'
 import { Route as ApiHectoOrderRouteImport } from './routes/api/hecto/order'
 import { Route as ApiHectoNotiRouteImport } from './routes/api/hecto/noti'
 import { Route as ApiHectoNextRouteImport } from './routes/api/hecto/next'
+import { Route as ApiHectoCancelTxRouteImport } from './routes/api/hecto/cancel-tx'
 import { Route as ApiHectoCancelRouteImport } from './routes/api/hecto/cancel'
 import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
 import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
@@ -289,6 +290,11 @@ const ApiHectoNextRoute = ApiHectoNextRouteImport.update({
   path: '/api/hecto/next',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHectoCancelTxRoute = ApiHectoCancelTxRouteImport.update({
+  id: '/api/hecto/cancel-tx',
+  path: '/api/hecto/cancel-tx',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHectoCancelRoute = ApiHectoCancelRouteImport.update({
   id: '/api/hecto/cancel',
   path: '/api/hecto/cancel',
@@ -468,6 +474,7 @@ export interface FileRoutesByFullPath {
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/api/hecto/cancel': typeof ApiHectoCancelRoute
+  '/api/hecto/cancel-tx': typeof ApiHectoCancelTxRoute
   '/api/hecto/next': typeof ApiHectoNextRoute
   '/api/hecto/noti': typeof ApiHectoNotiRoute
   '/api/hecto/order': typeof ApiHectoOrderRoute
@@ -534,6 +541,7 @@ export interface FileRoutesByTo {
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/api/hecto/cancel': typeof ApiHectoCancelRoute
+  '/api/hecto/cancel-tx': typeof ApiHectoCancelTxRoute
   '/api/hecto/next': typeof ApiHectoNextRoute
   '/api/hecto/noti': typeof ApiHectoNotiRoute
   '/api/hecto/order': typeof ApiHectoOrderRoute
@@ -604,6 +612,7 @@ export interface FileRoutesById {
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
   '/api/hecto/cancel': typeof ApiHectoCancelRoute
+  '/api/hecto/cancel-tx': typeof ApiHectoCancelTxRoute
   '/api/hecto/next': typeof ApiHectoNextRoute
   '/api/hecto/noti': typeof ApiHectoNotiRoute
   '/api/hecto/order': typeof ApiHectoOrderRoute
@@ -672,6 +681,7 @@ export interface FileRouteTypes {
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
     | '/api/hecto/cancel'
+    | '/api/hecto/cancel-tx'
     | '/api/hecto/next'
     | '/api/hecto/noti'
     | '/api/hecto/order'
@@ -738,6 +748,7 @@ export interface FileRouteTypes {
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
     | '/api/hecto/cancel'
+    | '/api/hecto/cancel-tx'
     | '/api/hecto/next'
     | '/api/hecto/noti'
     | '/api/hecto/order'
@@ -807,6 +818,7 @@ export interface FileRouteTypes {
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
     | '/api/hecto/cancel'
+    | '/api/hecto/cancel-tx'
     | '/api/hecto/next'
     | '/api/hecto/noti'
     | '/api/hecto/order'
@@ -847,6 +859,7 @@ export interface RootRouteChildren {
   ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
   ApiDropsShareCodeRoute: typeof ApiDropsShareCodeRoute
   ApiHectoCancelRoute: typeof ApiHectoCancelRoute
+  ApiHectoCancelTxRoute: typeof ApiHectoCancelTxRoute
   ApiHectoNextRoute: typeof ApiHectoNextRoute
   ApiHectoNotiRoute: typeof ApiHectoNotiRoute
   ApiHectoOrderRoute: typeof ApiHectoOrderRoute
@@ -1158,6 +1171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHectoNextRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/hecto/cancel-tx': {
+      id: '/api/hecto/cancel-tx'
+      path: '/api/hecto/cancel-tx'
+      fullPath: '/api/hecto/cancel-tx'
+      preLoaderRoute: typeof ApiHectoCancelTxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/hecto/cancel': {
       id: '/api/hecto/cancel'
       path: '/api/hecto/cancel'
@@ -1464,6 +1484,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCouponsClaimRoute: ApiCouponsClaimRoute,
   ApiDropsShareCodeRoute: ApiDropsShareCodeRoute,
   ApiHectoCancelRoute: ApiHectoCancelRoute,
+  ApiHectoCancelTxRoute: ApiHectoCancelTxRoute,
   ApiHectoNextRoute: ApiHectoNextRoute,
   ApiHectoNotiRoute: ApiHectoNotiRoute,
   ApiHectoOrderRoute: ApiHectoOrderRoute,

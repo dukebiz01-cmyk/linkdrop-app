@@ -24,6 +24,17 @@ interface OrderResponse {
   sdkUrl: string;
 }
 
+/** POST /api/hecto/cancel-tx 응답 형태 (취소 결과). */
+interface CancelTxResult {
+  httpStatus?: number;
+  cancelMchtTrdNo?: string;
+  outStatCd?: string;
+  outRsltCd?: string;
+  outRsltMsg?: string;
+  cnclAmt?: string;
+  blcAmt?: string;
+}
+
 /** 결제창 SDK 전역 객체(SETTLE_PG)의 최소 타입. */
 type SettlePg = { pay: (params: Record<string, unknown>, callback?: (r: unknown) => void) => void };
 function getSettlePg(): SettlePg | undefined {
@@ -116,6 +127,13 @@ function HectoTestPage() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const preloadStartedRef = useRef(false);
 
+  // v1.6 — 취소 테스트 상태. orgTrdNo(원거래번호)는 결제 노티/next 로그의 trdNo 를 수동 입력.
+  const [cancelOrgTrdNo, setCancelOrgTrdNo] = useState("");
+  const [cancelAmount, setCancelAmount] = useState("1000");
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelResult, setCancelResult] = useState<CancelTxResult | null>(null);
+  const [cancelError, setCancelError] = useState("");
+
   // 진행 중 잠금 — 주문/로드/호출 단계에서만 버튼 비활성. error/idle/ready 는 다시 누를 수 있어야 함.
   const busy = phase === "ordering" || phase === "sdk-loading" || phase === "paying";
 
@@ -200,46 +218,137 @@ function HectoTestPage() {
     }
   }, [phase, busy]);
 
+  // v1.6 — 서버→헥토 APICancel.do 취소 호출. 별개 라우트 /api/hecto/cancel-tx.
+  const onCancel = useCallback(async () => {
+    const orgTrdNo = cancelOrgTrdNo.trim();
+    const amountKrw = Number(cancelAmount);
+    if (!orgTrdNo) {
+      setCancelError("원거래번호(orgTrdNo)를 입력하세요. (결제 노티/next 로그의 trdNo)");
+      return;
+    }
+    if (!Number.isFinite(amountKrw) || amountKrw <= 0) {
+      setCancelError("취소 금액이 올바르지 않아요.");
+      return;
+    }
+    setCancelBusy(true);
+    setCancelError("");
+    setCancelResult(null);
+    try {
+      const res = await fetch("/api/hecto/cancel-tx", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ orgTrdNo, amountKrw }),
+      });
+      const json = (await res.json()) as CancelTxResult & { message?: string };
+      if (!res.ok && json.message) throw new Error(json.message);
+      setCancelResult(json);
+    } catch (e) {
+      setCancelError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCancelBusy(false);
+    }
+  }, [cancelOrgTrdNo, cancelAmount]);
+
   const statusText = phase === "error" && errorMsg ? `로드 실패 — ${errorMsg}` : PHASE_LABEL[phase];
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-6 p-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-xl font-bold tracking-ko text-strong">헥토 결제창 테스트</h1>
-        <p className="text-sm tracking-ko text-muted">
-          표준결제창 SDK(SETTLE_PG) 연동 확인용 테스트베드입니다.
-        </p>
-      </div>
+    // v1.6.1 — 페이지 전체 명시 대비 고정(테마 상속 차단): 배경 #FFFFFF, 기본 텍스트 #0F172A.
+    <div className="min-h-screen w-full bg-[#FFFFFF] text-[#0F172A]">
+      <div className="mx-auto flex max-w-md flex-col gap-6 p-6">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-xl font-bold tracking-ko text-[#0F172A]">헥토 결제창 테스트</h1>
+          <p className="text-sm tracking-ko text-[#64748B]">
+            표준결제창 SDK(SETTLE_PG) 연동 확인용 테스트베드입니다.
+          </p>
+        </div>
 
-      <button
-        type="button"
-        onClick={onPay}
-        disabled={busy}
-        className="min-h-[44px] min-w-[44px] rounded-lg bg-accent px-6 font-semibold tracking-ko text-white shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {busy ? "처리 중…" : "테스트 결제 1,000원"}
-      </button>
+        <button
+          type="button"
+          onClick={onPay}
+          disabled={busy}
+          className="min-h-[44px] min-w-[44px] rounded-lg bg-[#171717] px-6 font-semibold tracking-ko text-[#FFFFFF] shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {busy ? "처리 중…" : "테스트 결제 1,000원"}
+        </button>
 
-      {/* ② 상태줄 — 사용자가 왜 눌리는지/안 눌리는지 보이게. 실패 시 재시도 버튼. */}
-      <div className="flex items-center gap-3">
-        <p className="text-sm tracking-ko text-muted">
-          상태: <span className={phase === "error" ? "text-red-600" : "text-strong"}>{statusText}</span>
+        {/* ② 상태줄 — 배경 #F8FAFC + 모노스페이스 대비 고정. 실패 시 재시도 버튼. */}
+        <div className="flex items-center gap-3">
+          <p className="flex-1 rounded-lg bg-[#F8FAFC] px-3 py-2 font-mono text-sm text-[#0F172A]">
+            상태:{" "}
+            <span className={phase === "error" ? "text-[#DC2626]" : "text-[#0F172A]"}>
+              {statusText}
+            </span>
+          </p>
+          {phase === "error" && (
+            <button
+              type="button"
+              onClick={onPay}
+              className="min-h-[44px] rounded-lg bg-[#171717] px-4 text-sm font-semibold tracking-ko text-[#FFFFFF] hover:-translate-y-0.5"
+            >
+              재시도
+            </button>
+          )}
+        </div>
+
+        <p className="rounded-lg bg-[#F8FAFC] p-4 text-xs tracking-ko text-[#64748B]">
+          ⚠️ 주문 확정은 <span className="font-semibold text-[#0F172A]">노티(서버-서버 통보) 기준</span>
+          입니다. 결제창의 완료/취소 리턴은 참고용이며 위·변조 가능합니다.
         </p>
-        {phase === "error" && (
+
+        {/* v1.6 — 취소 테스트 (서버→헥토 APICancel.do). 결제창 리턴 수신 /api/hecto/cancel 과 별개. */}
+        <div className="flex flex-col gap-3 rounded-lg border border-[#D7DEE7] p-4">
+          <h2 className="text-base font-bold tracking-ko text-[#0F172A]">취소 테스트</h2>
+          <label className="flex flex-col gap-1 text-xs tracking-ko text-[#64748B]">
+            원거래번호 (orgTrdNo)
+            <input
+              type="text"
+              value={cancelOrgTrdNo}
+              onChange={(e) => setCancelOrgTrdNo(e.target.value)}
+              placeholder="결제 노티/next 로그의 trdNo (STFP_…)"
+              className="min-h-[44px] rounded-lg border border-[#D7DEE7] bg-[#FFFFFF] px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8]"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs tracking-ko text-[#64748B]">
+            취소 금액 (원)
+            <input
+              type="number"
+              value={cancelAmount}
+              onChange={(e) => setCancelAmount(e.target.value)}
+              min={1}
+              className="min-h-[44px] rounded-lg border border-[#D7DEE7] bg-[#FFFFFF] px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8]"
+            />
+          </label>
           <button
             type="button"
-            onClick={onPay}
-            className="min-h-[44px] rounded-lg border border-border px-4 text-sm font-semibold tracking-ko text-strong hover:-translate-y-0.5"
+            onClick={onCancel}
+            disabled={cancelBusy}
+            className="min-h-[44px] min-w-[44px] rounded-lg bg-[#171717] px-6 font-semibold tracking-ko text-[#FFFFFF] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            재시도
+            {cancelBusy ? "취소 요청 중…" : "승인 취소"}
           </button>
-        )}
+          {cancelError && <p className="text-sm tracking-ko text-[#DC2626]">오류: {cancelError}</p>}
+          {cancelResult && (
+            <div className="flex flex-col gap-1 rounded-lg bg-[#F8FAFC] p-3 font-mono text-xs text-[#0F172A]">
+              <div>
+                결과(outStatCd):{" "}
+                <span className="font-semibold text-[#0F172A]">{cancelResult.outStatCd || "-"}</span>{" "}
+                {cancelResult.outStatCd === "0021"
+                  ? "(성공)"
+                  : cancelResult.outStatCd === "0031"
+                    ? "(실패)"
+                    : ""}
+              </div>
+              <div>거절코드(outRsltCd): {cancelResult.outRsltCd || "-"}</div>
+              <div>메시지: {cancelResult.outRsltMsg || "-"}</div>
+              <div>
+                취소금액(cnclAmt): {cancelResult.cnclAmt || "-"} / 잔액(blcAmt):{" "}
+                {cancelResult.blcAmt || "-"}
+              </div>
+              <div>취소주문번호(mchtTrdNo): {cancelResult.cancelMchtTrdNo || "-"}</div>
+            </div>
+          )}
+        </div>
       </div>
-
-      <p className="rounded-lg bg-surface p-4 text-xs tracking-ko text-muted">
-        ⚠️ 주문 확정은 <span className="font-semibold text-strong">노티(서버-서버 통보) 기준</span>
-        입니다. 결제창의 완료/취소 리턴은 참고용이며 위·변조 가능합니다.
-      </p>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   buildNotiVerifyHash,
   splitTrdDtm,
 } from "../src/server/payments/hecto/order";
+import { buildCancelRequest } from "../src/server/payments/hecto/cancel";
 import { aesEcbEncryptBase64, sha256Hex } from "../src/server/payments/hecto/crypto";
 import { getHectoConfig } from "../src/server/payments/hecto/config";
 
@@ -76,6 +77,37 @@ async function main() {
   console.log("signedHash       :", signedHash);
   console.log("noti hash match  :", notiMatch);
   console.log("forgery rejected :", forgeryRejected);
+
+  // ── 취소 API 해시 검증 (v1.6, 09-card-cancel 규격) ──
+  //   해시 조합(주문/노티와 다름): trdDt + trdTm + mchtId + mchtTrdNo + cnclAmt평문 + licenseKey.
+  const fixedCancelMchtTrdNo = "LDC202607021200005678";
+  const cancelAmountKrw = 1000;
+  const cancelReq = await buildCancelRequest({
+    orgTrdNo: "STFP_PGCAnxca_jt_il0211129135810M1494620", // 문서 예시 원거래번호
+    cancelAmountKrw,
+    now: fixedNow,
+    mchtTrdNo: fixedCancelMchtTrdNo,
+  });
+  // 독립 재계산(교차검증).
+  const cnclPlain = String(cancelAmountKrw);
+  const cnclAmtDirect = aesEcbEncryptBase64(cnclPlain, cfg.encKey);
+  const cnclHashDirect = await sha256Hex(
+    cancelReq.trdDt + cancelReq.trdTm + cfg.mchtId + fixedCancelMchtTrdNo + cnclPlain + cfg.licenseKey,
+  );
+
+  console.log("=== HECTO cancel verify (09-card-cancel) ===");
+  console.log("endpoint         :", cancelReq.endpoint);
+  console.log("ver/method/biz/enc:", cancelReq.ver, cancelReq.method, cancelReq.bizType, cancelReq.encCd);
+  console.log("mchtTrdNo(cancel):", cancelReq.mchtTrdNo);
+  console.log("orgTrdNo         :", cancelReq.orgTrdNo);
+  console.log("cnclOrd          :", cancelReq.cnclOrd);
+  console.log("crcCd            :", cancelReq.crcCd);
+  console.log("cnclAmt(plain)   :", cnclPlain);
+  console.log("cnclAmt(cipher)  :", cancelReq.cnclAmt);
+  console.log("pktHash          :", cancelReq.pktHash);
+  console.log("--- cross-check (independent recompute) ---");
+  console.log("cnclAmt match    :", cancelReq.cnclAmt === cnclAmtDirect);
+  console.log("pktHash match    :", cancelReq.pktHash === cnclHashDirect);
 }
 
 main().catch((e) => {
