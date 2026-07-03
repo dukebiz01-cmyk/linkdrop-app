@@ -1,0 +1,238 @@
+# video-metadata 배선 main 완전 반영(A판정). 기반 브랜치 feat/v3-step8-tier1-ui 현존
+diff --git a/src/components/create-drop-wizard.tsx b/src/components/create-drop-wizard.tsx
+index d5e7666..0d8f9e5 100644
+--- a/src/components/create-drop-wizard.tsx
++++ b/src/components/create-drop-wizard.tsx
+@@ -23,7 +23,12 @@ import { ActionButton } from "@/components/ActionButton";
+ import { ErrorMessage } from "@/components/ErrorMessage";
+ import { WizardSharePreview } from "@/components/wizard-share-preview";
+ import { shareToKakao } from "@/lib/kakao";
+-import { MOCK_LOCAL_PARTNERS, MOCK_VIDEO_INFO } from "@/lib/mock-data";
++import { MOCK_LOCAL_PARTNERS } from "@/lib/mock-data";
++import {
++  fetchVideoMetadata,
++  parseVideoUrl,
++  type VideoMetadataFetchedBy,
++} from "@/lib/video-metadata";
+ import type { DropPurpose } from "@/lib/types";
+ import {
+   WIZARD_PRIMARY_BUTTON_CLASS,
+@@ -175,17 +180,35 @@ function StepBadge({ n }: { n: StepNum }) {
+ // Step 1 — 영상 링크
+ // =============================================================================
+ 
++const VIDEO_THUMB_PLACEHOLDER_CLASS =
++  "flex h-full w-full items-center justify-center bg-surface text-text-subtle";
++
++function metadataUsesFallback(fetchedBy: VideoMetadataFetchedBy | null): boolean {
++  return (
++    fetchedBy === "youtube_fallback" ||
++    fetchedBy === "instagram_fallback" ||
++    fetchedBy === "manual_fallback"
++  );
++}
++
+ function Step1UrlInput({
+   value,
+   onChange,
+   status,
+   videoInfo,
++  metadataFetchedBy,
+ }: {
+   value: string;
+   onChange: (v: string) => void;
+   status: "idle" | "loading" | "success" | "error";
+   videoInfo: VideoInfo | null;
++  metadataFetchedBy: VideoMetadataFetchedBy | null;
+ }) {
++  const [thumbBroken, setThumbBroken] = useState(false);
++
++  useEffect(() => {
++    setThumbBroken(false);
++  }, [videoInfo?.thumbnailUrl, videoInfo?.url]);
+   const handlePaste = async () => {
+     try {
+       const text = await navigator.clipboard.readText();
+@@ -251,32 +274,64 @@ function Step1UrlInput({
+         {status === "loading" && (
+           <div className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-surface p-4">
+             <Loader2 className="size-5 animate-spin text-accent" strokeWidth={2} />
+-            <span className="text-sm font-medium text-text-muted">영상을 분석하고 있어요…</span>
++            <span className="text-sm font-medium tracking-ko text-text-muted">
++              영상 정보를 가져오는 중...
++            </span>
+           </div>
+         )}
+ 
+         {status === "error" && (
+           <div className="mt-4 flex items-center gap-3 rounded-lg border border-intent-danger/30 bg-intent-danger-bg p-4">
+             <AlertCircle className="size-5 text-intent-danger" strokeWidth={2} />
+-            <span className="text-sm font-medium text-intent-danger">URL을 다시 확인해 주세요</span>
++            <span className="text-sm font-medium tracking-ko text-intent-danger">
++              유튜브 또는 인스타그램 링크인지 확인해 주세요
++            </span>
+           </div>
+         )}
+ 
+         {status === "success" && videoInfo && (
+-          <div className="mt-4 flex gap-3 overflow-hidden rounded-2xl border border-border bg-bg p-3">
+-            <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-surface">
+-              <img src={videoInfo.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+-              <span className="absolute bottom-1 right-1 rounded-lg bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
+-                {videoInfo.duration}
+-              </span>
+-            </div>
+-            <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+-              <p className="line-clamp-2 text-sm font-bold tracking-ko text-text-strong">
+-                {videoInfo.title}
++          <>
++            {metadataUsesFallback(metadataFetchedBy) && (
++              <p className="mt-4 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
++                영상 정보를 자동으로 가져오지 못했어요. 링크는 그대로 사용할 수 있어요.
+               </p>
+-              <p className="text-xs font-medium text-text-muted">{videoInfo.channelName}</p>
++            )}
++            <div className="mt-4 flex gap-3 overflow-hidden rounded-2xl border border-border bg-bg p-3">
++              <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-surface">
++                {videoInfo.thumbnailUrl && !thumbBroken ? (
++                  <img
++                    src={videoInfo.thumbnailUrl}
++                    alt=""
++                    className="h-full w-full object-cover"
++                    onError={() => setThumbBroken(true)}
++                  />
++                ) : (
++                  <div className={VIDEO_THUMB_PLACEHOLDER_CLASS}>
++                    <LinkIcon className="size-6" strokeWidth={2} />
++                  </div>
++                )}
++                <span className="absolute left-1 top-1 rounded-lg bg-black/75 px-1.5 py-0.5 text-[10px] font-semibold tracking-ko text-white">
++                  {platformLabel(videoInfo.platform)}
++                </span>
++                {videoInfo.duration ? (
++                  <span className="absolute bottom-1 right-1 rounded-lg bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
++                    {videoInfo.duration}
++                  </span>
++                ) : null}
++              </div>
++              <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
++                <p className="line-clamp-2 text-sm font-bold tracking-ko text-text-strong">
++                  {videoInfo.title}
++                </p>
++                {videoInfo.channelName ? (
++                  <p className="text-xs font-medium tracking-ko text-text-muted">
++                    {videoInfo.channelName}
++                  </p>
++                ) : null}
++                <p className="truncate font-mono text-[11px] text-text-subtle">{videoInfo.url}</p>
++              </div>
+             </div>
+-          </div>
++          </>
+         )}
+       </main>
+     </div>
+@@ -542,6 +597,9 @@ export function CreateDropWizard({
+   const [url, setUrl] = useState("");
+   const [urlStatus, setUrlStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
++  const [metadataFetchedBy, setMetadataFetchedBy] = useState<VideoMetadataFetchedBy | null>(
++    null,
++  );
+   const [purpose, setPurpose] = useState<DropPurpose | null>(null);
+   const [partnerSearch, setPartnerSearch] = useState("");
+   const [selectedPartner, setSelectedPartner] = useState<LocalPartner | null>(null);
+@@ -562,33 +620,53 @@ export function CreateDropWizard({
+     return `${origin}/d/preview-${slug}-${Date.now().toString(36)}`;
+   }, [purpose]);
+ 
+-  // WHY: Phase 1 URL 파싱은 mock — oEmbed/Edge 연동 전 UX 검증용.
+   useEffect(() => {
+-    if (!url) {
++    const trimmed = url.trim();
++    if (!trimmed) {
+       setUrlStatus("idle");
+       setVideoInfo(null);
++      setMetadataFetchedBy(null);
+       return;
+     }
+-    const isValid = url.includes("youtu") || url.includes("instagram");
+-    if (!isValid) {
++
++    const parsed = parseVideoUrl(trimmed);
++    if (!parsed) {
+       setUrlStatus("error");
+       setVideoInfo(null);
++      setMetadataFetchedBy(null);
+       return;
+     }
++
+     setUrlStatus("loading");
+-    const timer = setTimeout(() => {
+-      const mock = MOCK_VIDEO_INFO.cafeTour;
+-      setUrlStatus("success");
+-      setVideoInfo({
+-        url,
+-        thumbnailUrl: mock.thumbnailUrl,
+-        title: mock.title,
+-        channelName: mock.channelName,
+-        duration: mock.duration,
+-        platform: url.includes("instagram") ? "instagram" : "youtube",
++    let cancelled = false;
++
++    const debounce = setTimeout(() => {
++      void fetchVideoMetadata(trimmed).then((meta) => {
++        if (cancelled) return;
++        const platform =
++          meta.platform === "instagram"
++            ? "instagram"
++            : meta.platform === "youtube"
++              ? "youtube"
++              : parsed.platform;
++
++        setMetadataFetchedBy(meta.fetchedBy);
++        setUrlStatus("success");
++        setVideoInfo({
++          url: meta.sourceUrl,
++          thumbnailUrl: meta.thumbnailUrl ?? "",
++          title: meta.title,
++          channelName: meta.authorName ?? "",
++          duration: "",
++          platform,
++        });
+       });
+-    }, 1200);
+-    return () => clearTimeout(timer);
++    }, 400);
++
++    return () => {
++      cancelled = true;
++      clearTimeout(debounce);
++    };
+   }, [url]);
+ 
+   function buildAiPreview(p: DropPurpose, message: string): AiPreviewData {
+@@ -628,7 +706,7 @@ export function CreateDropWizard({
+   }
+ 
+   function canProceed(): boolean {
+-    if (step === 1) return urlStatus === "success";
++    if (step === 1) return parseVideoUrl(url.trim()) !== null && urlStatus === "success";
+     if (step === 2) return purpose !== null;
+     if (step === 3) return !requiresPartner || selectedPartner !== null;
+     return true;
+@@ -718,7 +796,13 @@ export function CreateDropWizard({
+       </div>
+ 
+       {step === 1 && (
+-        <Step1UrlInput value={url} onChange={setUrl} status={urlStatus} videoInfo={videoInfo} />
++        <Step1UrlInput
++          value={url}
++          onChange={setUrl}
++          status={urlStatus}
++          videoInfo={videoInfo}
++          metadataFetchedBy={metadataFetchedBy}
++        />
+       )}
+       {step === 2 && <Step2PurposeSelect selected={purpose} onSelect={setPurpose} />}
+       {step === 3 && purpose && (
