@@ -39,6 +39,7 @@ import { Route as UserMeOrdersRouteImport } from './routes/_user/me-orders'
 import { Route as UserMeRouteImport } from './routes/_user/me'
 import { Route as UserInboxRouteImport } from './routes/_user/inbox'
 import { Route as UserHomeRouteImport } from './routes/_user/home'
+import { Route as UserHectoTestRouteImport } from './routes/_user/hecto-test'
 import { Route as UserExploreRouteImport } from './routes/_user/explore'
 import { Route as UserCreateWizardRouteImport } from './routes/_user/create-wizard'
 import { Route as UserCreateBuilderRouteImport } from './routes/_user/create-builder'
@@ -50,6 +51,8 @@ import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index
 import { Route as ApiProductsCopyRouteImport } from './routes/api/products/copy'
 import { Route as ApiHectoOrderRouteImport } from './routes/api/hecto/order'
 import { Route as ApiHectoNotiRouteImport } from './routes/api/hecto/noti'
+import { Route as ApiHectoNextRouteImport } from './routes/api/hecto/next'
+import { Route as ApiHectoCancelRouteImport } from './routes/api/hecto/cancel'
 import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
 import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
 import { Route as UserResultsShareUuidRouteImport } from './routes/_user/results.$shareUuid'
@@ -221,6 +224,11 @@ const UserHomeRoute = UserHomeRouteImport.update({
   path: '/home',
   getParentRoute: () => UserRoute,
 } as any)
+const UserHectoTestRoute = UserHectoTestRouteImport.update({
+  id: '/hecto-test',
+  path: '/hecto-test',
+  getParentRoute: () => UserRoute,
+} as any)
 const UserExploreRoute = UserExploreRouteImport.update({
   id: '/explore',
   path: '/explore',
@@ -274,6 +282,16 @@ const ApiHectoOrderRoute = ApiHectoOrderRouteImport.update({
 const ApiHectoNotiRoute = ApiHectoNotiRouteImport.update({
   id: '/api/hecto/noti',
   path: '/api/hecto/noti',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHectoNextRoute = ApiHectoNextRouteImport.update({
+  id: '/api/hecto/next',
+  path: '/api/hecto/next',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHectoCancelRoute = ApiHectoCancelRouteImport.update({
+  id: '/api/hecto/cancel',
+  path: '/api/hecto/cancel',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDropsShareCodeRoute = ApiDropsShareCodeRouteImport.update({
@@ -408,6 +426,7 @@ export interface FileRoutesByFullPath {
   '/create-builder': typeof UserCreateBuilderRoute
   '/create-wizard': typeof UserCreateWizardRoute
   '/explore': typeof UserExploreRoute
+  '/hecto-test': typeof UserHectoTestRoute
   '/home': typeof UserHomeRoute
   '/inbox': typeof UserInboxRoute
   '/me': typeof UserMeRoute
@@ -448,6 +467,8 @@ export interface FileRoutesByFullPath {
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/hecto/cancel': typeof ApiHectoCancelRoute
+  '/api/hecto/next': typeof ApiHectoNextRoute
   '/api/hecto/noti': typeof ApiHectoNotiRoute
   '/api/hecto/order': typeof ApiHectoOrderRoute
   '/api/products/copy': typeof ApiProductsCopyRoute
@@ -471,6 +492,7 @@ export interface FileRoutesByTo {
   '/create-builder': typeof UserCreateBuilderRoute
   '/create-wizard': typeof UserCreateWizardRoute
   '/explore': typeof UserExploreRoute
+  '/hecto-test': typeof UserHectoTestRoute
   '/home': typeof UserHomeRoute
   '/inbox': typeof UserInboxRoute
   '/me': typeof UserMeRoute
@@ -511,6 +533,8 @@ export interface FileRoutesByTo {
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/hecto/cancel': typeof ApiHectoCancelRoute
+  '/api/hecto/next': typeof ApiHectoNextRoute
   '/api/hecto/noti': typeof ApiHectoNotiRoute
   '/api/hecto/order': typeof ApiHectoOrderRoute
   '/api/products/copy': typeof ApiProductsCopyRoute
@@ -538,6 +562,7 @@ export interface FileRoutesById {
   '/_user/create-builder': typeof UserCreateBuilderRoute
   '/_user/create-wizard': typeof UserCreateWizardRoute
   '/_user/explore': typeof UserExploreRoute
+  '/_user/hecto-test': typeof UserHectoTestRoute
   '/_user/home': typeof UserHomeRoute
   '/_user/inbox': typeof UserInboxRoute
   '/_user/me': typeof UserMeRoute
@@ -578,6 +603,8 @@ export interface FileRoutesById {
   '/_user/results/$shareUuid': typeof UserResultsShareUuidRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/hecto/cancel': typeof ApiHectoCancelRoute
+  '/api/hecto/next': typeof ApiHectoNextRoute
   '/api/hecto/noti': typeof ApiHectoNotiRoute
   '/api/hecto/order': typeof ApiHectoOrderRoute
   '/api/products/copy': typeof ApiProductsCopyRoute
@@ -603,6 +630,7 @@ export interface FileRouteTypes {
     | '/create-builder'
     | '/create-wizard'
     | '/explore'
+    | '/hecto-test'
     | '/home'
     | '/inbox'
     | '/me'
@@ -643,6 +671,8 @@ export interface FileRouteTypes {
     | '/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/hecto/cancel'
+    | '/api/hecto/next'
     | '/api/hecto/noti'
     | '/api/hecto/order'
     | '/api/products/copy'
@@ -666,6 +696,7 @@ export interface FileRouteTypes {
     | '/create-builder'
     | '/create-wizard'
     | '/explore'
+    | '/hecto-test'
     | '/home'
     | '/inbox'
     | '/me'
@@ -706,6 +737,8 @@ export interface FileRouteTypes {
     | '/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/hecto/cancel'
+    | '/api/hecto/next'
     | '/api/hecto/noti'
     | '/api/hecto/order'
     | '/api/products/copy'
@@ -732,6 +765,7 @@ export interface FileRouteTypes {
     | '/_user/create-builder'
     | '/_user/create-wizard'
     | '/_user/explore'
+    | '/_user/hecto-test'
     | '/_user/home'
     | '/_user/inbox'
     | '/_user/me'
@@ -772,6 +806,8 @@ export interface FileRouteTypes {
     | '/_user/results/$shareUuid'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/hecto/cancel'
+    | '/api/hecto/next'
     | '/api/hecto/noti'
     | '/api/hecto/order'
     | '/api/products/copy'
@@ -810,6 +846,8 @@ export interface RootRouteChildren {
   RClaim_codeRoute: typeof RClaim_codeRoute
   ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
   ApiDropsShareCodeRoute: typeof ApiDropsShareCodeRoute
+  ApiHectoCancelRoute: typeof ApiHectoCancelRoute
+  ApiHectoNextRoute: typeof ApiHectoNextRoute
   ApiHectoNotiRoute: typeof ApiHectoNotiRoute
   ApiHectoOrderRoute: typeof ApiHectoOrderRoute
   ApiProductsCopyRoute: typeof ApiProductsCopyRoute
@@ -1029,6 +1067,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UserHomeRouteImport
       parentRoute: typeof UserRoute
     }
+    '/_user/hecto-test': {
+      id: '/_user/hecto-test'
+      path: '/hecto-test'
+      fullPath: '/hecto-test'
+      preLoaderRoute: typeof UserHectoTestRouteImport
+      parentRoute: typeof UserRoute
+    }
     '/_user/explore': {
       id: '/_user/explore'
       path: '/explore'
@@ -1104,6 +1149,20 @@ declare module '@tanstack/react-router' {
       path: '/api/hecto/noti'
       fullPath: '/api/hecto/noti'
       preLoaderRoute: typeof ApiHectoNotiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/hecto/next': {
+      id: '/api/hecto/next'
+      path: '/api/hecto/next'
+      fullPath: '/api/hecto/next'
+      preLoaderRoute: typeof ApiHectoNextRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/hecto/cancel': {
+      id: '/api/hecto/cancel'
+      path: '/api/hecto/cancel'
+      fullPath: '/api/hecto/cancel'
+      preLoaderRoute: typeof ApiHectoCancelRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/drops/$shareCode': {
@@ -1344,6 +1403,7 @@ interface UserRouteChildren {
   UserCreateBuilderRoute: typeof UserCreateBuilderRoute
   UserCreateWizardRoute: typeof UserCreateWizardRoute
   UserExploreRoute: typeof UserExploreRoute
+  UserHectoTestRoute: typeof UserHectoTestRoute
   UserHomeRoute: typeof UserHomeRoute
   UserInboxRoute: typeof UserInboxRoute
   UserMeRoute: typeof UserMeRoute
@@ -1362,6 +1422,7 @@ const UserRouteChildren: UserRouteChildren = {
   UserCreateBuilderRoute: UserCreateBuilderRoute,
   UserCreateWizardRoute: UserCreateWizardRoute,
   UserExploreRoute: UserExploreRoute,
+  UserHectoTestRoute: UserHectoTestRoute,
   UserHomeRoute: UserHomeRoute,
   UserInboxRoute: UserInboxRoute,
   UserMeRoute: UserMeRoute,
@@ -1402,6 +1463,8 @@ const rootRouteChildren: RootRouteChildren = {
   RClaim_codeRoute: RClaim_codeRoute,
   ApiCouponsClaimRoute: ApiCouponsClaimRoute,
   ApiDropsShareCodeRoute: ApiDropsShareCodeRoute,
+  ApiHectoCancelRoute: ApiHectoCancelRoute,
+  ApiHectoNextRoute: ApiHectoNextRoute,
   ApiHectoNotiRoute: ApiHectoNotiRoute,
   ApiHectoOrderRoute: ApiHectoOrderRoute,
   ApiProductsCopyRoute: ApiProductsCopyRoute,

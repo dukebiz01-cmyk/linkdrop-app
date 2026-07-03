@@ -42,6 +42,8 @@ export interface CardOrder {
   nextUrl: string;
   cancUrl: string;
   orderName: string;
+  /** v1.5 — 결제창 SDK 스크립트 URL(클라 페이지가 로드). */
+  sdkUrl: string;
 }
 
 /** Date → KST(UTC+9) 기준 {yyyyMMdd, HHmmss}. */
@@ -63,14 +65,12 @@ function genMchtTrdNo(trdDt: string, trdTm: string): string {
   return `LD${trdDt}${trdTm}${rand4}`;
 }
 
-const PLACEHOLDER = {
-  noti: "https://app.drop.how/api/hecto/noti",
-  next: "https://app.drop.how/api/hecto/return",
-  canc: "https://app.drop.how/api/hecto/cancel",
-} as const;
-
 export async function createCardOrder(input: CreateCardOrderInput): Promise<CardOrder> {
   const cfg = getHectoConfig();
+  // v1.5 — noti/next/cancel URL 은 config.notiBase(공개 호스트) 기준. input 오버라이드 우선.
+  const notiUrl = input.notiUrl ?? `${cfg.notiBase}/api/hecto/noti`;
+  const nextUrl = input.nextUrl ?? `${cfg.notiBase}/api/hecto/next`;
+  const cancUrl = input.cancUrl ?? `${cfg.notiBase}/api/hecto/cancel`;
   const { trdDt, trdTm } = toKstParts(input.now ?? new Date());
   const mchtTrdNo = input.mchtTrdNo ?? genMchtTrdNo(trdDt, trdTm);
 
@@ -92,10 +92,11 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
     trdTm,
     trdAmt,
     pktHash,
-    notiUrl: input.notiUrl ?? PLACEHOLDER.noti,
-    nextUrl: input.nextUrl ?? PLACEHOLDER.next,
-    cancUrl: input.cancUrl ?? PLACEHOLDER.canc,
+    notiUrl,
+    nextUrl,
+    cancUrl,
     orderName: input.orderName,
+    sdkUrl: cfg.payWindowSdkUrl,
   };
 }
 

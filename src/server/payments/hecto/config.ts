@@ -29,12 +29,23 @@ const TESTBED_DEFAULTS = {
   encKey: "pgSettle30y739r82jtd709yOfZ2yK5K",
 } as const;
 
+// v1.5 결제창 SDK — 표준결제창 SDK 스크립트 경로.
+//   ⚠️ 정확한 파일명/버전은 헥토 표준결제창 개발가이드(hecto MCP)에서 확정 후 HECTO_PAYWINDOW_SDK_PATH env 로 교체.
+//   아래 기본값은 문서 표준 경로이나 실테스트 전 반드시 검증. (전역 객체 = SETTLE_PG)
+const DEFAULT_SDK_PATH = "/resources/js/v1/SettlePG_v1.2.js";
+// 노티/리턴/취소 URL 베이스 — 로컬 dev 기본. cloudflared 터널 사용 시 HECTO_NOTI_BASE env 로 공개 URL 주입.
+const DEFAULT_NOTI_BASE = "http://localhost:8080";
+
 export interface HectoConfig {
   env: HectoEnv;
   /** 결제창(브라우저 호출) 도메인 */
   payWindowBase: string;
   /** 서버-서버 API 도메인 */
   apiBase: string;
+  /** 노티/next/cancel URL 베이스(공개 접근 가능 호스트) */
+  notiBase: string;
+  /** 결제창 SDK 스크립트 전체 URL(payWindowBase + 경로) */
+  payWindowSdkUrl: string;
   mchtId: string;
   /** 해시(pktHash) 생성 키 = 라이선스 키 */
   licenseKey: string;
@@ -62,10 +73,15 @@ export function getHectoConfig(): HectoConfig {
     throw new Error(`[hecto] Missing key(s) for env=${env}: ${missing.join(", ")}`);
   }
 
+  const notiBase = (readEnv("HECTO_NOTI_BASE") ?? DEFAULT_NOTI_BASE).replace(/\/+$/, "");
+  const sdkPath = readEnv("HECTO_PAYWINDOW_SDK_PATH") ?? DEFAULT_SDK_PATH;
+
   return {
     env,
     payWindowBase: domains.payWindow,
     apiBase: domains.api,
+    notiBase,
+    payWindowSdkUrl: `${domains.payWindow}${sdkPath}`,
     mchtId,
     licenseKey,
     encKey,
