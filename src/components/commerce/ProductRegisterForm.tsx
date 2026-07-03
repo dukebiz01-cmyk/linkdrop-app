@@ -371,27 +371,6 @@ export function ProductRegisterForm({ onSubmit }: ProductRegisterFormProps) {
           />
         </div>
 
-        {/* 가격 (필수) */}
-        <div className="space-y-2">
-          <label htmlFor="pd-price" className="block text-xs font-semibold text-[#0F172A]">
-            가격
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              id="pd-price"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder="19900"
-              className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm tabular-nums text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
-              required
-            />
-            <span className="shrink-0 text-sm font-semibold text-[#64748B]">원</span>
-          </div>
-        </div>
-
         {/* 신선/가공 — 농가 선주문 속성. 기본 신선. 가공이면 신선 입력칸 숨김(is_fresh=false). */}
         <div className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
           <span className="block text-xs font-semibold tracking-ko text-text-strong">
@@ -519,6 +498,33 @@ export function ProductRegisterForm({ onSubmit }: ProductRegisterFormProps) {
               지원합니다.
             </p>
           )}
+        </div>
+
+        {/* 가격 (필수) — P1.5: 품목→시세 확인 후 입력(순서 유도, 강제 아님). */}
+        <div className="space-y-2">
+          <label htmlFor="pd-price" className="block text-xs font-semibold text-[#0F172A]">
+            가격
+          </label>
+          {/* P1.5 — 시세 데이터(status ok) 있을 때만 참고 문구. 미조회·데이터 없음이면 숨김. */}
+          {priceBand?.status === "ok" ? (
+            <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+              위 시세를 참고해 판매 가격을 정하세요
+            </p>
+          ) : null}
+          <div className="flex items-center gap-2">
+            <input
+              id="pd-price"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="19900"
+              className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm tabular-nums text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+              required
+            />
+            <span className="shrink-0 text-sm font-semibold text-[#64748B]">원</span>
+          </div>
         </div>
 
         {/* 나-1 — 홍보 문구(선택). 상품명·가격·메모 기반 AI 카피 + 수동 수정. */}
