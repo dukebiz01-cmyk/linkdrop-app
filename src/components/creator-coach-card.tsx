@@ -61,7 +61,8 @@ const PERIODS: { id: Period; label: string }[] = [
   { id: "all", label: "전체" },
 ];
 
-export function CreatorCoachCard() {
+// S22 — 신호 확인용 최소 노출: 결과 수신 성공 시 1회 콜백(내부 로직 무수정, 옵셔널 — 기존 소비처 무영향).
+export function CreatorCoachCard({ onLoaded }: { onLoaded?: (ok: boolean) => void } = {}) {
   // 기본 'all' — 검증 시 채워진 결과를 먼저 보려고.
   const [period, setPeriod] = useState<Period>("all");
   const [loading, setLoading] = useState(true);
@@ -83,12 +84,14 @@ export function CreatorCoachCard() {
         return;
       }
       setData(res as Feedback);
+      onLoaded?.(true); // S22 — 결과 수신 신호(셸 전구 점등용)
     } catch {
       setFailed(true);
       setData(null);
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
