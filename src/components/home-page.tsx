@@ -12,6 +12,8 @@ export interface DropFeedItem {
   intent: DropFeedCardProps["intent"];
   /** 1-C-2 — 타일 타이머용 마감(ISO, feed-queries feedExpiresAt 산출). 없으면 미렌더. */
   expiresAt?: string;
+  /** 1-C-3 — 파생 재고(1-B-2 get_feed_remaining_stock 배치값 그대로, L4). 없으면 미렌더. */
+  remainingStock?: number;
   title: string;
   localName?: string;
   distance?: string;

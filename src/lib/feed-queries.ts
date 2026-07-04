@@ -39,6 +39,35 @@ function formatDroppedAgo(iso: string | null | undefined): string {
   return `${Math.round(d / 7)}주 전`;
 }
 
+// 1-C-3 — 피드 재고 배치 병합(1-B-2 get_feed_remaining_stock). 피드당 정확 1회 호출.
+//   L4: RPC 반환값 그대로(가공·연출 감산 0) · 캐싱 없음(스테일 재고 = 가짜 표시).
+//   실패 내성: 오류 시 빈 맵 반환 → 피드는 정상, 재고만 미표시(가용성 우선) + console 1줄.
+async function fetchRemainingStock(
+  client: SupabaseClient,
+  dropIds: string[],
+): Promise<Map<string, number | null>> {
+  const map = new Map<string, number | null>();
+  const ids = Array.from(new Set(dropIds.filter(Boolean)));
+  if (ids.length === 0) return map;
+  try {
+    // get_feed_remaining_stock 은 types.ts 미반영(TEMP — 타입 재생성 후 캐스트 제거).
+    const { data, error } = (await client.rpc(
+      "get_feed_remaining_stock" as never,
+      { p_drop_ids: ids } as never,
+    )) as { data: unknown; error: { message?: string } | null };
+    if (error) {
+      console.error("[feed-queries] get_feed_remaining_stock failed:", error.message);
+      return map;
+    }
+    for (const row of (data as { drop_id: string; remaining_stock: number | null }[]) ?? []) {
+      map.set(row.drop_id, row.remaining_stock);
+    }
+  } catch (e) {
+    console.error("[feed-queries] get_feed_remaining_stock error:", e);
+  }
+  return map;
+}
+
 type ContentSourceRow = {
   provider: string | null;
   title: string | null;
@@ -105,6 +134,8 @@ type InfoDropDiscoverRow = {
 type ShareEventSentRow = {
   share_uuid: string;
   created_at: string | null;
+  // 1-C-3 — 재고 배치 조회용 드랍 id(루트 컬럼).
+  info_drop_id?: string | null;
   // 1-C-2 — 공유 자체 만료.
   expires_at?: string | null;
   info_drops: {
@@ -115,7 +146,11 @@ type ShareEventSentRow = {
   } | null;
 };
 
-function adaptDiscoverRow(row: InfoDropDiscoverRow): DropFeedItem | null {
+// 1-C-3 — remainingStock: 배치 RPC 병합값(null/미반환 = undefined → 타일 미렌더, 1-A 계약).
+function adaptDiscoverRow(
+  row: InfoDropDiscoverRow,
+  remainingStock?: number | null,
+): DropFeedItem | null {
   const cs = row.content_sources;
   if (!cs?.thumbnail_url) return null;
   const shareUuid = row.share_events?.[0]?.share_uuid ?? row.id;
@@ -131,6 +166,8 @@ function adaptDiscoverRow(row: InfoDropDiscoverRow): DropFeedItem | null {
     intent: safeIntent(row.intent_types?.key),
     // 1-C-2 — 타일 타이머용 마감(ISO). 없으면 undefined = 미렌더(하위호환).
     expiresAt: feedExpiresAt(row.purpose, row.coupons ?? null, row.share_events?.[0]?.expires_at),
+    // 1-C-3 — 파생 재고(1-B-2 배치값 그대로, L4).
+    ...(remainingStock != null ? { remainingStock } : {}),
     title: cs.title ?? "(제목 없음)",
     receivedByCount: row.share_count ?? undefined,
     creator:
@@ -140,7 +177,8 @@ function adaptDiscoverRow(row: InfoDropDiscoverRow): DropFeedItem | null {
   };
 }
 
-function adaptSentRow(row: ShareEventSentRow): DropFeedItem | null {
+// 1-C-3 — remainingStock: 배치 RPC 병합값(adaptDiscoverRow 와 동일 계약).
+function adaptSentRow(row: ShareEventSentRow, remainingStock?: number | null): DropFeedItem | null {
   const cs = row.info_drops?.content_sources;
   if (!cs?.thumbnail_url) return null;
   return {
@@ -156,6 +194,8 @@ function adaptSentRow(row: ShareEventSentRow): DropFeedItem | null {
       row.info_drops?.coupons ?? null,
       row.expires_at,
     ),
+    // 1-C-3 — 파생 재고(배치값 그대로, L4). 비공개 드랍은 RPC 가 행 미반환 → undefined(미렌더).
+    ...(remainingStock != null ? { remainingStock } : {}),
     title: cs.title ?? "(제목 없음)",
     creator:
       cs.author_name && cs.source_url
@@ -181,6 +221,7 @@ const DISCOVER_SELECT = `
 const SENT_SELECT = `
   share_uuid,
   created_at,
+  info_drop_id,
   expires_at,
   info_drops!share_events_info_drop_id_fkey (
     purpose,
@@ -210,8 +251,14 @@ export async function getDiscoverDrops(
     .order("published_at", { ascending: false, nullsFirst: false })
     .limit(20);
   if (error || !data) return [];
-  return (data as unknown as InfoDropDiscoverRow[])
-    .map(adaptDiscoverRow)
+  const rows = data as unknown as InfoDropDiscoverRow[];
+  // 1-C-3 — 재고 배치 병합: 피드당 정확 1회(get_feed_remaining_stock, 드랍별 반복 금지).
+  const stock = await fetchRemainingStock(
+    client,
+    rows.map((r) => r.id),
+  );
+  return rows
+    .map((r) => adaptDiscoverRow(r, stock.get(r.id) ?? undefined))
     .filter((x): x is DropFeedItem => x !== null);
 }
 
@@ -241,8 +288,14 @@ export async function getFollowedMakerDrops(
     .order("published_at", { ascending: false, nullsFirst: false })
     .limit(10);
   if (error || !data) return [];
-  return (data as unknown as InfoDropDiscoverRow[])
-    .map(adaptDiscoverRow)
+  const rows = data as unknown as InfoDropDiscoverRow[];
+  // 1-C-3 — 재고 배치 병합(피드당 1회).
+  const stock = await fetchRemainingStock(
+    client,
+    rows.map((r) => r.id),
+  );
+  return rows
+    .map((r) => adaptDiscoverRow(r, stock.get(r.id) ?? undefined))
     .filter((x): x is DropFeedItem => x !== null);
 }
 
@@ -289,7 +342,15 @@ export async function getSentDrops(
     .order("created_at", { ascending: false })
     .limit(20);
   if (error || !data) return [];
-  return (data as unknown as ShareEventSentRow[])
-    .map(adaptSentRow)
+  const rows = data as unknown as ShareEventSentRow[];
+  // 1-C-3 — 재고 배치 병합(피드당 1회). 비공개 드랍은 RPC 가 행 미반환 → 미표시.
+  const stock = await fetchRemainingStock(
+    client,
+    rows.map((r) => r.info_drop_id ?? "").filter(Boolean),
+  );
+  return rows
+    .map((r) =>
+      adaptSentRow(r, r.info_drop_id ? (stock.get(r.info_drop_id) ?? undefined) : undefined),
+    )
     .filter((x): x is DropFeedItem => x !== null);
 }

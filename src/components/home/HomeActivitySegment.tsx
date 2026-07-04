@@ -59,6 +59,8 @@ export function HomeActivitySegment({
               // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
               expiresAt={drop.expiresAt}
               serverNow={serverNow}
+              // 1-C-3 — 파생 재고(1-B-2 배치값, L4).
+              remainingStock={drop.remainingStock}
               onClick={() => openDrop(drop.shareUuid)}
               onShare={() =>
                 void reshareDrop({
