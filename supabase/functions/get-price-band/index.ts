@@ -88,6 +88,25 @@ type PriceSource = {
   ref_date: string;
 };
 
+// ── P5a 구조화 블록(단위 헌법) — base_unit=kg 고정. 기존 sources 보존 + 추가 필드. ──
+type WholesaleBlock = {
+  min: number;
+  max: number;
+  avg: number;
+  market_count: number;
+  as_of: string;
+};
+type OnlineBlock = {
+  // converted_count < MIN_COMPARABLE 이면 insufficient(통계 null·건수는 정직 보고).
+  status: "ok" | "insufficient";
+  min: number | null;
+  max: number | null;
+  avg: number | null;
+  converted_count: number;
+  excluded_count: number;
+  as_of: string;
+};
+
 type PriceBandResult = {
   status: "ok" | "no_data" | "unconfigured" | "error";
   item_code: string;
@@ -95,6 +114,12 @@ type PriceBandResult = {
   sources: PriceSource[];
   cached: boolean;
   note?: string;
+  // P5a 확장(옵셔널 — 기존 소비자 무영향). 온라인 통계는 kg 환산가 기준으로만 산출.
+  base_unit?: "kg";
+  wholesale?: WholesaleBlock | null;
+  online?: OnlineBlock | null;
+  per_unit_weight_g?: number; // 요청 파라미터 에코
+  unit_count?: number; // 요청 파라미터 에코
 };
 
 // KAMIS item 한 행(필요 필드만).
@@ -260,7 +285,7 @@ async function fetchWholesale(
   itemName: string,
   regday: string,
   apiKey: string,
-): Promise<{ source: PriceSource; item_name: string | null } | null> {
+): Promise<{ source: PriceSource; item_name: string | null; stats: WholesaleBlock } | null> {
   // cond[필드::연산자]=값. 대괄호·콜론 인코딩 필수. serviceKey 는 인코딩 1회.
   const cond = (field: string, op: string, val: string) =>
     `${encodeURIComponent(`cond[${field}::${op}]`)}=${encodeURIComponent(val)}`;
@@ -343,7 +368,18 @@ async function fetchWholesale(
     rank_note: `전국 ${markets.size}개 시장 · 평균 ${avg.toLocaleString("ko-KR")}원/kg`,
     ref_date: usedDate,
   };
-  return { source, item_name: matched[0]?.corp_gds_item_nm ?? itemName };
+  return {
+    source,
+    item_name: matched[0]?.corp_gds_item_nm ?? itemName,
+    // P5a 구조화 블록 — 표기용 통계(low/high/avg 동일값, 계약 필드명으로 재노출).
+    stats: {
+      min: source.low,
+      max: source.high,
+      avg,
+      market_count: markets.size,
+      as_of: usedDate,
+    },
+  };
 }
 
 // 오늘(Asia/Seoul) YYYY-MM-DD — 네이버 실시간 판매가 기준일.
@@ -367,12 +403,50 @@ type SaleModeResult = {
 };
 
 type NaverShopResult = {
-  source: PriceSource;
+  // P5a: weight 모드에서 환산 가능 리스팅이 MIN_COMPARABLE 미만이면 source=null
+  //   (sources 배열 미표시, 건수는 excludedCount/comparables 로 정직 보고).
+  source: PriceSource | null;
   item_name: string | null;
-  // 밴드 산출용 가격 배열(오름차순). weight=원/kg(또는 legacy 원/개), count/volume=원/listing.
+  // 밴드 산출용 가격 배열(오름차순). weight=원/kg(환산가만), count/volume=원/listing.
   comparables: number[];
   bandUnit: NaverBandUnit;
+  // P5a: 구성(수량·중량) 불명으로 비교에서 제외한 리스팅 수(weight 모드 집계).
+  excludedCount: number;
 };
+
+// ── P5a 리스팅 구성 파싱(단위 헌법) — 온라인 비교는 kg 환산가로만. ──
+//   우선순위: 복합 곱("2kg×3박스"=6kg) > 중량 단일(Nkg|Ng) > 개수만(N개|N입|N미|N팩).
+//   중량 표기가 서로 다른 값 2개+("500g/1kg 선택" 류) = 모호 → unknown(제외 집계).
+type ListingComposition =
+  | { kind: "kg"; kg: number }
+  | { kind: "count_only"; count: number }
+  | { kind: "unknown" };
+
+function parseListingComposition(title: string): ListingComposition {
+  // 1) 복합 곱 — "2kg×3(박스)" / "3×2kg" 양방향. 총중량 = 곱.
+  const mulA = title.match(/(\d+(?:\.\d+)?)\s*(kg|g)\s*[x×*]\s*(\d{1,3})/i);
+  if (mulA) {
+    const w = Number(mulA[1]) * (mulA[2].toLowerCase() === "g" ? 0.001 : 1);
+    return { kind: "kg", kg: w * Number(mulA[3]) };
+  }
+  const mulB = title.match(/(\d{1,3})\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(kg|g)/i);
+  if (mulB) {
+    const w = Number(mulB[2]) * (mulB[3].toLowerCase() === "g" ? 0.001 : 1);
+    return { kind: "kg", kg: Number(mulB[1]) * w };
+  }
+  // 2) 중량 단일 — kg·g 토큰 전부 수집(kg 환산 후 중복 제거). 값 1개면 채택, 2개+면 모호.
+  const kgTokens = [...title.matchAll(/(\d+(?:\.\d+)?)\s*kg/gi)].map((m) => Number(m[1]));
+  const gTokens = [...title.matchAll(/(\d+(?:\.\d+)?)\s*g(?![a-zA-Z])/gi)].map(
+    (m) => Number(m[1]) / 1000,
+  );
+  const weights = [...new Set([...kgTokens, ...gTokens])];
+  if (weights.length === 1) return { kind: "kg", kg: weights[0] };
+  if (weights.length > 1) return { kind: "unknown" };
+  // 3) 개수만 — 요청 per_unit_weight_g 있을 때만 환산 가능(호출부 판단).
+  const c = title.match(/(\d{1,4})\s*(개|입|미|팩)/);
+  if (c) return { kind: "count_only", count: Number(c[1]) };
+  return { kind: "unknown" };
+}
 
 // 수량 토큰 추출(스펙 3-2): (\d{1,4})\s*(개|입|알|구|과|봉|수|미|포기|통|송이)
 function extractCount(title: string): number | null {
@@ -489,6 +563,8 @@ async function fetchNaverShop(
     unitQty?: number;
     unitLabel?: string;
     approxWeightKg?: number;
+    // P5a — 개당 중량(g). 개수만 표기된 리스팅("옥수수 20개")을 kg 환산할 때 사용.
+    perUnitWeightG?: number;
   },
 ): Promise<NaverShopResult | null> {
   // 키 중간 비ASCII 제거(discover-content 패턴) — ByteString 위반 차단.
@@ -561,12 +637,14 @@ async function fetchNaverShop(
       rank_note: `"${query}" 네이버쇼핑 ${arr.length}건 · 판매자 등록가 · 평균 ${avg.toLocaleString("ko-KR")}원`,
       ref_date: todayKstIso(),
     };
-    return { source, item_name: itemName, comparables: arr, bandUnit: "krw_per_listing" };
+    return { source, item_name: itemName, comparables: arr, bandUnit: "krw_per_listing", excludedCount: 0 };
   }
 
-  // ── weight/기본: 기존 동작 100% 보존(kg환산, useKg fallback). ──
+  // ── weight/기본 — P5a 단위 헌법: 구성 파싱 → kg 환산가로만 통계(원/listing 폴백 제거). ──
+  //   복합("2kg×3박스")=곱 처리 · 개수만은 perUnitWeightG 있을 때만 환산 ·
+  //   불명/모호/환산범위(0.1~50kg) 밖 → 제외하고 excludedCount 집계.
   const perKg: number[] = [];
-  const raw: number[] = [];
+  let excluded = 0;
   for (const it of items) {
     const title = stripTag(it.title ?? "");
     if (!title.includes(itemName)) continue;
@@ -575,20 +653,31 @@ async function fetchNaverShop(
     if (isBlockedByItem(title, itemName)) continue; // 품목별 차단어(옥수수수염차 등) — weight 검색에도 적용
     const lp = parsePrice(it.lprice);
     if (lp == null) continue;
-    raw.push(lp);
-    // 중량 추출: "3kg"·"500g" → kg당 환산(가능할 때만).
-    const kgM = title.match(/([\d.]+)\s*kg/i);
-    const gM = title.match(/([\d.]+)\s*g(?![a-zA-Z])/i);
+    const comp = parseListingComposition(title);
     let kg: number | null = null;
-    if (kgM) kg = Number(kgM[1]);
-    else if (gM) kg = Number(gM[1]) / 1000;
+    if (comp.kind === "kg") kg = comp.kg;
+    else if (
+      comp.kind === "count_only" &&
+      typeof opts?.perUnitWeightG === "number" &&
+      opts.perUnitWeightG > 0
+    ) {
+      kg = (comp.count * opts.perUnitWeightG) / 1000;
+    }
     if (kg != null && kg >= 0.1 && kg <= 50) perKg.push(lp / kg);
+    else excluded++;
   }
-  if (raw.length === 0) return null;
 
-  // 중량표기 상품이 충분(≥10)하면 kg당, 아니면 상품 단가(개당).
-  const useKg = perKg.length >= 10;
-  const arr = (useKg ? perKg : raw).slice().sort((a, b) => a - b);
+  const arr = perKg.slice().sort((a, b) => a - b);
+  // 환산 표본이 MIN_COMPARABLE 미만 — sources 미표시(source=null), 건수만 정직 반환.
+  if (arr.length < MIN_COMPARABLE) {
+    return {
+      source: null,
+      item_name: itemName,
+      comparables: arr,
+      bandUnit: "krw_per_kg",
+      excludedCount: excluded,
+    };
+  }
   const { low, high, avg } = bandStats(arr);
 
   const source: PriceSource = {
@@ -597,11 +686,11 @@ async function fetchNaverShop(
     price_type: "online",
     low: Math.min(low, high),
     high: Math.max(low, high),
-    unit: useKg ? "kg" : "개",
-    rank_note: `"${itemName}" 네이버쇼핑 ${arr.length}개 · 판매자 등록가 · 평균 ${avg.toLocaleString("ko-KR")}원`,
+    unit: "kg",
+    rank_note: `"${itemName}" 네이버쇼핑 ${arr.length}건 환산 · 판매자 등록가 · 평균 ${avg.toLocaleString("ko-KR")}원/kg`,
     ref_date: todayKstIso(),
   };
-  return { source, item_name: itemName, comparables: arr, bandUnit: useKg ? "krw_per_kg" : "krw_per_listing" };
+  return { source, item_name: itemName, comparables: arr, bandUnit: "krw_per_kg", excludedCount: excluded };
 }
 
 // ── S4 오케스트레이션 — sale_mode 별 소스 분기(스펙 §3). 서로 다른 단위 한 밴드 절대 금지. ──
@@ -717,8 +806,9 @@ async function handleSaleMode(
       unitQty,
       unitLabel,
     });
-    // weight 밴드 = 원/kg 만. 네이버가 kg 정규화(krw_per_kg)했을 때만 채택(개당이면 단위 불일치 → 제외).
-    if (naver && naver.bandUnit === "krw_per_kg") {
+    // weight 밴드 = 원/kg 만. P5a 이후 weight 모드는 항상 환산가(krw_per_kg)지만
+    //   환산 0건일 수 있어 length 가드 추가(빈 소스가 used 에 집계되지 않게).
+    if (naver && naver.bandUnit === "krw_per_kg" && naver.comparables.length > 0) {
       used.push("naver");
       naverComparableCount = naver.comparables.length;
       kgPoints.push(...naver.comparables);
@@ -766,6 +856,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     unit_label?: string;
     approx_weight_kg?: number;
     itemNameKo?: string;
+    // P5a 구성 파라미터(옵셔널·하위호환 — 없으면 기존 호출 그대로).
+    per_unit_weight_g?: number;
+    unit_count?: number;
   };
   try {
     body = await req.json();
@@ -787,6 +880,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
       : yesterdayKst();
   const rankCode =
     body.rank_code === "04" || body.rank_code === "05" ? body.rank_code : undefined;
+
+  // P5a — 판매 구성 파라미터(옵셔널). per_unit_weight_g 는 개수-only 리스팅 환산에 사용,
+  //   unit_count 는 에코 전용(클라 '내 판매단위' 계산 검증용). 없으면 기존 동작 그대로.
+  const perUnitWeightG =
+    typeof body.per_unit_weight_g === "number" &&
+    Number.isFinite(body.per_unit_weight_g) &&
+    body.per_unit_weight_g > 0
+      ? Math.round(body.per_unit_weight_g)
+      : undefined;
+  const unitCount =
+    typeof body.unit_count === "number" && Number.isFinite(body.unit_count) && body.unit_count > 0
+      ? Math.round(body.unit_count)
+      : undefined;
 
   // ── S4: sale_mode 명시 시에만 신규 규격인지 path. 없으면/이상값이면 아래 기존 path 그대로(하위호환). ──
   const saleMode: SaleMode | null =
@@ -821,8 +927,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     } satisfies PriceBandResult);
   }
 
-  // 1) 캐시 조회 — 품목별 동적 cache_key.
-  const cacheKey = `kamis|${itemCode}|${COUNTRY_CODE}|${regday}`;
+  // 1) 캐시 조회 — 품목별 동적 cache_key. P5a: 개당중량은 온라인 환산 결과를 바꾸므로 키에 포함.
+  const cacheKey =
+    `kamis|${itemCode}|${COUNTRY_CODE}|${regday}` +
+    (perUnitWeightG != null ? `|puw${perUnitWeightG}` : "");
   try {
     const { data: cached } = await supabase
       .from("price_cache")
@@ -835,14 +943,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (row?.retail && row.fetched_at) {
       const freshUntil = new Date(row.fetched_at).getTime() + row.ttl_sec * 1000;
       if (freshUntil > Date.now()) {
-        const payload = row.retail as { item_name: string | null; sources: PriceSource[] };
-        return jsonResponse({
-          status: payload.sources.length > 0 ? "ok" : "no_data",
-          item_code: itemCode,
-          item_name: payload.item_name ?? null,
-          sources: payload.sources ?? [],
-          cached: true,
-        } satisfies PriceBandResult);
+        const payload = row.retail as {
+          item_name: string | null;
+          sources: PriceSource[];
+          base_unit?: "kg";
+          wholesale?: WholesaleBlock | null;
+          online?: OnlineBlock | null;
+        };
+        // P5a 이전 캐시(구조화 블록 없음)는 미스 취급 → 실호출로 재적재(1 TTL 내 자연 전환).
+        if (payload.base_unit === "kg") {
+          return jsonResponse({
+            status: payload.sources.length > 0 ? "ok" : "no_data",
+            item_code: itemCode,
+            item_name: payload.item_name ?? null,
+            sources: payload.sources ?? [],
+            cached: true,
+            base_unit: "kg",
+            wholesale: payload.wholesale ?? null,
+            online: payload.online ?? null,
+            ...(perUnitWeightG != null ? { per_unit_weight_g: perUnitWeightG } : {}),
+            ...(unitCount != null ? { unit_count: unitCount } : {}),
+          } satisfies PriceBandResult);
+        }
       }
     }
   } catch (e) {
@@ -881,20 +1003,51 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // 2-B) 도매경락 실호출(4-B). WHOLESALE_API_KEY + 품목명 있을 때만.
+  let wholesaleBlock: WholesaleBlock | null = null;
   if (WHOLESALE_API_KEY && itemNameKo) {
     const wholesale = await fetchWholesale(itemNameKo, regday, WHOLESALE_API_KEY);
     if (wholesale) {
       sources.push(wholesale.source);
+      wholesaleBlock = wholesale.stats;
       if (!itemName) itemName = wholesale.item_name;
     }
   }
 
   // 2-C) 인터넷 판매가 실호출(4-C). NAVER 키 + 품목명 있을 때만.
+  //   P5a: kg 환산가 통계만(OnlineBlock). MIN_COMPARABLE 미만 → status insufficient(건수 정직 보고).
+  let onlineBlock: OnlineBlock | null = null;
   if (NAVER_CLIENT_ID && NAVER_CLIENT_SECRET && itemNameKo) {
-    const naver = await fetchNaverShop(itemNameKo, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET);
+    const naver = await fetchNaverShop(itemNameKo, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, {
+      perUnitWeightG,
+    });
     if (naver) {
-      sources.push(naver.source);
-      if (!itemName) itemName = naver.item_name;
+      if (naver.source) {
+        sources.push(naver.source);
+        if (!itemName) itemName = naver.item_name;
+      }
+      const conv = naver.comparables; // fetchNaverShop 이 이미 오름차순 정렬
+      if (conv.length >= MIN_COMPARABLE) {
+        const { low, high, avg } = bandStats(conv);
+        onlineBlock = {
+          status: "ok",
+          min: low,
+          max: high,
+          avg,
+          converted_count: conv.length,
+          excluded_count: naver.excludedCount,
+          as_of: todayKstIso(),
+        };
+      } else {
+        onlineBlock = {
+          status: "insufficient",
+          min: null,
+          max: null,
+          avg: null,
+          converted_count: conv.length,
+          excluded_count: naver.excludedCount,
+          as_of: todayKstIso(),
+        };
+      }
     }
   }
 
@@ -904,14 +1057,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
     item_name: itemName,
     sources,
     cached: false,
+    base_unit: "kg",
+    wholesale: wholesaleBlock,
+    online: onlineBlock,
+    ...(perUnitWeightG != null ? { per_unit_weight_g: perUnitWeightG } : {}),
+    ...(unitCount != null ? { unit_count: unitCount } : {}),
   };
 
-  // 3) 캐시 저장 — sources 를 retail jsonb 에 담음(no_data 도 캐시해 반복 호출 절약).
+  // 3) 캐시 저장 — sources+구조화 블록을 retail jsonb 에 담음(no_data 도 캐시해 반복 호출 절약).
   try {
     await supabase.from("price_cache").upsert(
       {
         cache_key: cacheKey,
-        retail: { item_name: itemName, sources },
+        retail: {
+          item_name: itemName,
+          sources,
+          base_unit: "kg",
+          wholesale: wholesaleBlock,
+          online: onlineBlock,
+        },
         ref_date: regday,
         fetched_at: new Date().toISOString(),
         ttl_sec: DEFAULT_TTL_SEC,
