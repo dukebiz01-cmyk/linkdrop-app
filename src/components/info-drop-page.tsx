@@ -39,6 +39,7 @@ import {
   ExternalLink,
   Info,
   ChevronDown,
+  GitBranch,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type PriceOfferRow } from "@/components/ai-price-comparison-card";
@@ -67,15 +68,8 @@ import { CardBody } from "@/components/card/CardBody";
 // Phase 1-C — 1-A 배지 재사용(수신카드 주입). 순환 없음: ShareCardTile 트리(home-page→drop-feed-card)는 본 파일 미참조.
 import { TimerBadge, StockMeta } from "@/components/home/ShareCardTile";
 
-// SM-2 — get_share_journey 응답 노드(서버측 마스킹본만 — 원본 user_id·실명 없음, 응답 레벨 보장).
-type ShareJourneyRpcNode = {
-  position: number;
-  masked_name: string;
-  role: string; // '개척' | '전달' | '최고공헌' (v8.3.1)
-  is_viewer: boolean;
-  has_conversion: boolean;
-  spread_count: number;
-};
+// SM-4 — 여정 렌더부 공용 추출분(share-journey.tsx). 타입·타임라인 모두 공용 소비.
+import { ShareJourneyTimeline, type ShareJourneyRpcNode } from "@/components/share-journey";
 import { PurchaseCardBody } from "@/components/card/PurchaseCardBody";
 import { ProductWidget } from "@/components/card/ProductWidget";
 import { CardActionButton } from "@/components/card/CardActionButton";
@@ -1218,97 +1212,37 @@ export function InfoDropPage({
         문제 신고
       </button>
 
-      {/* SM-2 — 공유 여정 아코디언(기본 접힘·lazy). FTC 고지 하단·카드 프레임 푸터 영역(추가만).
+      {/* SM-2 — 공유 여정 아코디언(기본 접힘·lazy). FTC 고지 하단·카드 프레임 푸터 영역.
           [보정2] 역할 4종 락: 개척·전달·최고공헌·구매자 — 그 외 역할·인원수 과시("N명 모집" 류) 금지.
           [보정3] 연출 = 색·정적 뱃지만(펄스·애니메이션 0 — 개폐 기본 트랜지션 외 모션 없음).
-          ⛔ 포인트 숫자 금지(Phase 3 소관) · 모집·초대·수익 언어 금지. */}
+          ⛔ 포인트 숫자 금지(Phase 3 소관) · 모집·초대·수익 언어 금지.
+          SM-4 — 렌더부는 공용 ShareJourneyTimeline 소비(로직·상태는 본 파일 SM-2 그대로).
+          SM-4 버튼 승격(fix 흡수) — GitBranch 칩형 풀폭 필(보더+틴트): FTC/신고 소자와 계층 분리. */}
       <button
         type="button"
         onClick={() => void toggleJourney()}
         aria-expanded={journeyOpen}
-        className={`mx-auto mt-1 flex min-h-[44px] items-center gap-1 text-[11px] font-semibold tracking-ko ${light ? "text-text-subtle" : "text-white/50"}`}
+        className={`mt-3 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border px-4 text-[12px] font-semibold tracking-ko ${
+          light
+            ? "border-[#E8EDF3] bg-[#F8FAFC] text-[#334155]"
+            : "border-white/15 bg-white/10 text-white/85"
+        }`}
       >
+        <GitBranch className="size-3.5" strokeWidth={2} />
         공유 여정 보기
         <ChevronDown
           className={`size-3.5 transition-transform ${journeyOpen ? "rotate-180" : ""}`}
           strokeWidth={2}
         />
       </button>
-      {journeyOpen
-        ? (() => {
-            // 톤 클래스 3종 — light/다크 공용(가독·프리티어 정합용 지역 상수).
-            const jMuted = `text-[11px] font-medium tracking-ko ${light ? "text-text-subtle" : "text-white/50"}`;
-            const jStrong = `text-[12px] font-semibold tracking-ko ${light ? "text-text-strong" : "text-white/90"}`;
-            const jBadge = `rounded-lg px-1.5 text-[10px] font-semibold tracking-ko ${light ? "bg-surface text-text-muted" : "bg-white/15 text-white/70"}`;
-            const jNotice = `text-[10px] font-medium leading-relaxed tracking-ko ${light ? "text-text-subtle" : "text-white/45"}`;
-            const dotColor = (role: string) =>
-              role === "개척" ? "#2563EB" : role === "최고공헌" ? "#B45309" : "#94A3B8";
-            return (
-              <div className="mt-1 space-y-2 text-left" data-testid="share-journey">
-                {journeyLoading ? (
-                  <p className={jMuted}>여정을 불러오는 중…</p>
-                ) : journeyError ? (
-                  <p className={jMuted}>여정을 불러오지 못했어요</p>
-                ) : journeyRows &&
-                  journeyRows.length === 1 &&
-                  journeyRows[0].is_viewer &&
-                  journeyRows[0].role === "개척" ? (
-                  // SM-2-fix3 — 원점(발신자) 시점: 노드 1개=나·개척이면 빈약한 타임라인 대신
-                  //   개척 시점 문구로 전환(집계와의 시점 갭 보정). 타인 노드 미표시 =
-                  //   개인정보 설계 그대로 — RPC·그 외 케이스(수신자·다홉) 무변경.
-                  <>
-                    <p className={jStrong}>
-                      내가 개척한 드랍 · {journeyRows[0].spread_count}명에게 퍼졌어요
-                    </p>
-                    <p className={jMuted}>
-                      이 카드로부터 {journeyRows[0].spread_count}갈래로 퍼져나갔어요
-                    </p>
-                    <p className={jNotice}>
-                      다른 참여자는 개인정보 보호로 익명 표시 · 기여도만 집계
-                    </p>
-                  </>
-                ) : journeyRows && journeyRows.length > 0 ? (
-                  <>
-                    {/* 확산 집계 — '퍼졌어요' 표기('모집' 계열 금지). */}
-                    <p className={jStrong}>
-                      이 드랍은 지금까지 {journeyRows[0].spread_count}명에게 퍼졌어요
-                    </p>
-                    <ol className="space-y-1.5">
-                      {journeyRows.flatMap((n) => {
-                        const items = [
-                          <li key={n.position} className="flex items-center gap-2">
-                            <span
-                              className="size-1.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: dotColor(n.role) }}
-                            />
-                            <span className={jStrong}>{n.is_viewer ? "나" : n.masked_name}</span>
-                            <span className={jBadge}>{n.role}</span>
-                          </li>,
-                        ];
-                        if (n.has_conversion) {
-                          // [보정1] 구매·수령 신원 절대 미표시 — 클라 생성 익명 노드(플래그 기반).
-                          items.push(
-                            <li key={`${n.position}-buyer`} className="flex items-center gap-2">
-                              <span className="size-1.5 shrink-0 rounded-full bg-[#0F172A]" />
-                              <span className={jStrong}>구매자</span>
-                              <span className={jBadge}>구매 성사</span>
-                            </li>,
-                          );
-                        }
-                        return items;
-                      })}
-                    </ol>
-                    <p className={jNotice}>
-                      다른 참여자는 개인정보 보호로 익명 표시 · 기여도만 집계
-                    </p>
-                  </>
-                ) : (
-                  <p className={jMuted}>아직 공유 여정이 없어요</p>
-                )}
-              </div>
-            );
-          })()
-        : null}
+      {journeyOpen ? (
+        <ShareJourneyTimeline
+          light={light}
+          loading={journeyLoading}
+          error={journeyError}
+          rows={journeyRows}
+        />
+      ) : null}
     </div>
   );
   const shareFooter = renderShareFooter(isLightCard);

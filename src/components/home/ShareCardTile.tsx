@@ -1,6 +1,9 @@
-import { Play, Send, Image as ImageIcon, Diamond, Package, User } from "lucide-react";
+import { useState } from "react";
+import { Play, Send, Image as ImageIcon, Diamond, Package, User, ChevronRight } from "lucide-react";
 import type { DropFeedItem } from "@/components/home-page";
 import { useCountdown } from "@/hooks/use-countdown";
+// SM-4 — 확산 필 탭 → 그 자리 바텀시트(무Radix 자체 구현·타일 자체 호스팅 = 피드 표면 0터치).
+import { ShareJourneySheet } from "@/components/share-journey";
 
 /**
  * ShareCardTile — V4 카드(정사각 썸네일 + 솔리드 정보영역 + 슬레이트 + 도트칩 + 섀도).
@@ -119,10 +122,17 @@ export function StockMeta({ remaining }: { remaining: number }) {
 
 // SM-3 — 확산 컴팩트 필(1-A 보정2 shareCount 렌더 금지 해제분). 익명 아바타 스택(제네릭
 //   실루엣 최대 3 — 이니셜·실명·이미지 0) + "N명 확산"("모집" 계열 금지). 재고 뱃지 동일
-//   계열(rounded·px-1.5·py-0.5·text-[10px]) · 모션 0 · 탭 동선 없음(타일 onClick=/d 가 담당).
-function SpreadPill({ count }: { count: number }) {
+//   계열(rounded·px-1.5·py-0.5·text-[10px]) · 모션 0.
+//   SM-4 — 탭 동선 신설: 필 탭 = 그 자리 여정 바텀시트(카드 본체 탭 /d 는 그대로).
+//   [㉮] 정적 셰브론 1자(size-3 = 아바타 원과 동일 → 필 높이 무변경) · 모션 0 · 마스킹 무변경.
+function SpreadPill({ count, onOpen }: { count: number; onOpen: (e: React.MouseEvent) => void }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded border border-[#E8EDF3] bg-[#F8FAFC] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[#64748B]">
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`${count}명 확산 — 공유 여정 보기`}
+      className="inline-flex shrink-0 items-center gap-1 rounded border border-[#E8EDF3] bg-[#F8FAFC] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[#64748B]"
+    >
       <span className="flex -space-x-1">
         {Array.from({ length: Math.min(3, count) }).map((_, i) => (
           <span
@@ -134,7 +144,8 @@ function SpreadPill({ count }: { count: number }) {
         ))}
       </span>
       {count}명 확산
-    </span>
+      <ChevronRight className="size-3 text-[#94A3B8]" strokeWidth={2} />
+    </button>
   );
 }
 
@@ -179,6 +190,8 @@ export function ShareCardTile({
   const isVideo = drop.videoDurationSec > 0;
   const chip = purposeMeta(purpose);
   const hasThumb = Boolean(drop.videoThumbnailUrl);
+  // SM-4 — 여정 시트 개폐. 시트는 닫혀도 마운트 유지(open=false 는 null 렌더) → rows 캐시 보존.
+  const [journeyOpen, setJourneyOpen] = useState(false);
 
   return (
     <article
@@ -257,8 +270,17 @@ export function ShareCardTile({
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               {dropyReward != null ? <DropyBadge amount={dropyReward} /> : null}
-              {/* SM-3 — 확산 필: 재고 뱃지 인접 메타 영역(0/미주입 = 미렌더). */}
-              {(shareCount ?? 0) > 0 ? <SpreadPill count={shareCount as number} /> : null}
+              {/* SM-3 — 확산 필: 재고 뱃지 인접 메타 영역(0/미주입 = 미렌더).
+                  SM-4 — 필 탭 = 여정 시트(stopPropagation — 타일 onClick=/d 오발화 차단). */}
+              {(shareCount ?? 0) > 0 ? (
+                <SpreadPill
+                  count={shareCount as number}
+                  onOpen={(e) => {
+                    e.stopPropagation();
+                    setJourneyOpen(true);
+                  }}
+                />
+              ) : null}
               {remainingStock != null ? <StockMeta remaining={remainingStock} /> : null}
             </div>
           </div>
@@ -272,6 +294,16 @@ export function ShareCardTile({
           {drop.title}
         </div>
       </div>
+
+      {/* SM-4 — 여정 바텀시트(포털 → body). 확산 필 있을 때만 배선. 시트 내부 클릭은
+          share-journey 루트 stopPropagation 이 타일 onClick 버블을 차단. */}
+      {(shareCount ?? 0) > 0 ? (
+        <ShareJourneySheet
+          open={journeyOpen}
+          onClose={() => setJourneyOpen(false)}
+          shareUuid={drop.shareUuid}
+        />
+      ) : null}
     </article>
   );
 }
