@@ -82,7 +82,7 @@ type NavTab = {
   id: NavId;
   label: string;
   Icon: (p: { active: boolean }) => React.JSX.Element;
-  to?: "/" | "/explore" | "/studio" | "/me";
+  to?: "/" | "/explore" | "/studio-build" | "/me";
   match: (pathname: string) => boolean;
   placeholder?: string; // 라우트 미존재 시 toast 메시지
 };
@@ -106,7 +106,9 @@ const TABS: NavTab[] = [
     id: "studio",
     label: "스튜디오",
     Icon: StudioIcon,
-    to: "/studio",
+    // P6-1(형님 확정 A) — 제작 진입점 단일화: 탭 → studio-build 직결.
+    //   match 는 startsWith("/studio") 유지 — /studio(리다이렉트 잔류)·/studio-build 모두 활성.
+    to: "/studio-build",
     match: (p) => p.startsWith("/studio"),
   },
   {

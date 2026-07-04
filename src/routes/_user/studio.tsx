@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   Video,
@@ -29,6 +29,12 @@ type StudioLoaderData = { isBusiness: boolean; myRewards: number };
 
 export const Route = createFileRoute("/_user/studio")({
   head: () => ({ meta: [{ title: "스튜디오 — LinkDrop" }] }),
+  // P6-1(형님 확정 A) — 전면 대체: /studio 는 studio-build 리다이렉트만 잔류(북마크·딥링크 보호).
+  //   아래 셸 UI(코치·도구 섹션·loader)는 P6-2 이식 재료로 보존 — 삭제 금지(유실 방지).
+  //   비사업자 처리 변경 없음(P6-3 소관) — studio-build 쪽 현행 graceful 동작 그대로.
+  beforeLoad: () => {
+    throw redirect({ to: "/studio-build" });
+  },
   // 비즈니스(approved 파트너) 판별 — 쿠폰·예약/커머스 버튼 게이트용(home.tsx loader 패턴).
   //   데이터 조회만 — redirect throw 금지(버튼 깜빡임 방지 + 리다이렉트 루프 방지).
   loader: async (): Promise<StudioLoaderData> => {
