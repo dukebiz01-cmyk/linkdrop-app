@@ -4,7 +4,7 @@
 //     컴포넌트는 router 훅 0. onNavigate 는 향후 임베드 호스트용 예약 옵션 prop.
 //   (c) 저장은 onSubmit(payload) props 주입 — /api/drops insert 로직은 라우트가 그대로 소유.
 //   (d) getSupabase 는 lib(비-라우터)라 컴포넌트 내부 유지(KAMIS 조회·get-price-band·업로드·세션).
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import {
   ImagePlus,
@@ -42,6 +42,29 @@ const CATEGORY_OPTIONS: Array<{ key: ProductCategory; label: string; Icon: typeo
 // KAMIS 품목 분류 — 라이브 DB kamis_categories(6행)/kamis_items(130행). types.ts 미반영이라 캐스트.
 type KamisCategory = { category_code: string; category_name: string };
 type KamisItem = { item_code: string; item_name: string };
+// CAT-2 — 전 부류 병합 목록 행(검색용). 기존 2단 로딩 타입(KamisItem)은 폴백이 그대로 사용.
+type KamisItemFull = KamisItem & { category_code: string };
+
+// CAT-2 검색 정규화 — 공백·괄호문자 제거 + 소문자. §0: 추천(fuzzy)용일 뿐,
+//   확정은 후보 탭/Enter = 정확 item_code 선택만. 시세 조회는 확정 코드로만 나간다.
+function normalizeItemText(s: string): string {
+  return s.toLowerCase().replace(/[\s()（）]/g, "");
+}
+
+// CAT-2 동의어 사전 — 부분일치로 못 잡는 이명·사투리·품종·표기변형만 등록(확장 가능 구조).
+//   값 = kamis_items.item_name 정확값. 부분일치로 잡히는 파생어(찰옥수수·애호박 등)는 등록 불필요.
+const ITEM_SYNONYMS: Record<string, string> = {
+  "강냉이": "옥수수",
+  "스위트콘": "옥수수",
+  "고구마순": "고구마",
+  "무우": "무",
+  "동태": "명태",
+  "코다리": "명태",
+  "키위": "참다래",
+  "밀감": "감귤",
+  "부사": "사과",
+  "샤인머스캣": "샤인머스켓",
+};
 
 /** onSubmit 에 넘기는 저장 payload — 기존 /api/drops body 필드 그대로(신규 필드 추가 금지). */
 export interface ProductRegisterPayload {
@@ -133,6 +156,11 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
   const [kamisItemCode, setKamisItemCode] = useState("");
   const [kamisCategories, setKamisCategories] = useState<KamisCategory[]>([]);
   const [kamisItems, setKamisItems] = useState<KamisItem[]>([]);
+  // CAT-2 품목 자동 매칭 — 전 부류 병합 목록(1회 로드) + 검색어/드롭다운/키보드 상태.
+  const [allKamisItems, setAllKamisItems] = useState<KamisItemFull[]>([]);
+  const [itemQuery, setItemQuery] = useState("");
+  const [itemSearchOpen, setItemSearchOpen] = useState(false);
+  const [itemActiveIdx, setItemActiveIdx] = useState(0);
   // STEP4-A — KAMIS 소매 시세 어드바이저(농가 가격 참고용). 품목 선택 시 get-price-band 조회.
   const [priceBand, setPriceBand] = useState<PriceBandResult | null>(null);
   const [priceBandLoading, setPriceBandLoading] = useState(false);
@@ -182,6 +210,22 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
     };
   }, []);
 
+  // CAT-2 — 전 부류 품목 1회 병합 로드(약 130행, 클라 자체 필터로 충분 — 라이브러리 금지).
+  //   실패해도 아래 기존 2단 로딩(직접 찾기 폴백)이 살아 있어 무해.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { data } = await getSupabase()
+        .from("kamis_items" as never)
+        .select("item_code, item_name, category_code")
+        .order("sort_order");
+      if (!cancelled) setAllKamisItems((data as unknown as KamisItemFull[] | null) ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // 부류 선택 시 해당 품목 로드 (register.tsx 149-166 패턴). 부류 비면 품목 비움.
   useEffect(() => {
     if (!kamisCategoryCode) {
@@ -201,6 +245,71 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
       cancelled = true;
     };
   }, [kamisCategoryCode]);
+
+  // CAT-2 부류명 표시 — 후보 드롭 "품목명 · 부류명" 용.
+  const categoryNameOf = (code: string) =>
+    kamisCategories.find((c) => c.category_code === code)?.category_name ?? "";
+
+  // CAT-2 후보 매칭 — 정확 일치 > 동의어 > 품목명이 검색어 포함 > 검색어가 품목명 포함(2자+).
+  //   단문자 품목(무·파·갓 등)의 역포함 노이즈는 2자+ 가드로 차단. 최대 7건.
+  const itemCandidates = useMemo(() => {
+    const q = normalizeItemText(itemQuery);
+    if (!q || allKamisItems.length === 0) return [];
+    const synTargets = new Set<string>();
+    for (const [key, target] of Object.entries(ITEM_SYNONYMS)) {
+      if (q.includes(normalizeItemText(key))) synTargets.add(normalizeItemText(target));
+    }
+    const scored: Array<{ it: KamisItemFull; score: number }> = [];
+    for (const it of allKamisItems) {
+      const n = normalizeItemText(it.item_name);
+      let score = -1;
+      if (n === q) score = 0;
+      else if (synTargets.has(n)) score = 1;
+      else if (n.includes(q)) score = 2 + n.length;
+      else if (n.length >= 2 && q.includes(n)) score = 100 + (q.length - n.length);
+      if (score >= 0) scored.push({ it, score });
+    }
+    scored.sort((a, b) => a.score - b.score);
+    return scored.slice(0, 7).map((s) => s.it);
+  }, [itemQuery, allKamisItems]);
+
+  // CAT-2 상품명 선제 제안 — 상품명에서 품목이 읽히면 칩 1개 제안. 자동 확정 금지(§0:
+  //   확정은 사용자의 [적용] 탭). 가장 긴 품목명 일치 우선(방울토마토 > 토마토), 폴백 동의어.
+  const nameSuggestion = useMemo(() => {
+    const q = normalizeItemText(name);
+    if (!q || allKamisItems.length === 0) return null;
+    let best: KamisItemFull | null = null;
+    let bestLen = 0;
+    for (const it of allKamisItems) {
+      const n = normalizeItemText(it.item_name);
+      if (n.length >= 2 && q.includes(n) && n.length > bestLen) {
+        best = it;
+        bestLen = n.length;
+      }
+    }
+    if (!best) {
+      for (const [key, target] of Object.entries(ITEM_SYNONYMS)) {
+        if (q.includes(normalizeItemText(key))) {
+          best =
+            allKamisItems.find(
+              (it) => normalizeItemText(it.item_name) === normalizeItemText(target),
+            ) ?? null;
+          if (best) break;
+        }
+      }
+    }
+    return best && best.item_code !== kamisItemCode ? best : null;
+  }, [name, allKamisItems, kamisItemCode]);
+
+  // CAT-2 후보 확정 — 검색 드롭·제안 칩 공용. 정확 item_code+category_code 동시 확정(§0)
+  //   → 기존 시세 파이프라인(아래 effect)이 확정 코드로만 발화.
+  function pickKamisItem(it: KamisItemFull) {
+    setKamisCategoryCode(it.category_code);
+    setKamisItemCode(it.item_code);
+    setItemQuery(it.item_name);
+    setItemSearchOpen(false);
+    setItemActiveIdx(0);
+  }
 
   // 품목 선택 시 KAMIS 소매 시세 조회 (미선택이면 호출 안 함 — 불필요 호출 방지).
   //   detach 주의: supabase.functions.invoke 를 메서드로 직접 호출(this 유지).
@@ -514,44 +623,148 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
               {/* §0 — 손님 카드 시세 비교 노출은 영구 금지(표시광고법). 생산자 참고용
                   PriceBandAdvisor(아래 품목 선택 시)만 유지. '손님 노출 토글'은 제거. */}
 
-              {/* 품목 분류 — KAMIS 부류→품목 2단(선택). 시세·제철 연동 기반. 미선택 허용. */}
+              {/* 품목 분류 — CAT-2: 검색 자동 매칭이 기본, 부류→품목 2단은 "직접 찾기" 폴백.
+                  선택 사항(미선택 허용). 시세·제철 연동 기반. */}
               <div className="space-y-2 pt-1">
                 <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
                   <Tags className="size-3.5" strokeWidth={2} />
                   품목 분류{" "}
                   <span className="font-medium text-text-subtle">(선택 · 시세·제철 연동용)</span>
                 </span>
-                <select
-                  aria-label="부류 선택"
-                  value={kamisCategoryCode}
-                  onChange={(e) => {
-                    setKamisCategoryCode(e.target.value);
-                    setKamisItemCode(""); // 부류 바뀌면 품목 선택 초기화(stale 방지)
-                  }}
-                  className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
-                >
-                  <option value="">부류 선택</option>
-                  {kamisCategories.map((c) => (
-                    <option key={c.category_code} value={c.category_code}>
-                      {c.category_name}
-                    </option>
-                  ))}
-                </select>
-                {kamisCategoryCode && kamisItems.length > 0 ? (
-                  <select
-                    aria-label="품목 선택"
-                    value={kamisItemCode}
-                    onChange={(e) => setKamisItemCode(e.target.value)}
-                    className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
-                  >
-                    <option value="">품목 선택</option>
-                    {kamisItems.map((it) => (
-                      <option key={it.item_code} value={it.item_code}>
-                        {it.item_name}
-                      </option>
-                    ))}
-                  </select>
+
+                {/* CAT-2 품목 검색 — fuzzy 추천, 확정은 후보 선택(정확 item_code)만(§0). */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    role="combobox"
+                    aria-label="품목 검색"
+                    aria-expanded={itemSearchOpen && itemCandidates.length > 0}
+                    aria-controls="pd-item-listbox"
+                    value={itemQuery}
+                    onChange={(e) => {
+                      setItemQuery(e.target.value);
+                      setItemSearchOpen(true);
+                      setItemActiveIdx(0);
+                    }}
+                    onFocus={() => {
+                      if (itemQuery.trim()) setItemSearchOpen(true);
+                    }}
+                    onBlur={() => setItemSearchOpen(false)}
+                    onKeyDown={(e) => {
+                      if (!itemSearchOpen || itemCandidates.length === 0) {
+                        if (e.key === "Enter") e.preventDefault(); // 검색 중 실수 제출 방지
+                        return;
+                      }
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setItemActiveIdx((i) => Math.min(i + 1, itemCandidates.length - 1));
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setItemActiveIdx((i) => Math.max(i - 1, 0));
+                      } else if (e.key === "Enter") {
+                        e.preventDefault();
+                        pickKamisItem(itemCandidates[itemActiveIdx]);
+                      } else if (e.key === "Escape") {
+                        setItemSearchOpen(false);
+                      }
+                    }}
+                    placeholder="품목 이름을 입력하세요 (예: 옥수수)"
+                    className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                  />
+                  {itemSearchOpen && itemCandidates.length > 0 ? (
+                    <ul
+                      id="pd-item-listbox"
+                      role="listbox"
+                      aria-label="품목 후보"
+                      className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-border bg-bg shadow-soft"
+                    >
+                      {itemCandidates.map((c, i) => (
+                        <li key={c.item_code} role="option" aria-selected={i === itemActiveIdx}>
+                          <button
+                            type="button"
+                            // onMouseDown + preventDefault — input blur 보다 먼저 확정(클릭 유실 방지).
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              pickKamisItem(c);
+                            }}
+                            onMouseEnter={() => setItemActiveIdx(i)}
+                            className={`flex w-full min-h-[44px] items-center px-3 text-sm tracking-ko ${
+                              i === itemActiveIdx ? "bg-surface" : "bg-bg"
+                            }`}
+                          >
+                            <span className="font-semibold text-text-strong">{c.item_name}</span>
+                            <span className="ml-1 text-[11px] font-medium text-text-subtle">
+                              · {categoryNameOf(c.category_code)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+
+                {/* CAT-2 상품명 선제 제안 — 자동 확정 금지(§0): [적용] 탭이 유일한 확정 행위. */}
+                {nameSuggestion ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
+                    <span className="text-[12px] font-medium tracking-ko text-text-muted">
+                      혹시 &lsquo;{nameSuggestion.item_name}&rsquo;인가요?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => pickKamisItem(nameSuggestion)}
+                      className="shrink-0 min-h-[44px] min-w-[44px] rounded-lg px-3 text-xs font-bold tracking-ko text-accent hover:bg-bg"
+                    >
+                      적용
+                    </button>
+                  </div>
                 ) : null}
+
+                {/* CAT-2 직접 찾기 폴백 — 기존 부류→품목 2단 select 보존(자동 매칭 실패 탈출구).
+                    같은 state(kamisCategoryCode/kamisItemCode)를 쓰므로 검색 선택과 상호 동기. */}
+                <details>
+                  <summary className="flex min-h-[44px] cursor-pointer list-none items-center text-[12px] font-semibold tracking-ko text-text-muted hover:text-text-strong">
+                    직접 찾기 (부류 → 품목 선택)
+                  </summary>
+                  <div className="space-y-2 pt-1">
+                    <select
+                      aria-label="부류 선택"
+                      value={kamisCategoryCode}
+                      onChange={(e) => {
+                        setKamisCategoryCode(e.target.value);
+                        setKamisItemCode(""); // 부류 바뀌면 품목 선택 초기화(stale 방지)
+                        setItemQuery(""); // CAT-2 상호 동기 — 선택 해제 시 검색창 표시도 비움
+                      }}
+                      className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
+                    >
+                      <option value="">부류 선택</option>
+                      {kamisCategories.map((c) => (
+                        <option key={c.category_code} value={c.category_code}>
+                          {c.category_name}
+                        </option>
+                      ))}
+                    </select>
+                    {kamisCategoryCode && kamisItems.length > 0 ? (
+                      <select
+                        aria-label="품목 선택"
+                        value={kamisItemCode}
+                        onChange={(e) => {
+                          setKamisItemCode(e.target.value);
+                          // CAT-2 상호 동기 — 폴백에서 고르면 검색창 표시도 품목명으로 일치.
+                          const picked = kamisItems.find((i) => i.item_code === e.target.value);
+                          setItemQuery(picked?.item_name ?? "");
+                        }}
+                        className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
+                      >
+                        <option value="">품목 선택</option>
+                        {kamisItems.map((it) => (
+                          <option key={it.item_code} value={it.item_code}>
+                            {it.item_name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </div>
+                </details>
 
                 {/* P5b 판매 구성(단위 헌법) — 포장형태×입수×총중량 → 개당 중량 자동 표시.
                     시세 환산 전용(per_unit_weight_g 전달) — 저장 payload 미포함. */}
