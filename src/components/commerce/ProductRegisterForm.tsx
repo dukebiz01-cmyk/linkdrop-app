@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Sprout,
   Factory,
+  Box,
   CalendarDays,
   Hash,
   Tags,
@@ -27,6 +28,16 @@ import { PriceBandAdvisor, type PriceBandResult } from "@/components/commerce/Pr
 
 const MAX_WIDTH = 1200;
 const BUCKET = "product-images";
+
+// CAT-1 카테고리 3분기 — 상품정보제공고시(전자상거래법 13조④) 유형 분기의 최소선.
+//   fresh=신선식품(KAMIS 시세·구성), processed=가공식품(내용량·소비기한), goods=공산품·잡화(고지만).
+export type ProductCategory = "fresh" | "processed" | "goods";
+
+const CATEGORY_OPTIONS: Array<{ key: ProductCategory; label: string; Icon: typeof Sprout }> = [
+  { key: "fresh", label: "신선식품", Icon: Sprout },
+  { key: "processed", label: "가공식품", Icon: Factory },
+  { key: "goods", label: "공산품·잡화", Icon: Box },
+];
 
 // KAMIS 품목 분류 — 라이브 DB kamis_categories(6행)/kamis_items(130행). types.ts 미반영이라 캐스트.
 type KamisCategory = { category_code: string; category_name: string };
@@ -103,10 +114,20 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
-  // 신선 원물(농가 선주문) — 기본 신선. 가공 선택 시 신선 입력칸 숨김 + is_fresh=false.
-  const [isFresh, setIsFresh] = useState(true);
+  // CAT-1 카테고리 3분기 — 기본 신선. 하위호환: 기존 is_fresh 저장값은 true→fresh / false→processed
+  //   에 대응(goods 는 신규 — 구 데이터엔 없음). payload 의 is_fresh 는 category==="fresh" 파생 유지.
+  const [category, setCategory] = useState<ProductCategory>("fresh");
+  const isFresh = category === "fresh";
   const [harvestDate, setHarvestDate] = useState("");
   const [stockLimit, setStockLimit] = useState("");
+  // CAT-1 가공 — 내용량(숫자+단위 g/ml/개입)·소비기한. 내용량은 폼 상태만(저장은 후속 슬라이스),
+  //   소비기한만 product 블록 jsonb(expiry_date)로 저장.
+  const [contentAmount, setContentAmount] = useState("");
+  const [contentUnit, setContentUnit] = useState("g");
+  const [expiryDate, setExpiryDate] = useState("");
+  // CAT-1 고지 — 원산지(전 카테고리 필수, 상품정보제공고시). 빈칸 제출 시 인라인 안내 + 차단.
+  const [origin, setOrigin] = useState("");
+  const [originError, setOriginError] = useState(false);
   // KAMIS 품목 2단(부류→품목) — 시세(STEP4)·제철(STEP5) 연동 기반. 선택 사항(미선택 허용).
   const [kamisCategoryCode, setKamisCategoryCode] = useState("");
   const [kamisItemCode, setKamisItemCode] = useState("");
@@ -185,8 +206,10 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
   //   detach 주의: supabase.functions.invoke 를 메서드로 직접 호출(this 유지).
   //   P5b — 판매 구성(per_unit_weight_g/unit_count) 동반 전달 + 구성 타이핑 연타 방지 debounce(350ms).
   useEffect(() => {
-    if (!kamisItemCode || !kamisCategoryCode) {
+    // CAT-1 — 신선 외 카테고리는 시세 조회·표시 자체를 중단(어설픈 표시 금지, §0).
+    if (!isFresh || !kamisItemCode || !kamisCategoryCode) {
       setPriceBand(null);
+      setPriceBandLoading(false);
       return;
     }
     let cancelled = false;
@@ -225,7 +248,7 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [kamisItemCode, kamisCategoryCode, perUnitWeightG, unitCountForQuery]);
+  }, [isFresh, kamisItemCode, kamisCategoryCode, perUnitWeightG, unitCountForQuery]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -281,6 +304,12 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
       toast.error("가격을 올바르게 입력해 주세요.");
       return;
     }
+    // CAT-1 — 원산지 필수(상품정보제공고시). 빈칸이면 인라인 안내 + 제출 차단.
+    const originTrimmed = origin.trim();
+    if (!originTrimmed) {
+      setOriginError(true);
+      return;
+    }
     const productName = name.trim() || null;
     setSubmitting(true);
     try {
@@ -294,7 +323,8 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
         // 나-1 — 카피 동봉(서버가 메인 product 블록 block_data 에 머지). 빈 값은 서버에서 생략.
         headline: copy.headline.trim(),
         selling_points: copy.sellingPoints.map((s) => s.trim()).filter(Boolean),
-        // 신선 원물 — 가공이면 is_fresh=false + 나머지 생략(null). 신선이면 예정일·수량·시세 플래그.
+        // 신선 원물 — CAT-1: is_fresh = (category==="fresh") 파생 유지(하위호환).
+        //   processed/goods 는 false + 신선 키 생략(null) — 기존 가공 저장값과 동일 형태.
         is_fresh: isFresh,
         harvest_date: isFresh && harvestDate ? harvestDate : null,
         stock_limit: isFresh && Number(stockLimit) >= 1 ? Math.floor(Number(stockLimit)) : null,
@@ -305,7 +335,15 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
         blocks: [
           {
             block_kind: "product",
-            block_data: { name: productName, price_krw: priceNum },
+            block_data: {
+              name: productName,
+              price_krw: priceNum,
+              // CAT-1 — 카테고리·고지(상품정보제공고시 최소선). jsonb 키 추가만(스키마 무변경).
+              //   서버(/api/drops)는 block_data 를 스프레드 보존 머지하므로 그대로 저장된다.
+              category,
+              origin: originTrimmed,
+              ...(category === "processed" && expiryDate ? { expiry_date: expiryDate } : {}),
+            },
             position: 0,
           },
         ],
@@ -413,38 +451,29 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
           />
         </div>
 
-        {/* 신선/가공 — 농가 선주문 속성. 기본 신선. 가공이면 신선 입력칸 숨김(is_fresh=false). */}
+        {/* CAT-1 카테고리 3분기 — 신선식품/가공식품/공산품·잡화(상품정보제공고시 유형 분기).
+            fresh=KAMIS·구성·시세(P5d 그대로) / processed=내용량·소비기한 / goods=고지만. */}
         <div className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
           <span className="block text-xs font-semibold tracking-ko text-text-strong">
             상품 유형
           </span>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setIsFresh(true)}
-              aria-pressed={isFresh}
-              className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl border text-sm font-semibold tracking-ko transition-colors ${
-                isFresh
-                  ? "border-action bg-bg text-text-strong"
-                  : "border-border bg-bg text-text-muted hover:border-text-muted"
-              }`}
-            >
-              <Sprout className="size-4" strokeWidth={2} />
-              신선 원물
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsFresh(false)}
-              aria-pressed={!isFresh}
-              className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl border text-sm font-semibold tracking-ko transition-colors ${
-                !isFresh
-                  ? "border-action bg-bg text-text-strong"
-                  : "border-border bg-bg text-text-muted hover:border-text-muted"
-              }`}
-            >
-              <Factory className="size-4" strokeWidth={2} />
-              가공식품
-            </button>
+          <div className="grid grid-cols-3 gap-2">
+            {CATEGORY_OPTIONS.map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setCategory(key)}
+                aria-pressed={category === key}
+                className={`flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-xl border text-xs font-semibold tracking-ko transition-colors ${
+                  category === key
+                    ? "border-action bg-bg text-text-strong"
+                    : "border-border bg-bg text-text-muted hover:border-text-muted"
+                }`}
+              >
+                <Icon className="size-4" strokeWidth={2} />
+                {label}
+              </button>
+            ))}
           </div>
 
           {isFresh ? (
@@ -599,12 +628,108 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
                 ) : null}
               </div>
             </div>
-          ) : (
+          ) : null}
+
+          {/* CAT-1 processed — 내용량(숫자+단위 g/ml/개입) + 소비기한. KAMIS·구성 4칸 숨김,
+              시세 어드바이저 미렌더(가공 시세 소스는 후속 슬라이스 — 어설픈 표시 금지). */}
+          {category === "processed" ? (
+            <div className="space-y-3 pt-1">
+              <label htmlFor="pd-content" className="block">
+                <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
+                  <Hash className="size-3.5" strokeWidth={2} />
+                  내용량 <span className="font-medium text-text-subtle">(선택)</span>
+                </span>
+                <div className="mt-2 grid grid-cols-[1fr_96px] gap-2">
+                  <input
+                    id="pd-content"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={contentAmount}
+                    onChange={(e) => setContentAmount(e.target.value)}
+                    placeholder="예: 500"
+                    className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                  />
+                  <select
+                    aria-label="내용량 단위"
+                    value={contentUnit}
+                    onChange={(e) => setContentUnit(e.target.value)}
+                    className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
+                  >
+                    {["g", "ml", "개입"].map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label htmlFor="pd-expiry" className="block">
+                <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
+                  <CalendarDays className="size-3.5" strokeWidth={2} />
+                  소비기한·유통기한 <span className="font-medium text-text-subtle">(선택)</span>
+                </span>
+                <input
+                  id="pd-expiry"
+                  type="date"
+                  value={expiryDate}
+                  onChange={(e) => setExpiryDate(e.target.value)}
+                  className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
+                />
+              </label>
+            </div>
+          ) : null}
+
+          {/* CAT-1 goods — KAMIS·구성·시세 전부 숨김(§0: 브랜드 상품 비교는 정직하게 미제공). */}
+          {category === "goods" ? (
             <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
-              가공식품은 사진·가격·이름·홍보 문구만 등록해요. 유통기한·식품표시는 다음 단계에서
-              지원합니다.
+              공산품·잡화는 시세 비교를 제공하지 않아요. 사진·가격·홍보 문구와 아래 고지만
+              등록합니다.
             </p>
-          )}
+          ) : null}
+
+          {/* CAT-1 고지 — 원산지(전 카테고리 노출·필수, 상품정보제공고시 최소선).
+              goods 는 "상세페이지 참조" 프리셋 버튼 제공. 빈칸 제출 시 인라인 안내 + 차단. */}
+          <label htmlFor="pd-origin" className="block pt-1">
+            <span className="text-xs font-semibold tracking-ko text-text-strong">
+              원산지{" "}
+              <span className="font-medium text-text-subtle">(필수 · 상품정보제공고시)</span>
+            </span>
+            <div className="mt-2 flex gap-2">
+              <input
+                id="pd-origin"
+                type="text"
+                value={origin}
+                onChange={(e) => {
+                  setOrigin(e.target.value);
+                  if (originError) setOriginError(false);
+                }}
+                placeholder="예: 국산(충북 괴산)"
+                maxLength={80}
+                className={`flex-1 min-w-0 min-h-[44px] rounded-xl border bg-bg px-3 text-sm text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none ${
+                  originError ? "border-[#EF4444]" : "border-border"
+                }`}
+              />
+              {category === "goods" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrigin("상세페이지 참조");
+                    setOriginError(false);
+                  }}
+                  className="shrink-0 min-h-[44px] rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-muted hover:border-text-muted"
+                >
+                  상세페이지 참조
+                </button>
+              ) : null}
+            </div>
+            {originError ? (
+              <p className="mt-2 text-[11px] font-medium tracking-ko text-[#EF4444]">
+                원산지를 입력해 주세요 — 상품정보제공고시 필수 항목이에요.
+              </p>
+            ) : null}
+          </label>
         </div>
 
         {/* 가격 (필수) — P1.5: 품목→시세 확인 후 입력(순서 유도, 강제 아님). */}
