@@ -55,11 +55,11 @@ export type ShareJourneyNode = {
   emphasis?: boolean;
 };
 
-// ── Phase 1-A 하드락 ──
+// ── Phase 1-A 하드락 (fix3 = L7 최종판) ──
 //   L1/L3 — 기준은 expiresAt 하나: 리셋·재계산 금지(새로고침 동일값. 계산은 use-countdown 훅 소관).
 //   L2 — 만료 후 연장 렌더 금지: "마감" 고정.
 //   L6 — serverNow 우선(훅이 offset 보정. 주입 배선은 1-C).
-//   L7 — 상시 빨강·강펄스 금지: urgent(≤24h) 앰버가 최종 구간.
+//   L7 최종판 — 빨강=임박 1h 한정 · 펄스 금지 · 1초 틱 · 진짜 expiresAt만(3단계 톤: 다크→앰버→빨강).
 //   L4 — remainingStock 은 공급값 표시만(가공·연출 감산 금지).
 
 // 타이머 배지 — 썸네일 우하단(재생시간 배지 계열 시각). D-N HH:MM:SS(N>0) / HH:MM:SS(당일).
@@ -77,14 +77,10 @@ export function TimerBadge({ expiresAt, serverNow }: { expiresAt: string; server
   }
   return (
     <span
-      // fix2 색상 3단계 — 평상(>24h) 다크 글래스 / 주의(≤24h) 앰버 / 임박(≤1h) 앰버 심화+틴트.
-      //   L7 — 빨강·강펄스 금지(앰버 계열이 최종 구간). tabular-nums = 0.1초 자리 흔들림 방지.
+      // fix3 색상 3단계(L7 최종판) — 평상(>24h) 다크 글래스 / 주의(≤24h) 앰버 /
+      //   임박(≤1h) 빨강(이 구간 한정). 펄스·애니메이션 금지. tabular-nums = 자리 흔들림 방지.
       className={`absolute bottom-2 right-2 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white ${
-        cd.imminent
-          ? "bg-[#92400E]/95 ring-1 ring-inset ring-[#F59E0B]/40"
-          : cd.urgent
-            ? "bg-[#B45309]/90"
-            : "bg-black/65"
+        cd.imminent ? "bg-[#DC2626]/90" : cd.urgent ? "bg-[#B45309]/90" : "bg-black/65"
       }`}
     >
       {cd.days > 0 ? `D-${cd.days} ${cd.hms}` : cd.hms}
