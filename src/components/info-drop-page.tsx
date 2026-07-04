@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { startKakaoLogin } from "@/lib/oauth-kakao";
 import {
@@ -453,7 +453,14 @@ function ReservationCalendarClient(props: {
 //   (혜택·이벤트 합성 섹션 + 캘린더 + 예약하기 스택은 본문 showReservationCalendar 블록 참고.)
 
 // WHY: 무로그인 lead 수집 — submitConsultationLead RPC는 Step 5 이후 연동.
-function ConsultationLeadForm({ partnerName }: { partnerName: string }) {
+// S17(P4) — footerSlot: 손님 공유 푸터를 폼 컨테이너 내부 최하단에 인입(ProductWidget 동일 패턴).
+function ConsultationLeadForm({
+  partnerName,
+  footerSlot,
+}: {
+  partnerName: string;
+  footerSlot?: ReactNode;
+}) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
@@ -481,6 +488,8 @@ function ConsultationLeadForm({ partnerName }: { partnerName: string }) {
         <p className="text-sm font-semibold tracking-ko text-intent-success">
           상담 신청이 접수됐어요. 빠르게 연락드릴게요.
         </p>
+        {/* S17(P4) — 접수 완료 후에도 공유 푸터는 컨테이너 내부 최하단 유지. */}
+        {footerSlot}
       </section>
     );
   }
@@ -540,6 +549,9 @@ function ConsultationLeadForm({ partnerName }: { partnerName: string }) {
       >
         상담 신청하기
       </ActionButton>
+      {/* S17(P4) — 공유 푸터 인입: 폼 컨테이너(카드) 내부 최하단. 내부 버튼은 전부 type="button"
+          (a·button)이라 form submit 과 충돌 없음. */}
+      {footerSlot}
     </form>
   );
 }
@@ -860,6 +872,22 @@ export function InfoDropPage({
   //   sticky "쿠폰 받기"는 쿠폰 드롭(isCoupon)에서만. (주석상 "정보/구매/상담 드롭 = sticky 없음" 의도 강제.)
   const hasStickyBar = Boolean(funnelCoupon && onReserveAndClaim && !isCombined && isCoupon);
 
+  // S18-A(P4) — 카드 내부 "쿠폰 받기" CTA 가시성 관찰: 보이면(threshold 0.5) sticky 숨김, 벗어나면 복귀.
+  //   IO 미지원·스크립트 미실행·SSR = visible=false 유지 → sticky 항상 표시(현행 동작 폴백).
+  const inlineCouponCtaRef = useRef<HTMLDivElement | null>(null);
+  const [inlineCouponCtaVisible, setInlineCouponCtaVisible] = useState(false);
+  useEffect(() => {
+    if (!hasStickyBar) return;
+    const el = inlineCouponCtaRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => setInlineCouponCtaVisible(entries[0]?.isIntersecting ?? false),
+      { threshold: 0.5 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasStickyBar]);
+
   // 3b-1 — 예약/쿠폰 하단 블록 const 호이스팅(IIFE → 컴포넌트 스코프). 콘텐츠 0변화, 위치만.
   //   CardBody 주입(3b-3)이 쿠폰(L1030)·예약(L1076) 호출부에서 이 const 들을 참조하기 위함.
   //   IIFE 는 셸만 남겨 return JSX·순서·조건 그대로(아래 showReservationCalendar 블록).
@@ -1056,7 +1084,10 @@ export function InfoDropPage({
       </Accordion>
     ) : null;
 
-  const shareFooter = (
+  // S17(P4) — 단일 마크업을 light 파라미터 함수로: 기존 소비처(카드색 기반)는 shareFooter 그대로,
+  //   흰 카드 프레임 안 인입(purchase ProductWidget footerSlot·lead 폼)은 renderShareFooter(true)로
+  //   라이트 스타일 강제(navy 페이지 배경과 무관하게 카드 안은 흰 바탕). 마크업·핸들러 복제 0.
+  const renderShareFooter = (light: boolean) => (
     <div data-testid="share-footer">
       <div data-testid="share-block" className="mt-4 flex items-center gap-2">
         {/* S5b — 형님 확정 A: 푸터 4면 동일. 영상 무 카드는 Wand2=나도 만들기(스튜디오 진입, 캐처→드로퍼 루프). */}
@@ -1072,8 +1103,8 @@ export function InfoDropPage({
           rel="noopener noreferrer"
           aria-label={videoSourceUrl && !commerce?.selfUpload ? "이 영상으로 만들기" : "나도 만들기"}
           // C13 S4b — 라이트 카드는 목적색(accent) bg+흰글씨(스튜디오 MODE_ACCENT 미러). 다크 레거시는 기존 흰 버튼 보존.
-          className={`flex h-12 flex-1 items-center justify-center rounded-2xl shadow-[0_4px_14px_rgba(0,0,0,0.18)] ${isLightCard ? "text-white" : "bg-white text-[#0A0A0A]"}`}
-          style={isLightCard ? { backgroundColor: accent } : undefined}
+          className={`flex h-12 flex-1 items-center justify-center rounded-2xl shadow-[0_4px_14px_rgba(0,0,0,0.18)] ${light ? "text-white" : "bg-white text-[#0A0A0A]"}`}
+          style={light ? { backgroundColor: accent } : undefined}
         >
           <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
         </a>
@@ -1081,7 +1112,7 @@ export function InfoDropPage({
           type="button"
           onClick={handleCopy}
           aria-label="링크 복사"
-          className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${light ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
         >
           <Copy className="h-5 w-5" strokeWidth={2.25} />
         </button>
@@ -1089,23 +1120,24 @@ export function InfoDropPage({
           type="button"
           onClick={handleKakao}
           aria-label="친구에게 보내기"
-          className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${light ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
         >
           <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
         </button>
       </div>
-      <p className={`mt-3 text-center text-[10px] leading-relaxed ${isLightCard ? "text-text-subtle" : "text-white/45"}`}>
+      <p className={`mt-3 text-center text-[10px] leading-relaxed ${light ? "text-text-subtle" : "text-white/45"}`}>
         본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
       </p>
       <button
         type="button"
         onClick={() => setIsReportSheetOpen(true)}
-        className={`mt-2 mx-auto flex items-center gap-1 text-[11px] underline underline-offset-2 ${isLightCard ? "text-text-subtle" : "text-white/50"}`}
+        className={`mt-2 mx-auto flex items-center gap-1 text-[11px] underline underline-offset-2 ${light ? "text-text-subtle" : "text-white/50"}`}
       >
         문제 신고
       </button>
     </div>
   );
+  const shareFooter = renderShareFooter(isLightCard);
 
   return (
     <div
@@ -1277,7 +1309,29 @@ export function InfoDropPage({
                 local,
                 variant,
               } as unknown as InfoDropPageProps)}
-              couponBlock={benefitEventSection}
+              couponBlock={
+                // S18-A(P4) — 카드 내부 "쿠폰 받기" CTA 병행: sticky 와 동일 핸들러(onReserveAndClaim)
+                //   재사용(복제 로직 0)·동일 게이트(hasStickyBar — 교집합(isCombined) 인라인 경로 0터치).
+                //   ref div = IO 관찰 대상(보이면 sticky 숨김).
+                hasStickyBar ? (
+                  <div className="space-y-3">
+                    {benefitEventSection}
+                    <div ref={inlineCouponCtaRef}>
+                      <button
+                        type="button"
+                        data-testid="cta-coupon-inline"
+                        onClick={onReserveAndClaim}
+                        className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 text-base font-bold text-white"
+                        style={{ backgroundColor: accent }}
+                      >
+                        <span className="truncate">쿠폰 받기</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  benefitEventSection
+                )
+              }
               reservationBlock={
                 showCalendar ? (
                   <div className="space-y-3">
@@ -1481,6 +1535,9 @@ export function InfoDropPage({
               accent={accent}
               onPreorder={onPreorder}
               onSellerClick={() => handleCtaClick("seller")}
+              // S17(P4) — 공유 푸터를 카드 프레임 안 최하단으로 인입(페이지레벨 렌더 제거).
+              //   흰 카드 내부라 light 강제(페이지 navy 배경과 무관).
+              footerSlot={renderShareFooter(true)}
             />
           ) : (
             // commerce 없음(외부 스크랩·mock) → 기존 PurchaseCardBody = AiPriceComparisonCard 시세 fallback 보존.
@@ -1631,7 +1688,10 @@ export function InfoDropPage({
           </section>
         )}
 
-        {resolvedVariant === "lead" && <ConsultationLeadForm partnerName={safeLocal.name} />}
+        {resolvedVariant === "lead" && (
+          // S17(P4) — 푸터 인입: 폼(흰 계열 카드) 내부라 light 강제. 페이지레벨 lead 렌더는 제거됨.
+          <ConsultationLeadForm partnerName={safeLocal.name} footerSlot={renderShareFooter(true)} />
+        )}
 
         {/* 4. 목적별 CTA — info는 하단 푸터(링크·카톡)만. v7.2: 쿠폰은 본문 CTAS
             비우고 sticky 단일 액션 으로. purchase/lead 만 본문 CTAS 사용. */}
@@ -1772,17 +1832,18 @@ export function InfoDropPage({
         <section className="mx-auto w-full max-w-[480px] px-6 pt-4">{aiSummaryAccordion}</section>
       ) : null}
 
-      {/* v0 원안 공유 푸터 — 페이지 레벨은 비-CardBody variant(purchase/lead)만 담당(회귀 0).
-            info/coupon/reservation 은 CardBody.shareFooter 슬롯(카드 본문 맨 아래)에서 동일 마크업 렌더.
-            purchase/lead 페이지 배경은 navy(#1E3A8A)라 같은 white-on-navy 푸터 그대로 적용. */}
-      {(resolvedVariant === "purchase" || resolvedVariant === "lead") ? (
+      {/* v0 원안 공유 푸터 — S17(P4): purchase(commerce)=ProductWidget.footerSlot / lead=폼 footerSlot 인입.
+            페이지레벨 잔류는 commerce 없는 purchase 폴백(PurchaseCardBody 경로)만 — 푸터 유실 방지.
+            navy 페이지 배경 위라 white-on-navy 스타일(shareFooter=카드색 기반) 그대로. */}
+      {resolvedVariant === "purchase" && !commerce ? (
         <section className="mx-auto w-full max-w-[480px] px-6 pt-4">{shareFooter}</section>
       ) : null}
 
       {/* v7.2 5b — sticky 하단 바: funnelCoupon + onReserveAndClaim 있을
             때만 단일 액션. 카카오톡 공유는 위 공유 블록으로 이전 (sticky 미사용).
-            정보/구매/상담 드롭 = sticky 없음. */}
-      {funnelCoupon && onReserveAndClaim && !isCombined && isCoupon ? (
+            정보/구매/상담 드롭 = sticky 없음.
+            S18-A(P4) — 카드 내부 CTA(cta-coupon-inline)가 뷰포트에 보이면 숨김(IO), 벗어나면 복귀. */}
+      {hasStickyBar && !inlineCouponCtaVisible ? (
         <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#E5E7EB] bg-white">
           <div className="mx-auto w-full max-w-[480px] px-6 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
             <button

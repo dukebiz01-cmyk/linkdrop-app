@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Check, ShoppingCart, MapPin, CalendarDays, Sprout, Video, Sparkles } from "lucide-react";
 import { ActionButton } from "@/components/ActionButton";
 import { ImageZoomModal } from "@/components/card/ImageZoomModal";
@@ -39,6 +39,9 @@ export interface ProductWidgetProps {
   onSellerClick?: () => void;
   /** C13 S4c — 목적색(카드 accent). 주어지면 1차 CTA 배경에 적용. 미지정=기존 bg-action(검정) 그대로. */
   accent?: string;
+  /** S17(P4) — 카드 프레임 안 최하단 슬롯(손님 공유 푸터 인입). CardBody.preFooterSlot 패턴.
+   *  기본 undefined = 미주입 시 아무것도 렌더 안 함(스튜디오 미리보기 등 기존 소비처 무영향). */
+  footerSlot?: ReactNode;
 }
 
 export function ProductWidget({
@@ -56,6 +59,7 @@ export function ProductWidget({
   buyUrl,
   onPreorder,
   accent,
+  footerSlot,
 }: ProductWidgetProps) {
   const [zoomOpen, setZoomOpen] = useState(false);
   // C13 S4c — accent 있으면 1차 CTA 배경을 목적색으로(인라인이 bg-action 오버라이드). 미지정=무행동.
@@ -192,6 +196,8 @@ export function ProductWidget({
               구매하기
             </ActionButton>
           )}
+          {/* S17(P4) — 공유 푸터 인입 슬롯: 카드 프레임 안 최하단. 미주입=미렌더(레이아웃 무영향). */}
+          {footerSlot}
         </div>
       </div>
     </section>
