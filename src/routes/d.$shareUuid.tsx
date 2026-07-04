@@ -82,6 +82,35 @@ type SlotRow = {
   available: number;
 };
 
+// Phase 1-D — OG 정적 만료 텍스트(카톡 미리보기). 1-C 컴포넌트 계산과 동일 알고리즘
+//   (min(coupon.valid_until[쿠폰 계열 purpose 한정], share_events.expires_at) — 단일 기준 L1.
+//   1-C 반영분 0터치 락 때문에 컴포넌트 IIFE 는 그대로 두고 같은 식을 모듈 헬퍼로 병치 — 후속 통합 후보).
+//   ⛔ D-N·시:분 표기 금지(L5 표시=실체 — OG 는 크롤 시점 고정, 시간은 경과 시 거짓) → "~M/D까지" 날짜만.
+//   만료 경과 = null(마감 문구 박제 방지). remaining_stock 은 OG 삽입 금지(L4 — 라이브 표면 전용).
+function buildOgExpiryText(
+  detail: DropDetailRpc | null,
+  shareExpiresAt?: string | null,
+  nowMs: number = Date.now(),
+): string | null {
+  if (!detail) return null;
+  const isCouponPurpose = ["coupon", "쿠폰", "reservation", "예약"].includes(
+    String(detail.drop?.purpose ?? "").toLowerCase(),
+  );
+  const couponValidUntil = isCouponPurpose ? (detail.coupon?.valid_until ?? null) : null;
+  const cands = [couponValidUntil, shareExpiresAt ?? null]
+    .filter((v): v is string => Boolean(v))
+    .map((v) => Date.parse(v))
+    .filter((t) => Number.isFinite(t));
+  if (cands.length === 0) return null;
+  const earliest = Math.min(...cands);
+  if (earliest <= nowMs) return null; // 만료 경과 — 미표기(박제 방지)
+  const kst = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(
+    new Date(earliest),
+  );
+  const [, m, d] = kst.split("-");
+  return `~${Number(m)}/${Number(d)}까지`;
+}
+
 type MockLoaderData = {
   mode: "mock";
   shareUuid: string;
@@ -241,6 +270,12 @@ export const Route = createFileRoute("/d/$shareUuid")({
         const makerName = detail?.maker?.display_name ?? null;
         const prefixed = makerName ? `${makerName}님이 보낸 카드 — ${baseDesc}` : baseDesc;
         description = prefixed.length > 200 ? prefixed.slice(0, 197) + "..." : prefixed;
+        // Phase 1-D — OG 정적 만료 날짜 접두("~M/D까지 · …"). 없음/만료 경과 = 기존 그대로(회귀 0).
+        const ogExpiry = buildOgExpiryText(detail, loaderData.shareExpiresAt);
+        if (ogExpiry) {
+          const withExpiry = `${ogExpiry} · ${description}`;
+          description = withExpiry.length > 200 ? withExpiry.slice(0, 197) + "..." : withExpiry;
+        }
         imageUrl = detail?.source?.thumbnail_url ?? null;
       }
       // else: catch fallback 기본값 그대로 유지
