@@ -4,8 +4,11 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
 /**
- * 공통 하단 nav — V4 커스텀 SVG 아이콘(액티브=채움 / 비액티브=라인) + 액티브 알약, icon-only(라벨 제거).
- * 홈·탐색·스튜디오·나 4탭. 라벨은 aria-label 로만 유지(스크린리더), 화면 텍스트 미렌더.
+ * 공통 하단 nav — V4 커스텀 SVG 아이콘(액티브=채움 / 비액티브=라인) + 액티브 알약.
+ * 홈·탐색·스튜디오·내페이지 4탭.
+ * NAV-1 — 한글 라벨 상시 노출(국내 표준: 카카오톡·토스·네이버 하단 탭 + 중장년 매장주
+ *   아이콘 추측 제거). 그리드 실높이 66px 불변 — studio-build 발행 바가
+ *   bottom-[calc(66px+…)] 로 결속(P6-9). 라벨 공간은 알약 h-11→h-8 내부 재배치로 확보.
  *
  * active 상태는 현재 URL 에서 파생 → 직접 접속·붙여넣기·SSR/hydration 모두 동작.
  *
@@ -113,7 +116,8 @@ const TABS: NavTab[] = [
   },
   {
     id: "me",
-    label: "나",
+    // NAV-1 — 형님 확정 문구 "내페이지"(구 "나"). 축약 금지.
+    label: "내페이지",
     Icon: MeIcon,
     to: "/me",
     match: (p) => p === "/me" || p.startsWith("/me") || p === "/profile",
@@ -134,14 +138,24 @@ export function BottomNav() {
           {TABS.map((tab) => {
             const active = tab.match(pathname);
 
-            // icon-only — 라벨 텍스트 미렌더. active 시 알약(bg-[#F1F5F9]) + 채움 아이콘.
+            // NAV-1 — 아이콘 + 한글 라벨 상시. active 시 알약(bg-[#F1F5F9]) + 채움 아이콘 +
+            //   잉크 라벨(아이콘 톤 동기). 알약 h-8 로 내부 재배치(그리드 66px 불변) — 아이콘 무수정.
             const content = (
-              <span
-                className={`flex h-11 w-16 items-center justify-center rounded-2xl transition-all duration-200 group-active:scale-90 ${
-                  active ? "bg-[#F1F5F9]" : "bg-transparent"
-                }`}
-              >
-                <tab.Icon active={active} />
+              <span className="flex flex-col items-center justify-center gap-1 transition-all duration-200 group-active:scale-90">
+                <span
+                  className={`flex h-8 w-14 items-center justify-center rounded-2xl ${
+                    active ? "bg-[#F1F5F9]" : "bg-transparent"
+                  }`}
+                >
+                  <tab.Icon active={active} />
+                </span>
+                <span
+                  className={`whitespace-nowrap text-[10px] font-semibold leading-none tracking-ko ${
+                    active ? "text-[#0F172A]" : "text-[#94A3B8]"
+                  }`}
+                >
+                  {tab.label}
+                </span>
               </span>
             );
 
