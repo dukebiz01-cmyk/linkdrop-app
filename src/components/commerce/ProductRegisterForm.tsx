@@ -553,7 +553,7 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
                         min={1}
                         value={packCount}
                         onChange={(e) => setPackCount(e.target.value)}
-                        placeholder="입수(개)"
+                        placeholder="예: 30"
                         className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
                       />
                       <input
@@ -564,7 +564,7 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
                         step="0.1"
                         value={packWeightKg}
                         onChange={(e) => setPackWeightKg(e.target.value)}
-                        placeholder="총중량(kg)"
+                        placeholder="예: 10"
                         className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
                       />
                     </div>

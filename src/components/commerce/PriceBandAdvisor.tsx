@@ -3,6 +3,8 @@ import { TrendingUp } from "lucide-react";
 // 공용 시세 어드바이저 — P5b(단위 헌법 1~3조) 표기 전면 교체.
 //   구조: ①개당(또는 kg당) 헤드라인 → ②환산 근거 줄 → ③3열 고정 표(도매/인터넷/제외)
 //        → ④내 판매단위 강조 → ⑤고정 참고 문구(모든 상태 공통).
+//   P5d — 헤드라인 도매 우선(인터넷은 confidence ok·표본≥10일 때만 후보), 인터넷 범위는
+//        p25~p75(대표값 median), 저신뢰 인터넷은 "표본 부족 · 참고만" 배지로 강등.
 //   순수 presentational: props {priceBand, loading, composition} 만. invoke·state 는 호출부 몫.
 //   §0: 생산자 가격 결정 참고용만 — 시세를 저장/손님 카드로 내보내지 않는다. 단정·권유 금지.
 //   표기 규칙: 전 금액 백원 반올림 + "약" 접두.
@@ -35,6 +37,14 @@ export type OnlineBlock = {
   converted_count: number;
   excluded_count: number;
   as_of: string;
+  // P5d 확장(옵셔널 — 구응답 호환): 사분위·신뢰도·순도/교차 가드 집계.
+  confidence?: "ok" | "low";
+  p25?: number | null;
+  p75?: number | null;
+  median?: number | null;
+  filtered_count?: number;
+  outlier_count?: number;
+  cross_check?: "applied" | "unavailable";
 };
 
 export type PriceBandResult = {
@@ -116,12 +126,21 @@ export function PriceBandAdvisor({
       ? priceBand.online
       : null;
   const excludedCount = priceBand.online?.excluded_count ?? 0;
-  // 헤드라인·내 판매단위의 kg 기준 밴드 — 인터넷(환산) 우선, 없으면 도매.
-  const kgBand = o
-    ? { min: o.min as number, max: o.max as number }
-    : w
-      ? { min: w.min, max: w.max }
-      : null;
+  const filteredCount = priceBand.online?.filtered_count ?? 0;
+  // P5d 인터넷 신뢰 판정 — confidence "low" 아님 + 표본 ≥10. 구응답(confidence 없음)은 표본만.
+  const onlineTrusted = o != null && o.confidence !== "low" && o.converted_count >= 10;
+  // P5d 표시 밴드 — p25~p75(구응답이면 min~max 폴백) + 대표값 median(폴백 avg).
+  const oBand = o ? { min: o.p25 ?? (o.min as number), max: o.p75 ?? (o.max as number) } : null;
+  const oMedian = o ? (o.median ?? o.avg) : null;
+  // 헤드라인·내 판매단위의 kg 기준 밴드 — P5d 역전: 도매 우선, 인터넷은 신뢰될 때만 후보.
+  const kgBand = w ? { min: w.min, max: w.max } : onlineTrusted && oBand ? oBand : null;
+  // 제외 줄 — 다른 상품(순도 필터) + 구성 불명, 둘 다 정직 표기(§0).
+  const exclusionParts = [
+    filteredCount > 0 ? `다른 상품(가공품 등) ${filteredCount}건` : null,
+    excludedCount > 0 ? `구성 불명 ${excludedCount}건` : null,
+  ].filter(Boolean);
+  const exclusionLine =
+    exclusionParts.length > 0 ? `${exclusionParts.join(" · ")}은 비교에서 제외` : null;
 
   // insufficient/no_data/구버전 응답 — 표 대신 정직 표기 + ⑤ 유지.
   if (!kgBand) {
@@ -130,10 +149,8 @@ export function PriceBandAdvisor({
         <p className="text-[13px] font-medium leading-relaxed tracking-ko text-text-muted">
           비교 데이터 부족 — 이 품목은 아직 견줄 시세가 충분하지 않아요.
         </p>
-        {excludedCount > 0 ? (
-          <p className="text-[11px] font-medium tracking-ko text-text-subtle">
-            구성(수량·중량) 불명 리스팅 {excludedCount}건은 비교에서 제외
-          </p>
+        {exclusionLine ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle">{exclusionLine}</p>
         ) : null}
         <NoticeLine />
       </div>
@@ -191,25 +208,34 @@ export function PriceBandAdvisor({
               </td>
             </tr>
           ) : null}
-          {o ? (
+          {o && oBand ? (
             <tr className="border-t border-border">
               <td className="font-bold text-text-strong">인터넷</td>
               <td className="font-medium tabular-nums text-text-strong">
                 {hasPerUnit
-                  ? `개당 약 ${fmtWonH(toUnit(o.min as number))}~${fmtWonH(toUnit(o.max as number))}원`
-                  : `kg당 약 ${fmtWonH(o.min as number)}~${fmtWonH(o.max as number)}원`}{" "}
+                  ? `개당 약 ${fmtWonH(toUnit(oBand.min))}~${fmtWonH(toUnit(oBand.max))}원`
+                  : `kg당 약 ${fmtWonH(oBand.min)}~${fmtWonH(oBand.max)}원`}
+                {onlineTrusted && oMedian != null
+                  ? ` · 중앙값 약 ${fmtWonH(hasPerUnit ? toUnit(oMedian) : oMedian)}원`
+                  : ""}{" "}
                 · 환산가
+                {!onlineTrusted ? (
+                  // P5d 강등 배지 — 표본 <10 이면 헤드라인 후보 제외 + 참고 표시(muted).
+                  <span className="ml-1 rounded-lg bg-surface px-1 text-[11px] font-semibold text-text-subtle">
+                    표본 부족 · 참고만
+                  </span>
+                ) : null}
               </td>
               <td className="text-right text-[11px] font-medium tabular-nums text-text-muted">
                 {o.converted_count}건 환산 · {fmtRefDate(o.as_of)}
               </td>
             </tr>
           ) : null}
-          {excludedCount > 0 ? (
+          {exclusionLine ? (
             <tr className="border-t border-border">
               <td className="font-bold text-text-subtle">제외</td>
               <td colSpan={2} className="text-[11px] font-medium text-text-subtle">
-                구성(수량·중량) 불명 리스팅 {excludedCount}건은 비교에서 제외
+                {exclusionLine}
               </td>
             </tr>
           ) : null}
