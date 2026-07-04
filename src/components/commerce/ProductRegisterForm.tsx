@@ -54,16 +54,16 @@ function normalizeItemText(s: string): string {
 // CAT-2 동의어 사전 — 부분일치로 못 잡는 이명·사투리·품종·표기변형만 등록(확장 가능 구조).
 //   값 = kamis_items.item_name 정확값. 부분일치로 잡히는 파생어(찰옥수수·애호박 등)는 등록 불필요.
 const ITEM_SYNONYMS: Record<string, string> = {
-  "강냉이": "옥수수",
-  "스위트콘": "옥수수",
-  "고구마순": "고구마",
-  "무우": "무",
-  "동태": "명태",
-  "코다리": "명태",
-  "키위": "참다래",
-  "밀감": "감귤",
-  "부사": "사과",
-  "샤인머스캣": "샤인머스켓",
+  강냉이: "옥수수",
+  스위트콘: "옥수수",
+  고구마순: "고구마",
+  무우: "무",
+  동태: "명태",
+  코다리: "명태",
+  키위: "참다래",
+  밀감: "감귤",
+  부사: "사과",
+  샤인머스캣: "샤인머스켓",
 };
 
 /** onSubmit 에 넘기는 저장 payload — 기존 /api/drops body 필드 그대로(신규 필드 추가 금지). */
@@ -136,6 +136,8 @@ async function resizeToJpegBlob(file: File): Promise<Blob> {
 export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegisterFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
+  // P6-5ⓑ — 임베드(스튜디오) 전용 상품명 필수 인라인 안내. 파트너 라우트는 선택 유지.
+  const [nameError, setNameError] = useState(false);
   const [price, setPrice] = useState("");
   // CAT-1 카테고리 3분기 — 기본 신선. 하위호환: 기존 is_fresh 저장값은 true→fresh / false→processed
   //   에 대응(goods 는 신규 — 구 데이터엔 없음). payload 의 is_fresh 는 category==="fresh" 파생 유지.
@@ -408,6 +410,12 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
       toast.error("상품 사진을 먼저 업로드해 주세요.");
       return;
     }
+    // P6-5ⓑ — 임베드(스튜디오)만 상품명 필수: 발행 게이트(이름 필수)와 폼 단계 정합.
+    //   게이트 자체는 0터치(이중 방어 유지). 파트너 라우트는 현행 선택 그대로.
+    if (embedded && !name.trim()) {
+      setNameError(true);
+      return;
+    }
     const priceNum = Number(price);
     if (!Number.isFinite(priceNum) || priceNum <= 0) {
       toast.error("가격을 올바르게 입력해 주세요.");
@@ -459,7 +467,8 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
       };
       const r = await onSubmit(payload);
       setResult({ shareUuid: r.shareUuid, shareUrl: r.shareUrl });
-      toast.success("상품 카드를 만들었어요.");
+      // P6-5ⓐ — 임베드는 P2.1 한 줄 상태("상품이 카드에 붙었어요")와 문구 통일(컨펌 반 겹 제거).
+      toast.success(embedded ? "상품이 카드에 붙었어요" : "상품 카드를 만들었어요.");
     } catch (err) {
       console.error("[ProductRegisterForm] submit failed:", err);
       toast.error("상품 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
@@ -544,20 +553,31 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
           {uploadError ? <p className="text-[11px] text-[#EF4444]">{uploadError}</p> : null}
         </div>
 
-        {/* 상품명 (선택) */}
+        {/* 상품명 — P6-5ⓑ: 임베드(스튜디오)=필수(발행 게이트 정합) / 파트너 라우트=선택(현행). */}
         <div className="space-y-2">
           <label htmlFor="pd-name" className="block text-xs font-semibold text-[#0F172A]">
-            상품명 <span className="font-medium text-[#94A3B8]">(선택)</span>
+            상품명{" "}
+            <span className="font-medium text-[#94A3B8]">{embedded ? "(필수)" : "(선택)"}</span>
           </label>
           <input
             id="pd-name"
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (nameError) setNameError(false);
+            }}
             placeholder="예: 해남 꿀고구마 5kg"
             maxLength={80}
-            className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+            className={`w-full min-h-[44px] rounded-xl border bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none ${
+              nameError ? "border-[#EF4444]" : "border-[#E5E7EB]"
+            }`}
           />
+          {nameError ? (
+            <p className="text-[11px] font-medium tracking-ko text-[#EF4444]">
+              카드 발행에 상품명이 필요해요.
+            </p>
+          ) : null}
         </div>
 
         {/* CAT-1 카테고리 3분기 — 신선식품/가공식품/공산품·잡화(상품정보제공고시 유형 분기).
@@ -906,8 +926,7 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
               goods 는 "상세페이지 참조" 프리셋 버튼 제공. 빈칸 제출 시 인라인 안내 + 차단. */}
           <label htmlFor="pd-origin" className="block pt-1">
             <span className="text-xs font-semibold tracking-ko text-text-strong">
-              원산지{" "}
-              <span className="font-medium text-text-subtle">(필수 · 상품정보제공고시)</span>
+              원산지 <span className="font-medium text-text-subtle">(필수 · 상품정보제공고시)</span>
             </span>
             <div className="mt-2 flex gap-2">
               <input
