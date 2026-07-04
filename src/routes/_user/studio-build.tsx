@@ -297,6 +297,9 @@ const STUDIO_BUILD_CSS = `
 export function CardStudioPage() {
   // loader 데이터 수신만 — 이번 단계는 배선까지. 화면 하드코딩 치환은 다음 단계.
   const { isBusiness, store, coupons, manageCoupons, myRewards } = Route.useLoaderData();
+  // P6-3(A안) — 사업자 모드 잠금 게이트: 비사업자(또는 매장 미보유)는 퍼블릭(general)만 활성.
+  //   무세션은 _user 부모 가드 소관(여기 도달 전 /login). 사업자는 false → 현행 완전 동일.
+  const bizLocked = !isBusiness || !store;
   const router = useRouter();
   // 쿠폰 만들기 바텀시트(CouponManageView 임베드) 노출 상태.
   const [couponSheetOpen, setCouponSheetOpen] = useState(false);
@@ -382,6 +385,13 @@ export function CardStudioPage() {
   // 모드 전환 — 덱/카드색 교체 + 장착·덱위치 리셋(모드 간 잔상 방지).
   const switchMode = (next: "general" | "reserve" | "commerce") => {
     if (next === buildMode) return;
+    // P6-3(§0 게이트) — 비사업자: 사업자 모드(예약·쿠폰/커머스) 전환 자체를 차단 → 등록 유도.
+    //   전환이 발생하지 않으므로 저장·발행 경로에 비사업자 커머스 데이터가 흘러들 수 없다.
+    //   (서버측 이중 방어 = create_drop_v2 v7.4 비사업자 purpose 게이트.)
+    if (bizLocked && next !== "general") {
+      void router.navigate({ to: "/partner/register" });
+      return;
+    }
     // S12 — 형님 확정 A: 목적 전환 = 전면 리셋(새 카드). S10 커머스 경계 조건은 S12로 대체(전면화). 이중 방어 게이트는 존치.
     setBuildMode(next);
     setApplied({});
@@ -1059,16 +1069,25 @@ export function CardStudioPage() {
             { key: "commerce", label: "커머스", Icon: Store },
           ].map(({ key, label, Icon }) => {
             const isOn = buildMode === key;
+            // P6-3(A안) — 비사업자: 사업자 모드 탭 잠금 표시(구 셸 :133-153 계열 재사용 —
+            //   dimmed + Lock + "사업자 전용"). 클릭은 switchMode 가드가 등록 유도로 처리(전환 0).
+            const locked = bizLocked && key !== "general";
             return (
               <button
                 key={key}
                 type="button"
                 onClick={() => switchMode(key as "general" | "reserve" | "commerce")}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-bold transition-all duration-200 ${isOn ? "text-white" : "text-[#737373]"}`}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-bold transition-all duration-200 ${isOn ? "text-white" : locked ? "text-[#A3A3A3] opacity-70" : "text-[#737373]"}`}
                 style={isOn ? { backgroundColor: MODE_ACCENT[key as "general" | "reserve" | "commerce"] } : undefined}
                 aria-pressed={isOn}
+                aria-disabled={locked || undefined}
+                aria-label={locked ? `${label} — 사업자 전용` : undefined}
               >
-                <Icon className="h-4 w-4" strokeWidth={2.25} />
+                {locked ? (
+                  <Lock className="h-4 w-4" strokeWidth={2.25} />
+                ) : (
+                  <Icon className="h-4 w-4" strokeWidth={2.25} />
+                )}
                 {label}
               </button>
             );
@@ -2066,9 +2085,23 @@ export const Route = createFileRoute("/_user/studio-build")({
       .eq("owner_user_id", userId)
       .maybeSingle();
 
-    // 비즈니스 게이트 — 매장 없거나 비즈니스 아니면 사업자 등록으로 유도(소프트 게이트).
+    // P6-3(형님 확정 A안) — 전면 redirect 차단 → "잠금 열람"으로 완화: 비사업자(또는 매장
+    //   미보유)도 진입 허용. 사업자 모드 잠금은 컴포넌트 게이트(switchMode·탭 Lock)가,
+    //   저장측은 create_drop_v2 비사업자 purpose 게이트(v7.4)가 이중 방어. 매장 데이터
+    //   (쿠폰·manageCoupons)는 사업자+매장 보유일 때만 조회(아래 기존 경로 그대로).
     if (!isBusiness || !store) {
-      throw redirect({ to: "/partner/register" });
+      // 내 캐쉬만 조회(P6-2 본체 블록은 사업자 경로에 0터치 보존 — 이 분기 전용 사본).
+      let lockedRewards: number | null = null;
+      try {
+        const rpc = supabase.rpc as unknown as (
+          fn: string,
+        ) => Promise<{ data: unknown; error: unknown }>;
+        const { data: rewardsRaw, error: rewardsErr } = await rpc("get_my_rewards");
+        if (!rewardsErr) lockedRewards = Number(rewardsRaw) || 0;
+      } catch {
+        // graceful — null 유지
+      }
+      return { ...empty, isBusiness, myRewards: lockedRewards };
     }
 
     // 활성 쿠폰 (create-drop-wizard.tsx:401 패턴). get_active_store_coupons 는 types.ts 미반영.
