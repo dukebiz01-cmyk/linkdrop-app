@@ -128,6 +128,8 @@ type DbLoaderData = {
   serverNow?: string;
   /** Phase 1-C — share_events.expires_at (쿠폰 valid_until 과 이른 값 비교 재료). */
   shareExpiresAt?: string | null;
+  /** P6-4(N4) — 열람자 사업자 여부: "나도 만들기" 목적지 분기(사업자=studio-build 직결). */
+  isViewerBusiness?: boolean;
 };
 type LoaderData = MockLoaderData | DbLoaderData;
 
@@ -211,6 +213,22 @@ export const Route = createFileRoute("/d/$shareUuid")({
         console.error("[d/$shareUuid loader] share_events.expires_at", seErr);
       }
 
+      // P6-4(N4) — 열람자 사업자 판별. 세션 존재 시에만 RPC 1회(무세션 열람 = 즉시 스킵,
+      //   RPC 0회 — 공개 열람 성능 0훼손). 실패 = false(graceful, throw 금지).
+      let isViewerBusiness = false;
+      try {
+        const { data: sessData } = await supabase.auth.getSession();
+        const viewerId = sessData.session?.user.id ?? null;
+        if (viewerId) {
+          const { data: bizRaw } = await supabase.rpc("is_active_partner_owner", {
+            _user_id: viewerId,
+          });
+          isViewerBusiness = Boolean(bizRaw);
+        }
+      } catch (bizErr) {
+        console.error("[d/$shareUuid loader] viewer business check", bizErr);
+      }
+
       // P3 — partner_id 있으면 슬롯도 SSR 에서 미리 가져온다(get_drop_detail 과 동일 인스턴스).
       // anon EXECUTE 확인 완료. 실패해도 페이지는 정상 — slots=[] 로 두는 graceful 패턴.
       // p_date = Asia/Seoul 오늘(서버 UTC 무관). en-CA → "YYYY-MM-DD".
@@ -232,7 +250,7 @@ export const Route = createFileRoute("/d/$shareUuid")({
           console.error("[d/$shareUuid loader] get_available_slots", slotErr);
         }
       }
-      return { mode: "db", detail, shareUuid, slots, serverNow, shareExpiresAt };
+      return { mode: "db", detail, shareUuid, slots, serverNow, shareExpiresAt, isViewerBusiness };
     } catch (err) {
       console.error("[d/$shareUuid loader]", err);
       return { mode: "db", detail: null, shareUuid, slots: [] };
@@ -415,7 +433,7 @@ function DropPage() {
     );
   }
 
-  const { detail, shareUuid, slots, serverNow, shareExpiresAt } = loaderData;
+  const { detail, shareUuid, slots, serverNow, shareExpiresAt, isViewerBusiness } = loaderData;
 
   // 실제 share_uuid 인데 조회 실패 → mock info 변형으로 fallback (무로그인 화면 깨짐 방지)
   if (!detail) {
@@ -642,6 +660,8 @@ function DropPage() {
         expiresAt={expiresAt}
         serverNow={serverNow}
         remainingStock={remainingStock}
+        // P6-4(N4) — 사업자 열람자: "나도 만들기" = studio-build 직결.
+        isViewerBusiness={isViewerBusiness}
         onReserveAndClaim={handleReserveAndClaim}
         onReservationRequest={(selection) => {
           trackReceiverEvent("reservation_click", detail.drop.id);

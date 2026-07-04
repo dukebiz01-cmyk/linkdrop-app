@@ -177,6 +177,9 @@ export interface InfoDropPageProps {
   serverNow?: string;
   /** Phase 1-C — 파생 재고(get_drop_detail.remaining_stock, L4: 공급값 표시만). */
   remainingStock?: number | null;
+  /** P6-4(N4) — 열람자 사업자 여부: true 면 "나도 만들기"(Wand2) = /studio-build 직결.
+   *  false/미주입(무세션 포함) = 현행 /create-wizard 경로(S5c) 그대로. */
+  isViewerBusiness?: boolean;
   /**
    * 재공유(re-share) 수신자 화면 여부. 부모 라우트가 URL 마커
    * (parentShareId · shareDepth · ref) 로 판별해 전달.
@@ -611,6 +614,7 @@ export function InfoDropPage({
   expiresAt,
   serverNow,
   remainingStock,
+  isViewerBusiness,
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   // 트랙 D §50 — 매장(partnerId) 구독. me.tsx handleSubscribe 패턴 재사용(maker_follows, 스키마 0).
@@ -1119,9 +1123,13 @@ export function InfoDropPage({
         {/* S9 — 새 탭: 보던 카드 보존 + 위저드 작업 보호 (리포 확립 패턴: 외부 진입=새 탭) */}
         <a
           href={
-            videoSourceUrl && !commerce?.selfUpload
-              ? `/create-wizard?url=${encodeURIComponent(videoSourceUrl)}&purpose=${resolvedVariant}`
-              : `/create-wizard?purpose=${resolvedVariant}`
+            // P6-4(N4) — 사업자 열람자 = studio-build 직결(purpose 프리셋: 빌더가 쿼리 초기모드
+            //   미수신이라 전파 생략 — 수신 신설은 다음 슬라이스 판단). 그 외 = 현행 S5c 그대로.
+            isViewerBusiness
+              ? "/studio-build"
+              : videoSourceUrl && !commerce?.selfUpload
+                ? `/create-wizard?url=${encodeURIComponent(videoSourceUrl)}&purpose=${resolvedVariant}`
+                : `/create-wizard?purpose=${resolvedVariant}`
           }
           target="_blank"
           rel="noopener noreferrer"
