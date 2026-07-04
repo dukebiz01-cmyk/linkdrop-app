@@ -22,6 +22,8 @@ export const Route = createFileRoute("/api/generate-promo-copy")({
             notes?: string;
             product_id?: string;
             image_url?: string | null;
+            /** COPY-1 — 카테고리 톤 분기 passthrough. 미전달 = Edge 가 fresh 폴백. */
+            category?: string | null;
           };
           if (!body.product_name || !body.product_name.trim()) {
             return Response.json(
@@ -52,6 +54,7 @@ export const Route = createFileRoute("/api/generate-promo-copy")({
               notes: (body.notes ?? "").trim(),
               product_id: body.product_id ?? null,
               image_url: body.image_url ?? null,
+              category: body.category ?? null, // COPY-1 — passthrough
               user_id: user.id,
             },
             session?.access_token ?? null,

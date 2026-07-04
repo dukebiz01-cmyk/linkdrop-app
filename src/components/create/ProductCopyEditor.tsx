@@ -20,6 +20,7 @@ export function ProductCopyEditor({
   priceKrw,
   productId,
   imageUrl,
+  category,
   value,
   onChange,
 }: {
@@ -29,6 +30,8 @@ export function ProductCopyEditor({
   productId?: string | null;
   /** 상품 사진 URL(선택) — 있으면 AI가 사진을 보고 카피 생성(비전). 없으면 텍스트-only. */
   imageUrl?: string | null;
+  /** COPY-1 — 카테고리 톤 3분기('fresh'|'processed'|'goods'). 미전달 = fresh 폴백(하위호환). */
+  category?: string;
   value: ProductCopyValue;
   onChange: (next: ProductCopyValue) => void;
 }) {
@@ -54,6 +57,7 @@ export function ProductCopyEditor({
           notes: notes.trim(),
           product_id: productId ?? null,
           image_url: imageUrl ?? null,
+          category: category ?? null, // COPY-1 — passthrough
         }),
       });
       const json = (await res.json()) as {

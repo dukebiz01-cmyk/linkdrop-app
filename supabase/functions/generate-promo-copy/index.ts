@@ -30,7 +30,7 @@ const MODEL = "claude-sonnet-4-6";
 const USD_TO_KRW = 1400;
 // generation_type CHECK 기존 값 재사용(DDL 0). response.kind 로 promo 식별.
 const GENERATION_TYPE = "share_message";
-const PROMPT_VERSION = "promo_v1";
+const PROMPT_VERSION = "promo_v2"; // COPY-1 — 카테고리 3분기 + 공통 락
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +70,33 @@ const SYSTEM_PROMPT = `너는 업주 본인 상품을 홍보하는 한국어 카
 }
 selling_points 는 3~5개. 각 항목은 짧게(한 줄).`;
 
+// COPY-1 — 공통 락(전 카테고리 프롬프트에 명문).
+const COMMON_LOCK = `
+공통 락(모든 카테고리 절대 준수):
+- 가격을 새로 만들거나 바꿔 말하지 마. 입력에 가격이 있으면 그 숫자만 언급 가능.
+- 후기·리뷰·평점 화법 금지(제3자 평가 사칭 금지 — 너는 파는 사람 본인).
+- 검증 불가한 효능·효과 주장 금지.
+- 인증·수상 표현은 입력(메모)에 명시돼 있을 때만.`;
+
+// COPY-1 — 카테고리 톤 3분기. fresh = 현행 원문 유지(추가 톤 지시 없음 — 무변경).
+//   미전달/알 수 없는 값 = fresh 폴백(하위호환 — 구 호출 무영향).
+const CATEGORY_TONE: Record<string, string> = {
+  fresh: "",
+  processed: `
+카테고리: 가공식품.
+톤 축 — 맛·원재료·간편함·보관성 중심으로 써.
+산지·수확·신선 같은 농산물(원물) 언어는 쓰지 마(입력 메모에 명시된 경우만 예외).`,
+  goods: `
+카테고리: 공산품·잡화.
+톤 축 — 기능·스펙·활용법·내구성 중심으로 써.
+산지·수확·신선·제철 같은 농산물 언어는 금지.`,
+};
+
+function buildSystemPrompt(category: string | null | undefined): string {
+  const tone = CATEGORY_TONE[category ?? "fresh"] ?? CATEGORY_TONE.fresh;
+  return SYSTEM_PROMPT + COMMON_LOCK + tone;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ error: "METHOD_NOT_ALLOWED" }, 405);
@@ -81,6 +108,8 @@ Deno.serve(async (req) => {
     user_id?: string;
     product_id?: string;
     image_url?: string | null;
+    // COPY-1 — 'fresh'|'processed'|'goods'. 미전달/그 외 = fresh 폴백.
+    category?: string | null;
   };
   try {
     body = await req.json();
@@ -160,7 +189,8 @@ Deno.serve(async (req) => {
     const res = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 500,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(body.category), // COPY-1 — 카테고리 톤 3분기
+
       messages: [
         {
           role: "user",

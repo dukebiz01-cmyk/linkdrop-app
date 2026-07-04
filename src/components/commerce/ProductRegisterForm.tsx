@@ -1049,6 +1049,8 @@ export function ProductRegisterForm({
           productName={name}
           priceKrw={Number.isFinite(Number(price)) && Number(price) > 0 ? Number(price) : null}
           imageUrl={uploadedUrl}
+          // COPY-1 — CAT-1 카테고리로 카피 톤 3분기(공산품에 산지·수확 언어 차단).
+          category={category}
           value={copy}
           onChange={setCopy}
         />
