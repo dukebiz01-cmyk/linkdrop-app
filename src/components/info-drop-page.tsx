@@ -1249,6 +1249,24 @@ export function InfoDropPage({
                   <p className={jMuted}>여정을 불러오는 중…</p>
                 ) : journeyError ? (
                   <p className={jMuted}>여정을 불러오지 못했어요</p>
+                ) : journeyRows &&
+                  journeyRows.length === 1 &&
+                  journeyRows[0].is_viewer &&
+                  journeyRows[0].role === "개척" ? (
+                  // SM-2-fix3 — 원점(발신자) 시점: 노드 1개=나·개척이면 빈약한 타임라인 대신
+                  //   개척 시점 문구로 전환(집계와의 시점 갭 보정). 타인 노드 미표시 =
+                  //   개인정보 설계 그대로 — RPC·그 외 케이스(수신자·다홉) 무변경.
+                  <>
+                    <p className={jStrong}>
+                      내가 개척한 드랍 · {journeyRows[0].spread_count}명에게 퍼졌어요
+                    </p>
+                    <p className={jMuted}>
+                      이 카드로부터 {journeyRows[0].spread_count}갈래로 퍼져나갔어요
+                    </p>
+                    <p className={jNotice}>
+                      다른 참여자는 개인정보 보호로 익명 표시 · 기여도만 집계
+                    </p>
+                  </>
                 ) : journeyRows && journeyRows.length > 0 ? (
                   <>
                     {/* 확산 집계 — '퍼졌어요' 표기('모집' 계열 금지). */}
