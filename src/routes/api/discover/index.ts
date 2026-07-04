@@ -144,12 +144,18 @@ function pickRegionToken(address: string | null): string {
   return "";
 }
 
-function buildEnhancedQuery(raw: string, partner: PartnerRow | null): string {
+// C16 — regionMode: 'boost'(기본·현행 = 지역 토큰 부착) | 'off'(사용자 명시 검색어 —
+//   원문 존중, 지역 토큰 미부착. 업종 토큰·3토큰/60자 상한 로직은 유지).
+function buildEnhancedQuery(
+  raw: string,
+  partner: PartnerRow | null,
+  regionMode: "boost" | "off" = "boost",
+): string {
   const base = raw.trim();
   if (!partner) return base;
 
   const subKr = subCategoryToKorean(partner.metadata);
-  const region = pickRegionToken(partner.address);
+  const region = regionMode === "off" ? "" : pickRegionToken(partner.address);
 
   const tokens: string[] = [];
   if (base) tokens.push(base);
@@ -159,6 +165,21 @@ function buildEnhancedQuery(raw: string, partner: PartnerRow | null): string {
   const dedup = Array.from(new Set(tokens.filter(Boolean))).slice(0, ENHANCED_MAX_TOKENS);
   const joined = dedup.join(" ");
   return joined.length > ENHANCED_MAX_LEN ? joined.slice(0, ENHANCED_MAX_LEN).trim() : joined;
+}
+
+// C16 — 로컬 우선정렬(LTK Near You 원리). 지역 토큰이 제목/채널/설명에 매치되는 항목을
+//   상단으로, 나머지는 관련도순(원 순서) 유지 — 안정 분할. 순수 함수(입력 무변형·side-effect 0).
+//   YouTube 호출·KV 저장분(무정렬 원본)에는 관여하지 않고 응답 시점에만 적용.
+function rankWithLocalBoost(items: DiscoverCandidate[], regionToken: string): DiscoverCandidate[] {
+  if (!regionToken || items.length < 2) return items;
+  const matched: DiscoverCandidate[] = [];
+  const rest: DiscoverCandidate[] = [];
+  for (const it of items) {
+    const desc = (it.raw_meta as { description?: unknown } | null)?.description;
+    const hay = `${it.title ?? ""} ${it.author_name ?? ""} ${typeof desc === "string" ? desc : ""}`;
+    (hay.includes(regionToken) ? matched : rest).push(it);
+  }
+  return matched.length ? [...matched, ...rest] : items;
 }
 
 export const Route = createFileRoute("/api/discover/")({
@@ -255,9 +276,15 @@ export const Route = createFileRoute("/api/discover/")({
               kw.length > ENHANCED_MAX_LEN ? kw.slice(0, ENHANCED_MAX_LEN).trim() : kw;
             rawQuery = enhancedQuery;
           } else {
-            // topic 모드면 partner=null → raw 패스스루. 기본이면 매장 보강(기존 동작).
-            enhancedQuery = buildEnhancedQuery(rawInput, partner);
+            // topic 모드면 partner=null → raw 패스스루(현행 무변경).
+            // C16 — 이 분기 = 사용자 명시 검색어(빈 값은 위 400 가드) → 지역 토큰 off
+            //   (원문 존중·전국 결과). 빈검색/추천/기본 탐색(store·topic·타 호출자)은
+            //   기본값 boost 유지 — 파일럿 지역성 보존.
+            enhancedQuery = buildEnhancedQuery(rawInput, partner, "off");
           }
+
+          // C16 — 로컬 우선정렬용 지역 토큰. 손님/지역 미상 = "" → rankWithLocalBoost 무동작.
+          const localRegion = pickRegionToken(partner?.address ?? null);
 
           // 쿼터 보호 (KV). 모든 KV 호출은 fail-open — 장애 시 검색을 죽이지 않는다.
           const kv = getKV();
@@ -275,6 +302,8 @@ export const Route = createFileRoute("/api/discover/")({
               if (cached) {
                 return Response.json({
                   ...cached,
+                  // C16 — 캐시는 무정렬 원본(키·TTL 무변경) — 정렬은 응답 시점 요청자 지역 기준.
+                  candidates: rankWithLocalBoost(cached.candidates ?? [], localRegion),
                   ...(storeMode ? { storeResolved: true } : {}),
                   cached: true,
                 });
@@ -348,9 +377,10 @@ export const Route = createFileRoute("/api/discover/")({
             }
           }
 
-          // h. 응답
+          // h. 응답 — C16: KV 에는 위(g)에서 무정렬 원본을 저장했고, 응답만 로컬 우선정렬.
           return Response.json({
             ...payload,
+            candidates: rankWithLocalBoost(payload.candidates, localRegion),
             ...(storeMode ? { storeResolved: true } : {}),
             cached: false,
           });
