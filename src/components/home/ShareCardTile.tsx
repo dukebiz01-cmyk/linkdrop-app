@@ -1,4 +1,4 @@
-import { Play, Send, Image as ImageIcon, Diamond } from "lucide-react";
+import { Play, Send, Image as ImageIcon, Diamond, Package } from "lucide-react";
 import type { DropFeedItem } from "@/components/home-page";
 import { useCountdown } from "@/hooks/use-countdown";
 
@@ -89,17 +89,29 @@ export function TimerBadge({ expiresAt, serverNow }: { expiresAt: string; server
 }
 
 // 재고 메타 — "N개 남음". L4: 공급값 그대로 표시만. N≤5 앰버(L7), N≤0 "마감".
-//   Phase 1-C — named export(수신카드 재사용). 렌더·로직 무수정.
+//   Phase 1-C — named export(수신카드 재사용).
+//   SM-2-fix2 — 뱃지형 승격: 필 뱃지(배경 틴트+얇은 보더) + Package 아이콘 수직 센터 +
+//   tabular-nums(자릿수 가변에도 흔들림 0). radius·높이·폰트 = TimerBadge 계열 통일
+//   (rounded·px-1.5·py-0.5·text-[10px] — 지시의 rounded-md 대신 TimerBadge 동일 radius 택1).
+//   색 로직 무변경(기본 슬레이트 / ≤5 앰버 / 0 저채도) — 컨테이너만 뱃지화.
 export function StockMeta({ remaining }: { remaining: number }) {
   if (remaining <= 0) {
-    return <span className="shrink-0 text-[11px] font-semibold text-[#94A3B8]">마감</span>;
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded border border-[#E8EDF3] bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-semibold text-[#94A3B8]">
+        <Package className="size-3" strokeWidth={2} />
+        마감
+      </span>
+    );
   }
   return (
     <span
-      className={`shrink-0 text-[11px] font-semibold tabular-nums ${
-        remaining <= 5 ? "text-[#B45309]" : "text-[#64748B]"
+      className={`inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+        remaining <= 5
+          ? "border-[#FDE68A] bg-[#FFFBEB] text-[#B45309]"
+          : "border-[#E8EDF3] bg-[#F8FAFC] text-[#64748B]"
       }`}
     >
+      <Package className="size-3" strokeWidth={2} />
       {remaining}개 남음
     </span>
   );
