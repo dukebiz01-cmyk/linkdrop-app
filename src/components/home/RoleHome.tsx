@@ -1,8 +1,9 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Sparkles, Users, ChevronRight, ArrowRight, TrendingUp, Bell } from "lucide-react";
 import { PerformanceBanner } from "@/components/home/PerformanceBanner";
-// P6-7(형님 확정 A안) — 링고AI 진단 카드(자체완결·내부 데이터 자가 로드) 스튜디오→홈 이동.
-import { CreatorCoachCard } from "@/components/creator-coach-card";
+// P6-8(형님 확정 A안) — 홈 AI 표면 1개: 링고AI 셸(가이드 상시 + 성과 진단 접힘·lazy).
+//   P6-7 이식분(CreatorCoachCard)은 셸 내부로 수렴 — 이 파일 직접 import 제거.
+import { LingoAiHomeCard } from "@/components/home/LingoAiHomeCard";
 import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
 import { SectionHeader } from "@/components/home/v4-bits";
@@ -259,12 +260,11 @@ export function RoleHome({
       {/* 성과 스탯 3타일 — 전환·적립·구독자. */}
       <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />
 
-      {/* 링고AI 매장 진단 (항상 노출 — 진단 or 포인터). ★TodayAiCard 0터치(기능 유지). */}
-      <TodayAiCard guide={merchant.guide} onGoResults={onGoResults} />
-
-      {/* P6-7 — 링고AI 성과 코치(구 스튜디오 상단 이식, 사업자 세그먼트 전용 — 비사업자 홈 무변경).
-          자체완결 컴포넌트(내부 Edge 호출) — 홈 loader 확장 불요. */}
-      <CreatorCoachCard />
+      {/* P6-8 — AI 한 지붕: 링고AI 셸 1개(가이드 상시 + 성과 진단 접힘). AI 박스 2겹 소멸.
+          ★TodayAiCard 컴포넌트 0터치 — 셸에 콘텐츠 주입만(크롬 중화는 셸 래퍼 담당). */}
+      <LingoAiHomeCard
+        guideSlot={<TodayAiCard guide={merchant.guide} onGoResults={onGoResults} />}
+      />
 
       {/* 제안 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. 스타일만 V4 톤. */}
       {merchant.proposals.length > 0 ? (
