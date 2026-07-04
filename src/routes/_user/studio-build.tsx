@@ -17,6 +17,8 @@ import { buildProductWidget } from "@/lib/adapters";
 import type { InfoDropPageProps } from "@/components/info-drop-page";
 // P6-2 — 구 /studio 셸 이식: AI 코치 카드(내부 링크 0 — 경로 보정 불필요).
 import { CreatorCoachCard } from "@/components/creator-coach-card";
+// Phase 2 — 미리보기 쿠폰 타이머(1-A 배지 재사용, 수신카드 1-C couponPanel 동형).
+import { TimerBadge } from "@/components/home/ShareCardTile";
 import { EMPTY_PRODUCT_COPY, type ProductCopyValue } from "@/components/create/ProductCopyEditor";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
@@ -815,6 +817,13 @@ export function CardStudioPage() {
         <div className="space-y-2">
           <h2 className={`text-sm font-bold tracking-ko ${isLightCard ? "text-text-strong" : "text-white"}`}>예약하면 받는 혜택</h2>
           <div className="space-y-3">
+            {/* Phase 2 — 마감 타이머(수신카드 1-C couponPanel 동형, relative 스트립).
+                L6 예외: 미리보기 한정 클라 시계 폴백(31창 승인) — serverNow 미주입. */}
+            {selectedCoupon.valid_until ? (
+              <div className="relative h-7">
+                <TimerBadge expiresAt={selectedCoupon.valid_until} />
+              </div>
+            ) : null}
             <CouponPreview coupon={{ ...selectedCoupon, title: selectedCoupon.title ?? "" }} />
             <p className={`text-xs font-medium tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}>
               예약을 신청하면 쿠폰이 지갑에 담겨요.

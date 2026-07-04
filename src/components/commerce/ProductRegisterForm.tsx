@@ -153,6 +153,8 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
   // CAT-1 고지 — 원산지(전 카테고리 필수, 상품정보제공고시). 빈칸 제출 시 인라인 안내 + 차단.
   const [origin, setOrigin] = useState("");
   const [originError, setOriginError] = useState(false);
+  // Phase 2 — Droppy 공유 보상 비율(정수 % 0~10, 기본 0=미설정). 저장은 dropy_rate(0~0.10).
+  const [dropyPercent, setDropyPercent] = useState(0);
   // KAMIS 품목 2단(부류→품목) — 시세(STEP4)·제철(STEP5) 연동 기반. 선택 사항(미선택 허용).
   const [kamisCategoryCode, setKamisCategoryCode] = useState("");
   const [kamisItemCode, setKamisItemCode] = useState("");
@@ -459,6 +461,9 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
               //   서버(/api/drops)는 block_data 를 스프레드 보존 머지하므로 그대로 저장된다.
               category,
               origin: originTrimmed,
+              // Phase 2(㉮) — Droppy 비율(numeric 0~0.10, 기본 0=미설정 → 카드 배지 미렌더 유지).
+              //   Phase 3: 구매 확정 시 rate를 conversion/preorder로 스냅샷(사후 변경 무영향) — 정산은 스냅샷 기준.
+              dropy_rate: dropyPercent / 100,
               ...(category === "processed" && expiryDate ? { expiry_date: expiryDate } : {}),
             },
             position: 0,
@@ -989,6 +994,43 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
             />
             <span className="shrink-0 text-sm font-semibold text-[#64748B]">원</span>
           </div>
+        </div>
+
+        {/* Phase 2 — Droppy 공유 보상 비율(0~10%, 1% 단위). 표시 = 풀 총액만 —
+            몫 분해(60/30/10) 표시는 Phase 3 소관[보정1]. 문안 락: 모집·수익 뉘앙스 금지,
+            UI=Droppy(영문)·코드=dropy. 저장 = product 블록 jsonb dropy_rate. */}
+        <div className="space-y-2 rounded-2xl border border-border bg-surface/40 p-4">
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="pd-dropy"
+              className="text-xs font-semibold tracking-ko text-text-strong"
+            >
+              공유 보상 비율 <span className="font-medium text-text-subtle">(Droppy)</span>
+            </label>
+            <span className="text-sm font-bold tabular-nums tracking-ko text-text-strong">
+              {dropyPercent}%
+            </span>
+          </div>
+          <input
+            id="pd-dropy"
+            type="range"
+            min={0}
+            max={10}
+            step={1}
+            value={dropyPercent}
+            onChange={(e) => setDropyPercent(Number(e.target.value))}
+            className="w-full accent-[#2563EB]"
+          />
+          {/* 풀 총액만 — 판매가 유효 + 비율 > 0 일 때(예: 32,000원 × 5% = 1,600원). */}
+          {dropyPercent > 0 && Number(price) > 0 ? (
+            <p className="text-[12px] font-medium tabular-nums tracking-ko text-text-muted">
+              {Number(price).toLocaleString("ko-KR")}원 × {dropyPercent}% ={" "}
+              {Math.round((Number(price) * dropyPercent) / 100).toLocaleString("ko-KR")}원
+            </p>
+          ) : null}
+          <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
+            판매 성사 시 기여도에 따라 분배됩니다 · 공유만으로는 적립되지 않습니다
+          </p>
         </div>
 
         {/* 나-1 — 홍보 문구(선택). 상품명·가격·메모 기반 AI 카피 + 수동 수정. */}

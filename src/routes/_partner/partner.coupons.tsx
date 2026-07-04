@@ -176,6 +176,15 @@ export function CouponManageView({
       toast.error("사용 기한 날짜를 선택해 주세요.");
       return;
     }
+    // Phase 2 — 만료(valid_until)가 valid_from(=저장 시점 now)보다 이르면 저장 거부.
+    //   datetime-local 값은 브라우저 로컬(KST) 기준으로 파싱된다.
+    if (!noExpiry) {
+      const untilMs = new Date(validUntil).getTime();
+      if (!Number.isFinite(untilMs) || untilMs <= Date.now()) {
+        toast.error("사용 기한은 지금 이후의 시각이어야 해요.");
+        return;
+      }
+    }
 
     setSubmitting(true);
     try {
@@ -400,8 +409,9 @@ export function CouponManageView({
               type="button"
               onClick={() => {
                 setNoExpiry(false);
-                // 토글 시 빈값이면 미래(오늘+30일)로 프리필 → "기한 지정 가능" 명확화.
-                if (!validUntil) setValidUntil(kstDateStr(30));
+                // 토글 시 빈값이면 미래(오늘+30일 23:59 KST)로 프리필 → "기한 지정 가능" 명확화.
+                //   Phase 2 — 분 단위 datetime(타이머 표시 정밀도와 정합).
+                if (!validUntil) setValidUntil(`${kstDateStr(30)}T23:59`);
               }}
               aria-pressed={!noExpiry}
               className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold transition-colors ${
@@ -415,9 +425,9 @@ export function CouponManageView({
           </div>
           {!noExpiry ? (
             <input
-              type="date"
+              type="datetime-local"
               value={validUntil}
-              min={kstDateStr()} /* 오늘(KST) 이전 날짜 선택 방지 */
+              min={kstDateTimeStr()} /* Phase 2 — 지금(KST) 이전 시각 선택 방지(분 단위) */
               onChange={(e) => setValidUntil(e.target.value)}
               className="mt-2 w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] focus:border-[#0A0A0A] focus:outline-none"
               required
@@ -568,6 +578,11 @@ function kstDateStr(offsetDays = 0): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(
     new Date(Date.now() + offsetDays * 86_400_000),
   );
+}
+
+// Phase 2 — datetime-local min 용 KST "YYYY-MM-DDTHH:mm"(분 단위).
+function kstDateTimeStr(): string {
+  return new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 16);
 }
 
 function formatDate(iso: string): string {
