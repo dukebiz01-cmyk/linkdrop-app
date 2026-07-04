@@ -1,5 +1,6 @@
-import { Play, Send, Image as ImageIcon } from "lucide-react";
+import { Play, Send, Image as ImageIcon, Diamond } from "lucide-react";
 import type { DropFeedItem } from "@/components/home-page";
+import { useCountdown } from "@/hooks/use-countdown";
 
 /**
  * ShareCardTile — V4 카드(정사각 썸네일 + 솔리드 정보영역 + 슬레이트 + 도트칩 + 섀도).
@@ -44,16 +45,93 @@ function purposeMeta(v: string | undefined): ChipMeta | null {
   }
 }
 
+// Phase 1-A — 공유 여정 노드. [보정2] props 타입 신설까지만 — 렌더 코드는 후속 Phase(작성 금지).
+export type ShareJourneyNode = {
+  name: string;
+  role: string;
+  kind: "peer" | "me" | "buyer";
+  emphasis?: boolean;
+};
+
+// ── Phase 1-A 하드락 ──
+//   L1/L3 — 기준은 expiresAt 하나: 리셋·재계산 금지(새로고침 동일값. 계산은 use-countdown 훅 소관).
+//   L2 — 만료 후 연장 렌더 금지: "마감" 고정.
+//   L6 — serverNow 우선(훅이 offset 보정. 주입 배선은 1-C).
+//   L7 — 상시 빨강·강펄스 금지: urgent(≤24h) 앰버가 최종 구간.
+//   L4 — remainingStock 은 공급값 표시만(가공·연출 감산 금지).
+
+// 타이머 배지 — 썸네일 우하단(재생시간 배지 계열 시각). D-N HH:MM:SS(N>0) / HH:MM:SS(당일).
+function TimerBadge({ expiresAt }: { expiresAt: string }) {
+  const cd = useCountdown(expiresAt); // serverNow 주입은 1-C(d.$shareUuid loader 확장)에서
+  if (!cd) return null; // 하이드레이션 안전 — 마운트 전 미렌더
+  if (cd.expired) {
+    // L2 — 만료 고정 표기(저채도). 연장 렌더 없음.
+    return (
+      <span className="absolute bottom-2 right-2 rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-semibold text-white/60">
+        마감
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`absolute bottom-2 right-2 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white ${
+        cd.urgent ? "bg-[#B45309]/90" : "bg-black/65" // L7 — urgent(≤24h)만 앰버, 빨강 금지
+      }`}
+    >
+      {cd.days > 0 ? `D-${cd.days} ${cd.hms}` : cd.hms}
+    </span>
+  );
+}
+
+// 재고 메타 — "N개 남음". L4: 공급값 그대로 표시만. N≤5 앰버(L7), N≤0 "마감".
+function StockMeta({ remaining }: { remaining: number }) {
+  if (remaining <= 0) {
+    return <span className="shrink-0 text-[11px] font-semibold text-[#94A3B8]">마감</span>;
+  }
+  return (
+    <span
+      className={`shrink-0 text-[11px] font-semibold tabular-nums ${
+        remaining <= 5 ? "text-[#B45309]" : "text-[#64748B]"
+      }`}
+    >
+      {remaining}개 남음
+    </span>
+  );
+}
+
+// 드로피 배지 — [보정1] 아이콘+숫자만("+{n}"), 단위 문자(P) 보류. 모집·수익 뉘앙스 문안 금지(코드명 dropy).
+function DropyBadge({ amount }: { amount: number }) {
+  return (
+    // V4 앱 액센트 — 목적색(mode-accent) 체계와 무관.
+    <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-bold tabular-nums text-[#2563EB]">
+      <Diamond className="size-3" strokeWidth={2.5} />+{amount}
+    </span>
+  );
+}
+
 export function ShareCardTile({
   drop,
   purpose,
   onShare,
   onClick,
+  expiresAt,
+  remainingStock,
+  dropyReward,
 }: {
   drop: DropFeedItem;
   purpose?: string;
   onShare?: (uuid: string) => void;
   onClick?: () => void;
+  /** Phase 1-A — ISO 마감시각(coupons.valid_until 계열). 미주입 = 타이머 미렌더. */
+  expiresAt?: string;
+  /** Phase 1-A — 파생 재고(1-B 공급). 미주입 = 미렌더. L4: 공급값 표시만. */
+  remainingStock?: number;
+  /** Phase 1-A — 드로피 보상(값 주입은 P6 이후 — 렌더만 선구현). */
+  dropyReward?: number;
+  /** [보정2] 타입 신설까지만 — 렌더 코드 없음(후속 Phase). */
+  shareCount?: number;
+  /** [보정2] 타입 신설까지만 — 렌더 코드 없음(후속 Phase). */
+  shareJourney?: ShareJourneyNode[];
 }) {
   const isVideo = drop.videoDurationSec > 0;
   const chip = purposeMeta(purpose);
@@ -119,14 +197,31 @@ export function ShareCardTile({
             {formatDuration(drop.videoDurationSec)}
           </span>
         ) : null}
+
+        {/* Phase 1-A — 마감 타이머(우하단, 재생시간 배지 계열·종류칩과 충돌 없음). 미주입 = 미렌더. */}
+        {expiresAt ? <TimerBadge expiresAt={expiresAt} /> : null}
       </div>
 
-      {/* 정보영역 — 솔리드, 고정 높이 컬럼 정렬(메이커·지역 1줄 + 제목 2줄). */}
+      {/* 정보영역 — 솔리드, 고정 높이 컬럼 정렬(메이커·지역 1줄 + 제목 2줄).
+          Phase 1-A — 재고·드로피 주입 시에만 메타 줄을 양분(좌 메이커 / 우 배지). 미주입 = 기존 마크업 그대로(픽셀 동일). */}
       <div className="flex flex-col px-3 pb-3 pt-2.5">
-        <div className="truncate text-[11px] font-semibold text-[#64748B]">
-          {drop.maker.name}
-          {drop.localName ? ` · ${drop.localName}` : ""}
-        </div>
+        {remainingStock != null || dropyReward != null ? (
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 truncate text-[11px] font-semibold text-[#64748B]">
+              {drop.maker.name}
+              {drop.localName ? ` · ${drop.localName}` : ""}
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {dropyReward != null ? <DropyBadge amount={dropyReward} /> : null}
+              {remainingStock != null ? <StockMeta remaining={remainingStock} /> : null}
+            </div>
+          </div>
+        ) : (
+          <div className="truncate text-[11px] font-semibold text-[#64748B]">
+            {drop.maker.name}
+            {drop.localName ? ` · ${drop.localName}` : ""}
+          </div>
+        )}
         <div className="mt-1 line-clamp-2 min-h-[37px] text-[13.5px] font-semibold leading-[1.4] tracking-[-0.01em] text-[#0F172A]">
           {drop.title}
         </div>
