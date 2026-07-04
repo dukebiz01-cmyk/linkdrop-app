@@ -1,10 +1,13 @@
-import { TrendingUp, Store, Truck, Globe, Tags } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 
-// 공용 시세 어드바이저 — partner.products.new 내부 정의에서 무변경 추출(S4-1).
-//   순수 presentational: props {priceBand, loading} 만 받음. get-price-band invoke·state 는 호출부(부모) 몫.
-//   §0: 생산자 가격 결정 참고용만 — 시세를 저장/손님 카드로 내보내지 않는다.
+// 공용 시세 어드바이저 — P5b(단위 헌법 1~3조) 표기 전면 교체.
+//   구조: ①개당(또는 kg당) 헤드라인 → ②환산 근거 줄 → ③3열 고정 표(도매/인터넷/제외)
+//        → ④내 판매단위 강조 → ⑤고정 참고 문구(모든 상태 공통).
+//   순수 presentational: props {priceBand, loading, composition} 만. invoke·state 는 호출부 몫.
+//   §0: 생산자 가격 결정 참고용만 — 시세를 저장/손님 카드로 내보내지 않는다. 단정·권유 금지.
+//   표기 규칙: 전 금액 백원 반올림 + "약" 접두.
 
-// get-price-band 응답(STEP4-A). sources 배열 = 다중소스(KAMIS 소매 + 추후 도매/인터넷).
+// get-price-band 응답 소스(레거시 sources 배열 — P5b 표기는 아래 구조화 블록 사용).
 export type PriceSource = {
   source: string;
   source_label: string;
@@ -15,6 +18,25 @@ export type PriceSource = {
   rank_note: string;
   ref_date: string;
 };
+
+// P5a 구조화 블록 — base_unit=kg. 온라인 통계는 kg 환산가 기준으로만 산출.
+export type WholesaleBlock = {
+  min: number;
+  max: number;
+  avg: number;
+  market_count: number;
+  as_of: string;
+};
+export type OnlineBlock = {
+  status: "ok" | "insufficient";
+  min: number | null;
+  max: number | null;
+  avg: number | null;
+  converted_count: number;
+  excluded_count: number;
+  as_of: string;
+};
+
 export type PriceBandResult = {
   status: "ok" | "no_data" | "unconfigured" | "error";
   item_code: string;
@@ -22,49 +44,56 @@ export type PriceBandResult = {
   sources: PriceSource[];
   cached: boolean;
   note?: string;
+  // P5a 확장(옵셔널) — 구버전 응답(미배포·구캐시)엔 없음 → 표 대신 데이터 부족 표기.
+  base_unit?: "kg";
+  wholesale?: WholesaleBlock | null;
+  online?: OnlineBlock | null;
+  per_unit_weight_g?: number;
+  unit_count?: number;
 };
 
-function fmtWon(n: number): string {
-  return n.toLocaleString("ko-KR");
+// 내 판매 구성(등록폼 입력) — 개당 환산·내 판매단위 강조의 기준.
+export type PriceComposition = {
+  packType: string; // 박스/봉/망/기타
+  unitCount: number;
+  totalKg: number;
+};
+
+// 백원 반올림(단위 헌법 표기 규칙 — 호출부에서 "약" 접두와 함께 사용).
+function fmtWonH(n: number): string {
+  return (Math.round(n / 100) * 100).toLocaleString("ko-KR");
 }
-// "2026-06-23" → "06/23"
+// "2026-07-03" → "7/3"
 function fmtRefDate(iso: string): string {
-  const m = iso.slice(5, 7);
-  const d = iso.slice(8, 10);
-  return m && d ? `${m}/${d}` : iso;
+  const m = Number(iso.slice(5, 7));
+  const d = Number(iso.slice(8, 10));
+  return m > 0 && d > 0 ? `${m}/${d}` : iso;
 }
 
-// 포장단위 → kg 수 (kg당 환산용). "kg"=1, "10kg(그물망 3포기)"=10, "개"·환산불가=null.
-function kgPerUnit(unit: string): number | null {
-  if (unit === "kg") return 1;
-  const m = unit.match(/([\d.]+)\s*kg/i);
-  return m ? Number(m[1]) : null;
-}
-// rank_note "… 평균 1,930원/kg" → 1930. 평균 표기 없으면(소매 등급) null.
-function parseAvg(rankNote: string): number | null {
-  const m = rankNote.match(/평균\s*([\d,]+)/);
-  return m ? Number(m[1].replace(/,/g, "")) : null;
-}
-// price_type → 구분 라벨 + 아이콘. (소매=KAMIS / 도매=경락 / 인터넷=네이버)
-const SOURCE_KIND_META: Record<string, { label: string; Icon: typeof Store }> = {
-  retail: { label: "소매", Icon: Store },
-  wholesale: { label: "도매", Icon: Truck },
-  online: { label: "인터넷", Icon: Globe },
-};
+// ⑤ 고정 문구 — 모든 상태에서 항상. 권유·단정 표현 금지(§0).
+const NOTICE = "참고용 정보입니다. 가격은 시장 변동률과 품종·등급에 따라 다를 수 있습니다.";
 
-// KAMIS 소매 시세 어드바이저 — 농가 가격 결정 참고용(§0: 추천/단정 아님, 농가 결정).
-//   다중소스 대비 sources.map(4-B 도매·4-C 인터넷 추가되면 자동으로 여러 줄).
+function NoticeLine() {
+  return (
+    <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">{NOTICE}</p>
+  );
+}
+
+// 시세 어드바이저 — 농가 가격 결정 참고용(§0: 추천/단정 아님, 농가 결정).
 export function PriceBandAdvisor({
   priceBand,
   loading,
+  composition,
 }: {
   priceBand: PriceBandResult | null;
   loading: boolean;
+  composition?: PriceComposition | null;
 }) {
   if (loading) {
     return (
-      <div className="mt-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
+      <div className="mt-2 space-y-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
         <p className="text-sm font-medium tracking-ko text-text-muted">시세 조회 중…</p>
+        <NoticeLine />
       </div>
     );
   }
@@ -72,38 +101,51 @@ export function PriceBandAdvisor({
   // unconfigured/error → 작은 안내만(등록 막지 않음).
   if (priceBand.status === "unconfigured" || priceBand.status === "error") {
     return (
-      <div className="mt-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
+      <div className="mt-2 space-y-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
         <p className="text-[12px] font-medium tracking-ko text-text-subtle">
           시세 정보를 불러올 수 없어요.
         </p>
+        <NoticeLine />
       </div>
     );
   }
-  // no_data(옥수수 등 미조사) → 담담한 회색 안내.
-  if (priceBand.status === "no_data" || priceBand.sources.length === 0) {
+
+  const w = priceBand.wholesale ?? null;
+  const o =
+    priceBand.online && priceBand.online.status === "ok" && priceBand.online.min != null
+      ? priceBand.online
+      : null;
+  const excludedCount = priceBand.online?.excluded_count ?? 0;
+  // 헤드라인·내 판매단위의 kg 기준 밴드 — 인터넷(환산) 우선, 없으면 도매.
+  const kgBand = o
+    ? { min: o.min as number, max: o.max as number }
+    : w
+      ? { min: w.min, max: w.max }
+      : null;
+
+  // insufficient/no_data/구버전 응답 — 표 대신 정직 표기 + ⑤ 유지.
+  if (!kgBand) {
     return (
-      <div className="mt-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
+      <div className="mt-2 space-y-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
         <p className="text-[13px] font-medium leading-relaxed tracking-ko text-text-muted">
-          이 품목은 KAMIS 시세 정보가 없어요 (시세 미조사 품목).
+          비교 데이터 부족 — 이 품목은 아직 견줄 시세가 충분하지 않아요.
         </p>
+        {excludedCount > 0 ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+            구성(수량·중량) 불명 리스팅 {excludedCount}건은 비교에서 제외
+          </p>
+        ) : null}
+        <NoticeLine />
       </div>
     );
   }
-  // ok — (1)3개 소스 표(kg 통일) + (2)도매↔직거래 격차 박스 + (3)수급 맥락. §0: 생산자 참고용.
-  const rows = priceBand.sources.map((s) => {
-    const kgCount = kgPerUnit(s.unit);
-    const lowKg = kgCount ? Math.round(s.low / kgCount) : null;
-    const highKg = kgCount ? Math.round(s.high / kgCount) : null;
-    // avg 는 단위가 정확히 "kg"(도매·인터넷 kg) 일 때만 kg당으로 신뢰(소매·개 단위는 제외).
-    const avgKg = s.unit === "kg" ? parseAvg(s.rank_note) : null;
-    return { s, lowKg, highKg, avgKg };
-  });
-  const wholesale = rows.find((r) => r.s.price_type === "wholesale");
-  const online = rows.find((r) => r.s.price_type === "online");
-  // 격차 = 도매·인터넷 둘 다 kg 평균 있고, 직거래가 더 높을 때만(graceful).
-  const showGap =
-    wholesale?.avgKg != null && online?.avgKg != null && online.avgKg > wholesale.avgKg;
-  const gap = showGap ? (online!.avgKg as number) - (wholesale!.avgKg as number) : 0;
+
+  // 개당 환산 기준 — 폼 구성 입력 우선, 없으면 서버 에코(per_unit_weight_g).
+  const perUnitG = composition
+    ? (composition.totalKg * 1000) / composition.unitCount
+    : (priceBand.per_unit_weight_g ?? null);
+  const hasPerUnit = perUnitG != null && perUnitG > 0;
+  const toUnit = (kgWon: number) => kgWon * ((perUnitG as number) / 1000);
 
   return (
     <div className="mt-2 space-y-3 rounded-xl border border-border bg-surface/40 p-4">
@@ -112,68 +154,83 @@ export function PriceBandAdvisor({
         <span className="text-sm font-bold tracking-ko text-text-strong">시세 참고 정보</span>
       </div>
 
-      {/* (1) 3개 소스 표 — 구분 | 시세 | 출처. kg 통일(소매는 포장단위 ÷ kg수). */}
-      <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-bg">
-        {rows.map(({ s, lowKg, highKg, avgKg }) => {
-          const meta = SOURCE_KIND_META[s.price_type];
-          const Icon = meta?.Icon ?? Tags;
-          const priceText =
-            lowKg != null
-              ? `${fmtWon(lowKg)}~${fmtWon(highKg as number)}원/kg`
-              : `${fmtWon(s.low)}~${fmtWon(s.high)}원${s.unit ? `/${s.unit}` : ""}`;
-          return (
-            <li key={`${s.source}-${s.price_type}`} className="px-3 py-2.5">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="flex shrink-0 items-center gap-1.5 text-sm font-bold tracking-ko text-text-strong">
-                  <Icon className="size-4 text-text-muted" strokeWidth={2} />
-                  {meta?.label ?? s.source_label}
-                </span>
-                <span className="text-right text-base font-bold tabular-nums tracking-ko text-text-strong">
-                  {priceText}
-                  {avgKg != null ? (
-                    <span className="ml-1.5 text-xs font-medium text-text-muted">
-                      평균 {fmtWon(avgKg)}
-                    </span>
-                  ) : null}
-                </span>
-              </div>
-              <p className="mt-0.5 text-[11px] leading-relaxed tracking-ko text-text-subtle">
-                {s.rank_note} · {fmtRefDate(s.ref_date)} 기준
-              </p>
-            </li>
-          );
-        })}
-      </ul>
+      {/* ① 헤드라인 — 개당(구성 있을 때) / kg당(없을 때). 26px. */}
+      <p className="text-[26px] font-bold leading-tight tabular-nums tracking-ko text-text-strong">
+        {hasPerUnit
+          ? `개당 약 ${fmtWonH(toUnit(kgBand.min))}~${fmtWonH(toUnit(kgBand.max))}원`
+          : `kg당 약 ${fmtWonH(kgBand.min)}~${fmtWonH(kgBand.max)}원`}
+      </p>
 
-      {/* (2) 도매↔직거래 격차 박스 — 도매·인터넷 둘 다(kg) 있고 직거래가 더 높을 때만. */}
-      {showGap ? (
-        <div className="rounded-lg border border-action bg-bg p-3">
-          <p className="text-sm font-bold tracking-ko text-text-strong">
-            직거래하면 생산자님의 몫이 커져요
-          </p>
-          <p className="mt-1.5 text-[13px] font-medium leading-relaxed tracking-ko text-text-muted">
-            도매상에 넘기면{" "}
-            <span className="font-bold tabular-nums text-text-strong">
-              {fmtWon(wholesale!.avgKg as number)}원/kg
-            </span>{" "}
-            → 직거래하면{" "}
-            <span className="font-bold tabular-nums text-text-strong">
-              {fmtWon(online!.avgKg as number)}원/kg
-            </span>
-          </p>
-          <p className="mt-1 text-[13px] font-bold tabular-nums tracking-ko text-action">
-            차이 {fmtWon(gap)}원/kg = 유통이 가져가던 몫
-          </p>
+      {/* ② 근거 줄 — 내 구성으로 환산했음을 명시(12px muted). 구성 없으면 생략. */}
+      {hasPerUnit && composition ? (
+        <p className="text-[12px] font-medium tracking-ko text-text-muted">
+          개당 약 {Math.round(perUnitG as number).toLocaleString("ko-KR")}g 기준 · 내 구성(
+          {composition.unitCount}개 · {composition.totalKg}kg)으로 환산한 값
+        </p>
+      ) : null}
+
+      {/* ③ 3열 고정 표 — 64px/auto/118px, 고정 레이아웃, 전 셀 nowrap, 숫자 tabular. */}
+      <table
+        className="w-full border-collapse text-[12px] tracking-ko"
+        style={{ tableLayout: "fixed" }}
+      >
+        <colgroup>
+          <col style={{ width: 64 }} />
+          <col />
+          <col style={{ width: 118 }} />
+        </colgroup>
+        <tbody className="[&_td]:whitespace-nowrap [&_td]:py-2 [&_td]:align-baseline">
+          {w ? (
+            <tr className="border-t border-border">
+              <td className="font-bold text-text-strong">도매</td>
+              <td className="font-medium tabular-nums text-text-strong">
+                kg당 약 {fmtWonH(w.min)}~{fmtWonH(w.max)}원 · 평균 약 {fmtWonH(w.avg)}원
+              </td>
+              <td className="text-right text-[11px] font-medium tabular-nums text-text-muted">
+                {w.market_count}개 시장 · {fmtRefDate(w.as_of)}
+              </td>
+            </tr>
+          ) : null}
+          {o ? (
+            <tr className="border-t border-border">
+              <td className="font-bold text-text-strong">인터넷</td>
+              <td className="font-medium tabular-nums text-text-strong">
+                {hasPerUnit
+                  ? `개당 약 ${fmtWonH(toUnit(o.min as number))}~${fmtWonH(toUnit(o.max as number))}원`
+                  : `kg당 약 ${fmtWonH(o.min as number)}~${fmtWonH(o.max as number)}원`}{" "}
+                · 환산가
+              </td>
+              <td className="text-right text-[11px] font-medium tabular-nums text-text-muted">
+                {o.converted_count}건 환산 · {fmtRefDate(o.as_of)}
+              </td>
+            </tr>
+          ) : null}
+          {excludedCount > 0 ? (
+            <tr className="border-t border-border">
+              <td className="font-bold text-text-subtle">제외</td>
+              <td colSpan={2} className="text-[11px] font-medium text-text-subtle">
+                구성(수량·중량) 불명 리스팅 {excludedCount}건은 비교에서 제외
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+
+      {/* ④ 내 판매단위 강조 — 구성 입력이 있을 때만. 우측 정렬 금액. */}
+      {composition ? (
+        <div className="flex items-baseline justify-between gap-2 rounded-lg bg-surface px-3 py-2.5">
+          <span className="shrink-0 text-xs font-semibold tracking-ko text-text-strong">
+            {composition.unitCount}개들이 {composition.packType}
+          </span>
+          <span className="text-right text-sm font-bold tabular-nums tracking-ko text-text-strong">
+            = 약 {fmtWonH(kgBand.min * composition.totalKg)}~
+            {fmtWonH(kgBand.max * composition.totalKg)}원
+          </span>
         </div>
       ) : null}
 
-      {/* (3) 수급 맥락 + §0 — 가격 추천/단정 아님, 농가가 직접 결정. */}
-      <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
-        제철엔 물량 몰려 도매가 낮아져요. 정성껏 키운 만큼, 직거래로 제값 받으세요.
-      </p>
-      <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
-        ※ 내 판매가는 직접 정하세요. 신품종·유기농·한정수량은 더 받을 수 있어요.
-      </p>
+      {/* ⑤ 고정 문구 — 모든 상태 공통(§0: 권유·단정 금지). */}
+      <NoticeLine />
     </div>
   );
 }

@@ -115,6 +115,27 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
   // STEP4-A — KAMIS 소매 시세 어드바이저(농가 가격 참고용). 품목 선택 시 get-price-band 조회.
   const [priceBand, setPriceBand] = useState<PriceBandResult | null>(null);
   const [priceBandLoading, setPriceBandLoading] = useState(false);
+  // P5b 판매 구성(단위 헌법) — 포장형태×입수×총중량. 시세 환산(per_unit_weight_g) 전용 폼 상태.
+  //   저장 payload 미포함 — blocks/스키마 신규 컬럼 금지(저장 확장은 별도 슬라이스).
+  const [packType, setPackType] = useState("박스");
+  const [packCount, setPackCount] = useState("");
+  const [packWeightKg, setPackWeightKg] = useState("");
+  const packCountNum = Math.floor(Number(packCount));
+  const packWeightNum = Number(packWeightKg);
+  const compositionValid =
+    Number.isFinite(packCountNum) &&
+    packCountNum >= 1 &&
+    Number.isFinite(packWeightNum) &&
+    packWeightNum > 0;
+  // 개당 중량(g) — 총중량÷입수. get-price-band per_unit_weight_g 로 전달 + 자동 표시.
+  const perUnitWeightG = compositionValid
+    ? Math.round((packWeightNum * 1000) / packCountNum)
+    : null;
+  // 정합성 가드 — 개당 10g 미만 / 5kg 초과면 확인 배너(차단 아닌 확인).
+  const compositionSuspect =
+    perUnitWeightG != null && (perUnitWeightG < 10 || perUnitWeightG > 5000);
+  // 시세 조회에 실을 입수 — 구성이 완성됐을 때만(미완성 타이핑 중 재조회 방지용 dep).
+  const unitCountForQuery = perUnitWeightG != null ? packCountNum : null;
   // 나-1 — 상품 카피(headline/selling_points). 비우면 저장 시 키 생략(회귀 0).
   const [copy, setCopy] = useState<ProductCopyValue>(EMPTY_PRODUCT_COPY);
   const [uploading, setUploading] = useState(false);
@@ -162,6 +183,7 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
 
   // 품목 선택 시 KAMIS 소매 시세 조회 (미선택이면 호출 안 함 — 불필요 호출 방지).
   //   detach 주의: supabase.functions.invoke 를 메서드로 직접 호출(this 유지).
+  //   P5b — 판매 구성(per_unit_weight_g/unit_count) 동반 전달 + 구성 타이핑 연타 방지 debounce(350ms).
   useEffect(() => {
     if (!kamisItemCode || !kamisCategoryCode) {
       setPriceBand(null);
@@ -169,31 +191,41 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
     }
     let cancelled = false;
     setPriceBandLoading(true);
-    void (async () => {
-      const fail: PriceBandResult = {
-        status: "error",
-        item_code: kamisItemCode,
-        item_name: null,
-        sources: [],
-        cached: false,
-      };
-      try {
-        const supabase = getSupabase();
-        const { data, error } = await supabase.functions.invoke("get-price-band", {
-          body: { item_code: kamisItemCode, category_code: kamisCategoryCode },
-        });
-        if (cancelled) return;
-        setPriceBand(error || !data ? fail : (data as PriceBandResult));
-      } catch {
-        if (!cancelled) setPriceBand(fail);
-      } finally {
-        if (!cancelled) setPriceBandLoading(false);
-      }
-    })();
+    const timer = setTimeout(() => {
+      void (async () => {
+        const fail: PriceBandResult = {
+          status: "error",
+          item_code: kamisItemCode,
+          item_name: null,
+          sources: [],
+          cached: false,
+        };
+        try {
+          const supabase = getSupabase();
+          const { data, error } = await supabase.functions.invoke("get-price-band", {
+            body: {
+              item_code: kamisItemCode,
+              category_code: kamisCategoryCode,
+              // 단위 헌법 — 구성 입력 시 개수-only 리스팅도 개당중량으로 kg 환산(P5a 파라미터).
+              ...(perUnitWeightG != null && unitCountForQuery != null
+                ? { per_unit_weight_g: perUnitWeightG, unit_count: unitCountForQuery }
+                : {}),
+            },
+          });
+          if (cancelled) return;
+          setPriceBand(error || !data ? fail : (data as PriceBandResult));
+        } catch {
+          if (!cancelled) setPriceBand(fail);
+        } finally {
+          if (!cancelled) setPriceBandLoading(false);
+        }
+      })();
+    }, 350);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
-  }, [kamisItemCode, kamisCategoryCode]);
+  }, [kamisItemCode, kamisCategoryCode, perUnitWeightG, unitCountForQuery]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -421,8 +453,7 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
               <label htmlFor="pd-harvest" className="block">
                 <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
                   <CalendarDays className="size-3.5" strokeWidth={2} />
-                  수확·발송 예정일{" "}
-                  <span className="font-medium text-text-subtle">(선택)</span>
+                  수확·발송 예정일 <span className="font-medium text-text-subtle">(선택)</span>
                 </span>
                 <input
                   id="pd-harvest"
@@ -437,8 +468,7 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
               <label htmlFor="pd-stock" className="block">
                 <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
                   <Hash className="size-3.5" strokeWidth={2} />
-                  한정 수량{" "}
-                  <span className="font-medium text-text-subtle">(선택)</span>
+                  한정 수량 <span className="font-medium text-text-subtle">(선택)</span>
                 </span>
                 <input
                   id="pd-stock"
@@ -460,9 +490,7 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
                 <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
                   <Tags className="size-3.5" strokeWidth={2} />
                   품목 분류{" "}
-                  <span className="font-medium text-text-subtle">
-                    (선택 · 시세·제철 연동용)
-                  </span>
+                  <span className="font-medium text-text-subtle">(선택 · 시세·제철 연동용)</span>
                 </span>
                 <select
                   aria-label="부류 선택"
@@ -496,9 +524,78 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
                   </select>
                 ) : null}
 
+                {/* P5b 판매 구성(단위 헌법) — 포장형태×입수×총중량 → 개당 중량 자동 표시.
+                    시세 환산 전용(per_unit_weight_g 전달) — 저장 payload 미포함. */}
+                {kamisItemCode ? (
+                  <div className="space-y-2 pt-1">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
+                      <Package className="size-3.5" strokeWidth={2} />
+                      판매 구성{" "}
+                      <span className="font-medium text-text-subtle">(선택 · 시세 환산용)</span>
+                    </span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <select
+                        aria-label="포장형태"
+                        value={packType}
+                        onChange={(e) => setPackType(e.target.value)}
+                        className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
+                      >
+                        {["박스", "봉", "망", "기타"].map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        aria-label="입수(개)"
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        value={packCount}
+                        onChange={(e) => setPackCount(e.target.value)}
+                        placeholder="입수(개)"
+                        className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                      />
+                      <input
+                        aria-label="총중량(kg)"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="0.1"
+                        value={packWeightKg}
+                        onChange={(e) => setPackWeightKg(e.target.value)}
+                        placeholder="총중량(kg)"
+                        className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                      />
+                    </div>
+                    {perUnitWeightG != null ? (
+                      <p className="text-[11px] font-medium tabular-nums tracking-ko text-text-muted">
+                        개당 약 {perUnitWeightG.toLocaleString("ko-KR")}g ({packCountNum}개 ·{" "}
+                        {packWeightNum}kg)
+                      </p>
+                    ) : null}
+                    {/* 정합성 가드 — 차단 아닌 확인(개당 10g 미만/5kg 초과). */}
+                    {compositionSuspect ? (
+                      <div className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2">
+                        <p className="text-[11px] font-medium leading-relaxed tracking-ko text-[#92400E]">
+                          입력값을 확인해 주세요: {packCountNum}개에 {packWeightNum}kg이 맞습니까?
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {/* KAMIS 소매 시세 어드바이저 — 품목 선택 시만. 농가 가격 참고용(§0). */}
                 {kamisItemCode ? (
-                  <PriceBandAdvisor priceBand={priceBand} loading={priceBandLoading} />
+                  <PriceBandAdvisor
+                    priceBand={priceBand}
+                    loading={priceBandLoading}
+                    composition={
+                      compositionValid
+                        ? { packType, unitCount: packCountNum, totalKg: packWeightNum }
+                        : null
+                    }
+                  />
                 ) : null}
               </div>
             </div>
