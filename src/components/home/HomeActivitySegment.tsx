@@ -51,6 +51,8 @@ export function HomeActivitySegment({
             <ShareCardTile
               key={drop.shareUuid}
               drop={drop}
+              // Phase 0 — 홈 뱃지 주입(탐색과 동일 소스 drop.intent). 3종 락.
+              purpose={drop.intent}
               onClick={() => openDrop(drop.shareUuid)}
               onShare={() =>
                 void reshareDrop({

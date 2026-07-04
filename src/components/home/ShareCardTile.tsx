@@ -25,13 +25,15 @@ type ChipTone = { dot: string; text: string };
 type ChipMeta = { label: string; tone: ChipTone };
 
 // 종류칩 메타 — 영문 intent / 국문 purpose 양쪽 매핑 + V4 톤(도트색·텍스트색).
-//   정보→info톤 / 쿠폰·예약→coupon톤(blue) / 구매→sale톤. 그 외(ticket/lead/…)·미주입 → null(칩 숨김).
-//   ★ 미주입(undefined) → null = 홈은 칩 없음(기존 계약 보존). 탐색만 purpose 주입 → 칩 표시.
+//   Phase 0(형님 확정) — 3종 락: 정보 / 쿠폰(예약 포함 병합 유지) / 상품판매. 그 외 intent
+//   (ticket/lead/discussion/…)·미주입 → null(칩 숨김) = 3종 락 — 의도된 정책(형님 확정).
+//   ★ Phase 0 — 홈(RoleHome·HomeActivitySegment)도 탐색과 동일하게 purpose 주입(뱃지 전멸 해소).
 function purposeMeta(v: string | undefined): ChipMeta | null {
   switch (v) {
     case "정보":
     case "info":
-      return { label: "정보", tone: { dot: "#64748B", text: "text-[#475569]" } };
+      // Phase 0 2-B — 정보 톤 식별 강화(슬레이트 한 단계 진하게). 쿠폰 블루·상품판매 블랙과 구분.
+      return { label: "정보", tone: { dot: "#475569", text: "text-[#334155]" } };
     case "쿠폰":
     case "예약":
     case "coupon":

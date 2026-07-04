@@ -182,6 +182,8 @@ export function RoleHome({
                 <ShareCardTile
                   key={drop.shareUuid}
                   drop={drop}
+                  // Phase 0 — 홈 뱃지 주입(탐색 explore.tsx 와 동일 소스 drop.intent). 3종 락.
+                  purpose={drop.intent}
                   onShare={() =>
                     void reshareDrop({
                       shareUuid: drop.shareUuid,
@@ -284,6 +286,8 @@ export function RoleHome({
               <ShareCardTile
                 key={drop.shareUuid}
                 drop={drop}
+                // Phase 0 — 홈 뱃지 주입(탐색과 동일 소스 drop.intent). 3종 락.
+                purpose={drop.intent}
                 onShare={() =>
                   void reshareDrop({
                     shareUuid: drop.shareUuid,
