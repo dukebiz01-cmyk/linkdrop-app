@@ -1,7 +1,11 @@
--- # DB 실정의 스냅샷(형상관리용). migrations 아님 — 재적용 금지.
--- # 이력: v8.3(신설, SM-1) → v8.3.1(role '최고공헌' 정정) → v8.3.2(spread 집계 v8.4 정합, 본 캡처).
--- # 원본 마이그레이션 = v8.3.2_get_share_journey_spread_align.sql.
--- # 캡처: 2026-07-04 · pg_get_functiondef · md5(def)=a75ac73f872a1e917665b15f94661bbf
+-- v8.3.2 — get_share_journey 집계 정합 (SM-1 ↔ SM-3 spread 기준 통일)
+--
+-- 배경: SM-1(v8.3) spread = 체인 원점 기준 · fraud 미배제 / SM-3(v8.4 get_feed_spread_count)
+--   = 드랍 기준 · fraud_decision='block' 배제. 어뷰징 노드 발생·다중 체인 드랍에서
+--   상세(아코디언·시트) ↔ 피드 타일 숫자가 갈라짐 → spread CTE 만 v8.4 술어로 동일화.
+-- 변경: spread CTE 단독 교체(원점·chain_origin 스코프 → 드랍 총량, v8.4 술어 복사).
+--   노드 반환 로직(walk/visible/역할/마스킹/origin_check 게이트) 무수정.
+-- 이력: v8.3(신설) → v8.3.1(role '최고공헌' 정정) → v8.3.2(spread 집계 정합, 본 건).
 
 CREATE OR REPLACE FUNCTION public.get_share_journey(p_share_uuid uuid)
  RETURNS TABLE("position" integer, masked_name text, role text, is_viewer boolean, has_conversion boolean, spread_count integer)
@@ -77,4 +81,4 @@ FROM visible v
 LEFT JOIN public.profiles p ON p.id = v.sender_user_id
 WHERE (SELECT ok FROM origin_check)
 ORDER BY v.node_pos;
-$function$
+$function$;
