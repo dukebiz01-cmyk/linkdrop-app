@@ -12,6 +12,9 @@ import { Toaster } from "@/components/ui/sonner";
 import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
 import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 import type { AttachedProduct } from "@/components/create/types";
+// P3 — 구매 미리보기 미러: 손님 /d purchase 와 동일 변환(buildProductWidget) 재사용(단일 소스).
+import { buildProductWidget } from "@/lib/adapters";
+import type { InfoDropPageProps } from "@/components/info-drop-page";
 import { EMPTY_PRODUCT_COPY, type ProductCopyValue } from "@/components/create/ProductCopyEditor";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
@@ -871,24 +874,51 @@ export function CardStudioPage() {
     };
   }
 
-  // 상품 본체 — C3: 손님과 동일 공유 위젯(ProductWidget) = WYSIWYG. preview 라 콜백 없음(선주문 버튼 보이되 무동작).
-  //   §0: 시세·비교가 금지 — 결정가(productPrice) 단일값만. 커머스 저장=self_upload 라 selfUpload 고정.
+  // 상품 본체 — P3(stash S3bc 흡수): 손님 /d purchase 경로와 동일 미러.
+  //   데이터 = attachedProducts[0](덱 자산) 우선, 등록 결과 미러 상태 폴백(드롭 id 미확보 케이스).
+  //   변환 = buildProductWidget(@/lib/adapters — 손님 info-drop-page :1479 와 같은 단일 소스,
+  //   스튜디오 전용 복제 변환 금지) → 동일 ProductWidget. preview 라 콜백 없음(선주문 버튼 무동작).
+  //   §0: 시세·비교가 금지 — 결정가 단일값만. 커머스 저장=self_upload 라 selfUpload 고정.
+  //   게이트 = hasProductData: S12 목적 전환 리셋 시 placeholder 복귀(기존 노출 타이밍 보존).
   const hasProductData = !!productImageUrl || !!productName.trim() || (productPrice ?? 0) > 0;
-  const productPreview = hasProductData ? (
+  const firstProduct = attachedProducts[0] ?? null;
+  const previewCommerce = !hasProductData
+    ? null
+    : firstProduct
+      ? {
+          name: firstProduct.name,
+          priceKrw: firstProduct.priceKrw,
+          imageUrl: firstProduct.imageUrl ?? "",
+          buyUrl: "", // 미리보기 — 실이동 없음
+          selfUpload: true,
+          ...(firstProduct.headline ? { headline: firstProduct.headline } : {}),
+          ...(firstProduct.sellingPoints?.length
+            ? { sellingPoints: firstProduct.sellingPoints }
+            : {}),
+        }
+      : {
+          name: productName || "상품 이름",
+          priceKrw: (productPrice ?? 0) > 0 ? productPrice : null,
+          imageUrl: productImageUrl ?? "",
+          buyUrl: "",
+          selfUpload: true,
+          ...(productCopy.headline ? { headline: productCopy.headline } : {}),
+          ...(productCopy.sellingPoints.length
+            ? { sellingPoints: productCopy.sellingPoints }
+            : {}),
+        };
+  // 손님 local 중 어댑터가 읽는 필드(name/address)만 — store 기반. 나머지는 cast 로 생략(손님 :1480 패턴).
+  const previewLocal = store?.display_name
+    ? { name: store.display_name, address: store.address ?? undefined }
+    : undefined;
+  const productPreview = previewCommerce ? (
     <div aria-hidden="true" className="select-none">
       <ProductWidget
-        name={productName || "상품 이름"}
-        priceKrw={(productPrice ?? 0) > 0 ? productPrice : null}
-        media={{ type: "image", imageUrl: productImageUrl ?? undefined }}
-        imageUrl={productImageUrl ?? undefined}
-        headline={productCopy.headline || undefined}
-        sellingPoints={productCopy.sellingPoints.length ? productCopy.sellingPoints : undefined}
-        local={
-          store?.display_name
-            ? { name: store.display_name, address: store.address ?? undefined }
-            : undefined
-        }
-        selfUpload
+        {...buildProductWidget({
+          commerce: previewCommerce,
+          title: previewCommerce.name,
+          local: previewLocal,
+        } as InfoDropPageProps)}
         accent={MODE_ACCENT[buildMode]}
       />
     </div>
