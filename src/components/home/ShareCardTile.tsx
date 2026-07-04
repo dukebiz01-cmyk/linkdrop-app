@@ -77,8 +77,14 @@ export function TimerBadge({ expiresAt, serverNow }: { expiresAt: string; server
   }
   return (
     <span
+      // fix2 색상 3단계 — 평상(>24h) 다크 글래스 / 주의(≤24h) 앰버 / 임박(≤1h) 앰버 심화+틴트.
+      //   L7 — 빨강·강펄스 금지(앰버 계열이 최종 구간). tabular-nums = 0.1초 자리 흔들림 방지.
       className={`absolute bottom-2 right-2 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white ${
-        cd.urgent ? "bg-[#B45309]/90" : "bg-black/65" // L7 — urgent(≤24h)만 앰버, 빨강 금지
+        cd.imminent
+          ? "bg-[#92400E]/95 ring-1 ring-inset ring-[#F59E0B]/40"
+          : cd.urgent
+            ? "bg-[#B45309]/90"
+            : "bg-black/65"
       }`}
     >
       {cd.days > 0 ? `D-${cd.days} ${cd.hms}` : cd.hms}
