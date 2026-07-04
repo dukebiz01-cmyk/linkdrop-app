@@ -45,7 +45,6 @@ import {
   Play,
   Lock,
   Store,
-  X,
   Zap,
   Plus,
   ChevronDown,
@@ -989,10 +988,10 @@ export function CardStudioPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[#EDEDED] bg-white/90 backdrop-blur-lg">
         <div className="mx-auto flex max-w-md items-center justify-between px-5 py-3">
+          {/* P6-9(S21) — 상단 X 제거: 주 탭 화면 표준(닫기=모달 문법). 이동은 하단 네비 상시가 담당.
+              구 X 는 onClick 없는 죽은 버튼이었고, 전 진입점(탭 직결/나도 만들기 새 탭/redirect)이
+              뒤로가기 불요 판정 — 교체 없이 제거. */}
           <div className="flex items-center gap-2.5">
-            <button className="flex h-9 w-9 items-center justify-center rounded-full text-[#525252] transition-colors hover:bg-[#F5F5F5]">
-              <X className="h-5 w-5" strokeWidth={2} />
-            </button>
             <div>
               <p className="text-[15px] font-bold leading-tight text-[#0A0A0A]">카드 스튜디오</p>
               <div className="mt-0.5 flex items-center gap-1.5">
@@ -1966,8 +1965,10 @@ export function CardStudioPage() {
         </div>
       </section>
 
-      {/* ───────── 카드 드롭하기 ───────── */}
-      <div className="fixed inset-x-0 bottom-0 z-40 pb-[env(safe-area-inset-bottom)]">
+      {/* ───────── 카드 드롭하기 ─────────
+          P6-9(S21) — 하단 네비(66px+safe, z-30) 상시 노출: 발행 바를 bottom-0 덮개에서
+          네비 위 안착으로 이동(z-40 유지 — 네비와 영역 분리라 충돌 없음). safe-area 는 네비가 소화. */}
+      <div className="fixed inset-x-0 bottom-[calc(66px+env(safe-area-inset-bottom))] z-40">
         <div className="pointer-events-none h-6 bg-gradient-to-t from-[#FAFAFA] to-transparent" />
         <div className="bg-[#FAFAFA]/95 backdrop-blur-md">
           <div className="mx-auto max-w-md px-5 pb-4">
