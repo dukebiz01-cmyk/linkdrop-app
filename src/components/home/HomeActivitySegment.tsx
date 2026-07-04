@@ -61,6 +61,8 @@ export function HomeActivitySegment({
               serverNow={serverNow}
               // 1-C-3 — 파생 재고(1-B-2 배치값, L4).
               remainingStock={drop.remainingStock}
+              // SM-3 — 확산 규모.
+              shareCount={drop.shareCount}
               onClick={() => openDrop(drop.shareUuid)}
               onShare={() =>
                 void reshareDrop({

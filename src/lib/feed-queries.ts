@@ -68,6 +68,34 @@ async function fetchRemainingStock(
   return map;
 }
 
+// SM-3 — 확산 규모 배치 병합(get_feed_spread_count). 1-C-3 fetchRemainingStock 미러:
+//   피드당 1회(재고 호출과 Promise.all 병렬 — 추가 라운드트립 0), 실패 = 미표시 + console 1줄.
+async function fetchSpreadCount(
+  client: SupabaseClient,
+  dropIds: string[],
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  const ids = Array.from(new Set(dropIds.filter(Boolean)));
+  if (ids.length === 0) return map;
+  try {
+    // get_feed_spread_count 는 types.ts 미반영(TEMP — 타입 재생성 후 캐스트 제거).
+    const { data, error } = (await client.rpc(
+      "get_feed_spread_count" as never,
+      { p_drop_ids: ids } as never,
+    )) as { data: unknown; error: { message?: string } | null };
+    if (error) {
+      console.error("[feed-queries] get_feed_spread_count failed:", error.message);
+      return map;
+    }
+    for (const row of (data as { drop_id: string; spread_count: number }[]) ?? []) {
+      map.set(row.drop_id, row.spread_count);
+    }
+  } catch (e) {
+    console.error("[feed-queries] get_feed_spread_count error:", e);
+  }
+  return map;
+}
+
 type ContentSourceRow = {
   provider: string | null;
   title: string | null;
@@ -147,9 +175,11 @@ type ShareEventSentRow = {
 };
 
 // 1-C-3 — remainingStock: 배치 RPC 병합값(null/미반환 = undefined → 타일 미렌더, 1-A 계약).
+// SM-3 — shareCount: 확산 규모 배치값(0/미반환 = undefined → 미렌더).
 function adaptDiscoverRow(
   row: InfoDropDiscoverRow,
   remainingStock?: number | null,
+  shareCount?: number,
 ): DropFeedItem | null {
   const cs = row.content_sources;
   if (!cs?.thumbnail_url) return null;
@@ -168,6 +198,8 @@ function adaptDiscoverRow(
     expiresAt: feedExpiresAt(row.purpose, row.coupons ?? null, row.share_events?.[0]?.expires_at),
     // 1-C-3 — 파생 재고(1-B-2 배치값 그대로, L4).
     ...(remainingStock != null ? { remainingStock } : {}),
+    // SM-3 — 확산 규모(0 = 미표시라 생략).
+    ...(shareCount ? { shareCount } : {}),
     title: cs.title ?? "(제목 없음)",
     receivedByCount: row.share_count ?? undefined,
     creator:
@@ -177,8 +209,12 @@ function adaptDiscoverRow(
   };
 }
 
-// 1-C-3 — remainingStock: 배치 RPC 병합값(adaptDiscoverRow 와 동일 계약).
-function adaptSentRow(row: ShareEventSentRow, remainingStock?: number | null): DropFeedItem | null {
+// 1-C-3 — remainingStock: 배치 RPC 병합값(adaptDiscoverRow 와 동일 계약). SM-3 — shareCount 동일.
+function adaptSentRow(
+  row: ShareEventSentRow,
+  remainingStock?: number | null,
+  shareCount?: number,
+): DropFeedItem | null {
   const cs = row.info_drops?.content_sources;
   if (!cs?.thumbnail_url) return null;
   return {
@@ -196,6 +232,8 @@ function adaptSentRow(row: ShareEventSentRow, remainingStock?: number | null): D
     ),
     // 1-C-3 — 파생 재고(배치값 그대로, L4). 비공개 드랍은 RPC 가 행 미반환 → undefined(미렌더).
     ...(remainingStock != null ? { remainingStock } : {}),
+    // SM-3 — 확산 규모(0 = 미표시라 생략).
+    ...(shareCount ? { shareCount } : {}),
     title: cs.title ?? "(제목 없음)",
     creator:
       cs.author_name && cs.source_url
@@ -252,13 +290,14 @@ export async function getDiscoverDrops(
     .limit(20);
   if (error || !data) return [];
   const rows = data as unknown as InfoDropDiscoverRow[];
-  // 1-C-3 — 재고 배치 병합: 피드당 정확 1회(get_feed_remaining_stock, 드랍별 반복 금지).
-  const stock = await fetchRemainingStock(
-    client,
-    rows.map((r) => r.id),
-  );
+  // 1-C-3 재고 + SM-3 확산 — 각 배치 1회, Promise.all 병렬(추가 라운드트립 0).
+  const ids = rows.map((r) => r.id);
+  const [stock, spread] = await Promise.all([
+    fetchRemainingStock(client, ids),
+    fetchSpreadCount(client, ids),
+  ]);
   return rows
-    .map((r) => adaptDiscoverRow(r, stock.get(r.id) ?? undefined))
+    .map((r) => adaptDiscoverRow(r, stock.get(r.id) ?? undefined, spread.get(r.id)))
     .filter((x): x is DropFeedItem => x !== null);
 }
 
@@ -289,13 +328,14 @@ export async function getFollowedMakerDrops(
     .limit(10);
   if (error || !data) return [];
   const rows = data as unknown as InfoDropDiscoverRow[];
-  // 1-C-3 — 재고 배치 병합(피드당 1회).
-  const stock = await fetchRemainingStock(
-    client,
-    rows.map((r) => r.id),
-  );
+  // 1-C-3 재고 + SM-3 확산 — 각 배치 1회 병렬.
+  const ids = rows.map((r) => r.id);
+  const [stock, spread] = await Promise.all([
+    fetchRemainingStock(client, ids),
+    fetchSpreadCount(client, ids),
+  ]);
   return rows
-    .map((r) => adaptDiscoverRow(r, stock.get(r.id) ?? undefined))
+    .map((r) => adaptDiscoverRow(r, stock.get(r.id) ?? undefined, spread.get(r.id)))
     .filter((x): x is DropFeedItem => x !== null);
 }
 
@@ -343,14 +383,19 @@ export async function getSentDrops(
     .limit(20);
   if (error || !data) return [];
   const rows = data as unknown as ShareEventSentRow[];
-  // 1-C-3 — 재고 배치 병합(피드당 1회). 비공개 드랍은 RPC 가 행 미반환 → 미표시.
-  const stock = await fetchRemainingStock(
-    client,
-    rows.map((r) => r.info_drop_id ?? "").filter(Boolean),
-  );
+  // 1-C-3 재고 + SM-3 확산 — 각 배치 1회 병렬. 비공개 드랍은 RPC 가 행 미반환 → 미표시.
+  const ids = rows.map((r) => r.info_drop_id ?? "").filter(Boolean);
+  const [stock, spread] = await Promise.all([
+    fetchRemainingStock(client, ids),
+    fetchSpreadCount(client, ids),
+  ]);
   return rows
     .map((r) =>
-      adaptSentRow(r, r.info_drop_id ? (stock.get(r.info_drop_id) ?? undefined) : undefined),
+      adaptSentRow(
+        r,
+        r.info_drop_id ? (stock.get(r.info_drop_id) ?? undefined) : undefined,
+        r.info_drop_id ? spread.get(r.info_drop_id) : undefined,
+      ),
     )
     .filter((x): x is DropFeedItem => x !== null);
 }

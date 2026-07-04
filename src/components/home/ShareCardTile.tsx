@@ -1,4 +1,4 @@
-import { Play, Send, Image as ImageIcon, Diamond, Package } from "lucide-react";
+import { Play, Send, Image as ImageIcon, Diamond, Package, User } from "lucide-react";
 import type { DropFeedItem } from "@/components/home-page";
 import { useCountdown } from "@/hooks/use-countdown";
 
@@ -117,6 +117,27 @@ export function StockMeta({ remaining }: { remaining: number }) {
   );
 }
 
+// SM-3 — 확산 컴팩트 필(1-A 보정2 shareCount 렌더 금지 해제분). 익명 아바타 스택(제네릭
+//   실루엣 최대 3 — 이니셜·실명·이미지 0) + "N명 확산"("모집" 계열 금지). 재고 뱃지 동일
+//   계열(rounded·px-1.5·py-0.5·text-[10px]) · 모션 0 · 탭 동선 없음(타일 onClick=/d 가 담당).
+function SpreadPill({ count }: { count: number }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded border border-[#E8EDF3] bg-[#F8FAFC] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[#64748B]">
+      <span className="flex -space-x-1">
+        {Array.from({ length: Math.min(3, count) }).map((_, i) => (
+          <span
+            key={i}
+            className="flex size-3 items-center justify-center rounded-full border border-white bg-[#CBD5E1]"
+          >
+            <User className="size-2 text-white" strokeWidth={2.5} />
+          </span>
+        ))}
+      </span>
+      {count}명 확산
+    </span>
+  );
+}
+
 // 드로피 배지 — [보정1] 아이콘+숫자만("+{n}"), 단위 문자(P) 보류. 모집·수익 뉘앙스 문안 금지(코드명 dropy).
 function DropyBadge({ amount }: { amount: number }) {
   return (
@@ -136,6 +157,7 @@ export function ShareCardTile({
   serverNow,
   remainingStock,
   dropyReward,
+  shareCount,
 }: {
   drop: DropFeedItem;
   purpose?: string;
@@ -149,7 +171,7 @@ export function ShareCardTile({
   remainingStock?: number;
   /** Phase 1-A — 드로피 보상(값 주입은 P6 이후 — 렌더만 선구현). */
   dropyReward?: number;
-  /** [보정2] 타입 신설까지만 — 렌더 코드 없음(후속 Phase). */
+  /** SM-3 — 확산 규모("N명 확산" 컴팩트 필, 1-A 보정2 렌더 금지 해제). 0/미주입 = 미렌더. */
   shareCount?: number;
   /** [보정2] 타입 신설까지만 — 렌더 코드 없음(후속 Phase). */
   shareJourney?: ShareJourneyNode[];
@@ -227,7 +249,7 @@ export function ShareCardTile({
       {/* 정보영역 — 솔리드, 고정 높이 컬럼 정렬(메이커·지역 1줄 + 제목 2줄).
           Phase 1-A — 재고·드로피 주입 시에만 메타 줄을 양분(좌 메이커 / 우 배지). 미주입 = 기존 마크업 그대로(픽셀 동일). */}
       <div className="flex flex-col px-3 pb-3 pt-2.5">
-        {remainingStock != null || dropyReward != null ? (
+        {remainingStock != null || dropyReward != null || (shareCount ?? 0) > 0 ? (
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 truncate text-[11px] font-semibold text-[#64748B]">
               {drop.maker.name}
@@ -235,6 +257,8 @@ export function ShareCardTile({
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               {dropyReward != null ? <DropyBadge amount={dropyReward} /> : null}
+              {/* SM-3 — 확산 필: 재고 뱃지 인접 메타 영역(0/미주입 = 미렌더). */}
+              {(shareCount ?? 0) > 0 ? <SpreadPill count={shareCount as number} /> : null}
               {remainingStock != null ? <StockMeta remaining={remainingStock} /> : null}
             </div>
           </div>

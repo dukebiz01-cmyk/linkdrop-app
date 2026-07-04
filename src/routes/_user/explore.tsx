@@ -159,6 +159,8 @@ function ExplorePage() {
               serverNow={data.serverNow}
               // 1-C-3 — 파생 재고(1-B-2 배치값, L4: 공급값 그대로).
               remainingStock={drop.remainingStock}
+              // SM-3 — 확산 규모(탭 동선 = 기존 onClick /d 이동 그대로).
+              shareCount={drop.shareCount}
               onClick={() => handleOpenDrop(drop.shareUuid)}
               onShare={() =>
                 void reshareDrop({

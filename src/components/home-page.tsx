@@ -14,6 +14,8 @@ export interface DropFeedItem {
   expiresAt?: string;
   /** 1-C-3 — 파생 재고(1-B-2 get_feed_remaining_stock 배치값 그대로, L4). 없으면 미렌더. */
   remainingStock?: number;
+  /** SM-3 — 확산 규모(get_feed_spread_count 배치값). 0/미주입 = 미렌더. */
+  shareCount?: number;
   title: string;
   localName?: string;
   distance?: string;
