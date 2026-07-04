@@ -321,6 +321,8 @@ export function CardStudioPage() {
   // 커머스 상품 상태 — P2: 입력은 ProductRegisterForm(임베드)이 소유, 여기는 등록 결과 미러
   //   (카드 미리보기 productPreview·발행 payload·코치 isFilled 가 읽는다). §0: 시세 없음.
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
+  // P6-6(A안) — 폼 제출 응답의 공유 URL(단축 우선). 발행이 드롭 A 를 재사용할 때 savedUrl 로 승계.
+  const [productShareUrl, setProductShareUrl] = useState<string | null>(null);
   const [productName, setProductName] = useState("");
   const [productPrice, setProductPrice] = useState<number | null>(null);
   // 커머스 홍보 문구(나-1) — headline/sellingPoints. 등록폼 제출 결과 미러.
@@ -653,21 +655,39 @@ export function CardStudioPage() {
               //   쿠폰·정보에도 매장 연결로 유용. studio-build 는 비즈니스 전제(store 있음).
               partner_id: store?.id ?? null,
             };
-      const res = await fetch("/api/drops", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const json = (await res.json()) as {
-        drop?: { id?: string; share_uuid?: string };
-        shareable_url?: string;
-        message?: string;
-      };
-      if (!res.ok || !json.drop?.share_uuid) {
-        setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
-        return;
+      // P6-6(A안) — 커머스 발행 = 폼 제출로 이미 생성된 상품 드롭 A(완전체: 고지·신선·kamis·카피
+      //   보유) 재사용. /api/drops 재호출 제거 → 이중 생성 + 발행본 데이터 열화(§0·고시 결함) 해소.
+      //   refDropId 부재(폼 미제출 발행 시도) = 아래 else 폴백(현행 신규 생성) 유지 —
+      //   P6-5ⓑ(임베드 상품명 필수)와 발행 가드(사진·이름·가격)로 이 폴백 도달은 자연 축소.
+      //   is_public 은 A·구 B 모두 false(비공개 링크 열람)라 상태 전환 불요 — 공개 설계는 P7 소관.
+      const reusedProduct =
+        buildMode === "commerce" && attachedProducts[0]?.refDropId ? attachedProducts[0] : null;
+      let dropId: string | null;
+      let publishedShareUuid: string;
+      let shareableUrl: string | null;
+      if (reusedProduct) {
+        dropId = reusedProduct.refDropId;
+        publishedShareUuid = reusedProduct.refShareUuid;
+        shareableUrl = productShareUrl; // 폼 제출 응답의 단축 URL(없으면 아래 long 폴백)
+      } else {
+        const res = await fetch("/api/drops", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const json = (await res.json()) as {
+          drop?: { id?: string; share_uuid?: string };
+          shareable_url?: string;
+          message?: string;
+        };
+        if (!res.ok || !json.drop?.share_uuid) {
+          setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+          return;
+        }
+        dropId = json.drop.id ?? null;
+        publishedShareUuid = json.drop.share_uuid;
+        shareableUrl = json.shareable_url ?? null;
       }
-      const dropId = json.drop.id ?? null;
 
       // S2-b 쿠폰 연결 — purpose 결정과 동일 조건(hasCoupon). create-wizard 패턴: 저장 후
       //   별도 RPC. best-effort(실패해도 저장/URL 진행).
@@ -727,7 +747,7 @@ export function CardStudioPage() {
 
       const origin =
         typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
-      setSavedUrl(json.shareable_url ?? `${origin}/d/${json.drop.share_uuid}`);
+      setSavedUrl(shareableUrl ?? `${origin}/d/${publishedShareUuid}`);
       setDropped(true);
     } catch (e) {
       console.error("[studio-build] handleSaveDrop", e);
@@ -863,6 +883,8 @@ export function CardStudioPage() {
 
     // WYSIWYG — 등록 결과를 미리보기·발행 상태로 미러(폼 입력값 = 서버 저장값).
     setProductImageUrl(payload.image_url);
+    // P6-6 — 발행(드롭 A 재사용) 시 그대로 노출할 공유 URL 보관(단축 우선, long 폴백).
+    setProductShareUrl(json.shareable_url ?? `https://app.drop.how/d/${shareUuid}`);
     setProductName(payload.name ?? "");
     setProductPrice(payload.price_krw);
     setProductCopy({ headline: payload.headline, sellingPoints: payload.selling_points });
