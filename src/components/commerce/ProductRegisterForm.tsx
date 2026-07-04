@@ -59,6 +59,9 @@ export interface ProductRegisterFormProps {
   onSubmit: (payload: ProductRegisterPayload) => Promise<ProductRegisterResult>;
   /** 예약 옵션 — 임베드 호스트가 폼 내 네비를 필요로 할 때 주입(현 폼 본체는 미사용). */
   onNavigate?: (to: string) => void;
+  /** P2 임베드 모드(스튜디오 등) — 폼 자체 카드 크롬·"새 상품" 헤더 숨김 + 완료 화면의
+   *  외부 이동 액션('카드 보기')을 숨긴다(호스트가 미리보기를 자체 표시). 기본 false = 기존 동작. */
+  embedded?: boolean;
 }
 
 // File → 가로 최대 1200px 비율유지 → image/jpeg 0.8 Blob. 캔버스 압축은 브라우저 전용.
@@ -95,7 +98,7 @@ async function resizeToJpegBlob(file: File): Promise<Blob> {
   return blob;
 }
 
-export function ProductRegisterForm({ onSubmit }: ProductRegisterFormProps) {
+export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegisterFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -299,14 +302,20 @@ export function ProductRegisterForm({ onSubmit }: ProductRegisterFormProps) {
     <>
       <form
         onSubmit={handleSubmit}
-        className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-4"
+        className={
+          embedded
+            ? "space-y-4"
+            : "rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-4"
+        }
       >
-        <div className="flex items-center gap-2">
-          <span className="flex size-8 items-center justify-center rounded-xl bg-[#FAFAFA]">
-            <Package className="size-4 text-[#0A0A0A]" strokeWidth={2} />
-          </span>
-          <h2 className="text-sm font-bold text-[#0F172A]">새 상품</h2>
-        </div>
+        {embedded ? null : (
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-xl bg-[#FAFAFA]">
+              <Package className="size-4 text-[#0A0A0A]" strokeWidth={2} />
+            </span>
+            <h2 className="text-sm font-bold text-[#0F172A]">새 상품</h2>
+          </div>
+        )}
 
         {/* 사진 (필수) */}
         <div className="space-y-2">
@@ -559,14 +568,17 @@ export function ProductRegisterForm({ onSubmit }: ProductRegisterFormProps) {
           </div>
           <p className="mt-2 break-all text-xs text-[#047857]">{result.shareUrl}</p>
           <div className="mt-3 flex gap-2">
-            <a
-              href={`/d/${result.shareUuid}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white"
-            >
-              카드 보기
-            </a>
+            {/* P2 — 임베드에선 외부 이동 액션 숨김(호스트 미리보기가 카드를 즉시 표시). */}
+            {embedded ? null : (
+              <a
+                href={`/d/${result.shareUuid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] px-4 text-sm font-bold text-white"
+              >
+                카드 보기
+              </a>
+            )}
             <button
               type="button"
               onClick={handleShare}

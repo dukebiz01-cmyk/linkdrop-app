@@ -2,17 +2,17 @@ import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
-import { PriceBandAdvisor, type PriceBandResult } from "@/components/commerce/PriceBandAdvisor";
+import {
+  ProductRegisterForm,
+  type ProductRegisterPayload,
+  type ProductRegisterResult,
+} from "@/components/commerce/ProductRegisterForm";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
 import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 import type { AttachedProduct } from "@/components/create/types";
-import {
-  ProductCopyEditor,
-  EMPTY_PRODUCT_COPY,
-  type ProductCopyValue,
-} from "@/components/create/ProductCopyEditor";
+import { EMPTY_PRODUCT_COPY, type ProductCopyValue } from "@/components/create/ProductCopyEditor";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
 import { CardBody } from "@/components/card/CardBody";
@@ -252,10 +252,6 @@ const MODE_CARD_COLOR: Record<"general" | "reserve" | "commerce", string> = {
   reserve: "#FFFFFF",
   commerce: "#FFFFFF",
 };
-// KAMIS 품목 분류(시세 연동) — 등록폼과 동일. 라이브 DB kamis_categories/kamis_items, types.ts 미반영 → as never 캐스트.
-type KamisCategory = { category_code: string; category_name: string };
-type KamisItem = { item_code: string; item_name: string };
-
 const ENHANCE_UNLOCK = 75;
 const POINT = "#1D4ED8"; // 전환력 지표(게이지·별·파워)에만
 const INK = "#0A0A0A";
@@ -290,40 +286,8 @@ const STUDIO_BUILD_CSS = `
 .animate-scale-in { animation: sb-scale-in 0.25s ease-out both; }
 `;
 
-// 상품 이미지 업로드 — partner.products.new 패턴 복제(공용 export 없음). 새 버킷/RLS/마이그 만들지 않음.
-//   버킷·경로 규칙({uid}/{uuid}.jpg)·클라 리사이즈 동일. RLS INSERT 통과 = 경로 첫 segment auth.uid().
-const PRODUCT_IMAGE_BUCKET = "product-images";
-const PRODUCT_IMAGE_MAX_WIDTH = 1200;
-
-// 클라이언트 캔버스 리사이즈 → JPEG Blob (resizeToJpegBlob 동형). 용량/포맷 정규화 역할.
-async function resizeProductImageToJpeg(file: File): Promise<Blob> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("파일을 읽지 못했어요."));
-    reader.readAsDataURL(file);
-  });
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const el = new Image();
-    el.onload = () => resolve(el);
-    el.onerror = () => reject(new Error("이미지를 불러오지 못했어요."));
-    el.src = dataUrl;
-  });
-  const scale = img.width > PRODUCT_IMAGE_MAX_WIDTH ? PRODUCT_IMAGE_MAX_WIDTH / img.width : 1;
-  const w = Math.max(1, Math.round(img.width * scale));
-  const h = Math.max(1, Math.round(img.height * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("이미지 처리에 실패했어요.");
-  ctx.drawImage(img, 0, 0, w, h);
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", 0.8),
-  );
-  if (!blob) throw new Error("이미지 압축에 실패했어요.");
-  return blob;
-}
+// 상품 이미지 업로드·KAMIS 시세 조회는 P2에서 ProductRegisterForm(공용 폼)이 내장 —
+//   스튜디오 복제본(PRODUCT_IMAGE_BUCKET/resizeProductImageToJpeg/kamis state·effect)은 제거.
 
 export function CardStudioPage() {
   // loader 데이터 수신만 — 이번 단계는 배선까지. 화면 하드코딩 치환은 다음 단계.
@@ -346,22 +310,13 @@ export function CardStudioPage() {
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
   // 상품 블록 — 내 등록상품(get_my_products) 선택. 쿠폰 selectedCouponId 패턴. 미리보기·저장 배선은 다음 단계.
   const [attachedProducts, setAttachedProducts] = useState<AttachedProduct[]>([]);
-  // 커머스 상품 이미지 — productimage 블록 업로드 결과(public URL). 본체 우선 소스.
+  // 커머스 상품 상태 — P2: 입력은 ProductRegisterForm(임베드)이 소유, 여기는 등록 결과 미러
+  //   (카드 미리보기 productPreview·발행 payload·코치 isFilled 가 읽는다). §0: 시세 없음.
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
-  const [productImageUploading, setProductImageUploading] = useState(false);
-  const [productImageError, setProductImageError] = useState<string | null>(null);
-  // 커머스 직접입력(B-2) — 상품명·결정가(단일값). §0: 시세 없음, price_band_enabled:false 고정.
   const [productName, setProductName] = useState("");
   const [productPrice, setProductPrice] = useState<number | null>(null);
-  // 커머스 홍보 문구(나-1) — headline/sellingPoints. ProductCopyEditor(등록폼과 동일) 제어값.
+  // 커머스 홍보 문구(나-1) — headline/sellingPoints. 등록폼 제출 결과 미러.
   const [productCopy, setProductCopy] = useState<ProductCopyValue>(EMPTY_PRODUCT_COPY);
-  // S4-2 커머스 시세 참고(§0: 제작화면 전용, 손님·저장 미포함). 등록폼과 동일 KAMIS 2단 + get-price-band.
-  const [kamisCategoryCode, setKamisCategoryCode] = useState("");
-  const [kamisItemCode, setKamisItemCode] = useState("");
-  const [kamisCategories, setKamisCategories] = useState<KamisCategory[]>([]);
-  const [kamisItems, setKamisItems] = useState<KamisItem[]>([]);
-  const [priceBand, setPriceBand] = useState<PriceBandResult | null>(null);
-  const [priceBandLoading, setPriceBandLoading] = useState(false);
   const [showCouponPicker, setShowCouponPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
   // S2-a 저장 — POST /api/drops(영상+한마디만). 단축 URL 반환 확인까지.
@@ -430,15 +385,11 @@ export function CardStudioPage() {
     setDropped(false);
     setShowColorPicker(false);
     setProductImageUrl(null); // 커머스 잔재 방지
-    setProductImageError(null);
     setProductName("");
     setProductPrice(null);
     setProductCopy(EMPTY_PRODUCT_COPY);
-    setKamisCategoryCode(""); // 시세 참고 잔재 방지
-    setKamisItemCode("");
-    setPriceBand(null);
     // 카드 콘텐츠 전면 리셋(무조건) — 영상 트랙(영상·AI요약·셀링포인트) + 한마디 + 쿠폰 선택.
-    //   검색도구(videoQuery/Results/Searched)·덱 자산(attachedProducts)·조회캐시(kamis 목록)는 보존(0터치).
+    //   검색도구(videoQuery/Results/Searched)·덱 자산(attachedProducts)은 보존(0터치).
     setSelectedVideo(null);
     setAiKeyPoints([]);
     setPickedPoints([]);
@@ -446,82 +397,7 @@ export function CardStudioPage() {
     setSelectedCouponId(null);
   };
 
-  // S4-2 KAMIS 부류 1회 로드 (등록폼 107-120 복제). types.ts 미반영 → as never.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const supabase = getSupabase();
-      if (!supabase) return;
-      const { data } = await supabase
-        .from("kamis_categories" as never)
-        .select("category_code, category_name")
-        .order("sort_order");
-      if (!cancelled) setKamisCategories((data as unknown as KamisCategory[] | null) ?? []);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // 부류 선택 시 품목 로드 (등록폼 122-140 복제). 부류 비면 품목 비움.
-  useEffect(() => {
-    if (!kamisCategoryCode) {
-      setKamisItems([]);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const supabase = getSupabase();
-      if (!supabase) return;
-      const { data } = await supabase
-        .from("kamis_items" as never)
-        .select("item_code, item_name")
-        .eq("category_code", kamisCategoryCode)
-        .order("sort_order");
-      if (!cancelled) setKamisItems((data as unknown as KamisItem[] | null) ?? []);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [kamisCategoryCode]);
-
-  // 품목 선택 시 KAMIS 소매 시세 조회 (등록폼 144-175 복제). §0: 참고용, 저장·손님 미포함.
-  useEffect(() => {
-    if (!kamisItemCode || !kamisCategoryCode) {
-      setPriceBand(null);
-      return;
-    }
-    let cancelled = false;
-    setPriceBandLoading(true);
-    void (async () => {
-      const fail: PriceBandResult = {
-        status: "error",
-        item_code: kamisItemCode,
-        item_name: null,
-        sources: [],
-        cached: false,
-      };
-      try {
-        const supabase = getSupabase();
-        if (!supabase) {
-          if (!cancelled) setPriceBand(fail);
-          return;
-        }
-        const { data, error } = await supabase.functions.invoke("get-price-band", {
-          body: { item_code: kamisItemCode, category_code: kamisCategoryCode },
-        });
-        if (cancelled) return;
-        setPriceBand(error || !data ? fail : (data as PriceBandResult));
-      } catch {
-        if (!cancelled) setPriceBand(fail);
-      } finally {
-        if (!cancelled) setPriceBandLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [kamisItemCode, kamisCategoryCode]);
+  // S4-2 KAMIS 부류·품목·시세 조회 effect 3종 — P2에서 ProductRegisterForm 내장분으로 대체(제거).
 
   const score = useMemo(() => {
     // 도달가능(덱 노출) non-paid 블록 power 합을 분모로 정규화.
@@ -949,46 +825,50 @@ export function CardStudioPage() {
     </div>
   ) : null;
 
-  // 상품 이미지 업로드 — partner.products.new 패턴 복제. product-images/{auth.uid()}/{uuid}.jpg.
-  //   저장(드롭 운반)은 (다). 여기선 업로드 + productImageUrl 반영(미리보기 본체)까지.
-  async function handleProductImageChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setProductImageError(null);
-    setProductImageUploading(true);
-    try {
-      const { getSupabase } = await import("@/lib/supabase");
-      const supabase = getSupabase();
-      if (!supabase) {
-        setProductImageError("업로드를 사용할 수 없어요.");
-        return;
-      }
-      // 세션 hydrate — anon 으로 나가면 RLS(auth.uid() NULL) 차단. 경로 첫 segment = userId.
-      const { data: sess } = await supabase.auth.getSession();
-      const userId = sess.session?.user.id;
-      if (!userId) {
-        setProductImageError("로그인이 필요해요.");
-        return;
-      }
-      const blob = await resizeProductImageToJpeg(file);
-      const path = `${userId}/${crypto.randomUUID()}.jpg`;
-      const { error: upErr } = await supabase.storage.from(PRODUCT_IMAGE_BUCKET).upload(path, blob, {
-        contentType: "image/jpeg",
-        upsert: false,
-      });
-      if (upErr) {
-        console.error("[studio-build] 상품 이미지 업로드 실패:", upErr);
-        setProductImageError("사진 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
-        return;
-      }
-      const { data: pub } = supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path);
-      setProductImageUrl(pub.publicUrl);
-    } catch (err) {
-      console.error("[studio-build] 상품 이미지 처리 오류:", err);
-      setProductImageError(err instanceof Error ? err.message : "사진 처리 중 문제가 생겼어요.");
-    } finally {
-      setProductImageUploading(false);
+  // P2 — 스튜디오 상품 등록 핸들러(ProductRegisterForm onSubmit 주입). 저장은 partner.products.new
+  //   submitProduct 와 동일한 POST /api/drops(self_upload:true 등 payload 는 폼이 그대로 구성).
+  //   성공 시 결과를 스튜디오 상태에 즉시 미러 → 카드 미리보기(productPreview)에 바로 붙고,
+  //   생성된 상품 드롭 참조는 attachedProducts(덱 자산, 모드 전환에도 보존)에 적재.
+  async function submitStudioProduct(payload: ProductRegisterPayload): Promise<ProductRegisterResult> {
+    const res = await fetch("/api/drops", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const json = (await res.json()) as {
+      drop?: { id?: string; share_uuid?: string };
+      shareable_url?: string;
+      message?: string;
+    };
+    if (!res.ok || !json.drop?.share_uuid) {
+      throw new Error(json.message ?? "DROP_CREATE_FAILED");
     }
+    const dropId = json.drop.id ?? null;
+    const shareUuid = json.drop.share_uuid;
+
+    // WYSIWYG — 등록 결과를 미리보기·발행 상태로 미러(폼 입력값 = 서버 저장값).
+    setProductImageUrl(payload.image_url);
+    setProductName(payload.name ?? "");
+    setProductPrice(payload.price_krw);
+    setProductCopy({ headline: payload.headline, sellingPoints: payload.selling_points });
+    if (dropId) {
+      setAttachedProducts((prev) => [
+        ...prev,
+        {
+          refDropId: dropId,
+          refShareUuid: shareUuid,
+          name: payload.name ?? "",
+          priceKrw: payload.price_krw,
+          imageUrl: payload.image_url,
+          ...(payload.headline ? { headline: payload.headline } : {}),
+          ...(payload.selling_points.length ? { sellingPoints: payload.selling_points } : {}),
+        },
+      ]);
+    }
+    return {
+      shareUuid,
+      shareUrl: json.shareable_url ?? `https://app.drop.how/d/${shareUuid}`,
+    };
   }
 
   // 상품 본체 — C3: 손님과 동일 공유 위젯(ProductWidget) = WYSIWYG. preview 라 콜백 없음(선주문 버튼 보이되 무동작).
@@ -1720,140 +1600,11 @@ export function CardStudioPage() {
                             </div>
                           )
                         ) : block.id === "product" ? (
-                          // 상품 — 사진 + 직접입력(사진·이름·결정가 통합, productimage 블록 흡수). §0: 시세 없음. 저장은 self_upload.
-                          <div className="space-y-3">
-                            {/* 상품 사진 — product-images 버킷 업로드. productImageUrl 저장·자동카피(imageUrl) 배선 유지. */}
-                            <div className="space-y-1.5">
-                              <label className="block text-[11px] text-[#A3A3A3]">상품 사진</label>
-                              {productImageUrl ? (
-                                <div className="overflow-hidden rounded-xl [box-shadow:0_0_0_1px_#E5E5E5]">
-                                  <img
-                                    src={productImageUrl}
-                                    alt="업로드한 상품 사진"
-                                    className="aspect-[4/3] w-full object-cover"
-                                  />
-                                </div>
-                              ) : null}
-                              <label
-                                className={`flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#CBD5E1] py-2.5 text-[13px] font-medium text-[#475569] transition-colors hover:bg-[#F8FAFC] ${
-                                  productImageUploading ? "pointer-events-none opacity-60" : ""
-                                }`}
-                              >
-                                {productImageUploading ? (
-                                  <>
-                                    <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2} />
-                                    올리는 중…
-                                  </>
-                                ) : (
-                                  <>
-                                    <ImageIcon className="h-4 w-4" strokeWidth={2} />
-                                    {productImageUrl ? "다른 사진으로 바꾸기" : "상품 사진 올리기"}
-                                  </>
-                                )}
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) => void handleProductImageChange(e)}
-                                  disabled={productImageUploading}
-                                  className="hidden"
-                                />
-                              </label>
-                              {productImageError ? (
-                                <p className="text-center text-[12px] text-[#B91C1C]">{productImageError}</p>
-                              ) : null}
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="block text-[11px] text-[#A3A3A3]">상품 이름</label>
-                              <input
-                                type="text"
-                                value={productName}
-                                onChange={(e) => setProductName(e.target.value.slice(0, 80))}
-                                maxLength={80}
-                                placeholder="상품 이름"
-                                className="w-full rounded-lg border border-[#E5E5E5] px-3 py-2.5 text-[14px] outline-none focus:border-[#0A0A0A]"
-                              />
-                            </div>
-                            {/* S4-2 시세 참고 — 품목 선택 시 KAMIS 시세(§0: 제작화면 전용, 저장·손님 미포함).
-                                가격 정하기 전 참고하도록 가격 입력란 위에 배치. 등록폼 검증 패턴 복제. */}
-                            {buildMode === "commerce" ? (
-                              <div className="space-y-1.5">
-                                <label className="block text-[11px] text-[#A3A3A3]">
-                                  품목 분류 <span className="text-[#C4C4C4]">(선택 · 시세 참고용)</span>
-                                </label>
-                                <select
-                                  aria-label="부류 선택"
-                                  value={kamisCategoryCode}
-                                  onChange={(e) => {
-                                    setKamisCategoryCode(e.target.value);
-                                    setKamisItemCode(""); // 부류 바뀌면 품목 초기화(stale 방지)
-                                  }}
-                                  className="w-full min-h-[44px] rounded-lg border border-[#E5E5E5] bg-white px-3 text-[14px] outline-none focus:border-[#0A0A0A]"
-                                >
-                                  <option value="">부류 선택</option>
-                                  {kamisCategories.map((c) => (
-                                    <option key={c.category_code} value={c.category_code}>
-                                      {c.category_name}
-                                    </option>
-                                  ))}
-                                </select>
-                                {kamisCategoryCode && kamisItems.length > 0 ? (
-                                  <select
-                                    aria-label="품목 선택"
-                                    value={kamisItemCode}
-                                    onChange={(e) => setKamisItemCode(e.target.value)}
-                                    className="w-full min-h-[44px] rounded-lg border border-[#E5E5E5] bg-white px-3 text-[14px] outline-none focus:border-[#0A0A0A]"
-                                  >
-                                    <option value="">품목 선택</option>
-                                    {kamisItems.map((it) => (
-                                      <option key={it.item_code} value={it.item_code}>
-                                        {it.item_name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : null}
-                                {/* KAMIS 소매 시세 어드바이저 — 품목 선택 시만. 농가 가격 참고용(§0). */}
-                                {kamisItemCode ? (
-                                  <PriceBandAdvisor priceBand={priceBand} loading={priceBandLoading} />
-                                ) : null}
-                              </div>
-                            ) : null}
-                            <div className="space-y-1.5">
-                              <label className="block text-[11px] text-[#A3A3A3]">가격</label>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  inputMode="numeric"
-                                  min={1}
-                                  value={productPrice ?? ""}
-                                  onChange={(e) =>
-                                    setProductPrice(e.target.value ? Number(e.target.value) : null)
-                                  }
-                                  placeholder="가격"
-                                  className="min-w-0 flex-1 rounded-lg border border-[#E5E5E5] px-3 py-2.5 text-[14px] tabular-nums outline-none focus:border-[#0A0A0A]"
-                                />
-                                <span className="shrink-0 text-[14px] font-semibold text-[#64748B]">원</span>
-                              </div>
-                            </div>
-                            {/* 홍보 문구(나-1) — 등록폼과 동일 ProductCopyEditor. 커머스 모드에서만. */}
-                            {buildMode === "commerce" ? (
-                              <ProductCopyEditor
-                                productName={productName}
-                                priceKrw={productPrice ?? 0}
-                                imageUrl={productImageUrl}
-                                value={productCopy}
-                                onChange={setProductCopy}
-                              />
-                            ) : null}
-                            {/* 확인 — 매듭(아코디언 닫기). 이름+가격 채워졌을 때만 활성. */}
-                            <button
-                              type="button"
-                              onClick={() => setExpandedBlockId(null)}
-                              disabled={!productName.trim() || !((productPrice ?? 0) > 0)}
-                              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0F172A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#1E293B] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
-                            >
-                              <Check className="h-4 w-4" strokeWidth={2.5} />확인
-                            </button>
-                          </div>
+                          // P2(결정ⓐ) — 등록폼 공용화: ProductRegisterForm 임베드(B-2 인라인 입력 대체).
+                          //   사진 업로드·KAMIS 품목/시세(§0 제작화면 전용)·홍보 문구는 폼이 내장.
+                          //   제출 → submitStudioProduct 가 /api/drops 저장 + 미리보기·attachedProducts 즉시 반영.
+                          //   embedded = 폼 카드 크롬·"새 상품" 헤더·완료 화면 '카드 보기'(외부 이동) 숨김.
+                          <ProductRegisterForm embedded onSubmit={submitStudioProduct} />
                         ) : (
                           <div className="rounded-xl border border-dashed border-[#D4D4D4] bg-[#FAFAFA] px-3 py-5 text-center">
                             <Wrench className="mx-auto h-5 w-5 text-[#A3A3A3]" strokeWidth={1.75} />
