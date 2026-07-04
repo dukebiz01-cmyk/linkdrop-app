@@ -15,6 +15,8 @@ import type { AttachedProduct } from "@/components/create/types";
 // P3 — 구매 미리보기 미러: 손님 /d purchase 와 동일 변환(buildProductWidget) 재사용(단일 소스).
 import { buildProductWidget } from "@/lib/adapters";
 import type { InfoDropPageProps } from "@/components/info-drop-page";
+// P6-2 — 구 /studio 셸 이식: AI 코치 카드(내부 링크 0 — 경로 보정 불필요).
+import { CreatorCoachCard } from "@/components/creator-coach-card";
 import { EMPTY_PRODUCT_COPY, type ProductCopyValue } from "@/components/create/ProductCopyEditor";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { DropCardShell } from "@/components/card/DropCardShell";
@@ -294,7 +296,7 @@ const STUDIO_BUILD_CSS = `
 
 export function CardStudioPage() {
   // loader 데이터 수신만 — 이번 단계는 배선까지. 화면 하드코딩 치환은 다음 단계.
-  const { isBusiness, store, coupons, manageCoupons } = Route.useLoaderData();
+  const { isBusiness, store, coupons, manageCoupons, myRewards } = Route.useLoaderData();
   const router = useRouter();
   // 쿠폰 만들기 바텀시트(CouponManageView 임베드) 노출 상태.
   const [couponSheetOpen, setCouponSheetOpen] = useState(false);
@@ -984,6 +986,22 @@ export function CardStudioPage() {
           </div>
         </div>
       </header>
+
+      {/* P6-2 — 구 /studio 셸 이식: 내 캐쉬 칩(구 :196-202 마크업 재사용) + AI 코치(CreatorCoachCard).
+          빌더 캔버스 위 상단 · max-w-md px-5 컨테이너 폭 준수(모바일 붕괴 없음). 빌더 본체 0터치. */}
+      <div className="mx-auto max-w-md space-y-3 px-5 pt-4">
+        {myRewards != null ? (
+          <div className="flex justify-end">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#F5F5F5] px-3 py-1.5">
+              <span className="text-[11px] font-medium tracking-ko text-[#737373]">내 캐쉬</span>
+              <span className="text-sm font-bold tracking-ko text-[#0A0A0A]">
+                {Number(myRewards ?? 0).toLocaleString()}원
+              </span>
+            </span>
+          </div>
+        ) : null}
+        <CreatorCoachCard />
+      </div>
 
       {/* P — 컴팩트 미리보기 띠. 히어로 안 보일 때만. 헤더(top-0 z-40) 아래 고정(top-[56px] z-30).
           ★ fixed 오버레이 — 흐름에서 빼 레이아웃 시프트(히어로 밀림) 제거 → 깜빡임 소멸.
@@ -2012,6 +2030,8 @@ type StudioBuildLoaderData = {
   // 쿠폰 만들기 시트(CouponManageView) 임베드용 — partner.coupons 와 동일 쿼리(coupons 테이블 직접).
   //   피커용 coupons(get_active_store_coupons)와 별개로 둘 다 반환.
   manageCoupons: CouponRow[];
+  // P6-2 — 내 캐쉬(reward_ledger 누적, 구 /studio 셸 이식). 실패·미조회 = null(graceful).
+  myRewards: number | null;
 };
 
 export const Route = createFileRoute("/_user/studio-build")({
@@ -2024,6 +2044,7 @@ export const Route = createFileRoute("/_user/studio-build")({
       store: null,
       coupons: [],
       manageCoupons: [],
+      myRewards: null,
     };
     const supabase = await getAuthClient();
     if (!supabase) return empty;
@@ -2085,7 +2106,20 @@ export const Route = createFileRoute("/_user/studio-build")({
       console.error("[studio-build] manage coupons load failed", e);
     }
 
-    return { isBusiness, store, coupons, manageCoupons };
+    // P6-2 — 내 캐쉬(구 /studio loader :44-54 이식). get_my_rewards 는 types.ts 미반영이라
+    //   untyped rpc 우회(TEMP — 타입 재생성 후 제거). 실패 시 null(throw 금지, graceful 유지).
+    let myRewards: number | null = null;
+    try {
+      const rpc = supabase.rpc as unknown as (
+        fn: string,
+      ) => Promise<{ data: unknown; error: unknown }>;
+      const { data: rewardsRaw, error: rewardsErr } = await rpc("get_my_rewards");
+      if (!rewardsErr) myRewards = Number(rewardsRaw) || 0;
+    } catch {
+      // 조회 실패 — 헤더는 표기 생략 대신 0원 렌더 방지 위해 null 유지.
+    }
+
+    return { isBusiness, store, coupons, manageCoupons, myRewards };
   },
   component: CardStudioPage,
 });
