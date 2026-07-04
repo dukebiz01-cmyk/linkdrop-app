@@ -59,8 +59,9 @@ export interface ProductRegisterFormProps {
   onSubmit: (payload: ProductRegisterPayload) => Promise<ProductRegisterResult>;
   /** 예약 옵션 — 임베드 호스트가 폼 내 네비를 필요로 할 때 주입(현 폼 본체는 미사용). */
   onNavigate?: (to: string) => void;
-  /** P2 임베드 모드(스튜디오 등) — 폼 자체 카드 크롬·"새 상품" 헤더 숨김 + 완료 화면의
-   *  외부 이동 액션('카드 보기')을 숨긴다(호스트가 미리보기를 자체 표시). 기본 false = 기존 동작. */
+  /** P2 임베드 모드(스튜디오 등) — 폼 자체 카드 크롬·"새 상품" 헤더 숨김 + 완료 섹션(단축주소·
+   *  카드 보기·공유하기)을 한 줄 상태로 대체(P2.1 S20: 단축주소는 호스트 발행 단일 경로).
+   *  기본 false = 기존 동작. */
   embedded?: boolean;
 }
 
@@ -559,17 +560,23 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
         </button>
       </form>
 
-      {/* 등록 완료 — 생성된 상품 카드 보기 / 공유 링크 복사 */}
+      {/* 등록 완료 — P2.1(S20) 컨펌 단일화: embedded 는 완료 섹션(단축주소·공유하기) 전면 미렌더.
+          단축주소는 스튜디오 발행 단일 경로만 — 여기선 한 줄 상태 표시(입력값 보존, 수정 재제출 가능).
+          비임베드(파트너 라우트)는 기존 완료 섹션 그대로. */}
       {result ? (
-        <section className="rounded-2xl border border-[#A7F3D0] bg-[#ECFDF5] p-5">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="size-4 text-[#059669]" strokeWidth={2} />
-            <h2 className="text-sm font-bold text-[#065F46]">상품 카드를 만들었어요</h2>
-          </div>
-          <p className="mt-2 break-all text-xs text-[#047857]">{result.shareUrl}</p>
-          <div className="mt-3 flex gap-2">
-            {/* P2 — 임베드에선 외부 이동 액션 숨김(호스트 미리보기가 카드를 즉시 표시). */}
-            {embedded ? null : (
+        embedded ? (
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-[#059669]">
+            <CheckCircle2 className="size-4" strokeWidth={2} />
+            상품이 카드에 붙었어요
+          </p>
+        ) : (
+          <section className="rounded-2xl border border-[#A7F3D0] bg-[#ECFDF5] p-5">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="size-4 text-[#059669]" strokeWidth={2} />
+              <h2 className="text-sm font-bold text-[#065F46]">상품 카드를 만들었어요</h2>
+            </div>
+            <p className="mt-2 break-all text-xs text-[#047857]">{result.shareUrl}</p>
+            <div className="mt-3 flex gap-2">
               <a
                 href={`/d/${result.shareUuid}`}
                 target="_blank"
@@ -578,16 +585,16 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
               >
                 카드 보기
               </a>
-            )}
-            <button
-              type="button"
-              onClick={handleShare}
-              className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#0E4D42] bg-white px-4 text-sm font-bold text-[#0E4D42] hover:bg-[#E1F5EE]"
-            >
-              공유하기
-            </button>
-          </div>
-        </section>
+              <button
+                type="button"
+                onClick={handleShare}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#0E4D42] bg-white px-4 text-sm font-bold text-[#0E4D42] hover:bg-[#E1F5EE]"
+              >
+                공유하기
+              </button>
+            </div>
+          </section>
+        )
       ) : null}
     </>
   );
