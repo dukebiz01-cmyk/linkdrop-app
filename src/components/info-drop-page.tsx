@@ -38,6 +38,7 @@ import {
   Sprout,
   ExternalLink,
   Info,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type PriceOfferRow } from "@/components/ai-price-comparison-card";
@@ -65,6 +66,16 @@ import { CouponPreview } from "@/components/receiver/CouponPreview";
 import { CardBody } from "@/components/card/CardBody";
 // Phase 1-C — 1-A 배지 재사용(수신카드 주입). 순환 없음: ShareCardTile 트리(home-page→drop-feed-card)는 본 파일 미참조.
 import { TimerBadge, StockMeta } from "@/components/home/ShareCardTile";
+
+// SM-2 — get_share_journey 응답 노드(서버측 마스킹본만 — 원본 user_id·실명 없음, 응답 레벨 보장).
+type ShareJourneyRpcNode = {
+  position: number;
+  masked_name: string;
+  role: string; // '개척' | '전달' | '최고공헌' (v8.3.1)
+  is_viewer: boolean;
+  has_conversion: boolean;
+  spread_count: number;
+};
 import { PurchaseCardBody } from "@/components/card/PurchaseCardBody";
 import { ProductWidget } from "@/components/card/ProductWidget";
 import { CardActionButton } from "@/components/card/CardActionButton";
@@ -627,6 +638,45 @@ export function InfoDropPage({
   const [manageOpen, setManageOpen] = useState(false);
   const [unsubscribing, setUnsubscribing] = useState(false);
 
+  // SM-2 — 공유 여정 아코디언(기본 접힘·lazy). 펼침 시 get_share_journey 1회, 재펼침 =
+  //   컴포넌트 state 캐시(리마운트 전까지 — 체인은 열람 중 급변하지 않음). share_uuid 는
+  //   클릭 시점에 URL(/d/{uuid})에서 파생(SSR 안전 — window 미접근 렌더 경로 0).
+  const [journeyOpen, setJourneyOpen] = useState(false);
+  const [journeyRows, setJourneyRows] = useState<ShareJourneyRpcNode[] | null>(null);
+  const [journeyLoading, setJourneyLoading] = useState(false);
+  const [journeyError, setJourneyError] = useState(false);
+  async function toggleJourney() {
+    const next = !journeyOpen;
+    setJourneyOpen(next);
+    if (!next || journeyRows || journeyLoading) return; // 재펼침 = 캐시(RPC 재호출 0)
+    const m =
+      typeof window !== "undefined"
+        ? window.location.pathname.match(/\/d\/([0-9a-fA-F-]{36})/)
+        : null;
+    if (!m) {
+      setJourneyError(true); // mock(/d/test 등) — 실체인 없음 → 오류 1줄(카드 가용성 무영향)
+      return;
+    }
+    setJourneyLoading(true);
+    try {
+      // get_share_journey 는 types.ts 미반영(TEMP — 타입 재생성 후 캐스트 제거).
+      const { data, error } = (await getSupabase().rpc(
+        "get_share_journey" as never,
+        { p_share_uuid: m[1] } as never,
+      )) as { data: unknown; error: unknown };
+      if (error || !Array.isArray(data)) {
+        setJourneyError(true);
+        return;
+      }
+      setJourneyRows(data as ShareJourneyRpcNode[]);
+      setJourneyError(false);
+    } catch {
+      setJourneyError(true);
+    } finally {
+      setJourneyLoading(false);
+    }
+  }
+
   // 로그인 유저 + 현재 매장 구독 여부 로드. partnerId(=매장) 있을 때만 조회.
   useEffect(() => {
     let cancelled = false;
@@ -1167,9 +1217,84 @@ export function InfoDropPage({
       >
         문제 신고
       </button>
+
+      {/* SM-2 — 공유 여정 아코디언(기본 접힘·lazy). FTC 고지 하단·카드 프레임 푸터 영역(추가만).
+          [보정2] 역할 4종 락: 개척·전달·최고공헌·구매자 — 그 외 역할·인원수 과시("N명 모집" 류) 금지.
+          [보정3] 연출 = 색·정적 뱃지만(펄스·애니메이션 0 — 개폐 기본 트랜지션 외 모션 없음).
+          ⛔ 포인트 숫자 금지(Phase 3 소관) · 모집·초대·수익 언어 금지. */}
+      <button
+        type="button"
+        onClick={() => void toggleJourney()}
+        aria-expanded={journeyOpen}
+        className={`mx-auto mt-1 flex min-h-[44px] items-center gap-1 text-[11px] font-semibold tracking-ko ${light ? "text-text-subtle" : "text-white/50"}`}
+      >
+        공유 여정 보기
+        <ChevronDown
+          className={`size-3.5 transition-transform ${journeyOpen ? "rotate-180" : ""}`}
+          strokeWidth={2}
+        />
+      </button>
+      {journeyOpen
+        ? (() => {
+            // 톤 클래스 3종 — light/다크 공용(가독·프리티어 정합용 지역 상수).
+            const jMuted = `text-[11px] font-medium tracking-ko ${light ? "text-text-subtle" : "text-white/50"}`;
+            const jStrong = `text-[12px] font-semibold tracking-ko ${light ? "text-text-strong" : "text-white/90"}`;
+            const jBadge = `rounded-lg px-1.5 text-[10px] font-semibold tracking-ko ${light ? "bg-surface text-text-muted" : "bg-white/15 text-white/70"}`;
+            const jNotice = `text-[10px] font-medium leading-relaxed tracking-ko ${light ? "text-text-subtle" : "text-white/45"}`;
+            const dotColor = (role: string) =>
+              role === "개척" ? "#2563EB" : role === "최고공헌" ? "#B45309" : "#94A3B8";
+            return (
+              <div className="mt-1 space-y-2 text-left" data-testid="share-journey">
+                {journeyLoading ? (
+                  <p className={jMuted}>여정을 불러오는 중…</p>
+                ) : journeyError ? (
+                  <p className={jMuted}>여정을 불러오지 못했어요</p>
+                ) : journeyRows && journeyRows.length > 0 ? (
+                  <>
+                    {/* 확산 집계 — '퍼졌어요' 표기('모집' 계열 금지). */}
+                    <p className={jStrong}>
+                      이 드랍은 지금까지 {journeyRows[0].spread_count}명에게 퍼졌어요
+                    </p>
+                    <ol className="space-y-1.5">
+                      {journeyRows.flatMap((n) => {
+                        const items = [
+                          <li key={n.position} className="flex items-center gap-2">
+                            <span
+                              className="size-1.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: dotColor(n.role) }}
+                            />
+                            <span className={jStrong}>{n.is_viewer ? "나" : n.masked_name}</span>
+                            <span className={jBadge}>{n.role}</span>
+                          </li>,
+                        ];
+                        if (n.has_conversion) {
+                          // [보정1] 구매·수령 신원 절대 미표시 — 클라 생성 익명 노드(플래그 기반).
+                          items.push(
+                            <li key={`${n.position}-buyer`} className="flex items-center gap-2">
+                              <span className="size-1.5 shrink-0 rounded-full bg-[#0F172A]" />
+                              <span className={jStrong}>구매자</span>
+                              <span className={jBadge}>구매 성사</span>
+                            </li>,
+                          );
+                        }
+                        return items;
+                      })}
+                    </ol>
+                    <p className={jNotice}>
+                      다른 참여자는 개인정보 보호로 익명 표시 · 기여도만 집계
+                    </p>
+                  </>
+                ) : (
+                  <p className={jMuted}>아직 공유 여정이 없어요</p>
+                )}
+              </div>
+            );
+          })()
+        : null}
     </div>
   );
   const shareFooter = renderShareFooter(isLightCard);
+  /* SM-2 상태·핸들러는 컴포넌트 상단(useState 클러스터)에 — renderShareFooter 가 클로저로 사용. */
 
   return (
     <div

@@ -1,6 +1,6 @@
 -- # DB 실정의 스냅샷(형상관리용). migrations 아님 — 재적용 금지.
 -- # 원본 마이그레이션 = v8.3_get_share_journey.sql (SM-1).
--- # 캡처: 2026-07-04 · pg_get_functiondef · md5(def)=532c92d94f71cd9ff57e70855960d0bd
+-- # 캡처: 2026-07-04 · pg_get_functiondef · md5(def)=15c4be47452f45916ef1c0d6a0982c22
 
 CREATE OR REPLACE FUNCTION public.get_share_journey(p_share_uuid uuid)
  RETURNS TABLE("position" integer, masked_name text, role text, is_viewer boolean, has_conversion boolean, spread_count integer)
@@ -61,7 +61,7 @@ SELECT
   END AS masked_name,
   CASE
     WHEN v.node_pos = 1 THEN '개척'
-    WHEN v.node_pos = v.visible_count THEN '결정타'
+    WHEN v.node_pos = v.visible_count THEN '최고공헌'
     ELSE '전달'
   END AS role,
   COALESCE(v.sender_user_id = auth.uid(), false) AS is_viewer, -- anon(uid null) = false 고정
