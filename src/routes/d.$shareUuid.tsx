@@ -95,6 +95,10 @@ type DbLoaderData = {
   detail: DropDetailRpc | null;
   shareUuid: string;
   slots: SlotRow[];
+  /** Phase 1-C(L6) — 서버 기준시각(ISO, loader 1회). use-countdown offset 보정용. */
+  serverNow?: string;
+  /** Phase 1-C — share_events.expires_at (쿠폰 valid_until 과 이른 값 비교 재료). */
+  shareExpiresAt?: string | null;
 };
 type LoaderData = MockLoaderData | DbLoaderData;
 
@@ -162,6 +166,22 @@ export const Route = createFileRoute("/d/$shareUuid")({
       if (error || !data) return { mode: "db", detail: null, shareUuid, slots: [] };
       const detail = data as unknown as DropDetailRpc;
 
+      // Phase 1-C — 기준시각 주입(L6): 서버 now 1회 캡처(아래 KST 계산과 동일 지점).
+      //   클라 use-countdown 이 이 값으로 시계 offset 을 고정 보정(새로고침 동일 기준, L1/L3).
+      const serverNow = new Date().toISOString();
+      // Phase 1-C — 공유 자체 만료(share_events.expires_at). 실패해도 페이지 정상(null graceful).
+      let shareExpiresAt: string | null = null;
+      try {
+        const { data: seRow } = await supabase
+          .from("share_events")
+          .select("expires_at")
+          .eq("share_uuid", shareUuid)
+          .maybeSingle();
+        shareExpiresAt = (seRow as { expires_at: string | null } | null)?.expires_at ?? null;
+      } catch (seErr) {
+        console.error("[d/$shareUuid loader] share_events.expires_at", seErr);
+      }
+
       // P3 — partner_id 있으면 슬롯도 SSR 에서 미리 가져온다(get_drop_detail 과 동일 인스턴스).
       // anon EXECUTE 확인 완료. 실패해도 페이지는 정상 — slots=[] 로 두는 graceful 패턴.
       // p_date = Asia/Seoul 오늘(서버 UTC 무관). en-CA → "YYYY-MM-DD".
@@ -183,7 +203,7 @@ export const Route = createFileRoute("/d/$shareUuid")({
           console.error("[d/$shareUuid loader] get_available_slots", slotErr);
         }
       }
-      return { mode: "db", detail, shareUuid, slots };
+      return { mode: "db", detail, shareUuid, slots, serverNow, shareExpiresAt };
     } catch (err) {
       console.error("[d/$shareUuid loader]", err);
       return { mode: "db", detail: null, shareUuid, slots: [] };
@@ -360,7 +380,7 @@ function DropPage() {
     );
   }
 
-  const { detail, shareUuid, slots } = loaderData;
+  const { detail, shareUuid, slots, serverNow, shareExpiresAt } = loaderData;
 
   // 실제 share_uuid 인데 조회 실패 → mock info 변형으로 fallback (무로그인 화면 깨짐 방지)
   if (!detail) {
@@ -383,6 +403,21 @@ function DropPage() {
     String(detail.drop?.purpose ?? "").toLowerCase(),
   );
   const funnelCoupon = isCouponPurpose ? (detail.coupon ?? null) : null;
+
+  // Phase 1-C — 마감 기준(L1: 단일 기준값): coupon.valid_until vs share_events.expires_at 중
+  //   이른 값 하나로 확정. 둘 다 null 이면 미전달(타이머 미렌더).
+  const expiresAt = (() => {
+    const cands = [funnelCoupon?.valid_until ?? null, shareExpiresAt ?? null]
+      .filter((v): v is string => Boolean(v))
+      .map((v) => ({ v, t: Date.parse(v) }))
+      .filter((x) => Number.isFinite(x.t));
+    if (cands.length === 0) return undefined;
+    cands.sort((a, b) => a.t - b.t);
+    return cands[0].v;
+  })();
+  // Phase 1-C — 파생 재고(1-B additive 키, adapters 타입 미확장이라 로컬 캐스트. L4: 표시만).
+  const remainingStock =
+    (detail as unknown as { remaining_stock?: number | null }).remaining_stock ?? null;
   const navigate = useNavigate();
   const claimedRef = useRef(false);
   const reserveResumeRef = useRef(false);
@@ -568,6 +603,10 @@ function DropPage() {
               }
             : null
         }
+        // Phase 1-C — 마감·재고·서버시각 주입(표시 게이트는 info-drop-page[보정2] 소관).
+        expiresAt={expiresAt}
+        serverNow={serverNow}
+        remainingStock={remainingStock}
         onReserveAndClaim={handleReserveAndClaim}
         onReservationRequest={(selection) => {
           trackReceiverEvent("reservation_click", detail.drop.id);

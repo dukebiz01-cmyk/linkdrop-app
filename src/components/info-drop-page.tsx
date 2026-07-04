@@ -63,6 +63,8 @@ import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import { CouponPreview } from "@/components/receiver/CouponPreview";
 import { CardBody } from "@/components/card/CardBody";
+// Phase 1-C — 1-A 배지 재사용(수신카드 주입). 순환 없음: ShareCardTile 트리(home-page→drop-feed-card)는 본 파일 미참조.
+import { TimerBadge, StockMeta } from "@/components/home/ShareCardTile";
 import { PurchaseCardBody } from "@/components/card/PurchaseCardBody";
 import { ProductWidget } from "@/components/card/ProductWidget";
 import { CardActionButton } from "@/components/card/CardActionButton";
@@ -169,6 +171,12 @@ export interface InfoDropPageProps {
   shareUrl?: string;
   /** 예약 목적 — 메이커가 보낸 예약 가능 날짜 (수신자 달력 마킹용). */
   reservationDates?: ReservationDateItem[];
+  /** Phase 1-C — 마감 기준(ISO): min(coupon.valid_until, share_events.expires_at). 미주입=타이머 미렌더. */
+  expiresAt?: string;
+  /** Phase 1-C(L6) — 서버 기준시각(ISO): use-countdown offset 보정. */
+  serverNow?: string;
+  /** Phase 1-C — 파생 재고(get_drop_detail.remaining_stock, L4: 공급값 표시만). */
+  remainingStock?: number | null;
   /**
    * 재공유(re-share) 수신자 화면 여부. 부모 라우트가 URL 마커
    * (parentShareId · shareDepth · ref) 로 판별해 전달.
@@ -600,6 +608,9 @@ export function InfoDropPage({
   initialSlots,
   calendarMode = "date_range",
   cardColor,
+  expiresAt,
+  serverNow,
+  remainingStock,
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   // 트랙 D §50 — 매장(partnerId) 구독. me.tsx handleSubscribe 패턴 재사용(maker_follows, 스키마 0).
@@ -942,8 +953,21 @@ export function InfoDropPage({
     </p>
   );
 
+  // Phase 1-C — 마감 타이머(1-A TimerBadge 재사용, L1~L7 하드락은 ShareCardTile·use-countdown 주석 체계 준수).
+  //   [보정2] 게이트: 쿠폰 계열 variant + funnelCoupon 존재 + expiresAt 주입 시에만. 그 외 미렌더.
+  //   TimerBadge 는 absolute 배지라 relative 스트립으로 감싼다(배지 자체 무수정).
+  const couponTimer =
+    (resolvedVariant === "coupon" || resolvedVariant === "reservation") &&
+    funnelCoupon &&
+    expiresAt ? (
+      <div className="relative h-7">
+        <TimerBadge expiresAt={expiresAt} serverNow={serverNow} />
+      </div>
+    ) : null;
+
   const couponPanel = funnelCoupon ? (
     <div className="space-y-3">
+      {couponTimer}
       <CouponPreview coupon={funnelCoupon} />
       <p className={`text-xs font-medium tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}>
         예약을 신청하면 쿠폰이 지갑에 담겨요.
@@ -1552,6 +1576,16 @@ export function InfoDropPage({
               onSellerClick={() => handleCtaClick("seller")}
             />
           ))}
+
+        {/* Phase 1-C — 파생 재고(1-B remaining_stock, L4: 공급값 표시만·가공 금지).
+            [보정2] 게이트: selfUpload 커머스 variant 에서만. 흰 필 래퍼 = navy 배경 대비용(배지 무수정). */}
+        {resolvedVariant === "purchase" && commerce?.selfUpload && remainingStock != null ? (
+          <div className="flex justify-end">
+            <span className="inline-flex items-center rounded-lg bg-white/95 px-2 py-1 shadow-[0_2px_6px_rgba(15,23,42,0.16)]">
+              <StockMeta remaining={remainingStock} />
+            </span>
+          </div>
+        ) : null}
 
         {/* C13 S3(🅱) — purchase 한마디는 위젯 아래(스튜디오 tagline 슬롯=위젯 아래와 정합). */}
         {resolvedVariant === "purchase" && makerMessage && (

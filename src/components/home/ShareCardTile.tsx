@@ -61,8 +61,9 @@ export type ShareJourneyNode = {
 //   L4 — remainingStock 은 공급값 표시만(가공·연출 감산 금지).
 
 // 타이머 배지 — 썸네일 우하단(재생시간 배지 계열 시각). D-N HH:MM:SS(N>0) / HH:MM:SS(당일).
-function TimerBadge({ expiresAt }: { expiresAt: string }) {
-  const cd = useCountdown(expiresAt); // serverNow 주입은 1-C(d.$shareUuid loader 확장)에서
+//   Phase 1-C — named export + serverNow 옵션 프로퍼티(1-A 예고분 배선). 렌더·로직 무수정.
+export function TimerBadge({ expiresAt, serverNow }: { expiresAt: string; serverNow?: string }) {
+  const cd = useCountdown(expiresAt, serverNow); // L6 — serverNow 수신 시 offset 보정
   if (!cd) return null; // 하이드레이션 안전 — 마운트 전 미렌더
   if (cd.expired) {
     // L2 — 만료 고정 표기(저채도). 연장 렌더 없음.
@@ -84,7 +85,8 @@ function TimerBadge({ expiresAt }: { expiresAt: string }) {
 }
 
 // 재고 메타 — "N개 남음". L4: 공급값 그대로 표시만. N≤5 앰버(L7), N≤0 "마감".
-function StockMeta({ remaining }: { remaining: number }) {
+//   Phase 1-C — named export(수신카드 재사용). 렌더·로직 무수정.
+export function StockMeta({ remaining }: { remaining: number }) {
   if (remaining <= 0) {
     return <span className="shrink-0 text-[11px] font-semibold text-[#94A3B8]">마감</span>;
   }
