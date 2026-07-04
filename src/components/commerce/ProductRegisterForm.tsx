@@ -97,6 +97,9 @@ export interface ProductRegisterFormProps {
    *  카드 보기·공유하기)을 한 줄 상태로 대체(P2.1 S20: 단축주소는 호스트 발행 단일 경로).
    *  기본 false = 기존 동작. */
   embedded?: boolean;
+  /** Phase 2 보완 — 재편집 프리필: 드롭 A product jsonb 의 dropy_rate(0~0.10)를 넘기면
+   *  슬라이더가 해당 %(0~10)로 복원. 미주입 = 0(신규 등록 기존 동작). */
+  initialDropyRate?: number;
 }
 
 // File → 가로 최대 1200px 비율유지 → image/jpeg 0.8 Blob. 캔버스 압축은 브라우저 전용.
@@ -133,7 +136,11 @@ async function resizeToJpegBlob(file: File): Promise<Blob> {
   return blob;
 }
 
-export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegisterFormProps) {
+export function ProductRegisterForm({
+  onSubmit,
+  embedded = false,
+  initialDropyRate,
+}: ProductRegisterFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   // P6-5ⓑ — 임베드(스튜디오) 전용 상품명 필수 인라인 안내. 파트너 라우트는 선택 유지.
@@ -154,7 +161,11 @@ export function ProductRegisterForm({ onSubmit, embedded = false }: ProductRegis
   const [origin, setOrigin] = useState("");
   const [originError, setOriginError] = useState(false);
   // Phase 2 — Droppy 공유 보상 비율(정수 % 0~10, 기본 0=미설정). 저장은 dropy_rate(0~0.10).
-  const [dropyPercent, setDropyPercent] = useState(0);
+  //   보완 — 재편집 프리필: jsonb dropy_rate(0~0.10) → % 복원(범위 밖·미주입 = 0).
+  const [dropyPercent, setDropyPercent] = useState(() => {
+    const p = Math.round((initialDropyRate ?? 0) * 100);
+    return Number.isFinite(p) && p >= 0 && p <= 10 ? p : 0;
+  });
   // KAMIS 품목 2단(부류→품목) — 시세(STEP4)·제철(STEP5) 연동 기반. 선택 사항(미선택 허용).
   const [kamisCategoryCode, setKamisCategoryCode] = useState("");
   const [kamisItemCode, setKamisItemCode] = useState("");
