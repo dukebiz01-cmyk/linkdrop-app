@@ -135,6 +135,7 @@ export function RoleHome({
   isBusiness,
   merchant,
   user,
+  serverNow,
   onGoResults,
   onGoReservations,
   onGoProposals,
@@ -142,6 +143,8 @@ export function RoleHome({
   isBusiness: boolean;
   merchant: MerchantHomeData | null;
   user: UserHomeData | null;
+  /** 1-C-2(L6) — 홈 loader 1회 공급 서버 기준시각(타일 타이머 offset 보정). */
+  serverNow?: string;
   onGoResults: () => void;
   onGoReservations: () => void;
   onGoProposals: () => void;
@@ -184,6 +187,9 @@ export function RoleHome({
                   drop={drop}
                   // Phase 0 — 홈 뱃지 주입(탐색 explore.tsx 와 동일 소스 drop.intent). 3종 락.
                   purpose={drop.intent}
+                  // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
+                  expiresAt={drop.expiresAt}
+                  serverNow={serverNow}
                   onShare={() =>
                     void reshareDrop({
                       shareUuid: drop.shareUuid,
@@ -202,7 +208,11 @@ export function RoleHome({
         ) : null}
 
         {/* 활동 세그먼트 — 내 공유 / 구독 토글. 빈상태 자체 처리. */}
-        <HomeActivitySegment sentDrops={sentDrops} followedDrops={followedDrops} />
+        <HomeActivitySegment
+          sentDrops={sentDrops}
+          followedDrops={followedDrops}
+          serverNow={serverNow}
+        />
       </div>
     );
   }
@@ -288,6 +298,9 @@ export function RoleHome({
                 drop={drop}
                 // Phase 0 — 홈 뱃지 주입(탐색과 동일 소스 drop.intent). 3종 락.
                 purpose={drop.intent}
+                // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
+                expiresAt={drop.expiresAt}
+                serverNow={serverNow}
                 onShare={() =>
                   void reshareDrop({
                     shareUuid: drop.shareUuid,
@@ -306,7 +319,11 @@ export function RoleHome({
       ) : null}
 
       {/* 활동 세그먼트 — 내 공유 / 구독 토글. 빈상태 자체 처리. */}
-      <HomeActivitySegment sentDrops={sentDrops} followedDrops={followedDrops} />
+      <HomeActivitySegment
+        sentDrops={sentDrops}
+        followedDrops={followedDrops}
+        serverNow={serverNow}
+      />
     </div>
   );
 }

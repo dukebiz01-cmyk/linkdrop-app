@@ -10,6 +10,8 @@ export interface DropFeedItem {
   videoSourceLabel: "YouTube" | "Instagram";
   videoDurationSec: number;
   intent: DropFeedCardProps["intent"];
+  /** 1-C-2 — 타일 타이머용 마감(ISO, feed-queries feedExpiresAt 산출). 없으면 미렌더. */
+  expiresAt?: string;
   title: string;
   localName?: string;
   distance?: string;

@@ -22,6 +22,8 @@ type HomeLoaderData = {
   isBusiness: boolean;
   merchant: MerchantHomeData | null;
   user: UserHomeData | null;
+  /** 1-C-2(L6) — 서버 기준시각 1회(타일 타이머 offset 보정, 1-C 미러). */
+  serverNow?: string;
 };
 
 const RESERVATION_LIMIT = 3;
@@ -118,6 +120,7 @@ export const Route = createFileRoute("/_user/home")({
           recommendedDrops: recommendedDrops.slice(0, RECOMMENDED_DROP_LIMIT),
           sentDrops,
         },
+        serverNow: new Date().toISOString(),
       };
     }
 
@@ -211,6 +214,7 @@ export const Route = createFileRoute("/_user/home")({
         recommendedDrops: recommendedDrops.slice(0, RECOMMENDED_DROP_LIMIT),
         sentDrops,
       },
+      serverNow: new Date().toISOString(),
     };
   },
   component: HomeRoute,
@@ -218,13 +222,14 @@ export const Route = createFileRoute("/_user/home")({
 
 function HomeRoute() {
   const navigate = useNavigate();
-  const { isBusiness, merchant, user } = Route.useLoaderData();
+  const { isBusiness, merchant, user, serverNow } = Route.useLoaderData();
 
   return (
     <RoleHome
       isBusiness={isBusiness}
       merchant={merchant}
       user={user}
+      serverNow={serverNow}
       onGoResults={() => void navigate({ to: "/partner/results" })}
       onGoReservations={() => void navigate({ to: "/partner/reservations" })}
       onGoProposals={() => void navigate({ to: "/partner" })}

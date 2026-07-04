@@ -119,6 +119,7 @@ export function ShareCardTile({
   onShare,
   onClick,
   expiresAt,
+  serverNow,
   remainingStock,
   dropyReward,
 }: {
@@ -128,6 +129,8 @@ export function ShareCardTile({
   onClick?: () => void;
   /** Phase 1-A — ISO 마감시각(coupons.valid_until 계열). 미주입 = 타이머 미렌더. */
   expiresAt?: string;
+  /** 1-C-2(L6) — 서버 기준시각(표면 loader 1회 공급). use-countdown offset 보정. */
+  serverNow?: string;
   /** Phase 1-A — 파생 재고(1-B 공급). 미주입 = 미렌더. L4: 공급값 표시만. */
   remainingStock?: number;
   /** Phase 1-A — 드로피 보상(값 주입은 P6 이후 — 렌더만 선구현). */
@@ -202,8 +205,9 @@ export function ShareCardTile({
           </span>
         ) : null}
 
-        {/* Phase 1-A — 마감 타이머(우하단, 재생시간 배지 계열·종류칩과 충돌 없음). 미주입 = 미렌더. */}
-        {expiresAt ? <TimerBadge expiresAt={expiresAt} /> : null}
+        {/* Phase 1-A — 마감 타이머(우하단, 재생시간 배지 계열·종류칩과 충돌 없음). 미주입 = 미렌더.
+            1-C-2 — serverNow 관통(L6). */}
+        {expiresAt ? <TimerBadge expiresAt={expiresAt} serverNow={serverNow} /> : null}
       </div>
 
       {/* 정보영역 — 솔리드, 고정 높이 컬럼 정렬(메이커·지역 1줄 + 제목 2줄).

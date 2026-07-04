@@ -15,9 +15,12 @@ import { reshareDrop } from "@/lib/reshare-drop";
 export function HomeActivitySegment({
   sentDrops,
   followedDrops,
+  serverNow,
 }: {
   sentDrops: DropFeedItem[];
   followedDrops: DropFeedItem[];
+  /** 1-C-2(L6) — 홈 loader 1회 공급 서버 기준시각(타일 타이머 offset 보정). */
+  serverNow?: string;
 }) {
   const [tab, setTab] = useState<"sent" | "subscribed">("sent");
   const navigate = useNavigate();
@@ -53,6 +56,9 @@ export function HomeActivitySegment({
               drop={drop}
               // Phase 0 — 홈 뱃지 주입(탐색과 동일 소스 drop.intent). 3종 락.
               purpose={drop.intent}
+              // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
+              expiresAt={drop.expiresAt}
+              serverNow={serverNow}
               onClick={() => openDrop(drop.shareUuid)}
               onShare={() =>
                 void reshareDrop({

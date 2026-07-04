@@ -25,6 +25,8 @@ type ExploreLoaderData = {
   info: DropFeedItem[];
   coupon: DropFeedItem[];
   commerce: DropFeedItem[];
+  /** 1-C-2(L6) — 서버 기준시각 1회(타일 타이머 offset 보정, 1-C 미러). */
+  serverNow?: string;
 };
 
 type ExploreTab = "all" | "info" | "coupon" | "commerce";
@@ -44,7 +46,7 @@ export const Route = createFileRoute("/_user/explore")({
       getDiscoverDrops(supabase, { purposes: ["쿠폰", "예약"], bizOnly: true }),
       getDiscoverDrops(supabase, { purposes: ["구매"] }),
     ]);
-    return { all, info, coupon, commerce };
+    return { all, info, coupon, commerce, serverNow: new Date().toISOString() };
   },
   component: ExplorePage,
 });
@@ -152,6 +154,9 @@ function ExplorePage() {
               key={drop.shareUuid}
               drop={drop}
               purpose={drop.intent}
+              // 1-C-2 — 마감 타이머 데이터 주입(피드 산출 expiresAt + loader serverNow).
+              expiresAt={drop.expiresAt}
+              serverNow={data.serverNow}
               onClick={() => handleOpenDrop(drop.shareUuid)}
               onShare={() =>
                 void reshareDrop({

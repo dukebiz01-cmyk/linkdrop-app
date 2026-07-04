@@ -48,6 +48,43 @@ type ContentSourceRow = {
   source_url: string | null;
 };
 
+// 1-C-2 — 피드용 마감 계산 재료(funnel 쿠폰 임베드). RLS(coupons_public_read: is_active=true)가
+//   비활성 쿠폰을 이미 감춘다 — 기간 창 검증만 클라에서 미러.
+type FeedCouponRow = {
+  valid_from: string | null;
+  valid_until: string | null;
+  is_active: boolean | null;
+} | null;
+
+// 1-C-2 — 1-C(d.$shareUuid 컴포넌트)와 동일 알고리즘의 피드판(L1: 단일 기준값):
+//   쿠폰 계열 purpose 게이트 + min(funnel coupon.valid_until[활성·기간 내], share_events.expires_at).
+//   ⚠️ get_drop_detail 의 2차 폴백(파트너 최신 활성 쿠폰)은 피드 미적용 — 드랍당 추가 쿼리(N+1) 금지.
+//   둘 다 없으면 undefined(타이머 미렌더).
+function feedExpiresAt(
+  purpose: string | null | undefined,
+  coupon: FeedCouponRow,
+  shareExpiresAt: string | null | undefined,
+): string | undefined {
+  const isCouponPurpose = purpose === "쿠폰" || purpose === "예약";
+  const now = Date.now();
+  const couponUntil =
+    isCouponPurpose &&
+    coupon &&
+    coupon.is_active !== false &&
+    (!coupon.valid_from || Date.parse(coupon.valid_from) <= now) &&
+    coupon.valid_until &&
+    Date.parse(coupon.valid_until) >= now
+      ? coupon.valid_until
+      : null;
+  const cands = [couponUntil, shareExpiresAt ?? null]
+    .filter((v): v is string => Boolean(v))
+    .map((v) => ({ v, t: Date.parse(v) }))
+    .filter((x) => Number.isFinite(x.t));
+  if (cands.length === 0) return undefined;
+  cands.sort((a, b) => a.t - b.t);
+  return cands[0].v;
+}
+
 type IntentTypeRow = { key: string | null };
 
 type InfoDropDiscoverRow = {
@@ -60,15 +97,21 @@ type InfoDropDiscoverRow = {
   partner_id?: string | null;
   content_sources: ContentSourceRow | null;
   intent_types: IntentTypeRow | null;
-  share_events: Array<{ share_uuid: string }> | null;
+  share_events: Array<{ share_uuid: string; expires_at?: string | null }> | null;
+  // 1-C-2 — funnel 쿠폰 임베드(info_drops_funnel_coupon_id_fkey).
+  coupons?: FeedCouponRow;
 };
 
 type ShareEventSentRow = {
   share_uuid: string;
   created_at: string | null;
+  // 1-C-2 — 공유 자체 만료.
+  expires_at?: string | null;
   info_drops: {
+    purpose?: string | null;
     content_sources: ContentSourceRow | null;
     intent_types: IntentTypeRow | null;
+    coupons?: FeedCouponRow;
   } | null;
 };
 
@@ -86,6 +129,8 @@ function adaptDiscoverRow(row: InfoDropDiscoverRow): DropFeedItem | null {
     videoSourceLabel: providerToLabel(cs.provider),
     videoDurationSec: cs.duration_sec ?? 0,
     intent: safeIntent(row.intent_types?.key),
+    // 1-C-2 — 타일 타이머용 마감(ISO). 없으면 undefined = 미렌더(하위호환).
+    expiresAt: feedExpiresAt(row.purpose, row.coupons ?? null, row.share_events?.[0]?.expires_at),
     title: cs.title ?? "(제목 없음)",
     receivedByCount: row.share_count ?? undefined,
     creator:
@@ -105,6 +150,12 @@ function adaptSentRow(row: ShareEventSentRow): DropFeedItem | null {
     videoSourceLabel: providerToLabel(cs.provider),
     videoDurationSec: cs.duration_sec ?? 0,
     intent: safeIntent(row.info_drops?.intent_types?.key),
+    // 1-C-2 — 내 공유 행도 동일 계산(공유 자체 expires_at 는 루트 행).
+    expiresAt: feedExpiresAt(
+      row.info_drops?.purpose,
+      row.info_drops?.coupons ?? null,
+      row.expires_at,
+    ),
     title: cs.title ?? "(제목 없음)",
     creator:
       cs.author_name && cs.source_url
@@ -113,6 +164,7 @@ function adaptSentRow(row: ShareEventSentRow): DropFeedItem | null {
   };
 }
 
+// 1-C-2 — expires_at·funnel 쿠폰 임베드 추가(같은 단일 쿼리의 embed 확장 — 쿼리 횟수 불변, N+1 0).
 const DISCOVER_SELECT = `
   id,
   published_at,
@@ -122,15 +174,19 @@ const DISCOVER_SELECT = `
   partner_id,
   content_sources!info_drops_source_id_fkey ( provider, title, thumbnail_url, duration_sec, author_name, source_url ),
   intent_types!info_drops_intent_id_fkey ( key ),
-  share_events ( share_uuid )
+  coupons!info_drops_funnel_coupon_id_fkey ( valid_from, valid_until, is_active ),
+  share_events ( share_uuid, expires_at )
 `;
 
 const SENT_SELECT = `
   share_uuid,
   created_at,
+  expires_at,
   info_drops!share_events_info_drop_id_fkey (
+    purpose,
     content_sources!info_drops_source_id_fkey ( provider, title, thumbnail_url, duration_sec, author_name, source_url ),
-    intent_types!info_drops_intent_id_fkey ( key )
+    intent_types!info_drops_intent_id_fkey ( key ),
+    coupons!info_drops_funnel_coupon_id_fkey ( valid_from, valid_until, is_active )
   )
 `;
 
