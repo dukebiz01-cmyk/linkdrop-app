@@ -116,8 +116,8 @@ const TABS: NavTab[] = [
   },
   {
     id: "me",
-    // NAV-1 — 형님 확정 문구 "내페이지"(구 "나"). 축약 금지.
-    label: "내페이지",
+    // NAV-1 — 형님 확정 문구(구 "나"), NAV-1.1 띄어쓰기 정정. 축약 금지.
+    label: "내 페이지",
     Icon: MeIcon,
     to: "/me",
     match: (p) => p === "/me" || p.startsWith("/me") || p === "/profile",
