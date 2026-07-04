@@ -1,6 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Sparkles, Users, ChevronRight, ArrowRight, TrendingUp, Bell } from "lucide-react";
 import { PerformanceBanner } from "@/components/home/PerformanceBanner";
+// P6-7(형님 확정 A안) — 링고AI 진단 카드(자체완결·내부 데이터 자가 로드) 스튜디오→홈 이동.
+import { CreatorCoachCard } from "@/components/creator-coach-card";
 import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
 import { SectionHeader } from "@/components/home/v4-bits";
@@ -259,6 +261,10 @@ export function RoleHome({
 
       {/* 링고AI 매장 진단 (항상 노출 — 진단 or 포인터). ★TodayAiCard 0터치(기능 유지). */}
       <TodayAiCard guide={merchant.guide} onGoResults={onGoResults} />
+
+      {/* P6-7 — 링고AI 성과 코치(구 스튜디오 상단 이식, 사업자 세그먼트 전용 — 비사업자 홈 무변경).
+          자체완결 컴포넌트(내부 Edge 호출) — 홈 loader 확장 불요. */}
+      <CreatorCoachCard />
 
       {/* 제안 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. 스타일만 V4 톤. */}
       {merchant.proposals.length > 0 ? (

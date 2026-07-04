@@ -15,8 +15,7 @@ import type { AttachedProduct } from "@/components/create/types";
 // P3 — 구매 미리보기 미러: 손님 /d purchase 와 동일 변환(buildProductWidget) 재사용(단일 소스).
 import { buildProductWidget } from "@/lib/adapters";
 import type { InfoDropPageProps } from "@/components/info-drop-page";
-// P6-2 — 구 /studio 셸 이식: AI 코치 카드(내부 링크 0 — 경로 보정 불필요).
-import { CreatorCoachCard } from "@/components/creator-coach-card";
+// P6-7(형님 확정 A안) — CreatorCoachCard 는 홈(RoleHome 사업자 세그먼트)으로 이동. 스튜디오=빌더 복귀.
 // Phase 2 — 미리보기 쿠폰 타이머(1-A 배지 재사용, 수신카드 1-C couponPanel 동형).
 import { TimerBadge } from "@/components/home/ShareCardTile";
 import { EMPTY_PRODUCT_COPY, type ProductCopyValue } from "@/components/create/ProductCopyEditor";
@@ -1028,10 +1027,11 @@ export function CardStudioPage() {
         </div>
       </header>
 
-      {/* P6-2 — 구 /studio 셸 이식: 내 캐쉬 칩(구 :196-202 마크업 재사용) + AI 코치(CreatorCoachCard).
-          빌더 캔버스 위 상단 · max-w-md px-5 컨테이너 폭 준수(모바일 붕괴 없음). 빌더 본체 0터치. */}
-      <div className="mx-auto max-w-md space-y-3 px-5 pt-4">
-        {myRewards != null ? (
+      {/* P6-2 — 구 /studio 셸 이식: 내 캐쉬 칩(구 :196-202 마크업 재사용).
+          P6-7 — AI 코치(CreatorCoachCard)는 홈으로 이동(진단=홈 소관) — 내 캐쉬만 잔류
+          (캐시 사용처=스튜디오 도구, 이동 금지). 빌더 첫 화면 복귀. 빌더 본체 0터치. */}
+      {myRewards != null ? (
+        <div className="mx-auto max-w-md px-5 pt-4">
           <div className="flex justify-end">
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#F5F5F5] px-3 py-1.5">
               <span className="text-[11px] font-medium tracking-ko text-[#737373]">내 캐쉬</span>
@@ -1040,9 +1040,8 @@ export function CardStudioPage() {
               </span>
             </span>
           </div>
-        ) : null}
-        <CreatorCoachCard />
-      </div>
+        </div>
+      ) : null}
 
       {/* P — 컴팩트 미리보기 띠. 히어로 안 보일 때만. 헤더(top-0 z-40) 아래 고정(top-[56px] z-30).
           ★ fixed 오버레이 — 흐름에서 빼 레이아웃 시프트(히어로 밀림) 제거 → 깜빡임 소멸.
