@@ -1074,6 +1074,22 @@ export function InfoDropPage({
       </section>
     ) : null;
 
+  // S23 — 교집합(isCombined) 보조 "쿠폰 받기"(쿠폰만): 옛 IIFE 셸(카드 밖 하단 스택) 렌더가
+  //   "하단 깔림" 증상 → 카드 내부(couponBlock, 쿠폰 패널 인접)로 이동. 버튼 testid·클래스·
+  //   핸들러(onReserveAndClaim = S14 claim_coupon 경로) 그대로 — 위치만. sticky 는 교집합에서
+  //   원래 미표시(hasStickyBar !isCombined)라 IO 연동 변화 없음.
+  const combinedCouponOnlyCta =
+    isCombined && onReserveAndClaim ? (
+      <button
+        type="button"
+        data-testid="cta-coupon-only"
+        onClick={onReserveAndClaim}
+        className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-bold tracking-ko text-[#0A0A0A] hover:bg-[#FAFAFA]"
+      >
+        쿠폰 받기
+      </button>
+    ) : null;
+
   // 3b-2 — 정보 보기(연락) 블록 const 추출. 콘텐츠 0변화, 위치만(handleCtaClick 결선 그대로).
   //   3b-3 에서 CardBody contactBlock 으로 주입하기 위함.
   const contactRow =
@@ -1437,6 +1453,12 @@ export function InfoDropPage({
                       </button>
                     </div>
                   </div>
+                  ) : combinedCouponOnlyCta ? (
+                    // S23 — 교집합(쿠폰+예약일): 보조 "쿠폰 받기"를 쿠폰 패널 아래 인카드 렌더.
+                    <div className="space-y-3">
+                      {benefitEventSection}
+                      {combinedCouponOnlyCta}
+                    </div>
                 ) : (
                   benefitEventSection
                 )
@@ -1504,7 +1526,18 @@ export function InfoDropPage({
                 local,
                 variant,
               } as unknown as InfoDropPageProps)}
-              couponBlock={benefitEventSection}
+                couponBlock={
+                  // S23 — 예약+쿠폰 교집합: 보조 "쿠폰 받기"를 쿠폰 패널 아래 인카드 렌더
+                  //   (옛 IIFE 셸 하단 렌더 이동분). 쿠폰 없으면 benefitEventSection 그대로(회귀 0).
+                  combinedCouponOnlyCta ? (
+                    <div className="space-y-3">
+                      {benefitEventSection}
+                      {combinedCouponOnlyCta}
+                    </div>
+                  ) : (
+                    benefitEventSection
+                  )
+                }
               reservationBlock={
                 <div className="space-y-3">
                   {calendarPanel}
@@ -1616,18 +1649,8 @@ export function InfoDropPage({
                 {/* 손님 하단 블록(쿠폰·예약)은 CardBody couponBlock/reservationBlock 로 이관(3b-3).
                     IIFE 셸엔 reserveNotice·쿠폰만받기만 잔류(조건 동일, funnel 0터치). */}
                 {!isCoupon ? reserveNotice : null}
-                {/* Phase 1 통합(가-2) — 교집합에서 sticky "쿠폰 받기" 대신 보조 "쿠폰만 받기".
-                    예약 없이 claim_coupon 만(기존 onReserveAndClaim 경로 그대로). */}
-                {isCombined && onReserveAndClaim ? (
-                  <button
-                    type="button"
-                    data-testid="cta-coupon-only"
-                    onClick={onReserveAndClaim}
-                    className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-bold tracking-ko text-[#0A0A0A] hover:bg-[#FAFAFA]"
-                  >
-                    쿠폰 받기
-                  </button>
-                ) : null}
+                {/* Phase 1 통합(가-2) 보조 "쿠폰만 받기"는 S23 에서 카드 내부(couponBlock,
+                    combinedCouponOnlyCta)로 이동 — 여기(카드 밖 하단) 렌더 제거. */}
               </div>
             );
           })()}
