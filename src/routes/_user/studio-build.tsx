@@ -2,6 +2,7 @@ import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
+import { shareToKakao } from "@/lib/kakao";
 import {
   ProductRegisterForm,
   type ProductRegisterPayload,
@@ -333,6 +334,9 @@ export function CardStudioPage() {
   const [saving, setSaving] = useState(false);
   const [savedUrl, setSavedUrl] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // P7b — 공개/비공개 토글(기본 공개 = P7 백필 시맨틱) + 카톡 전송 진행 상태.
+  const [isPublic, setIsPublic] = useState(true);
+  const [sending, setSending] = useState(false);
   const [deckIndex, setDeckIndex] = useState(0);
   const [pressedId, setPressedId] = useState<string | null>(null);
   // 블록 설정 아코디언 — 한 번에 하나만 펼침(null = 전부 접힘).
@@ -588,28 +592,29 @@ export function CardStudioPage() {
   // S2-a 저장 — 영상(media_url) + 한마디(curator_message)만 /api/drops 로. 쿠폰·예약은 다음 단계.
   //   media_url = selectedVideo.videoId 로 만든 YouTube watch URL(서버가 extract-meta 로 source 처리).
   //   purpose = "정보"(drop_purpose enum 값, 영상만 카드). is_public = false. blocks 미전송(영상은 media_url 본체).
-  async function handleSaveDrop() {
+  // P7b — 카톡 전송(handleSendKakao)이 발행 결과를 재사용하도록 성공 시 URL·share_uuid 반환.
+  async function handleSaveDrop(): Promise<{ url: string | null; shareUuid: string } | null> {
     // 6a 영상 게이트 완화 — 비커머스만 영상 필수(커머스는 self_upload 라 영상 없이 저장).
     if (buildMode !== "commerce" && !selectedVideo) {
       setSaveError("영상을 먼저 선택해주세요.");
-      return;
+      return null;
     }
     // 6b 커머스 필수 가드 — 사진 + 이름 + 결정가(§0 단일값).
     if (buildMode === "commerce") {
       if (!productImageUrl) {
         setSaveError("상품 사진을 올려주세요.");
-        return;
+        return null;
       }
       if (!productName.trim()) {
         setSaveError("상품 이름을 입력해주세요.");
-        return;
+        return null;
       }
       if (!((productPrice ?? 0) > 0)) {
         setSaveError("가격을 입력해주세요.");
-        return;
+        return null;
       }
     }
-    if (saving) return;
+    if (saving) return null;
     setSaving(true);
     setSaveError(null);
     try {
@@ -637,7 +642,7 @@ export function CardStudioPage() {
               headline: productCopy.headline,
               selling_points: productCopy.sellingPoints,
               price_band_enabled: false, // §0 시세 영구 금지
-              is_public: false,
+              is_public: isPublic, // P7b — 발행 바 공개/비공개 토글값
               blocks: [
                 {
                   block_kind: "product",
@@ -650,7 +655,7 @@ export function CardStudioPage() {
               media_url: mediaUrl,
               purpose: dropPurpose,
               curator_message: tagline.trim() || null,
-              is_public: false,
+              is_public: isPublic, // P7b — 발행 바 공개/비공개 토글값
               // 예약 슬롯 조회(손님 get_available_slots)가 drop.partner_id 기준 — 매장 연결 필수.
               //   쿠폰·정보에도 매장 연결로 유용. studio-build 는 비즈니스 전제(store 있음).
               partner_id: store?.id ?? null,
@@ -660,6 +665,7 @@ export function CardStudioPage() {
       //   refDropId 부재(폼 미제출 발행 시도) = 아래 else 폴백(현행 신규 생성) 유지 —
       //   P6-5ⓑ(임베드 상품명 필수)와 발행 가드(사진·이름·가격)로 이 폴백 도달은 자연 축소.
       //   is_public 은 A·구 B 모두 false(비공개 링크 열람)라 상태 전환 불요 — 공개 설계는 P7 소관.
+      // P7b — 재사용 분기는 기존 드롭 공개상태 유지, P7 토글 미적용(신규 발행 없음).
       const reusedProduct =
         buildMode === "commerce" && attachedProducts[0]?.refDropId ? attachedProducts[0] : null;
       let dropId: string | null;
@@ -682,7 +688,7 @@ export function CardStudioPage() {
         };
         if (!res.ok || !json.drop?.share_uuid) {
           setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
-          return;
+          return null;
         }
         dropId = json.drop.id ?? null;
         publishedShareUuid = json.drop.share_uuid;
@@ -749,11 +755,61 @@ export function CardStudioPage() {
         typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
       setSavedUrl(shareableUrl ?? `${origin}/d/${publishedShareUuid}`);
       setDropped(true);
+      return { url: shareableUrl, shareUuid: publishedShareUuid };
     } catch (e) {
       console.error("[studio-build] handleSaveDrop", e);
       setSaveError("카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      return null;
     } finally {
       setSaving(false);
+    }
+  }
+
+  // P7b — 카톡 전송. 위저드 handleKakaoShare(ensureRealShare 패턴, create-drop-wizard :538) 이식:
+  //   발행 전이면 handleSaveDrop 으로 발행을 먼저 보장(커머스 드롭A 재사용 분기 포함 — 신규 발행 없음)
+  //   → 확보한 공유 URL 로 shareToKakao. shareToKakao 는 throw 없음({ok,fallback} 반환,
+  //   폴백 클립보드 복사는 함수 내부 처리) — 실패해도 사용자 흐름 차단 금지.
+  async function handleSendKakao() {
+    if (sending || saving) return;
+    setSending(true);
+    try {
+      let linkUrl = dropped ? savedUrl : null;
+      if (!linkUrl) {
+        const published = await handleSaveDrop();
+        if (!published) return; // 발행 실패 — saveError 표시는 handleSaveDrop 이 이미 수행
+        const origin =
+          typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
+        linkUrl = published.url ?? `${origin}/d/${published.shareUuid}`;
+      }
+      // 스튜디오 실측 매핑 — 커머스: 상품명·상품사진, 비커머스: 영상 제목·썸네일.
+      //   description 은 위저드 규칙([purpose, makerNote].join(" · ")) 그대로 — 한마디(tagline)가 makerNote.
+      const purposeLabel =
+        buildMode === "commerce"
+          ? "구매"
+          : applied["calendar"]
+            ? "예약"
+            : applied["coupon"] && selectedCouponId
+              ? "쿠폰"
+              : "정보";
+      const title =
+        (buildMode === "commerce" ? productName.trim() : selectedVideo?.title) || "LinkDrop";
+      const imageUrl =
+        (buildMode === "commerce" ? productImageUrl : selectedVideo?.thumbnailUrl) ?? "";
+      const ctaTitle =
+        purposeLabel === "구매"
+          ? "상품 보러 가기"
+          : purposeLabel === "예약" || purposeLabel === "쿠폰"
+            ? "예약하고 혜택 받기"
+            : "보러 가기";
+      await shareToKakao({
+        title,
+        description: [purposeLabel, tagline.trim()].filter(Boolean).join(" · "),
+        imageUrl,
+        linkUrl,
+        buttons: [{ title: ctaTitle, link: linkUrl }],
+      });
+    } finally {
+      setSending(false);
     }
   }
 
@@ -1972,56 +2028,105 @@ export function CardStudioPage() {
         <div className="pointer-events-none h-6 bg-gradient-to-t from-[#FAFAFA] to-transparent" />
         <div className="bg-[#FAFAFA]/95 backdrop-blur-md">
           <div className="mx-auto max-w-md px-5 pb-4">
-            <button
-              onClick={() => void handleSaveDrop()}
-              disabled={score < 40 || saving}
-              className={`group flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl text-[15px] font-bold transition-all duration-300 ${
-                score >= 40
-                  ? "text-white shadow-[0_8px_24px_rgba(15,23,42,0.22)] active:scale-[0.985]"
-                  : "border border-[#EDEDED] bg-white text-[#A3A3A3]"
-              }`}
-              style={score >= 40 ? { backgroundColor: INK } : undefined}
-            >
-              {saving ? (
-                <>저장 중…</>
-              ) : dropped ? (
-                <>
-                  <Check className="h-5 w-5" strokeWidth={2.5} />
-                  카드를 저장했어요!
-                </>
-              ) : score >= 40 ? (
-                <>
-                  <Send
-                    className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-                    strokeWidth={2}
-                  />
-                  카드 드롭하기
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-5 w-5" strokeWidth={1.75} />
-                  레버를 더 채워주세요
-                </>
-              )}
-            </button>
-            {/* S2-a 저장 결과 — 단축 URL 반환 확인(카톡 공유 연결은 다음 단계). */}
+            {/* P7b (2-1) 공개/비공개 세그먼트 토글 — 자체 구현(Radix 금지), 정적 상태 전환(L7). */}
+            <div className="flex gap-2" role="group" aria-label="공개 범위 선택">
+              <button
+                type="button"
+                onClick={() => setIsPublic(true)}
+                disabled={saving}
+                aria-pressed={isPublic}
+                aria-label="공개로 게시"
+                className={`h-11 flex-1 rounded-lg text-[13px] font-semibold ${
+                  isPublic
+                    ? "bg-[#2563EB] text-white"
+                    : "border border-[#E5E5E5] bg-white text-[#525252]"
+                }`}
+              >
+                공개
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPublic(false)}
+                disabled={saving}
+                aria-pressed={!isPublic}
+                aria-label="비공개로 저장"
+                className={`h-11 flex-1 rounded-lg text-[13px] font-semibold ${
+                  !isPublic
+                    ? "bg-[#2563EB] text-white"
+                    : "border border-[#E5E5E5] bg-white text-[#525252]"
+                }`}
+              >
+                비공개
+              </button>
+            </div>
+            {/* P7b (2-2) 상태 안내 멘트 */}
+            <p className="mt-1 text-xs text-neutral-500">
+              {isPublic ? "홈·탐색·내 페이지에 게시됩니다" : "내 페이지에만 저장돼요 · 링크로만 공유"}
+            </p>
+            {/* P7b (2-3) 게시/저장(보조) + 카톡 전송(주) — 전송 강조 flex 1:1.4 */}
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => void handleSaveDrop()}
+                disabled={score < 40 || saving}
+                aria-label={isPublic ? "카드 게시하기" : "카드 저장하기"}
+                className={`h-12 flex-[1] rounded-2xl text-[14px] font-bold ${
+                  score >= 40
+                    ? "border border-[#D4D4D4] bg-white text-[#0A0A0A]"
+                    : "border border-[#EDEDED] bg-white text-[#A3A3A3]"
+                }`}
+              >
+                {saving
+                  ? "저장 중…"
+                  : dropped
+                    ? isPublic
+                      ? "게시했어요! ✓"
+                      : "저장했어요! ✓"
+                    : score >= 40
+                      ? isPublic
+                        ? "게시하기"
+                        : "저장하기"
+                      : "레버를 더 채워주세요"}
+              </button>
+              <button
+                onClick={() => void handleSendKakao()}
+                disabled={score < 40 || saving || sending}
+                aria-label="카카오톡으로 카드 전송"
+                className={`flex h-12 flex-[1.4] items-center justify-center gap-2 rounded-2xl text-[14px] font-bold ${
+                  score >= 40 && !saving && !sending
+                    ? "bg-[#2563EB] text-white"
+                    : "bg-[#E5E5E5] text-[#A3A3A3]"
+                }`}
+              >
+                <Send className="h-4 w-4" strokeWidth={2} />
+                {sending ? "전송 중…" : "카톡으로 전송"}
+              </button>
+            </div>
+            <p className="mt-1 text-center text-xs text-neutral-500">
+              받는 사람에게 카드를 전송합니다
+            </p>
+            {/* S2-a 저장 결과 — 단축 URL + 복사(유지) + P7b 성공 멘트. */}
             {saveError ? (
               <p className="mt-2 text-center text-[12px] text-[#B91C1C]">{saveError}</p>
             ) : savedUrl ? (
-              <div className="mt-2 flex items-center justify-center gap-2 text-[12px] text-[#525252]">
-                <span className="truncate font-medium text-[#0A0A0A]">{savedUrl}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof navigator !== "undefined" && navigator.clipboard) {
-                      void navigator.clipboard.writeText(savedUrl);
-                    }
-                  }}
-                  className="shrink-0 rounded-lg bg-white px-2 py-1 font-semibold text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] hover:bg-[#FAFAFA]"
-                >
-                  복사
-                </button>
-              </div>
+              <>
+                <div className="mt-2 flex items-center justify-center gap-2 text-[12px] text-[#525252]">
+                  <span className="truncate font-medium text-[#0A0A0A]">{savedUrl}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof navigator !== "undefined" && navigator.clipboard) {
+                        void navigator.clipboard.writeText(savedUrl);
+                      }
+                    }}
+                    className="shrink-0 rounded-lg bg-white px-2 py-1 font-semibold text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] hover:bg-[#FAFAFA]"
+                  >
+                    복사
+                  </button>
+                </div>
+                <p className="mt-1 text-center text-xs text-neutral-500">
+                  {isPublic ? "홈·탐색·내 페이지에서 볼 수 있어요" : "내 페이지에서 볼 수 있어요"}
+                </p>
+              </>
             ) : null}
           </div>
         </div>
