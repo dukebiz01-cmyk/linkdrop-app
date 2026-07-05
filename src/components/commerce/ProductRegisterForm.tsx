@@ -105,6 +105,13 @@ export interface ProductRegisterFormProps {
   initialDropyFixed?: number;
 }
 
+// DR2-fix1 F5 — 금액·수량 입력 정수 보존 필터. 원인: type="number" 입력은 포커스 중 휠·
+//   방향키가 step 감소를 일으켜 3000→2999 류 1원 깎임 발생 → type="text"+inputMode="numeric"
+//   +숫자만 통과로 전환(평상시 무간섭 · 클램프는 계산 경계에서만).
+function onlyDigits(s: string): string {
+  return s.replace(/[^0-9]/g, "");
+}
+
 // DR2-ⓑ ① 판매 방식 3모드 — CAT-1 세그먼트 문법(grid-cols-3) 복제. 환산은 P5a 단일 공식 재사용.
 type SaleMode = "single" | "box" | "weight";
 const SALE_MODE_OPTIONS: Array<{ key: SaleMode; label: string }> = [
@@ -257,10 +264,18 @@ export function ProductRegisterForm({
   const [packWeightKg, setPackWeightKg] = useState("");
   const [singleWeightG, setSingleWeightG] = useState(""); // 낱개 — 1개 무게(g)
   const [weightUnitKg, setWeightUnitKg] = useState(""); // 무게 단위 — 판매 단위(kg)
+  // DR2-fix1 F2 — [무게는 잘 몰라요] 토글. 기준 무게 자동 제시 소스 실측 결과:
+  //   ⓐ 4-C 응답에 유사상품 구성(개당 무게) 분포 없음(통계·건수만) / ⓑ kamis_items 에 표준
+  //   단위·개당 기준 컬럼 없음(item_code·category_code·item_name·sort_order 전부) → ⓒ 확정:
+  //   "기준 데이터 없음" 명시 + kg 비교 생략(구성 미전달 → 어드바이저는 kg당 시세만).
+  //   시세 환산 전용 — payload 저장 안 함.
+  const [weightUnknown, setWeightUnknown] = useState(false);
   const packCountNum = Math.floor(Number(packCount));
   const packWeightNum = Number(packWeightKg);
   // 모드 → 유효 구성(입수·총중량 kg) 통역. box=기존 2칸 / single=1개×g / weight=1단위×kg.
+  //   F2 — 무게 미상이면 구성 없음(kg 비교 생략) 처리.
   const composition = (() => {
+    if (weightUnknown) return null;
     if (saleMode === "box") {
       return Number.isFinite(packCountNum) &&
         packCountNum >= 1 &&
@@ -1056,8 +1071,9 @@ export function ProductRegisterForm({
             환산은 P5a 단일 공식 재사용(재발명 0) · 저장 payload 미포함(기존 그대로). */}
         {isFresh ? (
           <section className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
+            {/* DR2-fix1 F3 — 제목 교정(이 한 곳만). */}
             <h3 className="text-sm font-bold tracking-ko text-text-strong">
-              어떤 것을 판매하시겠어요?
+              어떻게 판매하시겠어요?
             </h3>
             <div className="grid grid-cols-3 gap-2">
               {SALE_MODE_OPTIONS.map(({ key, label }) => (
@@ -1112,10 +1128,11 @@ export function ProductRegisterForm({
                     inputMode="decimal"
                     min={0}
                     step="0.1"
+                    disabled={weightUnknown}
                     value={packWeightKg}
                     onChange={(e) => setPackWeightKg(e.target.value)}
                     placeholder="총 무게 kg"
-                    className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                    className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none disabled:opacity-50"
                   />
                 </label>
               </div>
@@ -1131,10 +1148,11 @@ export function ProductRegisterForm({
                   type="number"
                   inputMode="numeric"
                   min={1}
+                  disabled={weightUnknown}
                   value={singleWeightG}
                   onChange={(e) => setSingleWeightG(e.target.value)}
                   placeholder="예: 300"
-                  className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                  className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none disabled:opacity-50"
                 />
               </label>
             ) : null}
@@ -1150,12 +1168,35 @@ export function ProductRegisterForm({
                   inputMode="decimal"
                   min={0}
                   step="0.1"
+                  disabled={weightUnknown}
                   value={weightUnitKg}
                   onChange={(e) => setWeightUnitKg(e.target.value)}
                   placeholder="예: 5"
-                  className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                  className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none disabled:opacity-50"
                 />
               </label>
+            ) : null}
+
+            {/* DR2-fix1 F2 — 무게 미상 토글. 기준 무게 자동 제시 소스 실측: ⓐ 4-C 응답에 구성
+                분포 없음 · ⓑ KAMIS 표준단위 매핑 없음 → ⓒ "기준 데이터 없음" 명시 + kg 비교 생략.
+                (소스가 생기면 이 자리에서 기준값 제시 + 편집 입력 + 출처 1줄로 승격.) */}
+            <button
+              type="button"
+              onClick={() => setWeightUnknown((v) => !v)}
+              aria-pressed={weightUnknown}
+              className={`flex min-h-[44px] items-center justify-center rounded-xl border px-3 text-xs font-semibold tracking-ko transition-colors ${
+                weightUnknown
+                  ? "border-action bg-bg text-text-strong"
+                  : "border-border bg-bg text-text-muted hover:border-text-muted"
+              }`}
+            >
+              무게는 잘 몰라요
+            </button>
+            {weightUnknown ? (
+              <p className="text-[12px] font-medium leading-relaxed tracking-ko text-text-muted">
+                기준 무게 데이터가 아직 없어요 — 무게 비교는 생략하고 kg당 시세만 보여드려요. 무게를
+                알게 되면 토글을 끄고 적어주세요.
+              </p>
             ) : null}
 
             {/* 선언문 — 계산 결과 1줄 자동 갱신(괄호 축약 노출 금지). */}
@@ -1249,11 +1290,10 @@ export function ProductRegisterForm({
             </span>
             <input
               id="pd-cost"
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={0}
               value={costInput}
-              onChange={(e) => setCostInput(e.target.value)}
+              onChange={(e) => setCostInput(onlyDigits(e.target.value))}
               placeholder="예: 12000"
               className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
             />
@@ -1287,11 +1327,10 @@ export function ProductRegisterForm({
             <div className="flex items-center gap-2">
               <input
                 aria-label="배송비(원)"
-                type="number"
+                type="text"
                 inputMode="numeric"
-                min={0}
                 value={shippingFeeInput}
-                onChange={(e) => setShippingFeeInput(e.target.value)}
+                onChange={(e) => setShippingFeeInput(onlyDigits(e.target.value))}
                 placeholder="배송비 예: 4000"
                 className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
               />
@@ -1363,11 +1402,10 @@ export function ProductRegisterForm({
                 <div className="flex items-center gap-2">
                   <input
                     aria-label="고정 Droppy(원)"
-                    type="number"
+                    type="text"
                     inputMode="numeric"
-                    min={1}
                     value={dropyFixedInput}
-                    onChange={(e) => setDropyFixedInput(e.target.value)}
+                    onChange={(e) => setDropyFixedInput(onlyDigits(e.target.value))}
                     placeholder="예: 2000"
                     className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
                   />
@@ -1394,17 +1432,23 @@ export function ProductRegisterForm({
             </span>
             <input
               id="pd-discount"
-              type="number"
+              type="text"
               inputMode="numeric"
-              min={0}
               value={plannedDiscountInput}
-              onChange={(e) => setPlannedDiscountInput(e.target.value)}
+              onChange={(e) => setPlannedDiscountInput(onlyDigits(e.target.value))}
               placeholder="예: 2000"
               className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
             />
           </label>
 
-          {/* 영수증 — 세로 뺄셈(정적). computeProfitReceipt 정본 단일 소스. */}
+          {/* 영수증 — 세로 뺄셈(정적). computeProfitReceipt 정본 단일 소스.
+              DR2-fix1 F6 — 판매가만 있으면 항상 렌더 · 없으면 침묵 대신 안내 1줄.
+              (기존 '실종' 원인: 판매가 미입력·비유효 시 receipt=null 로 통째 미렌더 + 안내 0.) */}
+          {receipt == null ? (
+            <p className="text-[12px] font-medium tracking-ko text-text-subtle">
+              판매가를 입력하면 계산해 드려요
+            </p>
+          ) : null}
           {receipt ? (
             <div className="space-y-1 rounded-lg bg-surface px-3 py-2.5 text-[12px] font-medium tabular-nums tracking-ko text-text-strong">
               <div className="flex justify-between">
@@ -1446,8 +1490,9 @@ export function ProductRegisterForm({
                   <span>−{receipt.dropyCostKrw.toLocaleString("ko-KR")}원</span>
                 </div>
               ) : null}
+              {/* F6 — 원가 미입력이면 원가 행 생략(위) + 결과 라벨 "마진 전 남는 돈". */}
               <div className="flex justify-between border-t border-border pt-1 font-bold">
-                <span>= 건당 남는 돈</span>
+                <span>{costValid != null ? "= 건당 남는 돈" : "= 마진 전 남는 돈"}</span>
                 <span>
                   {receipt.perUnitProfitKrw.toLocaleString("ko-KR")}원
                   {receipt.marginPct != null ? ` (마진 ${Math.round(receipt.marginPct)}%)` : ""}
@@ -1480,11 +1525,10 @@ export function ProductRegisterForm({
               </span>
               <input
                 id="pd-stock"
-                type="number"
+                type="text"
                 inputMode="numeric"
-                min={1}
                 value={stockLimit}
-                onChange={(e) => setStockLimit(e.target.value)}
+                onChange={(e) => setStockLimit(onlyDigits(e.target.value))}
                 placeholder="예: 30"
                 className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
               />
@@ -1533,11 +1577,10 @@ export function ProductRegisterForm({
                   </span>
                   <input
                     id="pd-target"
-                    type="number"
+                    type="text"
                     inputMode="numeric"
-                    min={0}
                     value={targetProfitInput}
-                    onChange={(e) => setTargetProfitInput(e.target.value)}
+                    onChange={(e) => setTargetProfitInput(onlyDigits(e.target.value))}
                     placeholder="예: 300000"
                     className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
                   />

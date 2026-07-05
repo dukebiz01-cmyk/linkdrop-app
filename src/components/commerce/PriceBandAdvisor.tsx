@@ -108,7 +108,7 @@ function RefreshButton({ onRefresh }: { onRefresh: () => void }) {
     <button
       type="button"
       onClick={onRefresh}
-      className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-muted hover:border-text-muted"
+      className="flex w-full min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-muted hover:border-text-muted"
     >
       <RotateCw className="size-3.5" strokeWidth={2} />
       다시 조회
@@ -169,9 +169,9 @@ export function PriceBandAdvisor({
   const filteredCount = priceBand.online?.filtered_count ?? 0;
   // P5d 인터넷 신뢰 판정 — confidence "low" 아님 + 표본 ≥10. 구응답(confidence 없음)은 표본만.
   const onlineTrusted = o != null && o.confidence !== "low" && o.converted_count >= 10;
-  // P5d 표시 밴드 — p25~p75(구응답이면 min~max 폴백) + 대표값 median(폴백 avg).
-  const oBand = o ? { min: o.p25 ?? (o.min as number), max: o.p75 ?? (o.max as number) } : null;
-  const oMedian = o ? (o.median ?? o.avg) : null;
+  // DR2-fix1 F4 — 인터넷가 = 네이버 유사상품 실판매가 분포의 최저·평균·최고 3값(사분위→교체).
+  const oBand = o ? { min: o.min as number, max: o.max as number } : null;
+  const oAvg = o ? o.avg : null;
   // 헤드라인·내 판매단위의 kg 기준 밴드 — P5d 역전: 도매 우선, 인터넷은 신뢰될 때만 후보.
   const kgBand = w ? { min: w.min, max: w.max } : onlineTrusted && oBand ? oBand : null;
   // DR2-ⓑ 4-A 소매 — legacy sources 의 retail 행을 kg당 환산(무게 단위 파싱 가능분만·아니면 미표시).
@@ -221,8 +221,9 @@ export function PriceBandAdvisor({
       anchorPoints.push({ key: "wholesale", glyph: "●", label: "도매", value: w.avg * totalKg });
     }
     anchorPoints.push({ key: "mine", glyph: "▲", label: "내 가격", value: myPriceKrw });
-    if (o && oMedian != null) {
-      anchorPoints.push({ key: "online", glyph: "◇", label: "인터넷", value: oMedian * totalKg });
+    // F4 — ◇인터넷 점 = 평균값 기준(3값 상세는 표 행에 · 바 라벨은 겹침 0 원칙상 평균만).
+    if (o && oAvg != null) {
+      anchorPoints.push({ key: "online", glyph: "◇", label: "인터넷", value: oAvg * totalKg });
     }
     if (retailKg) {
       anchorPoints.push({
@@ -289,7 +290,9 @@ export function PriceBandAdvisor({
         </p>
       ) : null}
 
-      {/* ③ 3열 고정 표 — 64px/auto/118px, 고정 레이아웃, 전 셀 nowrap, 숫자 tabular. */}
+      {/* ③ 3열 고정 표 — 64px/auto/118px, 고정 레이아웃, 숫자 tabular.
+          DR2-fix1 F1 — 값 셀 nowrap 제거(줄바꿈 허용): fixed 레이아웃+전 셀 nowrap 이 375px 에서
+          가운데 열(약 90px)을 넘쳐 우측 열·이웃 텍스트 위로 포개지던 원인. 라벨·메타 열만 nowrap. */}
       <table
         className="w-full border-collapse text-[12px] tracking-ko"
         style={{ tableLayout: "fixed" }}
@@ -299,29 +302,27 @@ export function PriceBandAdvisor({
           <col />
           <col style={{ width: 118 }} />
         </colgroup>
-        <tbody className="[&_td]:whitespace-nowrap [&_td]:py-2 [&_td]:align-baseline">
+        <tbody className="[&_td]:py-2 [&_td]:align-baseline">
           {w ? (
             <tr className="border-t border-border">
-              <td className="font-bold text-text-strong">도매</td>
+              <td className="whitespace-nowrap font-bold text-text-strong">도매</td>
               <td className="font-medium tabular-nums text-text-strong">
                 kg당 약 {fmtWonH(w.min)}~{fmtWonH(w.max)}원 · 평균 약 {fmtWonH(w.avg)}원
               </td>
-              <td className="text-right text-[11px] font-medium tabular-nums text-text-muted">
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-muted">
                 {w.market_count}개 시장 · {fmtRefDate(w.as_of)}
               </td>
             </tr>
           ) : null}
-          {o && oBand ? (
+          {/* DR2-fix1 F4 — 인터넷가 = 네이버 유사상품 실판매가 최저·평균·최고 3값(도매 문법 통일). */}
+          {o && oBand && oAvg != null ? (
             <tr className="border-t border-border">
-              <td className="font-bold text-text-strong">인터넷</td>
+              <td className="whitespace-nowrap font-bold text-text-strong">인터넷</td>
               <td className="font-medium tabular-nums text-text-strong">
+                네이버 유사상품 ·{" "}
                 {hasPerUnit
-                  ? `개당 약 ${fmtWonH(toUnit(oBand.min))}~${fmtWonH(toUnit(oBand.max))}원`
-                  : `kg당 약 ${fmtWonH(oBand.min)}~${fmtWonH(oBand.max)}원`}
-                {onlineTrusted && oMedian != null
-                  ? ` · 중앙값 약 ${fmtWonH(hasPerUnit ? toUnit(oMedian) : oMedian)}원`
-                  : ""}{" "}
-                · 환산가
+                  ? `최저 약 ${fmtWonH(toUnit(oBand.min))} · 평균 약 ${fmtWonH(toUnit(oAvg))} · 최고 약 ${fmtWonH(toUnit(oBand.max))}원`
+                  : `kg당 최저 약 ${fmtWonH(oBand.min)} · 평균 약 ${fmtWonH(oAvg)} · 최고 약 ${fmtWonH(oBand.max)}원`}
                 {!onlineTrusted ? (
                   // P5d 강등 배지 — 표본 <10 이면 헤드라인 후보 제외 + 참고 표시(muted).
                   <span className="ml-1 rounded-lg bg-surface px-1 text-[11px] font-semibold text-text-subtle">
@@ -329,29 +330,29 @@ export function PriceBandAdvisor({
                   </span>
                 ) : null}
               </td>
-              <td className="text-right text-[11px] font-medium tabular-nums text-text-muted">
-                {o.converted_count}건 환산 · {fmtRefDate(o.as_of)}
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-muted">
+                {o.converted_count}건 기준 · {fmtRefDate(o.as_of)}
               </td>
             </tr>
           ) : null}
-          {/* DR2-ⓑ 4-A 소매 행 — 무게 단위 파싱 가능분만(아니면 미표시 · 생비교 금지). */}
+          {/* DR2-ⓑ 4-A 소매 행 — 무게 단위 파싱 가능분만(아니면 아래 부재 안내 · 생비교 금지). */}
           {retailSrc && retailKg ? (
             <tr className="border-t border-border">
-              <td className="font-bold text-text-strong">소매</td>
+              <td className="whitespace-nowrap font-bold text-text-strong">소매</td>
               <td className="font-medium tabular-nums text-text-strong">
                 {hasPerUnit
                   ? `개당 약 ${fmtWonH(toUnit(retailKg.min))}~${fmtWonH(toUnit(retailKg.max))}원`
                   : `kg당 약 ${fmtWonH(retailKg.min)}~${fmtWonH(retailKg.max)}원`}{" "}
                 · 환산가
               </td>
-              <td className="text-right text-[11px] font-medium tabular-nums text-text-muted">
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-muted">
                 {retailSrc.rank_note} · {fmtRefDate(retailSrc.ref_date)}
               </td>
             </tr>
           ) : null}
           {exclusionLine ? (
             <tr className="border-t border-border">
-              <td className="font-bold text-text-subtle">제외</td>
+              <td className="whitespace-nowrap font-bold text-text-subtle">제외</td>
               <td colSpan={2} className="text-[11px] font-medium text-text-subtle">
                 {exclusionLine}
               </td>
@@ -359,6 +360,23 @@ export function PriceBandAdvisor({
           ) : null}
         </tbody>
       </table>
+
+      {/* DR2-fix1 F4ⓒ — 데이터 없는 소스 침묵 금지(도매·인터넷·소매 동일 원칙). */}
+      {!w ? (
+        <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+          도매가: 표시할 시세가 없어요
+        </p>
+      ) : null}
+      {!(o && oBand && oAvg != null) ? (
+        <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+          인터넷가: 표시할 유사상품이 없어요
+        </p>
+      ) : null}
+      {!retailKg ? (
+        <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+          소매가: 표시할 시세가 없어요
+        </p>
+      ) : null}
 
       {/* DR2-ⓑ 4점 앵커 — 정적 위치 바(도매● ▲내가격 ◇인터넷 ○소매 · 값 크기 순). */}
       {showAnchor ? (
@@ -377,14 +395,15 @@ export function PriceBandAdvisor({
               </span>
             ))}
           </div>
+          {/* F1 — 가장자리 라벨은 중앙정렬 대신 안쪽 정렬(카드 밖 이탈·이웃 텍스트 포개짐 방지). */}
           <div className="relative h-9 text-[10px] font-medium tabular-nums tracking-ko text-text-muted">
             {positioned.map((p, i) => (
               <span
                 key={p.key}
                 style={{ left: `${p.pos}%`, top: labelRows[i] === 1 ? 16 : 0 }}
-                className={`absolute -translate-x-1/2 whitespace-nowrap ${
-                  p.key === "mine" ? "font-semibold text-text-strong" : ""
-                }`}
+                className={`absolute whitespace-nowrap ${
+                  p.pos < 18 ? "" : p.pos > 82 ? "-translate-x-full" : "-translate-x-1/2"
+                } ${p.key === "mine" ? "font-semibold text-text-strong" : ""}`}
               >
                 {p.label} 약 {fmtWonH(p.value)}원
               </span>
@@ -421,14 +440,15 @@ export function PriceBandAdvisor({
         </div>
       ) : null}
 
-      {/* DR2-ⓑ ②B/C — 판매가 조정 이동 · 수동 재조회(둘 다 정적 버튼). */}
+      {/* DR2-ⓑ ②B/C — 판매가 조정 이동 · 수동 재조회(둘 다 정적 버튼).
+          DR2-fix1 F1 — 버튼 독립 행 분리(한 행 flex 병치가 375px 협착·포개짐 유발 → 세로 스택). */}
       {onAdjustPrice || onRefresh ? (
-        <div className="flex gap-2">
+        <div className="space-y-2">
           {onAdjustPrice ? (
             <button
               type="button"
               onClick={onAdjustPrice}
-              className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-strong hover:border-text-muted"
+              className="flex w-full min-h-[44px] items-center justify-center rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-strong hover:border-text-muted"
             >
               시세 참고해 판매가 조정하기
             </button>
