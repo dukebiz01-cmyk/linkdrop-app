@@ -119,6 +119,8 @@ export interface InfoDropPageProps {
     harvestDate?: string | null;
     stockLimit?: number | null;
     priceBandEnabled?: boolean;
+    /** BADGE-ⓑ(4b) — Droppy 예상 보상(floor(dropy_rate×price_krw), adapters 산출). 미주입=미렌더. */
+    dropyReward?: number;
   };
   /** ③ 카드 담기 — 담은(관련) 상품. 본체 source 와 무관, 별도 "관련 상품" 섹션. */
   attachedProducts?: Array<{
@@ -1238,10 +1240,11 @@ export function InfoDropPage({
         type="button"
         onClick={() => void toggleJourney()}
         aria-expanded={journeyOpen}
-        className={`mt-3 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border px-4 text-[12px] font-semibold tracking-ko ${
+        // BADGE-ⓑ(SM-5) — 승격: 13px + 틴트 한 단계 강화(44px·정적 유지).
+        className={`mt-3 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border px-4 text-[13px] font-semibold tracking-ko ${
           light
-            ? "border-[#E8EDF3] bg-[#F8FAFC] text-[#334155]"
-            : "border-white/15 bg-white/10 text-white/85"
+            ? "border-[#D9E2EC] bg-[#EFF3F8] text-[#1E293B]"
+            : "border-white/25 bg-white/15 text-white/95"
         }`}
       >
         <GitBranch className="size-3.5" strokeWidth={2} />
@@ -1687,11 +1690,10 @@ export function InfoDropPage({
 
         {/* Phase 1-C — 파생 재고(1-B remaining_stock, L4: 공급값 표시만·가공 금지).
             [보정2] 게이트: selfUpload 커머스 variant 에서만. 흰 필 래퍼 = navy 배경 대비용(배지 무수정). */}
+        {/* BADGE-ⓑ(S24) — 이중 래퍼 정리: 뱃지 자체가 고대비 필(다크)로 승격돼 흰 필 래퍼 불요. */}
         {resolvedVariant === "purchase" && commerce?.selfUpload && remainingStock != null ? (
           <div className="flex justify-end">
-            <span className="inline-flex items-center rounded-lg bg-white/95 px-2 py-1 shadow-[0_2px_6px_rgba(15,23,42,0.16)]">
-              <StockMeta remaining={remainingStock} />
-            </span>
+            <StockMeta remaining={remainingStock} />
           </div>
         ) : null}
 

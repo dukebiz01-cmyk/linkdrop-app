@@ -199,6 +199,8 @@ export function RoleHome({
                   remainingStock={drop.remainingStock}
                   // SM-3 — 확산 규모.
                   shareCount={drop.shareCount}
+                  // BADGE-ⓑ(4b) — Droppy 예상 보상(배치값). 미주입=미렌더.
+                  dropyReward={drop.dropyReward}
                   onShare={() =>
                     void reshareDrop({
                       shareUuid: drop.shareUuid,
@@ -319,6 +321,8 @@ export function RoleHome({
                 remainingStock={drop.remainingStock}
                 // SM-3 — 확산 규모.
                 shareCount={drop.shareCount}
+                // BADGE-ⓑ(4b) — Droppy 예상 보상(배치값). 미주입=미렌더.
+                dropyReward={drop.dropyReward}
                 onShare={() =>
                   void reshareDrop({
                     shareUuid: drop.shareUuid,

@@ -18,6 +18,8 @@ export interface DropFeedItem {
   remainingStock?: number;
   /** SM-3 — 확산 규모(get_feed_spread_count 배치값). 0/미주입 = 미렌더. */
   shareCount?: number;
+  /** BADGE-ⓑ — Droppy 예상 보상(get_feed_dropy_reward 배치값, floor(rate×price)). 미주입 = 미렌더. */
+  dropyReward?: number;
   title: string;
   localName?: string;
   distance?: string;

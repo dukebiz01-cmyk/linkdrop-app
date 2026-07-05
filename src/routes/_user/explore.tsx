@@ -165,6 +165,8 @@ function ExplorePage() {
               remainingStock={drop.remainingStock}
               // SM-3 — 확산 규모(탭 동선 = 기존 onClick /d 이동 그대로).
               shareCount={drop.shareCount}
+              // BADGE-ⓑ(4b) — Droppy 예상 보상(배치값). 미주입=미렌더.
+              dropyReward={drop.dropyReward}
               onClick={() => handleOpenDrop(drop.shareUuid)}
               onShare={() =>
                 void reshareDrop({

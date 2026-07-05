@@ -98,9 +98,11 @@ export function TimerBadge({ expiresAt, serverNow }: { expiresAt: string; server
 //   (rounded·px-1.5·py-0.5·text-[10px] — 지시의 rounded-md 대신 TimerBadge 동일 radius 택1).
 //   색 로직 무변경(기본 슬레이트 / ≤5 앰버 / 0 저채도) — 컨테이너만 뱃지화.
 export function StockMeta({ remaining }: { remaining: number }) {
+  // BADGE-ⓑ(S24) — 썸네일 오버레이 승격: TimerBadge 동일 문법(text-[10px] font-semibold text-white
+  //   + 배경 필: 평상 bg-black/65 / ≤5 앰버 / 0 저채도 "마감"). 위치는 소비처가 지정(비-positioned).
   if (remaining <= 0) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded border border-[#E8EDF3] bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-semibold text-[#94A3B8]">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-semibold text-white/60">
         <Package className="size-3" strokeWidth={2} />
         마감
       </span>
@@ -108,10 +110,8 @@ export function StockMeta({ remaining }: { remaining: number }) {
   }
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
-        remaining <= 5
-          ? "border-[#FDE68A] bg-[#FFFBEB] text-[#B45309]"
-          : "border-[#E8EDF3] bg-[#F8FAFC] text-[#64748B]"
+      className={`inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white ${
+        remaining <= 5 ? "bg-[#B45309]/90" : "bg-black/65"
       }`}
     >
       <Package className="size-3" strokeWidth={2} />
@@ -131,7 +131,8 @@ function SpreadPill({ count, onOpen }: { count: number; onOpen: (e: React.MouseE
       type="button"
       onClick={onOpen}
       aria-label={`${count}명 확산 — 공유 여정 보기`}
-      className="inline-flex shrink-0 items-center gap-1 rounded border border-[#E8EDF3] bg-[#F8FAFC] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[#64748B]"
+      // BADGE-ⓑ(SM-5) — 승격: 11px·bold·#334155·틴트 #EFF3F8(대비↑). 구조·아바타 스택 무변경, 정적.
+      className="inline-flex shrink-0 items-center gap-1 rounded border border-[#E8EDF3] bg-[#EFF3F8] px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-[#334155]"
     >
       <span className="flex -space-x-1">
         {Array.from({ length: Math.min(3, count) }).map((_, i) => (
@@ -153,8 +154,12 @@ function SpreadPill({ count, onOpen }: { count: number; onOpen: (e: React.MouseE
 function DropyBadge({ amount }: { amount: number }) {
   return (
     // V4 앱 액센트 — 목적색(mode-accent) 체계와 무관.
-    <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-bold tabular-nums text-[#2563EB]">
-      <Diamond className="size-3" strokeWidth={2.5} />+{amount}
+    // BADGE-ⓑ(4b) — 값 점등: toLocaleString(3,200) + 조건 문구는 aria 만(시각 무노출, §0 절제 락).
+    <span
+      aria-label="판매 성사 시 적립"
+      className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-bold tabular-nums text-[#2563EB]"
+    >
+      <Diamond className="size-3" strokeWidth={2.5} />+{amount.toLocaleString()}
     </span>
   );
 }
@@ -263,10 +268,18 @@ export function ShareCardTile({
           </span>
         </button>
 
-        {/* 재생시간 — 좌하단(영상만). */}
-        {isVideo ? (
+        {/* 재생시간 — 좌하단(영상만). BADGE-ⓑ(S24) — 재고 오버레이와 동시 존재 시 재고 우선
+            (커머스 셀프업로드는 duration 없어 실충돌 희박 — 방어 게이트만). */}
+        {isVideo && remainingStock == null ? (
           <span className="absolute bottom-2 left-2 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white">
             {formatDuration(drop.videoDurationSec)}
+          </span>
+        ) : null}
+
+        {/* BADGE-ⓑ(S24) — 재고 썸네일 좌하단 승격: TimerBadge(우하단)와 대칭·동일 문법. */}
+        {remainingStock != null ? (
+          <span className="absolute bottom-2 left-2">
+            <StockMeta remaining={remainingStock} />
           </span>
         ) : null}
 
@@ -276,9 +289,9 @@ export function ShareCardTile({
       </div>
 
       {/* 정보영역 — 솔리드, 고정 높이 컬럼 정렬(메이커·지역 1줄 + 제목 2줄).
-          Phase 1-A — 재고·드로피 주입 시에만 메타 줄을 양분(좌 메이커 / 우 배지). 미주입 = 기존 마크업 그대로(픽셀 동일). */}
+          BADGE-ⓑ(S24) — 재고는 썸네일 오버레이로 이동 → 메타행 = 메이커명 + DropyBadge + SpreadPill(폭 압박 해소). */}
       <div className="flex flex-col px-3 pb-3 pt-2.5">
-        {remainingStock != null || dropyReward != null || (shareCount ?? 0) > 0 ? (
+        {dropyReward != null || (shareCount ?? 0) > 0 ? (
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 truncate text-[11px] font-semibold text-[#64748B]">
               {drop.maker.name}
@@ -286,7 +299,7 @@ export function ShareCardTile({
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               {dropyReward != null ? <DropyBadge amount={dropyReward} /> : null}
-              {/* SM-3 — 확산 필: 재고 뱃지 인접 메타 영역(0/미주입 = 미렌더).
+              {/* SM-3 — 확산 필(0/미주입 = 미렌더).
                   SM-4 — 필 탭 = 여정 시트(stopPropagation — 타일 onClick=/d 오발화 차단). */}
               {(shareCount ?? 0) > 0 ? (
                 <SpreadPill
@@ -297,7 +310,6 @@ export function ShareCardTile({
                   }}
                 />
               ) : null}
-              {remainingStock != null ? <StockMeta remaining={remainingStock} /> : null}
             </div>
           </div>
         ) : (

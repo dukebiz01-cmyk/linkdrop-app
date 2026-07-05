@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Check, ShoppingCart, MapPin, CalendarDays, Sprout, Video, Sparkles } from "lucide-react";
+import { Check, ShoppingCart, MapPin, CalendarDays, Sprout, Video, Sparkles, Diamond } from "lucide-react";
 import { ActionButton } from "@/components/ActionButton";
 import { ImageZoomModal } from "@/components/card/ImageZoomModal";
 import {
@@ -39,6 +39,8 @@ export interface ProductWidgetProps {
   onSellerClick?: () => void;
   /** C13 S4c — 목적색(카드 accent). 주어지면 1차 CTA 배경에 적용. 미지정=기존 bg-action(검정) 그대로. */
   accent?: string;
+  /** BADGE-ⓑ(4b) — Droppy 예상 보상(floor(rate×price)). 미주입=미렌더. 문안 = "판매 성사 시 적립"(§0 절제 락). */
+  dropyReward?: number;
   /** S17(P4) — 카드 프레임 안 최하단 슬롯(손님 공유 푸터 인입). CardBody.preFooterSlot 패턴.
    *  기본 undefined = 미주입 시 아무것도 렌더 안 함(스튜디오 미리보기 등 기존 소비처 무영향). */
   footerSlot?: ReactNode;
@@ -59,6 +61,7 @@ export function ProductWidget({
   buyUrl,
   onPreorder,
   accent,
+  dropyReward,
   footerSlot,
 }: ProductWidgetProps) {
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -174,6 +177,16 @@ export function ProductWidget({
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
+          ) : null}
+          {/* BADGE-ⓑ(4b) — Droppy 예상 보상 정적 1줄(주문 버튼 인접). 값은 rate×가격 실측만,
+              조건 문구 상시 동반("판매 성사 시 적립" — 모집·수익 뉘앙스 금지, §0). 미주입=미렌더. */}
+          {dropyReward != null && dropyReward > 0 ? (
+            <p className="flex items-center justify-center gap-1 text-[12px] tracking-ko">
+              <span className="inline-flex items-center gap-0.5 font-bold tabular-nums text-[#2563EB]">
+                <Diamond className="size-3" strokeWidth={2.5} />+{dropyReward.toLocaleString()} Droppy
+              </span>
+              <span className="font-medium text-text-subtle">· 판매 성사 시 적립</span>
+            </p>
           ) : null}
           {selfUpload ? (
             // ③b 자체업로드 상품 — 1차 버튼 = 선주문하기. 부모(d.$shareUuid)가 로그인 강제 +

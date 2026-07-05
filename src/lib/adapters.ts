@@ -173,8 +173,19 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     harvest_date?: unknown;
     stock_limit?: unknown;
     price_band_enabled?: unknown;
+    dropy_rate?: unknown;
   };
   const priceKrw = typeof data.price_krw === "number" ? data.price_krw : null;
+  // BADGE-ⓑ(4b) — Droppy 예상 보상 = floor(dropy_rate × price_krw). 유효 범위(0~0.20) 밖·재료
+  //   결손 = undefined(미주입=미렌더). RPC(get_feed_dropy_reward)와 동일 가드 — 값은 진짜 rate×가격만.
+  const dropyRate =
+    typeof data.dropy_rate === "number" && data.dropy_rate > 0 && data.dropy_rate <= 0.2
+      ? data.dropy_rate
+      : null;
+  const dropyReward =
+    dropyRate != null && priceKrw != null && priceKrw > 0
+      ? Math.floor(dropyRate * priceKrw)
+      : null;
   const name =
     typeof data.name === "string" && data.name.trim() ? data.name.trim() : (d.source.title ?? "");
   // 나-2 — 상품 메인 블록(self)에 저장된 카피(나-1). 있으면 상품 /d 페이지에 리치 표시.
@@ -210,6 +221,8 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     ...(isFresh && harvestDate ? { harvestDate } : {}),
     ...(isFresh && stockLimit != null ? { stockLimit } : {}),
     ...(isFresh ? { priceBandEnabled } : {}),
+    // BADGE-ⓑ(4b) — 있을 때만 동봉(미주입=미렌더).
+    ...(dropyReward != null && dropyReward > 0 ? { dropyReward } : {}),
   };
 }
 
@@ -482,5 +495,7 @@ export function buildProductWidget(props: InfoDropPageProps): ProductWidgetProps
       : undefined,
     selfUpload: c.selfUpload,
     buyUrl: c.buyUrl,
+    // BADGE-ⓑ(4b) — Droppy 예상 보상 관통(buildCommerce 산출 → 위젯 표기).
+    dropyReward: c.dropyReward,
   };
 }

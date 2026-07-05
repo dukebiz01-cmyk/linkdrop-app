@@ -96,6 +96,37 @@ async function fetchSpreadCount(
   return map;
 }
 
+// BADGE-ⓑ — Droppy 예상 보상 배치 병합(get_feed_dropy_reward). fetchRemainingStock 미러:
+//   피드당 1회(Promise.all 병렬 — 추가 라운드트립 0), 실패 = 미표시 + console 1줄(피드 생존).
+//   RPC 가 rate 없는·비공개·미게시 드롭 행을 미반환 → 그 드롭은 미주입=미렌더.
+async function fetchDropyReward(
+  client: SupabaseClient,
+  dropIds: string[],
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  const ids = Array.from(new Set(dropIds.filter(Boolean)));
+  if (ids.length === 0) return map;
+  try {
+    // get_feed_dropy_reward 는 types.ts 미반영(신설) — 타입 재생성 후 캐스트 제거.
+    const { data, error } = (await client.rpc(
+      "get_feed_dropy_reward" as never,
+      { p_drop_ids: ids } as never,
+    )) as { data: unknown; error: { message?: string } | null };
+    if (error) {
+      console.error("[feed-queries] get_feed_dropy_reward failed:", error.message);
+      return map;
+    }
+    for (const row of (data as { info_drop_id: string; dropy_reward: number }[]) ?? []) {
+      if (typeof row.dropy_reward === "number" && row.dropy_reward > 0) {
+        map.set(row.info_drop_id, row.dropy_reward);
+      }
+    }
+  } catch (e) {
+    console.error("[feed-queries] get_feed_dropy_reward error:", e);
+  }
+  return map;
+}
+
 type ContentSourceRow = {
   provider: string | null;
   title: string | null;
@@ -179,17 +210,20 @@ type ShareEventSentRow = {
 // 1-C-3 — remainingStock: 배치 RPC 병합값(null/미반환 = undefined → 타일 미렌더, 1-A 계약).
 // SM-3 — shareCount: 확산 규모 배치값(0/미반환 = undefined → 미렌더).
 // P7c FEED-1 — currentUserId 주입 시 owner_user_id 비교로 isMine 산출(미주입 = false → 칩 미렌더).
+// BADGE-ⓑ — dropyReward: 배치 RPC 병합값(미반환 = undefined → 뱃지 미렌더).
 function adaptDiscoverRow(
   row: InfoDropDiscoverRow,
   remainingStock?: number | null,
   shareCount?: number,
   currentUserId?: string | null,
+  dropyReward?: number,
 ): DropFeedItem | null {
   const cs = row.content_sources;
   if (!cs?.thumbnail_url) return null;
   const shareUuid = row.share_events?.[0]?.share_uuid ?? row.id;
   return {
     shareUuid,
+    ...(dropyReward != null ? { dropyReward } : {}),
     isMine: currentUserId != null && row.owner_user_id === currentUserId,
     maker: {
       ...MAKER_FALLBACK,
@@ -298,15 +332,22 @@ export async function getDiscoverDrops(
     .limit(20);
   if (error || !data) return [];
   const rows = data as unknown as InfoDropDiscoverRow[];
-  // 1-C-3 재고 + SM-3 확산 — 각 배치 1회, Promise.all 병렬(추가 라운드트립 0).
+  // 1-C-3 재고 + SM-3 확산 + BADGE-ⓑ Droppy — 각 배치 1회, Promise.all 병렬(추가 라운드트립 0).
   const ids = rows.map((r) => r.id);
-  const [stock, spread] = await Promise.all([
+  const [stock, spread, dropy] = await Promise.all([
     fetchRemainingStock(client, ids),
     fetchSpreadCount(client, ids),
+    fetchDropyReward(client, ids),
   ]);
   return rows
     .map((r) =>
-      adaptDiscoverRow(r, stock.get(r.id) ?? undefined, spread.get(r.id), opts?.currentUserId),
+      adaptDiscoverRow(
+        r,
+        stock.get(r.id) ?? undefined,
+        spread.get(r.id),
+        opts?.currentUserId,
+        dropy.get(r.id),
+      ),
     )
     .filter((x): x is DropFeedItem => x !== null);
 }
@@ -343,15 +384,22 @@ export async function getFollowedMakerDrops(
     .limit(10);
   if (error || !data) return [];
   const rows = data as unknown as InfoDropDiscoverRow[];
-  // 1-C-3 재고 + SM-3 확산 — 각 배치 1회 병렬.
+  // 1-C-3 재고 + SM-3 확산 + BADGE-ⓑ Droppy — 각 배치 1회 병렬.
   const ids = rows.map((r) => r.id);
-  const [stock, spread] = await Promise.all([
+  const [stock, spread, dropy] = await Promise.all([
     fetchRemainingStock(client, ids),
     fetchSpreadCount(client, ids),
+    fetchDropyReward(client, ids),
   ]);
   return rows
     .map((r) =>
-      adaptDiscoverRow(r, stock.get(r.id) ?? undefined, spread.get(r.id), opts?.currentUserId),
+      adaptDiscoverRow(
+        r,
+        stock.get(r.id) ?? undefined,
+        spread.get(r.id),
+        opts?.currentUserId,
+        dropy.get(r.id),
+      ),
     )
     .filter((x): x is DropFeedItem => x !== null);
 }
