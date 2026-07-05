@@ -16,6 +16,7 @@ import type { AttachedProduct } from "@/components/create/types";
 // P3 — 구매 미리보기 미러: 손님 /d purchase 와 동일 변환(buildProductWidget) 재사용(단일 소스).
 import { buildProductWidget } from "@/lib/adapters";
 import { resizeToJpegBlob } from "@/lib/image-upload";
+import { KeyboardAwareBar } from "@/components/keyboard-aware-bar";
 import type { InfoDropPageProps } from "@/components/info-drop-page";
 // P6-7(형님 확정 A안) — CreatorCoachCard 는 홈(RoleHome 사업자 세그먼트)으로 이동. 스튜디오=빌더 복귀.
 // Phase 2 — 미리보기 쿠폰 타이머(1-A 배지 재사용, 수신카드 1-C couponPanel 동형).
@@ -297,36 +298,8 @@ function getStage(score: number) {
 // 블록 설정 아코디언 대상 — 설정이 필요한 5개만. bgcolor(색=덱 팔레트)·강화 3종 제외.
 const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link", "product"];
 
-// STUDIO-fix3 H4⑵ — 키보드 인지 바 wrapper: 문서 focusin/focusout 을 자체 구독해 입력 중엔
-//   children(발행바)을 display 만 숨김. 상태가 이 컴포넌트에 갇혀 있어 포커스 전환마다
-//   스튜디오 거대 트리가 리렌더되던 G4 방식(최상위 isTyping)의 성능 회귀를 격리한다.
-//   120ms 지연 해제 = 필드 간 이동 깜빡임 방지(G4 시맨틱 유지 · 바 상태 완전 보존).
-function KeyboardAwareBar({ children }: { children: React.ReactNode }) {
-  const [hidden, setHidden] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    const isField = (t: EventTarget | null) =>
-      t instanceof HTMLElement && t.matches("input, textarea, select");
-    const onIn = (e: FocusEvent) => {
-      if (!isField(e.target)) return;
-      if (timerRef.current != null) clearTimeout(timerRef.current);
-      setHidden(true);
-    };
-    const onOut = (e: FocusEvent) => {
-      if (!isField(e.target)) return;
-      if (timerRef.current != null) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setHidden(false), 120);
-    };
-    document.addEventListener("focusin", onIn);
-    document.addEventListener("focusout", onOut);
-    return () => {
-      document.removeEventListener("focusin", onIn);
-      document.removeEventListener("focusout", onOut);
-      if (timerRef.current != null) clearTimeout(timerRef.current);
-    };
-  }, []);
-  return <div className={hidden ? "hidden" : ""}>{children}</div>;
-}
+// STUDIO-fix3 H4⑵ 의 KeyboardAwareBar 는 NAV-fix1 에서 @/components/keyboard-aware-bar 로
+//   공용 추출(하단 네비와 공유) — 동작·시맨틱 동일(중복 제거만).
 
 // v0 globals 부재 keyframes 동봉 — 룩 보존용(기존 파일 무수정).
 const STUDIO_BUILD_CSS = `
