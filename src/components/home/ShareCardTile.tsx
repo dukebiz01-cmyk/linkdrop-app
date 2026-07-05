@@ -130,22 +130,23 @@ function SpreadPill({ count, onOpen }: { count: number; onOpen: (e: React.MouseE
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`${count}명 확산 — 공유 여정 보기`}
+      aria-label={`${count}명 전달 — 공유 여정 보기`}
       // BADGE-ⓑ(SM-5) — 승격: 11px·bold·#334155·틴트 #EFF3F8(대비↑). 구조·아바타 스택 무변경, 정적.
+      // BADGE-fix1 — 라벨 "N명 전달"(역할 4종 락 어휘 통일) + 아이콘 잉크 계열(#334155) 대비 강화.
       className="inline-flex shrink-0 items-center gap-1 rounded border border-[#E8EDF3] bg-[#EFF3F8] px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-[#334155]"
     >
       <span className="flex -space-x-1">
         {Array.from({ length: Math.min(3, count) }).map((_, i) => (
           <span
             key={i}
-            className="flex size-3 items-center justify-center rounded-full border border-white bg-[#CBD5E1]"
+            className="flex size-3 items-center justify-center rounded-full border border-white bg-[#334155]"
           >
             <User className="size-2 text-white" strokeWidth={2.5} />
           </span>
         ))}
       </span>
-      {count}명 확산
-      <ChevronRight className="size-3 text-[#94A3B8]" strokeWidth={2} />
+      {count}명 전달
+      <ChevronRight className="size-3 text-[#334155]" strokeWidth={2} />
     </button>
   );
 }
