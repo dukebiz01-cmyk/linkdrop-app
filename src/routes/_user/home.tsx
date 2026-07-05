@@ -91,8 +91,8 @@ export const Route = createFileRoute("/_user/home")({
     if (!isBusiness) {
       const [walletRes, followedDrops, recommendedDrops, sentDrops] = await Promise.all([
         supabase.rpc("get_my_wallet"),
-        getFollowedMakerDrops(supabase, userId),
-        getDiscoverDrops(supabase),
+        getFollowedMakerDrops(supabase, userId, { currentUserId: userId }),
+        getDiscoverDrops(supabase, { currentUserId: userId }),
         getSentDrops(supabase, userId),
       ]);
       const walletRows = (walletRes.data as WalletRow[] | null) ?? [];
@@ -152,9 +152,9 @@ export const Route = createFileRoute("/_user/home")({
           )
           .eq("target_partner_id", partnerId)
           .eq("status", "pending"),
-        getDiscoverDrops(supabase),
+        getDiscoverDrops(supabase, { currentUserId: userId }),
         getSentDrops(supabase, userId),
-        getFollowedMakerDrops(supabase, userId),
+        getFollowedMakerDrops(supabase, userId, { currentUserId: userId }),
         supabase
           .from("maker_follows")
           .select("*", { count: "exact", head: true })

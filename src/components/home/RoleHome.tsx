@@ -190,6 +190,8 @@ export function RoleHome({
                   drop={drop}
                   // Phase 0 — 홈 뱃지 주입(탐색 explore.tsx 와 동일 소스 drop.intent). 3종 락.
                   purpose={drop.intent}
+                  // P7c FEED-1 — 내/남 구분 칩(feed-queries 산출).
+                  isMine={drop.isMine}
                   // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
                   expiresAt={drop.expiresAt}
                   serverNow={serverNow}
@@ -308,6 +310,8 @@ export function RoleHome({
                 drop={drop}
                 // Phase 0 — 홈 뱃지 주입(탐색과 동일 소스 drop.intent). 3종 락.
                 purpose={drop.intent}
+                // P7c FEED-1 — 내/남 구분 칩(feed-queries 산출).
+                isMine={drop.isMine}
                 // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
                 expiresAt={drop.expiresAt}
                 serverNow={serverNow}

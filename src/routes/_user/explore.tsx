@@ -38,13 +38,15 @@ export const Route = createFileRoute("/_user/explore")({
     const supabase = await getAuthClient();
     if (!supabase) return empty;
     const { data: sess } = await supabase.auth.getSession();
-    if (!sess.session?.user.id) return empty;
+    const userId = sess.session?.user.id;
+    if (!userId) return empty;
     // 4탭 병렬 로드. 전체 = opts 없이(필터 없음 = 공개 카드 전부). 쿠폰 탭 = 쿠폰·예약(혜택) + 매장 연결(bizOnly).
+    // P7c FEED-1 — currentUserId 주입: 각 카드 isMine 산출(내/남 구분 칩).
     const [all, info, coupon, commerce] = await Promise.all([
-      getDiscoverDrops(supabase),
-      getDiscoverDrops(supabase, { purposes: ["정보"] }),
-      getDiscoverDrops(supabase, { purposes: ["쿠폰", "예약"], bizOnly: true }),
-      getDiscoverDrops(supabase, { purposes: ["구매"] }),
+      getDiscoverDrops(supabase, { currentUserId: userId }),
+      getDiscoverDrops(supabase, { purposes: ["정보"], currentUserId: userId }),
+      getDiscoverDrops(supabase, { purposes: ["쿠폰", "예약"], bizOnly: true, currentUserId: userId }),
+      getDiscoverDrops(supabase, { purposes: ["구매"], currentUserId: userId }),
     ]);
     return { all, info, coupon, commerce, serverNow: new Date().toISOString() };
   },
@@ -154,6 +156,8 @@ function ExplorePage() {
               key={drop.shareUuid}
               drop={drop}
               purpose={drop.intent}
+              // P7c FEED-1 — 내/남 구분 칩(feed-queries 산출).
+              isMine={drop.isMine}
               // 1-C-2 — 마감 타이머 데이터 주입(피드 산출 expiresAt + loader serverNow).
               expiresAt={drop.expiresAt}
               serverNow={data.serverNow}

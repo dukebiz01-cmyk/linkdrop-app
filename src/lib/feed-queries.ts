@@ -152,6 +152,8 @@ type InfoDropDiscoverRow = {
   // 탐색 3탭 필터용(서버 .in("purpose")/.not("partner_id")). adaptDiscoverRow 는 미사용(렌더 무관).
   purpose?: string | null;
   partner_id?: string | null;
+  // P7c FEED-1 — 내/남 구분(isMine 산출 재료).
+  owner_user_id?: string | null;
   content_sources: ContentSourceRow | null;
   intent_types: IntentTypeRow | null;
   share_events: Array<{ share_uuid: string; expires_at?: string | null }> | null;
@@ -176,16 +178,19 @@ type ShareEventSentRow = {
 
 // 1-C-3 — remainingStock: 배치 RPC 병합값(null/미반환 = undefined → 타일 미렌더, 1-A 계약).
 // SM-3 — shareCount: 확산 규모 배치값(0/미반환 = undefined → 미렌더).
+// P7c FEED-1 — currentUserId 주입 시 owner_user_id 비교로 isMine 산출(미주입 = false → 칩 미렌더).
 function adaptDiscoverRow(
   row: InfoDropDiscoverRow,
   remainingStock?: number | null,
   shareCount?: number,
+  currentUserId?: string | null,
 ): DropFeedItem | null {
   const cs = row.content_sources;
   if (!cs?.thumbnail_url) return null;
   const shareUuid = row.share_events?.[0]?.share_uuid ?? row.id;
   return {
     shareUuid,
+    isMine: currentUserId != null && row.owner_user_id === currentUserId,
     maker: {
       ...MAKER_FALLBACK,
       droppedAgo: formatDroppedAgo(row.published_at ?? row.created_at),
@@ -250,6 +255,7 @@ const DISCOVER_SELECT = `
   share_count,
   purpose,
   partner_id,
+  owner_user_id,
   content_sources!info_drops_source_id_fkey ( provider, title, thumbnail_url, duration_sec, author_name, source_url ),
   intent_types!info_drops_intent_id_fkey ( key ),
   coupons!info_drops_funnel_coupon_id_fkey ( valid_from, valid_until, is_active ),
@@ -270,9 +276,10 @@ const SENT_SELECT = `
 `;
 
 // 탐색 3탭 필터 — purposes(drop_purpose enum 값)·bizOnly(매장 연결 카드만). 둘 다 없으면 기존 동작(하위호환).
+// P7c FEED-1 — currentUserId 주입 시 각 카드 isMine 산출(내/남 구분 칩).
 export async function getDiscoverDrops(
   client: SupabaseClient,
-  opts?: { purposes?: string[]; bizOnly?: boolean },
+  opts?: { purposes?: string[]; bizOnly?: boolean; currentUserId?: string | null },
 ): Promise<DropFeedItem[]> {
   let query = client
     .from("info_drops")
@@ -297,16 +304,20 @@ export async function getDiscoverDrops(
     fetchSpreadCount(client, ids),
   ]);
   return rows
-    .map((r) => adaptDiscoverRow(r, stock.get(r.id) ?? undefined, spread.get(r.id)))
+    .map((r) =>
+      adaptDiscoverRow(r, stock.get(r.id) ?? undefined, spread.get(r.id), opts?.currentUserId),
+    )
     .filter((x): x is DropFeedItem => x !== null);
 }
 
 // Slice 4b — 구독(maker_follows active) 한 메이커들의 published 카드.
 //   getDiscoverDrops 와 동일 join(content_sources/intent_types/share_events) +
 //   adaptDiscoverRow 매핑. 차이는 info_drops.partner_id 를 팔로우한 partner 로만 필터.
+// P7c — currentUserId 주입 시 isMine 산출(getDiscoverDrops 동일).
 export async function getFollowedMakerDrops(
   client: SupabaseClient,
   userId: string,
+  opts?: { currentUserId?: string | null },
 ): Promise<DropFeedItem[]> {
   const { data: follows, error: fErr } = await client
     .from("maker_follows")
@@ -323,6 +334,8 @@ export async function getFollowedMakerDrops(
     .from("info_drops")
     .select(DISCOVER_SELECT)
     .eq("status", "published")
+    // P7c Part A — 비공개 카드 구독피드 누출 차단(getDiscoverDrops :280-281 동일 패턴).
+    .eq("is_public", true)
     .in("partner_id", partnerIds)
     .order("published_at", { ascending: false, nullsFirst: false })
     .limit(10);
@@ -335,7 +348,9 @@ export async function getFollowedMakerDrops(
     fetchSpreadCount(client, ids),
   ]);
   return rows
-    .map((r) => adaptDiscoverRow(r, stock.get(r.id) ?? undefined, spread.get(r.id)))
+    .map((r) =>
+      adaptDiscoverRow(r, stock.get(r.id) ?? undefined, spread.get(r.id), opts?.currentUserId),
+    )
     .filter((x): x is DropFeedItem => x !== null);
 }
 

@@ -169,11 +169,14 @@ export function ShareCardTile({
   remainingStock,
   dropyReward,
   shareCount,
+  isMine,
 }: {
   drop: DropFeedItem;
   purpose?: string;
   onShare?: (uuid: string) => void;
   onClick?: () => void;
+  /** P7c FEED-1 — 내 카드 칩. prop 우선, 미주입 시 drop.isMine 폴백. 둘 다 없으면 미렌더. */
+  isMine?: boolean;
   /** Phase 1-A — ISO 마감시각(coupons.valid_until 계열). 미주입 = 타이머 미렌더. */
   expiresAt?: string;
   /** 1-C-2(L6) — 서버 기준시각(표면 loader 1회 공급). use-countdown offset 보정. */
@@ -189,6 +192,8 @@ export function ShareCardTile({
 }) {
   const isVideo = drop.videoDurationSec > 0;
   const chip = purposeMeta(purpose);
+  // P7c FEED-1 — prop 우선, 없으면 피드 산출값(drop.isMine).
+  const mine = isMine ?? drop.isMine ?? false;
   const hasThumb = Boolean(drop.videoThumbnailUrl);
   // SM-4 — 여정 시트 개폐. 시트는 닫혀도 마운트 유지(open=false 는 null 렌더) → rows 캐시 보존.
   const [journeyOpen, setJourneyOpen] = useState(false);
@@ -219,14 +224,24 @@ export function ShareCardTile({
         {/* 상단 스크림 — 칩·공유 가독성. */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/30 to-transparent" />
 
-        {/* 종류칩 — 좌상단, 도트+라벨(글래스 펄). purpose 주입 시만(홈 미주입=숨김). */}
-        {chip ? (
-          <span
-            className={`absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold shadow-[0_2px_6px_rgba(15,23,42,0.16)] backdrop-blur-sm ${chip.tone.text}`}
-          >
-            <span className="size-1.5 rounded-full" style={{ backgroundColor: chip.tone.dot }} />
-            {chip.label}
-          </span>
+        {/* 종류칩 — 좌상단, 도트+라벨(글래스 펄). purpose 주입 시만(홈 미주입=숨김).
+            P7c FEED-1 — "내 카드" 칩을 종류칩 우측에 나란히(같은 좌상단 영역, 정적·모션 0). */}
+        {chip || mine ? (
+          <div className="absolute left-2 top-2 flex items-center gap-1">
+            {chip ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold shadow-[0_2px_6px_rgba(15,23,42,0.16)] backdrop-blur-sm ${chip.tone.text}`}
+              >
+                <span className="size-1.5 rounded-full" style={{ backgroundColor: chip.tone.dot }} />
+                {chip.label}
+              </span>
+            ) : null}
+            {mine ? (
+              <span className="inline-flex items-center rounded-full bg-neutral-800/90 px-2 py-0.5 text-[10px] font-bold text-white">
+                내 카드
+              </span>
+            ) : null}
+          </div>
         ) : null}
 
         {/* 공유 — 우상단 아이콘 버튼. 탭영역 44px, 가시 원 32px. 카드 열기 방지 stopPropagation. */}

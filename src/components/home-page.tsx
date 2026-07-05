@@ -5,6 +5,8 @@ import { DropFeedCard, DropFeedCardSkeleton, type DropFeedCardProps } from "./dr
 // Types
 export interface DropFeedItem {
   shareUuid: string;
+  /** P7c FEED-1 — 내 카드 여부(owner_user_id === currentUserId, feed-queries 산출). 미주입/false = 칩 미렌더. */
+  isMine?: boolean;
   maker: { name: string; avatarUrl?: string; droppedAgo: string };
   videoThumbnailUrl: string;
   videoSourceLabel: "YouTube" | "Instagram";
