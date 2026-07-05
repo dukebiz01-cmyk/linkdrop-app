@@ -176,6 +176,55 @@ function ymdToIso(ymd: string): string | null {
   return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
 }
 
+// S2a — 매장 영문 slug(drop.how/{slug}) 로컬 헬퍼. DB CHECK(partners_slug_format
+//   ^[a-z0-9-]{2,40}$)·UNIQUE(idx_partners_slug_lower, lower 기준)와 동일 규칙의 클라 선검증.
+//   DB 무변경 — 기존 제약 재사용만.
+const SLUG_RE = /^[a-z0-9-]{2,40}$/;
+// 시스템 경로 충돌 방지 예약어 — drop.how/{slug}·앱 라우트 선점 금지.
+const RESERVED_SLUGS = new Set([
+  "admin",
+  "api",
+  "app",
+  "d",
+  "c",
+  "r",
+  "alliance",
+  "partner",
+  "store",
+  "login",
+  "me",
+  "home",
+  "explore",
+  "studio",
+  "create",
+  "coupon",
+  "results",
+  "auth",
+  "terms",
+  "privacy",
+  "business-info",
+  "www",
+  "assets",
+  "static",
+]);
+
+/** 소문자화 → 공백/언더스코어→하이픈 → 허용외 제거 → 연속 하이픈 축약 → 앞뒤 하이픈 트림. */
+function normalizeSlug(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/** CHECK 동일 정규식 + 예약어. 통과 시 null, 실패 시 사유 문구. */
+function validateSlug(s: string): string | null {
+  if (!SLUG_RE.test(s)) return "영문 주소는 2~40자, 영문 소문자·숫자·하이픈(-)만 쓸 수 있어요.";
+  if (RESERVED_SLUGS.has(s)) return "사용할 수 없는 주소입니다.";
+  return null;
+}
+
 function RegisterForm({
   userId,
   majors,
@@ -186,6 +235,10 @@ function RegisterForm({
   onSubmitted: () => Promise<void>;
 }) {
   const [displayName, setDisplayName] = useState("");
+  // S2a — 가게 영문 주소(slug). 선택 입력: 빈값 = slug 미포함 INSERT(NULL, 기존 /alliance/{id} 폴백).
+  //   입력 시에만 형식·예약어·중복 엄격 검증. blur 중복조회 + 제출 직전 재확인 + 23505 캐치 3중.
+  const [slugInput, setSlugInput] = useState("");
+  const [slugDupe, setSlugDupe] = useState(false);
   const [selectedMajor, setSelectedMajor] = useState<string>("");
   const [subs, setSubs] = useState<MajorRow[]>([]);
   const [selectedSubs, setSelectedSubs] = useState<string[]>([]); // ④-1: 복수 선택
@@ -242,8 +295,30 @@ function RegisterForm({
     );
   }
 
+  // S2a — blur 시 중복 선확인(UX). 실패는 무시(제출 직전 재확인 + 23505 캐치가 최종 방어).
+  async function checkSlugDupe() {
+    const n = normalizeSlug(slugInput);
+    if (!n || validateSlug(n)) {
+      setSlugDupe(false);
+      return;
+    }
+    try {
+      const supabase = getSupabase();
+      const { data } = await supabase.from("partners").select("id").eq("slug", n).maybeSingle();
+      setSlugDupe(Boolean(data));
+    } catch {
+      // 조회 실패 시 판단 유보 — 제출측 재확인이 커버.
+    }
+  }
+
   function validate(): string | null {
     if (!displayName.trim()) return "매장 이름을 입력해 주세요.";
+    // S2a — slug 는 선택 입력. 입력했으면 형식·예약어·중복 전부 통과해야 제출.
+    if (slugInput.trim()) {
+      const slugErr = validateSlug(normalizeSlug(slugInput));
+      if (slugErr) return slugErr;
+      if (slugDupe) return "이미 사용 중인 주소입니다. 다른 주소를 입력해주세요.";
+    }
     if (!selectedMajor) return "업종을 선택해 주세요.";
     const phoneDigits = contactPhone.replace(/[^0-9]/g, "");
     if (phoneDigits.length < 9 || phoneDigits.length > 11) {
@@ -364,11 +439,28 @@ function RegisterForm({
         return;
       }
 
+      // S2a — slug 최종 확정(선택). 제출 직전 중복 재확인(blur 이후 경합은 아래 23505 캐치가 최종 방어).
+      const normalizedSlug = slugInput.trim() ? normalizeSlug(slugInput) : "";
+      if (normalizedSlug) {
+        const { data: slugTaken } = await supabase
+          .from("partners")
+          .select("id")
+          .eq("slug", normalizedSlug)
+          .maybeSingle();
+        if (slugTaken) {
+          setSlugDupe(true);
+          toast.error("이미 사용 중인 주소입니다. 다른 주소를 입력해주세요.");
+          return;
+        }
+      }
+
       const phoneDigits = contactPhone.replace(/[^0-9]/g, "");
       const bnDigits = businessNo.replace(/[^0-9]/g, "");
       const payload: Record<string, unknown> = {
         owner_user_id: userId,
         display_name: displayName.trim(),
+        // S2a — 빈값이면 키 자체 생략(NULL 저장 = 기존 /alliance/{id} 폴백 동작).
+        ...(normalizedSlug ? { slug: normalizedSlug } : {}),
         business_type: selectedMajor, // 대분류 code (12 중 1)
         contact_phone: phoneDigits,
         business_no: bnDigits,
@@ -392,6 +484,12 @@ function RegisterForm({
         .single();
       if (error || !inserted) {
         console.error("[partner.register] insert failed:", error);
+        // S2a — UNIQUE(idx_partners_slug_lower) 경합: 재확인~INSERT 사이 선점된 케이스.
+        if (error?.code === "23505" && normalizedSlug) {
+          setSlugDupe(true);
+          toast.error("이미 사용 중인 주소입니다. 다른 주소를 입력해주세요.");
+          return;
+        }
         toast.error("등록에 실패했어요. 잠시 후 다시 시도해 주세요.");
         return;
       }
@@ -546,6 +644,50 @@ function RegisterForm({
               className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
               required
             />
+          </div>
+
+          {/* S2a — 가게 영문 주소(slug, 선택). 정규화 미리보기 + 형식/예약어/중복 정적 피드백(L7). */}
+          <div className="space-y-2">
+            <label htmlFor="rg-slug" className="block text-xs font-semibold text-[#0F172A]">
+              가게 영문 주소(링크) <span className="font-medium text-[#94A3B8]">— 선택</span>
+            </label>
+            <input
+              id="rg-slug"
+              type="text"
+              value={slugInput}
+              onChange={(e) => {
+                setSlugInput(e.target.value);
+                setSlugDupe(false); // 값이 바뀌면 이전 중복 판정 무효 — blur/제출에서 재확인
+              }}
+              onBlur={() => void checkSlugDupe()}
+              placeholder="예: noeulhouse"
+              maxLength={60}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="w-full min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:border-[#0A0A0A] focus:outline-none"
+            />
+            <p className="text-[11px] text-[#94A3B8]">
+              영문 소문자·숫자·하이픈(-)만, 2~40자. 예: noeulhouse → drop.how/noeulhouse
+            </p>
+            {slugInput.trim() ? (
+              (() => {
+                const n = normalizeSlug(slugInput);
+                const err = validateSlug(n);
+                if (err) return <p className="text-[11px] font-medium text-[#EF4444]">{err}</p>;
+                if (slugDupe)
+                  return (
+                    <p className="text-[11px] font-medium text-[#EF4444]">
+                      이미 사용 중인 주소입니다. 다른 주소를 입력해주세요.
+                    </p>
+                  );
+                return (
+                  <p className="text-[11px] font-medium text-[#15803D]">
+                    사용 가능: drop.how/{n}
+                  </p>
+                );
+              })()
+            ) : null}
           </div>
 
           {/* 업종 — 대분류 */}
