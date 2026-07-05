@@ -293,7 +293,8 @@ export async function getDiscoverDrops(
     query = query.not("partner_id", "is", null);
   }
   const { data, error } = await query
-    .order("published_at", { ascending: false, nullsFirst: false })
+    // 정렬 기준 = created_at(published_at 130건 NULL·미채움, created_at은 default now()로 100% 보장). published_at 정본화는 백로그.
+    .order("created_at", { ascending: false, nullsFirst: false })
     .limit(20);
   if (error || !data) return [];
   const rows = data as unknown as InfoDropDiscoverRow[];
@@ -337,7 +338,8 @@ export async function getFollowedMakerDrops(
     // P7c Part A — 비공개 카드 구독피드 누출 차단(getDiscoverDrops :280-281 동일 패턴).
     .eq("is_public", true)
     .in("partner_id", partnerIds)
-    .order("published_at", { ascending: false, nullsFirst: false })
+    // 정렬 기준 = created_at(published_at 130건 NULL·미채움, created_at은 default now()로 100% 보장). published_at 정본화는 백로그.
+    .order("created_at", { ascending: false, nullsFirst: false })
     .limit(10);
   if (error || !data) return [];
   const rows = data as unknown as InfoDropDiscoverRow[];
@@ -373,7 +375,8 @@ export async function getMakerRepDrops(
     .eq("status", "published")
     .eq("is_public", true)
     .in("partner_id", ids)
-    .order("published_at", { ascending: false, nullsFirst: false })
+    // 정렬 기준 = created_at(published_at 130건 NULL·미채움, created_at은 default now()로 100% 보장). published_at 정본화는 백로그.
+    .order("created_at", { ascending: false, nullsFirst: false })
     .limit(100);
   if (error || !data) return result;
 

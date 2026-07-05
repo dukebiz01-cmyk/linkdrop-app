@@ -237,7 +237,8 @@ export function ShareCardTile({
               </span>
             ) : null}
             {mine ? (
-              <span className="inline-flex items-center rounded-full bg-neutral-800/90 px-2 py-0.5 text-[10px] font-bold text-white">
+              // P7c 완성 — 흰 배경(종류칩 동일 톤): 어두운 썸네일 위 검정칩 매몰 해소. 그림자도 종류칩 동일.
+              <span className="inline-flex items-center rounded-full bg-white/95 px-2 py-0.5 text-[10px] font-bold text-neutral-800 shadow-[0_2px_6px_rgba(15,23,42,0.16)] backdrop-blur-sm">
                 내 카드
               </span>
             ) : null}
