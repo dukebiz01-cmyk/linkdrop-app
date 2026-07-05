@@ -592,7 +592,7 @@ export function CardStudioPage() {
   // S2-a 저장 — 영상(media_url) + 한마디(curator_message)만 /api/drops 로. 쿠폰·예약은 다음 단계.
   //   media_url = selectedVideo.videoId 로 만든 YouTube watch URL(서버가 extract-meta 로 source 처리).
   //   purpose = "정보"(drop_purpose enum 값, 영상만 카드). is_public = false. blocks 미전송(영상은 media_url 본체).
-  // P7b — 카톡 전송(handleSendKakao)이 발행 결과를 재사용하도록 성공 시 URL·share_uuid 반환.
+  // P7b — 성공 시 URL·share_uuid 반환(폴리시로 전송은 게시후 활성 — 반환값은 후속 소비자용 유지).
   async function handleSaveDrop(): Promise<{ url: string | null; shareUuid: string } | null> {
     // 6a 영상 게이트 완화 — 비커머스만 영상 필수(커머스는 self_upload 라 영상 없이 저장).
     if (buildMode !== "commerce" && !selectedVideo) {
@@ -600,8 +600,12 @@ export function CardStudioPage() {
       return null;
     }
     // 6b 커머스 필수 가드 — 사진 + 이름 + 결정가(§0 단일값).
+    //   P7b 폴리시(B2) — 사진 보유 판정에 덱 재사용 자산(attachedProducts[0].refDropId = 사진 보유
+    //   드롭A)도 인정: switchMode 리셋이 productImageUrl 미러만 지우고 덱 자산은 보존하는
+    //   비대칭으로, 재사용 분기 도달 전에 이 가드가 오차단하던 문제 해소.
     if (buildMode === "commerce") {
-      if (!productImageUrl) {
+      const hasProductImage = !!productImageUrl || !!attachedProducts?.[0]?.refDropId;
+      if (!hasProductImage) {
         setSaveError("상품 사진을 올려주세요.");
         return null;
       }
@@ -765,22 +769,17 @@ export function CardStudioPage() {
     }
   }
 
-  // P7b — 카톡 전송. 위저드 handleKakaoShare(ensureRealShare 패턴, create-drop-wizard :538) 이식:
-  //   발행 전이면 handleSaveDrop 으로 발행을 먼저 보장(커머스 드롭A 재사용 분기 포함 — 신규 발행 없음)
-  //   → 확보한 공유 URL 로 shareToKakao. shareToKakao 는 throw 없음({ok,fallback} 반환,
-  //   폴백 클립보드 복사는 함수 내부 처리) — 실패해도 사용자 흐름 차단 금지.
+  // P7b 폴리시(B1) — 카톡 전송은 "게시 완료 후"에만: 발행 await 체인 뒤 sendDefault 호출이
+  //   사용자 제스처 만료 → 브라우저 팝업 차단을 유발하던 것을 원천 차단(발행은 게시 버튼 소관).
+  //   클릭 즉시 shareToKakao 만 수행. shareToKakao 는 throw 없음({ok,fallback} 반환,
+  //   실패 시 클립보드 복사 폴백은 함수 내부 처리) — 반환값으로 실패 안내만 표시.
   async function handleSendKakao() {
     if (sending || saving) return;
+    // 미게시 방어 — 버튼 disabled 로 도달하지 않지만 이중 가드.
+    if (!dropped || !savedUrl) return;
     setSending(true);
     try {
-      let linkUrl = dropped ? savedUrl : null;
-      if (!linkUrl) {
-        const published = await handleSaveDrop();
-        if (!published) return; // 발행 실패 — saveError 표시는 handleSaveDrop 이 이미 수행
-        const origin =
-          typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
-        linkUrl = published.url ?? `${origin}/d/${published.shareUuid}`;
-      }
+      const linkUrl = savedUrl;
       // 스튜디오 실측 매핑 — 커머스: 상품명·상품사진, 비커머스: 영상 제목·썸네일.
       //   description 은 위저드 규칙([purpose, makerNote].join(" · ")) 그대로 — 한마디(tagline)가 makerNote.
       const purposeLabel =
@@ -801,13 +800,16 @@ export function CardStudioPage() {
           : purposeLabel === "예약" || purposeLabel === "쿠폰"
             ? "예약하고 혜택 받기"
             : "보러 가기";
-      await shareToKakao({
+      const res = await shareToKakao({
         title,
         description: [purposeLabel, tagline.trim()].filter(Boolean).join(" · "),
         imageUrl,
         linkUrl,
         buttons: [{ title: ctaTitle, link: linkUrl }],
       });
+      if (!res?.ok) {
+        setSaveError("전송에 실패했어요. 링크가 복사됐으니 붙여넣어 보내주세요.");
+      }
     } finally {
       setSending(false);
     }
@@ -2087,22 +2089,24 @@ export function CardStudioPage() {
                         : "저장하기"
                       : "레버를 더 채워주세요"}
               </button>
+              {/* P7b 폴리시(B1) — 게시 완료 후에만 활성(클릭 즉시 공유 = 제스처 유효, 팝업 차단 해소).
+                  색 위계: 파랑=토글상태 / 검정=주액션(전송) / 아웃라인=보조(게시). */}
               <button
                 onClick={() => void handleSendKakao()}
-                disabled={score < 40 || saving || sending}
+                disabled={!dropped || !savedUrl || saving || sending}
                 aria-label="카카오톡으로 카드 전송"
                 className={`flex h-12 flex-[1.4] items-center justify-center gap-2 rounded-2xl text-[14px] font-bold ${
-                  score >= 40 && !saving && !sending
-                    ? "bg-[#2563EB] text-white"
+                  dropped && savedUrl && !saving && !sending
+                    ? "bg-[#0A0A0A] text-white"
                     : "bg-[#E5E5E5] text-[#A3A3A3]"
                 }`}
               >
                 <Send className="h-4 w-4" strokeWidth={2} />
-                {sending ? "전송 중…" : "카톡으로 전송"}
+                {sending ? "전송 중…" : "전송"}
               </button>
             </div>
             <p className="mt-1 text-center text-xs text-neutral-500">
-              받는 사람에게 카드를 전송합니다
+              {dropped ? "받는 사람에게 카드를 전송합니다" : "게시 후 전송할 수 있어요"}
             </p>
             {/* S2-a 저장 결과 — 단축 URL + 복사(유지) + P7b 성공 멘트. */}
             {saveError ? (
