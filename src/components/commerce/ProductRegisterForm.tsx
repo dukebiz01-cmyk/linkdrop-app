@@ -103,6 +103,9 @@ export interface ProductRegisterFormProps {
   /** DR2-ⓑ 프리필 대칭 — product jsonb 의 dropy_fixed(정수 Droppy)를 넘기면 고정 모드로 복원.
    *  미주입 = %모드(기존 동작). */
   initialDropyFixed?: number;
+  /** STUDIO-fix4 T2 — 사진 업로드 성공 즉시 호출(publicUrl). 호스트(스튜디오)가 제출 전에도
+   *  카드 미리보기·발행 가드에 미러할 수 있게(ADDITIVE — 미주입 시 기존 동작). */
+  onImageChange?: (url: string) => void;
 }
 
 // DR2-fix1 F5 — 금액·수량 입력 정수 보존 필터. 원인: type="number" 입력은 포커스 중 휠·
@@ -169,6 +172,7 @@ export function ProductRegisterForm({
   embedded = false,
   initialDropyRate,
   initialDropyFixed,
+  onImageChange,
 }: ProductRegisterFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
@@ -543,6 +547,8 @@ export function ProductRegisterForm({
       const publicUrl = pub.publicUrl;
       setPreviewUrl(publicUrl);
       setUploadedUrl(publicUrl);
+      // STUDIO-fix4 T2 — 제출 전에도 호스트(스튜디오 카드 미리보기·발행 가드)에 즉시 미러.
+      onImageChange?.(publicUrl);
       toast.success("사진을 업로드했어요.");
     } catch (err) {
       console.error("[ProductRegisterForm] unexpected:", err);
@@ -562,6 +568,10 @@ export function ProductRegisterForm({
     //   게이트 자체는 0터치(이중 방어 유지). 파트너 라우트는 현행 선택 그대로.
     if (embedded && !name.trim()) {
       setNameError(true);
+      // STUDIO-fix4 T3 — 제출 버튼(최하단)에서 인라인 안내(상단)가 안 보여 침묵으로 느껴지던
+      //   차단 가드 가시화: toast + 해당 필드로 스크롤.
+      toast.error("상품명을 입력해 주세요.");
+      document.getElementById("pd-name")?.scrollIntoView({ block: "center" });
       return;
     }
     const priceNum = Number(price);
@@ -573,6 +583,9 @@ export function ProductRegisterForm({
     const originTrimmed = origin.trim();
     if (!originTrimmed) {
       setOriginError(true);
+      // STUDIO-fix4 T3 — 동일 가시화(원산지 가드가 최하단 버튼 사용자에겐 침묵이던 문제).
+      toast.error("원산지를 입력해 주세요 — 상품정보제공고시 필수 항목이에요.");
+      document.getElementById("pd-origin")?.scrollIntoView({ block: "center" });
       return;
     }
     const productName = name.trim() || null;
