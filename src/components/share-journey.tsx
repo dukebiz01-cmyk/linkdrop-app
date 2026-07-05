@@ -66,8 +66,8 @@ export function ShareJourneyTimeline({
         </>
       ) : rows && rows.length > 0 ? (
         <>
-          {/* 확산 집계 — '퍼졌어요' 표기('모집' 계열 금지). */}
-          <p className={jStrong}>이 드랍은 지금까지 {rows[0].spread_count}명에게 퍼졌어요</p>
+          {/* 확산 집계 — '전달' 어휘 통일(BADGE-fix1 SpreadPill 과 동일. '모집' 계열 금지). */}
+          <p className={jStrong}>이 드랍은 지금까지 {rows[0].spread_count}명에게 전달됐어요</p>
           <ol className="space-y-1.5">
             {rows.flatMap((n) => {
               const items = [
