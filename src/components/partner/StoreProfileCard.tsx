@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { MapPin, Phone, Tag, Ticket, Users } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Copy, Link2, MapPin, Phone, Tag, Ticket, Users } from "lucide-react";
 
 // 매장 프로필 카드(명함) — 사장 본인 내매장 + 공유용 /alliance 뷰 공용.
 // 보는 partner 를 prop 으로 받고, 구독수 등 소유자 전용 요소는 비소유자 뷰에서 숨긴다.
@@ -19,6 +19,8 @@ export type StoreProfileCardProps = {
   // 명함 고정 정보 — 연락처(있으면 tel: 링크). 없으면 행 미표시.
   contactPhone?: string | null;
   activeCoupons: AllianceActiveCoupon[];
+  /** S2b — 매장 영문 주소(slug). 있으면 drop.how/{slug} 링크 행 + 복사 버튼. 미주입 = 미렌더. */
+  slug?: string | null;
   /** 소유자 전용 — 구독수. undefined/null 이면 구독 행 숨김(비소유자 뷰). */
   subscriberCount?: number | null;
   /** 이름 아래 부제 (예: "내 매장 명함"). 없으면 미표시. */
@@ -102,11 +104,14 @@ export function StoreProfileCard({
   address,
   contactPhone,
   activeCoupons,
+  slug,
   subscriberCount,
   note,
   headerAction,
   footer,
 }: StoreProfileCardProps) {
+  // S2b — 링크 복사 피드백(정적 라벨 전환, L7 — 토스트 미사용: 공유 컴포넌트에 toast 의존 미도입).
+  const [linkCopied, setLinkCopied] = useState(false);
   const initial = name.trim().charAt(0) || "?";
   const industry = businessTypeLabel || partnerKindLabel(partnerKind);
   const visibleCoupons = activeCoupons.slice(0, 3);
@@ -148,6 +153,35 @@ export function StoreProfileCard({
         ) : null}
         {subscriberCount != null ? (
           <ProfileRow Icon={Users} label="구독" value={`${subscriberCount.toLocaleString()}명`} />
+        ) : null}
+        {/* S2b — 매장 링크(drop.how/{slug}) + 소형 복사 버튼. 공개 화면 공용(로그인 분기 불요). */}
+        {slug ? (
+          <div className="flex items-center gap-2 text-sm">
+            <Link2 className="size-4 shrink-0 text-[#94A3B8]" strokeWidth={2} />
+            <span className="w-9 shrink-0 text-xs font-medium text-[#94A3B8]">링크</span>
+            <span className="truncate font-semibold text-[#0A0A0A]">drop.how/{slug}</span>
+            <button
+              type="button"
+              aria-label="매장 링크 복사"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await navigator.clipboard.writeText(`https://drop.how/${slug}`);
+                    setLinkCopied(true);
+                  } catch {
+                    // 복사 실패 — 링크 텍스트가 보이므로 수동 복사 가능(추가 처리 없음).
+                  }
+                })();
+              }}
+              className="ml-auto flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg text-[#64748B] hover:bg-[#F8FAFC]"
+            >
+              {linkCopied ? (
+                <span className="text-[11px] font-bold text-[#15803D]">복사됨 ✓</span>
+              ) : (
+                <Copy className="size-4" strokeWidth={2} />
+              )}
+            </button>
+          </div>
         ) : null}
       </div>
 

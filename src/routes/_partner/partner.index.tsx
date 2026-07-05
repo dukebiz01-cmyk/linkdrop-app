@@ -338,6 +338,7 @@ function PartnerHome() {
             address={data.address}
             subscriberCount={data.subscriberCount}
             activeCoupons={data.activeCoupons}
+            slug={data.partnerSlug}
             note="내 매장 명함"
             headerAction={
               <button
@@ -362,6 +363,44 @@ function PartnerHome() {
               </button>
             }
           />
+        ) : null}
+
+        {/* S2b — 내 가게 링크(drop.how/{slug}) 상시 노출 + 원탭 복사. slug 없으면 안내 1줄만. */}
+        {data.partnerId ? (
+          <section className="rounded-2xl border border-[#E5E7EB] bg-white p-4">
+            {data.partnerSlug ? (
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-[#94A3B8]">내 가게 링크</p>
+                  <p className="mt-0.5 truncate text-sm font-bold text-[#0A0A0A]">
+                    drop.how/{data.partnerSlug}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        await navigator.clipboard.writeText(
+                          `https://drop.how/${data.partnerSlug}`,
+                        );
+                        toast.success("링크를 복사했어요");
+                      } catch {
+                        toast.error("복사에 실패했어요.");
+                      }
+                    })();
+                  }}
+                  className="shrink-0 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-bold text-[#0F172A] hover:bg-[#F8FAFC]"
+                >
+                  복사
+                </button>
+              </div>
+            ) : (
+              <p className="text-sm text-[#94A3B8]">
+                가게 영문 주소를 설정하면 짧은 링크가 생겨요
+              </p>
+            )}
+          </section>
         ) : null}
 
         {/* 받은 제휴 요청 — pending 0건이면 카드 숨김. */}

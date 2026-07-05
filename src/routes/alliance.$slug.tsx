@@ -22,6 +22,8 @@ type AlliancePartner = {
   address: string | null;
   contact_phone: string | null;
   verification_status: string | null;
+  // S2b — 매장 영문 주소(drop.how/{slug} 표시·복사용). select 에 이미 포함(:66 sel).
+  slug: string | null;
 };
 
 type ConnState = { id: string; status: string; iAmRequester: boolean } | null;
@@ -85,6 +87,7 @@ export const Route = createFileRoute("/alliance/$slug")({
       lat: number | null;
       lng: number | null;
       verification_status: string | null;
+      slug: string | null;
     };
 
     // 보는 사람 — 세션 + 소유 partner(거리 계산용 좌표 포함).
@@ -177,6 +180,7 @@ export const Route = createFileRoute("/alliance/$slug")({
         address: viewed.address ?? null,
         contact_phone: viewed.contact_phone ?? null,
         verification_status: viewed.verification_status ?? null,
+        slug: viewed.slug ?? null,
       },
       activeCoupons: (couponsRaw as AllianceActiveCoupon[] | null) ?? [],
       viewerPartnerId,
@@ -394,6 +398,7 @@ function AllianceView() {
           address={partner.address}
           contactPhone={partner.contact_phone}
           activeCoupons={data.activeCoupons}
+          slug={partner.slug}
           footer={
             <div className="space-y-2">
               {/* 거리 — 내 매장 기준 직선거리(차로 표현 금지). 좌표/사업자 조건 충족 시만. */}
