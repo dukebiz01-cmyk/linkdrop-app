@@ -1,16 +1,18 @@
 import { useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import {
   Clock,
   LayoutGrid,
   LayoutList,
   Compass,
   Layers,
+  Loader2,
   Newspaper,
   TicketPercent,
   Tag,
   Sparkles,
 } from "lucide-react";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { getAuthClient } from "@/lib/auth-context";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
 import { getDiscoverDrops } from "@/lib/feed-queries";
@@ -64,7 +66,17 @@ const TABS: { key: ExploreTab; label: string; empty: string; icon: typeof Layers
 function ExplorePage() {
   const data = Route.useLoaderData();
   const navigate = useNavigate();
+  const router = useRouter();
   const [tab, setTab] = useState<ExploreTab>("all");
+  // PTR-1 — 당겨서 새로고침(loader 재실행, 전체 리로드 아님). 최소 300ms 표시 보장.
+  const { pullDistance, refreshing, ready } = usePullToRefresh({
+    onRefresh: async () => {
+      const started = Date.now();
+      await router.invalidate();
+      const elapsed = Date.now() - started;
+      if (elapsed < 300) await new Promise((r) => setTimeout(r, 300 - elapsed));
+    },
+  });
   // 보기 모드 — 그리드(2열) / 리스트(1열). 세션 state 만(localStorage 미사용). 기본 = 그리드.
   const [view, setView] = useState<"grid" | "list">("grid");
 
@@ -77,6 +89,27 @@ function ExplorePage() {
 
   return (
     <div className="mx-auto max-w-md bg-white px-4 pb-24">
+      {/* PTR-1 인디케이터 — 당김 거리만큼만 높이(레이아웃 점프 없음). 스피너 = 기능 피드백(L7 허용). */}
+      <div
+        style={{ height: refreshing ? 64 : pullDistance }}
+        className="flex items-end justify-center overflow-hidden"
+        aria-hidden={pullDistance <= 0 && !refreshing}
+      >
+        {pullDistance > 0 || refreshing ? (
+          <div className="flex items-center gap-1.5 pb-3 text-xs font-medium text-[#64748B]">
+            {refreshing ? (
+              <>
+                <Loader2 className="size-4 animate-spin" strokeWidth={2} />
+                새로고침 중…
+              </>
+            ) : ready ? (
+              "놓으면 새로고침"
+            ) : (
+              "당겨서 새로고침"
+            )}
+          </div>
+        ) : null}
+      </div>
       {/* 헤더 — V4 컴퍼스 마크 + 그리드/리스트 흰칩 토글. */}
       <header className="flex items-center justify-between pt-5 pb-4">
         <div className="flex items-center gap-2.5">

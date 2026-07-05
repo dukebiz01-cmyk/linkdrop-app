@@ -1,5 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { getFollowedMakerDrops, getDiscoverDrops, getSentDrops } from "@/lib/feed-queries";
 import { getCouponDisplayStatus } from "@/lib/coupon-status";
 import {
@@ -222,17 +224,53 @@ export const Route = createFileRoute("/_user/home")({
 
 function HomeRoute() {
   const navigate = useNavigate();
+  const router = useRouter();
   const { isBusiness, merchant, user, serverNow } = Route.useLoaderData();
 
+  // PTR-1 — 당겨서 새로고침: loader 재실행(router.invalidate, 전체 리로드 아님).
+  //   최소 300ms 표시 보장(인디케이터 인지) — invalidate 가 즉시 끝나도 스피너 확인 가능.
+  const { pullDistance, refreshing, ready } = usePullToRefresh({
+    onRefresh: async () => {
+      const started = Date.now();
+      await router.invalidate();
+      const elapsed = Date.now() - started;
+      if (elapsed < 300) await new Promise((r) => setTimeout(r, 300 - elapsed));
+    },
+  });
+
   return (
-    <RoleHome
-      isBusiness={isBusiness}
-      merchant={merchant}
-      user={user}
-      serverNow={serverNow}
-      onGoResults={() => void navigate({ to: "/partner/results" })}
-      onGoReservations={() => void navigate({ to: "/partner/reservations" })}
-      onGoProposals={() => void navigate({ to: "/partner" })}
-    />
+    <>
+      {/* PTR-1 인디케이터 — 당김 거리만큼만 높이(레이아웃 점프 없음, 인디케이터 영역 한정).
+          스피너 회전은 기능 피드백(L7 허용). 자식(RoleHome) 무수정 — 래퍼 레벨 부착. */}
+      <div
+        style={{ height: refreshing ? 64 : pullDistance }}
+        className="flex items-end justify-center overflow-hidden"
+        aria-hidden={pullDistance <= 0 && !refreshing}
+      >
+        {pullDistance > 0 || refreshing ? (
+          <div className="flex items-center gap-1.5 pb-3 text-xs font-medium text-[#64748B]">
+            {refreshing ? (
+              <>
+                <Loader2 className="size-4 animate-spin" strokeWidth={2} />
+                새로고침 중…
+              </>
+            ) : ready ? (
+              "놓으면 새로고침"
+            ) : (
+              "당겨서 새로고침"
+            )}
+          </div>
+        ) : null}
+      </div>
+      <RoleHome
+        isBusiness={isBusiness}
+        merchant={merchant}
+        user={user}
+        serverNow={serverNow}
+        onGoResults={() => void navigate({ to: "/partner/results" })}
+        onGoReservations={() => void navigate({ to: "/partner/reservations" })}
+        onGoProposals={() => void navigate({ to: "/partner" })}
+      />
+    </>
   );
 }
