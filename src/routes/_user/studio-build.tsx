@@ -717,6 +717,21 @@ export function CardStudioPage() {
               // 예약 슬롯 조회(손님 get_available_slots)가 drop.partner_id 기준 — 매장 연결 필수.
               //   쿠폰·정보에도 매장 연결로 유용. studio-build 는 비즈니스 전제(store 있음).
               partner_id: store?.id ?? null,
+              // HERO-2 — 대표 이미지 블록 동봉: 기존 blocks passthrough(/api/drops :381
+              //   p_blocks) 계약 그대로(신규 payload 필드 0 · enum 'image' 값은 마이그레이션
+              //   hero2_block_kind_image 로 수용). 수신카드 포스터·피드 타일 썸네일이 이 블록으로
+              //   오버라이드되고 영상 재생 기능은 보존된다. 없으면 기존 동작 그대로.
+              ...(applied["image"] && heroImageUrl
+                ? {
+                    blocks: [
+                      {
+                        block_kind: "image",
+                        block_data: { image_url: heroImageUrl },
+                        position: 0,
+                      },
+                    ],
+                  }
+                : {}),
             };
       // P6-6(A안) — 커머스 발행 = 폼 제출로 이미 생성된 상품 드롭 A(완전체: 고지·신선·kamis·카피
       //   보유) 재사용. /api/drops 재호출 제거 → 이중 생성 + 발행본 데이터 열화(§0·고시 결함) 해소.

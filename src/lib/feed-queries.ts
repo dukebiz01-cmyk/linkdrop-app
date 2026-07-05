@@ -190,7 +190,16 @@ type InfoDropDiscoverRow = {
   share_events: Array<{ share_uuid: string; expires_at?: string | null }> | null;
   // 1-C-2 — funnel 쿠폰 임베드(info_drops_funnel_coupon_id_fkey).
   coupons?: FeedCouponRow;
+  // HERO-2 — 대표 이미지 블록(경량 embed: block_kind + jsonb image_url 만). 타일 썸네일 오버라이드.
+  component_blocks?: HeroBlockRow[] | null;
 };
+
+// HERO-2 — 대표 이미지 블록 행(jsonb 키만 알리아스로 뽑아 경량). 없거나 image 아님 = 미사용.
+type HeroBlockRow = { block_kind: string | null; image_url: string | null };
+function heroImageOfBlocks(blocks: HeroBlockRow[] | null | undefined): string | null {
+  const hit = blocks?.find((b) => b.block_kind === "image" && b.image_url);
+  return hit?.image_url ?? null;
+}
 
 type ShareEventSentRow = {
   share_uuid: string;
@@ -204,6 +213,8 @@ type ShareEventSentRow = {
     content_sources: ContentSourceRow | null;
     intent_types: IntentTypeRow | null;
     coupons?: FeedCouponRow;
+    // HERO-2 — 대표 이미지 블록(경량 embed).
+    component_blocks?: HeroBlockRow[] | null;
   } | null;
 };
 
@@ -229,7 +240,8 @@ function adaptDiscoverRow(
       ...MAKER_FALLBACK,
       droppedAgo: formatDroppedAgo(row.published_at ?? row.created_at),
     },
-    videoThumbnailUrl: cs.thumbnail_url,
+    // HERO-2 — 대표 이미지 블록 우선(타일 첫인상 오버라이드), 없으면 기존 영상 썸네일.
+    videoThumbnailUrl: heroImageOfBlocks(row.component_blocks) ?? cs.thumbnail_url,
     videoSourceLabel: providerToLabel(cs.provider),
     videoDurationSec: cs.duration_sec ?? 0,
     intent: safeIntent(row.intent_types?.key),
@@ -259,7 +271,8 @@ function adaptSentRow(
   return {
     shareUuid: row.share_uuid,
     maker: { ...MAKER_FALLBACK, droppedAgo: formatDroppedAgo(row.created_at) },
-    videoThumbnailUrl: cs.thumbnail_url,
+    // HERO-2 — 대표 이미지 블록 우선(타일 첫인상 오버라이드), 없으면 기존 영상 썸네일.
+    videoThumbnailUrl: heroImageOfBlocks(row.info_drops?.component_blocks) ?? cs.thumbnail_url,
     videoSourceLabel: providerToLabel(cs.provider),
     videoDurationSec: cs.duration_sec ?? 0,
     intent: safeIntent(row.info_drops?.intent_types?.key),
@@ -293,7 +306,8 @@ const DISCOVER_SELECT = `
   content_sources!info_drops_source_id_fkey ( provider, title, thumbnail_url, duration_sec, author_name, source_url ),
   intent_types!info_drops_intent_id_fkey ( key ),
   coupons!info_drops_funnel_coupon_id_fkey ( valid_from, valid_until, is_active ),
-  share_events ( share_uuid, expires_at )
+  share_events ( share_uuid, expires_at ),
+  component_blocks ( block_kind, image_url:block_data->>image_url )
 `;
 
 const SENT_SELECT = `
@@ -305,7 +319,8 @@ const SENT_SELECT = `
     purpose,
     content_sources!info_drops_source_id_fkey ( provider, title, thumbnail_url, duration_sec, author_name, source_url ),
     intent_types!info_drops_intent_id_fkey ( key ),
-    coupons!info_drops_funnel_coupon_id_fkey ( valid_from, valid_until, is_active )
+    coupons!info_drops_funnel_coupon_id_fkey ( valid_from, valid_until, is_active ),
+    component_blocks ( block_kind, image_url:block_data->>image_url )
   )
 `;
 

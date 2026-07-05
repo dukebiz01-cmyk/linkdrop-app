@@ -354,11 +354,27 @@ function buildAttachedVideos(d: DropDetailRpc): InfoDropPageProps["attachedVideo
   return items.length > 0 ? items : undefined;
 }
 
+// HERO-2 — 대표 이미지 블록(block_kind="image", block_data.image_url) 추출.
+//   수신카드 포스터(videoThumbnailUrl)를 드롭 고유 이미지로 오버라이드 — 영상 재생 기능은 보존,
+//   첫인상(포스터)만 교체. 블록 없으면 null(기존 source 썸네일 그대로).
+function heroImageOf(d: DropDetailRpc): string | null {
+  const blocks = Array.isArray(d.blocks) ? d.blocks : [];
+  for (const b of blocks) {
+    const blk = b as { block_kind?: string; block_data?: Record<string, unknown> };
+    if (blk?.block_kind === "image" && typeof blk.block_data?.image_url === "string") {
+      const u = blk.block_data.image_url.trim();
+      if (u) return u;
+    }
+  }
+  return null;
+}
+
 /** get_drop_detail RPC 출력 → InfoDropPage props. */
 export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
   const product = d.products?.[0];
   return {
-    videoThumbnailUrl: d.source.thumbnail_url ?? "",
+    // HERO-2 — 대표 이미지 블록 우선(포스터 오버라이드), 없으면 기존 source 썸네일.
+    videoThumbnailUrl: heroImageOf(d) ?? d.source.thumbnail_url ?? "",
     videoDurationSec: d.source.duration_sec ?? 0,
     videoSourceLabel: providerLabel(d.source.provider),
     officialStatus: "user_shared",
