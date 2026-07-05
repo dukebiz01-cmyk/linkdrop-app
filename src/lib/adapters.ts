@@ -174,18 +174,30 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     stock_limit?: unknown;
     price_band_enabled?: unknown;
     dropy_rate?: unknown;
+    dropy_fixed?: unknown;
   };
   const priceKrw = typeof data.price_krw === "number" ? data.price_krw : null;
-  // BADGE-ⓑ(4b) — Droppy 예상 보상 = floor(dropy_rate × price_krw). 유효 범위(0~0.20) 밖·재료
-  //   결손 = undefined(미주입=미렌더). RPC(get_feed_dropy_reward)와 동일 가드 — 값은 진짜 rate×가격만.
+  // BADGE-ⓑ(4b)/DR2-ⓑ — Droppy 예상 보상, fixed-우선(정본 우선규칙 · 3면 동일: 피드 RPC
+  //   get_feed_dropy_reward · 상세 adapters(여기) · 주문 스냅샷 create_preorder DR2-ⓐ):
+  //   dropy_fixed 유효(정수 AND >0 AND ≤price(가격 있으면)) → fixed / 무효·부재 → 기존
+  //   rate 경로 floor(dropy_rate × price_krw)(0<rate≤0.20) / 둘 다 무효 → 미주입=미렌더.
+  const dropyFixed =
+    typeof data.dropy_fixed === "number" &&
+    Number.isInteger(data.dropy_fixed) &&
+    data.dropy_fixed > 0 &&
+    (priceKrw == null || data.dropy_fixed <= priceKrw)
+      ? data.dropy_fixed
+      : null;
   const dropyRate =
     typeof data.dropy_rate === "number" && data.dropy_rate > 0 && data.dropy_rate <= 0.2
       ? data.dropy_rate
       : null;
   const dropyReward =
-    dropyRate != null && priceKrw != null && priceKrw > 0
-      ? Math.floor(dropyRate * priceKrw)
-      : null;
+    dropyFixed != null
+      ? dropyFixed
+      : dropyRate != null && priceKrw != null && priceKrw > 0
+        ? Math.floor(dropyRate * priceKrw)
+        : null;
   const name =
     typeof data.name === "string" && data.name.trim() ? data.name.trim() : (d.source.title ?? "");
   // 나-2 — 상품 메인 블록(self)에 저장된 카피(나-1). 있으면 상품 /d 페이지에 리치 표시.

@@ -97,9 +97,61 @@ export interface ProductRegisterFormProps {
    *  카드 보기·공유하기)을 한 줄 상태로 대체(P2.1 S20: 단축주소는 호스트 발행 단일 경로).
    *  기본 false = 기존 동작. */
   embedded?: boolean;
-  /** Phase 2 보완 — 재편집 프리필: 드롭 A product jsonb 의 dropy_rate(0~0.10)를 넘기면
-   *  슬라이더가 해당 %(0~10)로 복원. 미주입 = 0(신규 등록 기존 동작). */
+  /** Phase 2 보완 — 재편집 프리필: 드롭 A product jsonb 의 dropy_rate(0~0.20)를 넘기면
+   *  슬라이더가 해당 %(0~20)로 복원. 미주입 = 0(신규 등록 기존 동작). DR2-ⓑ max 20 확장. */
   initialDropyRate?: number;
+  /** DR2-ⓑ 프리필 대칭 — product jsonb 의 dropy_fixed(정수 Droppy)를 넘기면 고정 모드로 복원.
+   *  미주입 = %모드(기존 동작). */
+  initialDropyFixed?: number;
+}
+
+// DR2-ⓑ ① 판매 방식 3모드 — CAT-1 세그먼트 문법(grid-cols-3) 복제. 환산은 P5a 단일 공식 재사용.
+type SaleMode = "single" | "box" | "weight";
+const SALE_MODE_OPTIONS: Array<{ key: SaleMode; label: string }> = [
+  { key: "single", label: "낱개로" },
+  { key: "box", label: "박스·묶음으로" },
+  { key: "weight", label: "무게 단위로" },
+];
+
+// ============================================================================
+// DR2-ⓑ ③ 이익 계산 정본(순수 함수) — CP-1b(주문시트)가 이식할 단일 기준.
+//   ⚠️ Droppy % 기준 = 상품 실결제액(판매가 − 쿠폰/할인, 배송비 제외) — 표시·계산 동일.
+//   shipping: free = 판매자 비용, paid = 구매자 부담(비용 아님 · 손님 결제에 병기만).
+// ============================================================================
+export interface ProfitReceiptInput {
+  priceKrw: number; // 판매가(구성 단위)
+  discountKrw: number; // 예정 할인(쿠폰 시뮬 — CP-1a 전 수동 입력, 저장 안 함)
+  costKrw: number | null; // 원가(선택 · 로컬만)
+  shippingMode: "free" | "paid";
+  shippingFeeKrw: number; // 배송비(0 이상)
+  dropyMode: "rate" | "fixed";
+  dropyPercent: number; // 0~20(정수)
+  dropyFixedKrw: number | null; // 고정 Droppy(유효 가드 통과분만)
+}
+export interface ProfitReceipt {
+  netCustomerKrw: number; // 상품 실결제액 = 판매가 − 할인
+  customerTotalKrw: number; // 손님 결제(배송비 별도 모드면 +배송비)
+  sellerShippingKrw: number; // 무료배송(내 부담)일 때만 비용
+  dropyCostKrw: number;
+  perUnitProfitKrw: number; // 건당 남는 돈
+  marginPct: number | null; // 판매가 대비 %
+}
+function computeProfitReceipt(i: ProfitReceiptInput): ProfitReceipt {
+  const discount = Math.min(Math.max(i.discountKrw, 0), i.priceKrw);
+  const net = i.priceKrw - discount;
+  const customerTotal = i.shippingMode === "paid" ? net + i.shippingFeeKrw : net;
+  const sellerShipping = i.shippingMode === "free" ? i.shippingFeeKrw : 0;
+  const dropyCost =
+    i.dropyMode === "fixed" ? (i.dropyFixedKrw ?? 0) : Math.round((net * i.dropyPercent) / 100);
+  const profit = net - (i.costKrw ?? 0) - sellerShipping - dropyCost;
+  return {
+    netCustomerKrw: net,
+    customerTotalKrw: customerTotal,
+    sellerShippingKrw: sellerShipping,
+    dropyCostKrw: dropyCost,
+    perUnitProfitKrw: profit,
+    marginPct: i.priceKrw > 0 ? (profit / i.priceKrw) * 100 : null,
+  };
 }
 
 // File → 가로 최대 1200px 비율유지 → image/jpeg 0.8 Blob. 캔버스 압축은 브라우저 전용.
@@ -140,6 +192,7 @@ export function ProductRegisterForm({
   onSubmit,
   embedded = false,
   initialDropyRate,
+  initialDropyFixed,
 }: ProductRegisterFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
@@ -160,12 +213,28 @@ export function ProductRegisterForm({
   // CAT-1 고지 — 원산지(전 카테고리 필수, 상품정보제공고시). 빈칸 제출 시 인라인 안내 + 차단.
   const [origin, setOrigin] = useState("");
   const [originError, setOriginError] = useState(false);
-  // Phase 2 — Droppy 공유 보상 비율(정수 % 0~10, 기본 0=미설정). 저장은 dropy_rate(0~0.10).
-  //   보완 — 재편집 프리필: jsonb dropy_rate(0~0.10) → % 복원(범위 밖·미주입 = 0).
+  // Phase 2 — Droppy 공유 보상 비율(정수 % 0~20, 기본 0=미설정). 저장은 dropy_rate(0~0.20).
+  //   보완 — 재편집 프리필: jsonb dropy_rate(0~0.20) → % 복원(범위 밖·미주입 = 0). DR2-ⓑ max 20.
   const [dropyPercent, setDropyPercent] = useState(() => {
     const p = Math.round((initialDropyRate ?? 0) * 100);
-    return Number.isFinite(p) && p >= 0 && p <= 10 ? p : 0;
+    return Number.isFinite(p) && p >= 0 && p <= 20 ? p : 0;
   });
+  // DR2-ⓑ ③ — Droppy 이중모드(비율 %|고정 Droppy). 프리필 initialDropyFixed 있으면 고정 복원.
+  const [dropyMode, setDropyMode] = useState<"rate" | "fixed">(() =>
+    Number.isInteger(initialDropyFixed) && (initialDropyFixed as number) > 0 ? "fixed" : "rate",
+  );
+  const [dropyFixedInput, setDropyFixedInput] = useState(() =>
+    Number.isInteger(initialDropyFixed) && (initialDropyFixed as number) > 0
+      ? String(initialDropyFixed)
+      : "",
+  );
+  // DR2-ⓑ ③ — 원가(로컬만·저장 금지)·배송비·부담 토글(기본 무료배송=내 부담)·예정 할인 시뮬.
+  const [costInput, setCostInput] = useState("");
+  const [shippingFeeInput, setShippingFeeInput] = useState("");
+  const [shippingMode, setShippingMode] = useState<"free" | "paid">("free");
+  const [plannedDiscountInput, setPlannedDiscountInput] = useState("");
+  // DR2-ⓑ ④ — 목표 순이익 역산 입력(로컬만).
+  const [targetProfitInput, setTargetProfitInput] = useState("");
   // KAMIS 품목 2단(부류→품목) — 시세(STEP4)·제철(STEP5) 연동 기반. 선택 사항(미선택 허용).
   const [kamisCategoryCode, setKamisCategoryCode] = useState("");
   const [kamisItemCode, setKamisItemCode] = useState("");
@@ -179,27 +248,101 @@ export function ProductRegisterForm({
   // STEP4-A — KAMIS 소매 시세 어드바이저(농가 가격 참고용). 품목 선택 시 get-price-band 조회.
   const [priceBand, setPriceBand] = useState<PriceBandResult | null>(null);
   const [priceBandLoading, setPriceBandLoading] = useState(false);
-  // P5b 판매 구성(단위 헌법) — 포장형태×입수×총중량. 시세 환산(per_unit_weight_g) 전용 폼 상태.
+  // P5b 판매 구성(단위 헌법) — DR2-ⓑ ①: 판매 방식 3모드(낱개|박스·묶음|무게) 세그먼트 통역.
+  //   환산은 기존 P5a 단일 공식(총중량÷입수) 재사용 — 모드는 입력 UI 통역일 뿐(재발명 0).
   //   저장 payload 미포함 — blocks/스키마 신규 컬럼 금지(저장 확장은 별도 슬라이스).
+  const [saleMode, setSaleMode] = useState<SaleMode>("box");
   const [packType, setPackType] = useState("박스");
   const [packCount, setPackCount] = useState("");
   const [packWeightKg, setPackWeightKg] = useState("");
+  const [singleWeightG, setSingleWeightG] = useState(""); // 낱개 — 1개 무게(g)
+  const [weightUnitKg, setWeightUnitKg] = useState(""); // 무게 단위 — 판매 단위(kg)
   const packCountNum = Math.floor(Number(packCount));
   const packWeightNum = Number(packWeightKg);
-  const compositionValid =
-    Number.isFinite(packCountNum) &&
-    packCountNum >= 1 &&
-    Number.isFinite(packWeightNum) &&
-    packWeightNum > 0;
-  // 개당 중량(g) — 총중량÷입수. get-price-band per_unit_weight_g 로 전달 + 자동 표시.
-  const perUnitWeightG = compositionValid
-    ? Math.round((packWeightNum * 1000) / packCountNum)
+  // 모드 → 유효 구성(입수·총중량 kg) 통역. box=기존 2칸 / single=1개×g / weight=1단위×kg.
+  const composition = (() => {
+    if (saleMode === "box") {
+      return Number.isFinite(packCountNum) &&
+        packCountNum >= 1 &&
+        Number.isFinite(packWeightNum) &&
+        packWeightNum > 0
+        ? { unitCount: packCountNum, totalKg: packWeightNum }
+        : null;
+    }
+    if (saleMode === "single") {
+      const g = Number(singleWeightG);
+      return Number.isFinite(g) && g > 0 ? { unitCount: 1, totalKg: g / 1000 } : null;
+    }
+    const kg = Number(weightUnitKg);
+    return Number.isFinite(kg) && kg > 0 ? { unitCount: 1, totalKg: kg } : null;
+  })();
+  // 개당 중량(g) — 총중량÷입수(P5a 공식 그대로). get-price-band per_unit_weight_g 로 전달.
+  const perUnitWeightG = composition
+    ? Math.round((composition.totalKg * 1000) / composition.unitCount)
     : null;
   // 정합성 가드 — 개당 10g 미만 / 5kg 초과면 확인 배너(차단 아닌 확인).
   const compositionSuspect =
     perUnitWeightG != null && (perUnitWeightG < 10 || perUnitWeightG > 5000);
   // 시세 조회에 실을 입수 — 구성이 완성됐을 때만(미완성 타이핑 중 재조회 방지용 dep).
-  const unitCountForQuery = perUnitWeightG != null ? packCountNum : null;
+  const unitCountForQuery = composition != null ? composition.unitCount : null;
+  // DR2-ⓑ ②C — [↻ 다시 조회] 수동 재조회 카운터(시세 effect dep).
+  const [priceBandRefresh, setPriceBandRefresh] = useState(0);
+  // DR2-ⓑ ① 선언문 — 계산 결과 자동 갱신. 괄호 축약("(1개 · 0.9kg)" 류) 노출 금지.
+  const compositionLabel = composition
+    ? saleMode === "box"
+      ? `${composition.unitCount}개들이 한 ${packType}(${composition.totalKg}kg)`
+      : saleMode === "single"
+        ? `낱개 1개`
+        : `${composition.totalKg}kg 단위`
+    : null;
+  const declarationLine =
+    composition && perUnitWeightG != null
+      ? saleMode === "box"
+        ? `${composition.unitCount}개들이 한 ${packType}(${composition.totalKg}kg) · 개당 약 ${perUnitWeightG.toLocaleString("ko-KR")}g — 이 기준으로 시세를 비교해요`
+        : saleMode === "single"
+          ? `낱개 1개 · 약 ${perUnitWeightG.toLocaleString("ko-KR")}g — 이 기준으로 시세를 비교해요`
+          : `${composition.totalKg}kg 단위 판매 — 이 기준으로 시세를 비교해요`
+      : null;
+  // DR2-ⓑ ③ 파생 — 유효 가드 통과 값만(무효 = NULL 흡수 · 차단 아님).
+  const priceNumLive = Number(price);
+  const priceValid =
+    Number.isFinite(priceNumLive) && priceNumLive > 0 ? Math.floor(priceNumLive) : null;
+  // 고정 Droppy 가드 — 정수 AND >0 AND ≤판매가(정본 우선규칙과 동일. DB·adapters 3면 미러).
+  const dropyFixedValid = (() => {
+    const t = dropyFixedInput.trim();
+    if (!/^\d{1,9}$/.test(t)) return null;
+    const n = Number(t);
+    return n > 0 && (priceValid == null || n <= priceValid) ? n : null;
+  })();
+  const shippingFeeValid = (() => {
+    const t = shippingFeeInput.trim();
+    if (!/^\d{1,9}$/.test(t)) return null;
+    return Number(t);
+  })();
+  const costValid = (() => {
+    const t = costInput.trim();
+    if (!/^\d{1,9}$/.test(t)) return null;
+    return Number(t);
+  })();
+  const plannedDiscountValid = (() => {
+    const t = plannedDiscountInput.trim();
+    if (!/^\d{1,9}$/.test(t)) return null;
+    return Number(t);
+  })();
+  // 영수증 — 정본 순수 함수(computeProfitReceipt) 단일 호출. 판매가 없으면 미계산.
+  const receipt =
+    priceValid != null
+      ? computeProfitReceipt({
+          priceKrw: priceValid,
+          discountKrw: plannedDiscountValid ?? 0,
+          costKrw: costValid,
+          shippingMode,
+          shippingFeeKrw: shippingFeeValid ?? 0,
+          dropyMode,
+          dropyPercent,
+          dropyFixedKrw: dropyFixedValid,
+        })
+      : null;
   // 나-1 — 상품 카피(headline/selling_points). 비우면 저장 시 키 생략(회귀 0).
   const [copy, setCopy] = useState<ProductCopyValue>(EMPTY_PRODUCT_COPY);
   const [uploading, setUploading] = useState(false);
@@ -372,7 +515,15 @@ export function ProductRegisterForm({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [isFresh, kamisItemCode, kamisCategoryCode, perUnitWeightG, unitCountForQuery]);
+    // DR2-ⓑ ②A/C — 구성·품목 변경 자동 재조회(기존 dep) + priceBandRefresh 수동 재조회 dep.
+  }, [
+    isFresh,
+    kamisItemCode,
+    kamisCategoryCode,
+    perUnitWeightG,
+    unitCountForQuery,
+    priceBandRefresh,
+  ]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -472,9 +623,18 @@ export function ProductRegisterForm({
               //   서버(/api/drops)는 block_data 를 스프레드 보존 머지하므로 그대로 저장된다.
               category,
               origin: originTrimmed,
-              // Phase 2(㉮) — Droppy 비율(numeric 0~0.10, 기본 0=미설정 → 카드 배지 미렌더 유지).
-              //   Phase 3: 구매 확정 시 rate를 conversion/preorder로 스냅샷(사후 변경 무영향) — 정산은 스냅샷 기준.
-              dropy_rate: dropyPercent / 100,
+              // Phase 2(㉮)/DR2-ⓑ — Droppy 이중모드 배타 저장(numeric 0~0.20 · max 20 확장):
+              //   %모드 = dropy_rate 만 / 고정모드 = dropy_fixed(정수·유효 가드 통과분)만.
+              //   소비는 fixed-우선 — 피드 RPC(get_feed_dropy_reward)·상세(adapters)·주문 스냅샷
+              //   (create_preorder, DR2-ⓐ) 3면 동일 규칙. 정산은 스냅샷 기준(사후 변경 무영향).
+              ...(dropyMode === "rate"
+                ? { dropy_rate: dropyPercent / 100 }
+                : dropyFixedValid != null
+                  ? { dropy_fixed: dropyFixedValid }
+                  : {}),
+              // DR2-ⓑ — 배송 정책(ADDITIVE 키 추가만 · CP-1b 주문시트 소비 예정 · 삼면 미러).
+              shipping_mode: shippingMode,
+              ...(shippingFeeValid != null ? { shipping_fee_krw: shippingFeeValid } : {}),
               ...(category === "processed" && expiryDate ? { expiry_date: expiryDate } : {}),
             },
             position: 0,
@@ -638,23 +798,7 @@ export function ProductRegisterForm({
                 />
               </label>
 
-              {/* 한정 수량 */}
-              <label htmlFor="pd-stock" className="block">
-                <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
-                  <Hash className="size-3.5" strokeWidth={2} />
-                  한정 수량 <span className="font-medium text-text-subtle">(선택)</span>
-                </span>
-                <input
-                  id="pd-stock"
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  value={stockLimit}
-                  onChange={(e) => setStockLimit(e.target.value)}
-                  placeholder="예: 30"
-                  className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
-                />
-              </label>
+              {/* 한정 수량 입력은 DR2-ⓑ ④ "몇 개나 판매하시겠어요?" 섹션으로 이동(상태·머지 키 불변). */}
 
               {/* §0 — 손님 카드 시세 비교 노출은 영구 금지(표시광고법). 생산자 참고용
                   PriceBandAdvisor(아래 품목 선택 시)만 유지. '손님 노출 토글'은 제거. */}
@@ -802,79 +946,7 @@ export function ProductRegisterForm({
                   </div>
                 </details>
 
-                {/* P5b 판매 구성(단위 헌법) — 포장형태×입수×총중량 → 개당 중량 자동 표시.
-                    시세 환산 전용(per_unit_weight_g 전달) — 저장 payload 미포함. */}
-                {kamisItemCode ? (
-                  <div className="space-y-2 pt-1">
-                    <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
-                      <Package className="size-3.5" strokeWidth={2} />
-                      판매 구성{" "}
-                      <span className="font-medium text-text-subtle">(선택 · 시세 환산용)</span>
-                    </span>
-                    <div className="grid grid-cols-3 gap-2">
-                      <select
-                        aria-label="포장형태"
-                        value={packType}
-                        onChange={(e) => setPackType(e.target.value)}
-                        className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
-                      >
-                        {["박스", "봉", "망", "기타"].map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        aria-label="입수(개)"
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        value={packCount}
-                        onChange={(e) => setPackCount(e.target.value)}
-                        placeholder="예: 30"
-                        className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
-                      />
-                      <input
-                        aria-label="총중량(kg)"
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        step="0.1"
-                        value={packWeightKg}
-                        onChange={(e) => setPackWeightKg(e.target.value)}
-                        placeholder="예: 10"
-                        className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
-                      />
-                    </div>
-                    {perUnitWeightG != null ? (
-                      <p className="text-[11px] font-medium tabular-nums tracking-ko text-text-muted">
-                        개당 약 {perUnitWeightG.toLocaleString("ko-KR")}g ({packCountNum}개 ·{" "}
-                        {packWeightNum}kg)
-                      </p>
-                    ) : null}
-                    {/* 정합성 가드 — 차단 아닌 확인(개당 10g 미만/5kg 초과). */}
-                    {compositionSuspect ? (
-                      <div className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2">
-                        <p className="text-[11px] font-medium leading-relaxed tracking-ko text-[#92400E]">
-                          입력값을 확인해 주세요: {packCountNum}개에 {packWeightNum}kg이 맞습니까?
-                        </p>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {/* KAMIS 소매 시세 어드바이저 — 품목 선택 시만. 농가 가격 참고용(§0). */}
-                {kamisItemCode ? (
-                  <PriceBandAdvisor
-                    priceBand={priceBand}
-                    loading={priceBandLoading}
-                    composition={
-                      compositionValid
-                        ? { packType, unitCount: packCountNum, totalKg: packWeightNum }
-                        : null
-                    }
-                  />
-                ) : null}
+                {/* 판매 구성 입력은 DR2-ⓑ ① / 시세 어드바이저는 ② 섹션으로 이동(상태·배선 불변). */}
               </div>
             </div>
           ) : null}
@@ -980,6 +1052,162 @@ export function ProductRegisterForm({
           </label>
         </div>
 
+        {/* DR2-ⓑ ① 구성 통역 — 판매 방식 3모드 세그먼트(CAT-1 문법 복제) + 선언문.
+            환산은 P5a 단일 공식 재사용(재발명 0) · 저장 payload 미포함(기존 그대로). */}
+        {isFresh ? (
+          <section className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
+            <h3 className="text-sm font-bold tracking-ko text-text-strong">
+              어떤 것을 판매하시겠어요?
+            </h3>
+            <div className="grid grid-cols-3 gap-2">
+              {SALE_MODE_OPTIONS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSaleMode(key)}
+                  aria-pressed={saleMode === key}
+                  className={`flex min-h-[44px] items-center justify-center rounded-xl border px-2 text-xs font-semibold tracking-ko transition-colors ${
+                    saleMode === key
+                      ? "border-action bg-bg text-text-strong"
+                      : "border-border bg-bg text-text-muted hover:border-text-muted"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {saleMode === "box" ? (
+              <div className="grid grid-cols-3 gap-2">
+                <select
+                  aria-label="포장형태"
+                  value={packType}
+                  onChange={(e) => setPackType(e.target.value)}
+                  className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm text-text-strong focus:border-text-strong focus:outline-none"
+                >
+                  {["박스", "봉", "망", "기타"].map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <label className="block">
+                  <span className="sr-only">한 박스 개수</span>
+                  <input
+                    aria-label="한 박스 개수"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={packCount}
+                    onChange={(e) => setPackCount(e.target.value)}
+                    placeholder="한 박스 N개"
+                    className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="sr-only">총 무게(kg)</span>
+                  <input
+                    aria-label="총 무게(kg)"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.1"
+                    value={packWeightKg}
+                    onChange={(e) => setPackWeightKg(e.target.value)}
+                    placeholder="총 무게 kg"
+                    className="w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                  />
+                </label>
+              </div>
+            ) : null}
+
+            {saleMode === "single" ? (
+              <label className="block">
+                <span className="text-xs font-semibold tracking-ko text-text-strong">
+                  1개 무게 약 <span className="font-medium text-text-subtle">(g)</span>
+                </span>
+                <input
+                  aria-label="1개 무게(g)"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={singleWeightG}
+                  onChange={(e) => setSingleWeightG(e.target.value)}
+                  placeholder="예: 300"
+                  className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                />
+              </label>
+            ) : null}
+
+            {saleMode === "weight" ? (
+              <label className="block">
+                <span className="text-xs font-semibold tracking-ko text-text-strong">
+                  판매 단위 <span className="font-medium text-text-subtle">(kg)</span>
+                </span>
+                <input
+                  aria-label="판매 단위(kg)"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="0.1"
+                  value={weightUnitKg}
+                  onChange={(e) => setWeightUnitKg(e.target.value)}
+                  placeholder="예: 5"
+                  className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                />
+              </label>
+            ) : null}
+
+            {/* 선언문 — 계산 결과 1줄 자동 갱신(괄호 축약 노출 금지). */}
+            {declarationLine ? (
+              <p className="text-[12px] font-medium tabular-nums leading-relaxed tracking-ko text-text-muted">
+                {declarationLine}
+              </p>
+            ) : null}
+            {/* 정합성 가드 — 차단 아닌 확인(개당 10g 미만/5kg 초과). 정적 앰버. */}
+            {compositionSuspect && composition ? (
+              <div className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2">
+                <p className="text-[11px] font-medium leading-relaxed tracking-ko text-[#92400E]">
+                  입력값을 확인해 주세요: {composition.unitCount}개에 {composition.totalKg}kg이
+                  맞습니까?
+                </p>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {/* DR2-ⓑ ② 시세 4점 앵커 — 도매(4-B)·소매(4-A)·인터넷(네이버 4-C) + 내 가격.
+            판매자 전용 참고(§0 — 소비자 카드 노출 경로 없음). 품목 선택 시만. */}
+        {isFresh && kamisItemCode ? (
+          <section className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
+            <h3 className="text-sm font-bold tracking-ko text-text-strong">
+              시세는 이렇습니다. 참고하세요
+            </h3>
+            <PriceBandAdvisor
+              priceBand={priceBand}
+              loading={priceBandLoading}
+              composition={
+                composition
+                  ? {
+                      packType:
+                        saleMode === "box" ? packType : saleMode === "single" ? "낱개" : "단위",
+                      unitCount: composition.unitCount,
+                      totalKg: composition.totalKg,
+                    }
+                  : null
+              }
+              compositionLabel={compositionLabel}
+              myPriceKrw={priceValid}
+              onRefresh={() => setPriceBandRefresh((n) => n + 1)}
+              onAdjustPrice={() => {
+                const el = document.getElementById("pd-price");
+                el?.scrollIntoView({ block: "center" });
+                (el as HTMLInputElement | null)?.focus();
+              }}
+            />
+          </section>
+        ) : null}
+
         {/* 가격 (필수) — P1.5: 품목→시세 확인 후 입력(순서 유도, 강제 아님). */}
         <div className="space-y-2">
           <label htmlFor="pd-price" className="block text-xs font-semibold text-[#0F172A]">
@@ -1007,42 +1235,326 @@ export function ProductRegisterForm({
           </div>
         </div>
 
-        {/* Phase 2 — Droppy 공유 보상 비율(0~10%, 1% 단위). 표시 = 풀 총액만 —
-            몫 분해(60/30/10) 표시는 Phase 3 소관[보정1]. 문안 락: 모집·수익 뉘앙스 금지,
-            UI=Droppy(영문)·코드=dropy. 저장 = product 블록 jsonb dropy_rate. */}
-        <div className="space-y-2 rounded-2xl border border-border bg-surface/40 p-4">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="pd-dropy"
-              className="text-xs font-semibold tracking-ko text-text-strong"
-            >
-              공유 보상 비율 <span className="font-medium text-text-subtle">(Droppy)</span>
-            </label>
-            <span className="text-sm font-bold tabular-nums tracking-ko text-text-strong">
-              {dropyPercent}%
+        {/* DR2-ⓑ ③ 이익 계산 — 한큐 영수증. Droppy 이중모드(0~20%, 1% 단위 | 고정 정수).
+            표시 = 풀 총액만 — 몫 분해(60/30/10) 표시 금지[보정1]. 문안 락: 모집·수익 뉘앙스 금지,
+            UI=Droppy(영문)·코드=dropy. 저장 = product 블록 jsonb dropy_rate|dropy_fixed(배타).
+            ⚠️ Droppy % 기준 = 상품 실결제액(판매가−쿠폰, 배송비 제외) — 표시·계산 모두. */}
+        <section className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
+          <h3 className="text-sm font-bold tracking-ko text-text-strong">이익 계산</h3>
+
+          {/* 원가(선택 · 로컬만 · 저장 금지) */}
+          <label htmlFor="pd-cost" className="block">
+            <span className="text-xs font-semibold tracking-ko text-text-strong">
+              원가 <span className="font-medium text-text-subtle">(선택 · 저장하지 않아요)</span>
             </span>
+            <input
+              id="pd-cost"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={costInput}
+              onChange={(e) => setCostInput(e.target.value)}
+              placeholder="예: 12000"
+              className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+            />
+          </label>
+
+          {/* 배송비 + 부담 토글(기본 = 무료배송(내 부담)) — 세그먼트 문법. */}
+          <div className="space-y-2">
+            <span className="block text-xs font-semibold tracking-ko text-text-strong">배송</span>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  { key: "free", label: "무료배송(내 부담)" },
+                  { key: "paid", label: "배송비 별도(구매자 부담)" },
+                ] as const
+              ).map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setShippingMode(key)}
+                  aria-pressed={shippingMode === key}
+                  className={`flex min-h-[44px] items-center justify-center rounded-xl border px-2 text-xs font-semibold tracking-ko transition-colors ${
+                    shippingMode === key
+                      ? "border-action bg-bg text-text-strong"
+                      : "border-border bg-bg text-text-muted hover:border-text-muted"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                aria-label="배송비(원)"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={shippingFeeInput}
+                onChange={(e) => setShippingFeeInput(e.target.value)}
+                placeholder="배송비 예: 4000"
+                className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+              />
+              <span className="shrink-0 text-sm font-semibold text-text-muted">원</span>
+            </div>
           </div>
-          <input
-            id="pd-dropy"
-            type="range"
-            min={0}
-            max={10}
-            step={1}
-            value={dropyPercent}
-            onChange={(e) => setDropyPercent(Number(e.target.value))}
-            className="w-full accent-[#2563EB]"
-          />
-          {/* 풀 총액만 — 판매가 유효 + 비율 > 0 일 때(예: 32,000원 × 5% = 1,600원). */}
-          {dropyPercent > 0 && Number(price) > 0 ? (
-            <p className="text-[12px] font-medium tabular-nums tracking-ko text-text-muted">
-              {Number(price).toLocaleString("ko-KR")}원 × {dropyPercent}% ={" "}
-              {Math.round((Number(price) * dropyPercent) / 100).toLocaleString("ko-KR")}원
+
+          {/* Droppy 이중모드 — 세그먼트 [비율 %|고정 Droppy]. */}
+          <div className="space-y-2">
+            <span className="block text-xs font-semibold tracking-ko text-text-strong">
+              공유 보상 <span className="font-medium text-text-subtle">(Droppy)</span>
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  { key: "rate", label: "비율 %" },
+                  { key: "fixed", label: "고정 Droppy" },
+                ] as const
+              ).map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setDropyMode(key)}
+                  aria-pressed={dropyMode === key}
+                  className={`flex min-h-[44px] items-center justify-center rounded-xl border px-2 text-xs font-semibold tracking-ko transition-colors ${
+                    dropyMode === key
+                      ? "border-action bg-bg text-text-strong"
+                      : "border-border bg-bg text-text-muted hover:border-text-muted"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {dropyMode === "rate" ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="pd-dropy"
+                    className="text-xs font-semibold tracking-ko text-text-strong"
+                  >
+                    공유 보상 비율
+                  </label>
+                  <span className="text-sm font-bold tabular-nums tracking-ko text-text-strong">
+                    {dropyPercent}%
+                  </span>
+                </div>
+                <input
+                  id="pd-dropy"
+                  type="range"
+                  min={0}
+                  max={20}
+                  step={1}
+                  value={dropyPercent}
+                  onChange={(e) => setDropyPercent(Number(e.target.value))}
+                  className="w-full accent-[#2563EB]"
+                />
+                {/* 풀 총액만 — % 기준은 상품 실결제액(판매가−예정 할인, 배송비 제외). */}
+                {dropyPercent > 0 && receipt ? (
+                  <p className="text-[12px] font-medium tabular-nums tracking-ko text-text-muted">
+                    상품 실결제액 {receipt.netCustomerKrw.toLocaleString("ko-KR")}원 ×{" "}
+                    {dropyPercent}% = {receipt.dropyCostKrw.toLocaleString("ko-KR")}원
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <input
+                    aria-label="고정 Droppy(원)"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={dropyFixedInput}
+                    onChange={(e) => setDropyFixedInput(e.target.value)}
+                    placeholder="예: 2000"
+                    className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                  />
+                  <span className="shrink-0 text-sm font-semibold text-text-muted">Droppy</span>
+                </div>
+                {/* 유효 가드 — 정수 · >0 · ≤판매가. 무효면 저장 미포함(차단 아님 · 정적 안내). */}
+                {dropyFixedInput.trim() && dropyFixedValid == null ? (
+                  <p className="text-[11px] font-medium tracking-ko text-[#92400E]">
+                    판매가 이하의 정수만 저장돼요. 지금 값은 저장되지 않아요.
+                  </p>
+                ) : null}
+              </>
+            )}
+            <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
+              판매 성사 시 기여도에 따라 분배됩니다 · 공유만으로는 적립되지 않습니다
             </p>
+          </div>
+
+          {/* 예정 할인 시뮬 — CP-1a(쿠폰) 전 수동 입력. 저장 안 함. */}
+          <label htmlFor="pd-discount" className="block">
+            <span className="text-xs font-semibold tracking-ko text-text-strong">
+              예정 할인{" "}
+              <span className="font-medium text-text-subtle">(시뮬레이션 · 저장하지 않아요)</span>
+            </span>
+            <input
+              id="pd-discount"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={plannedDiscountInput}
+              onChange={(e) => setPlannedDiscountInput(e.target.value)}
+              placeholder="예: 2000"
+              className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+            />
+          </label>
+
+          {/* 영수증 — 세로 뺄셈(정적). computeProfitReceipt 정본 단일 소스. */}
+          {receipt ? (
+            <div className="space-y-1 rounded-lg bg-surface px-3 py-2.5 text-[12px] font-medium tabular-nums tracking-ko text-text-strong">
+              <div className="flex justify-between">
+                <span>판매가</span>
+                <span>{priceValid?.toLocaleString("ko-KR")}원</span>
+              </div>
+              {(plannedDiscountValid ?? 0) > 0 ? (
+                <div className="flex justify-between text-text-muted">
+                  <span>− 예정 할인</span>
+                  <span>−{(plannedDiscountValid ?? 0).toLocaleString("ko-KR")}원</span>
+                </div>
+              ) : null}
+              <div className="flex justify-between border-t border-border pt-1">
+                <span>= 손님 결제</span>
+                <span>
+                  {receipt.netCustomerKrw.toLocaleString("ko-KR")}원
+                  {shippingMode === "paid" && (shippingFeeValid ?? 0) > 0
+                    ? ` (+배송비 ${(shippingFeeValid ?? 0).toLocaleString("ko-KR")}원)`
+                    : ""}
+                </span>
+              </div>
+              {costValid != null ? (
+                <div className="flex justify-between text-text-muted">
+                  <span>− 원가</span>
+                  <span>−{costValid.toLocaleString("ko-KR")}원</span>
+                </div>
+              ) : null}
+              {receipt.sellerShippingKrw > 0 ? (
+                <div className="flex justify-between text-text-muted">
+                  <span>− 배송비(내 부담)</span>
+                  <span>−{receipt.sellerShippingKrw.toLocaleString("ko-KR")}원</span>
+                </div>
+              ) : null}
+              {receipt.dropyCostKrw > 0 ? (
+                <div className="flex justify-between text-text-muted">
+                  <span>
+                    − Droppy{dropyMode === "rate" ? `(실결제액 × ${dropyPercent}%)` : "(고정)"}
+                  </span>
+                  <span>−{receipt.dropyCostKrw.toLocaleString("ko-KR")}원</span>
+                </div>
+              ) : null}
+              <div className="flex justify-between border-t border-border pt-1 font-bold">
+                <span>= 건당 남는 돈</span>
+                <span>
+                  {receipt.perUnitProfitKrw.toLocaleString("ko-KR")}원
+                  {receipt.marginPct != null ? ` (마진 ${Math.round(receipt.marginPct)}%)` : ""}
+                </span>
+              </div>
+            </div>
           ) : null}
-          <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
-            판매 성사 시 기여도에 따라 분배됩니다 · 공유만으로는 적립되지 않습니다
-          </p>
-        </div>
+
+          {/* 역마진 — 정적 앰버 배너(차단 아님). */}
+          {receipt && receipt.perUnitProfitKrw < 0 ? (
+            <div className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2">
+              <p className="text-[11px] font-medium leading-relaxed tracking-ko text-[#92400E]">
+                보상·할인이 이익보다 큽니다 — 숫자를 확인해 주세요
+              </p>
+            </div>
+          ) : null}
+        </section>
+
+        {/* DR2-ⓑ ④ 판매계획 — 수량 = 기존 stock_limit 상태 단일 필드(머지 키 불변).
+            전부 조건문 어미("다 팔면"·"~라면") · 정적. 예측 언어 금지. */}
+        {isFresh ? (
+          <section className="space-y-3 rounded-2xl border border-border bg-surface/40 p-4">
+            <h3 className="text-sm font-bold tracking-ko text-text-strong">
+              몇 개나 판매하시겠어요?
+            </h3>
+            <label htmlFor="pd-stock" className="block">
+              <span className="flex items-center gap-1.5 text-xs font-semibold tracking-ko text-text-strong">
+                <Hash className="size-3.5" strokeWidth={2} />
+                판매 수량 <span className="font-medium text-text-subtle">(선택 · 한정 수량)</span>
+              </span>
+              <input
+                id="pd-stock"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={stockLimit}
+                onChange={(e) => setStockLimit(e.target.value)}
+                placeholder="예: 30"
+                className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+              />
+            </label>
+
+            {/* "다 팔면" — ③ 정본 순수 함수 × 수량(조건문 어미만). */}
+            {receipt && Number(stockLimit) >= 1 ? (
+              <div className="space-y-1 rounded-lg bg-surface px-3 py-2.5 text-[12px] font-medium tabular-nums tracking-ko text-text-strong">
+                <p className="text-xs font-bold">
+                  {Math.floor(Number(stockLimit)).toLocaleString("ko-KR")}개를 다 팔면
+                </p>
+                <div className="flex justify-between">
+                  <span>매출</span>
+                  <span>
+                    {((priceValid ?? 0) * Math.floor(Number(stockLimit))).toLocaleString("ko-KR")}원
+                  </span>
+                </div>
+                <div className="flex justify-between text-text-muted">
+                  <span>Droppy 예산 총액</span>
+                  <span>
+                    {(receipt.dropyCostKrw * Math.floor(Number(stockLimit))).toLocaleString(
+                      "ko-KR",
+                    )}
+                    원
+                  </span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span>총 순이익</span>
+                  <span>
+                    {(receipt.perUnitProfitKrw * Math.floor(Number(stockLimit))).toLocaleString(
+                      "ko-KR",
+                    )}
+                    원
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
+            {/* "목표로 역산" — 건당 순익 > 0 일 때만(≤0 이면 숨김). */}
+            {receipt && receipt.perUnitProfitKrw > 0 ? (
+              <div className="space-y-2">
+                <label htmlFor="pd-target" className="block">
+                  <span className="text-xs font-semibold tracking-ko text-text-strong">
+                    목표 순이익{" "}
+                    <span className="font-medium text-text-subtle">(선택 · 저장하지 않아요)</span>
+                  </span>
+                  <input
+                    id="pd-target"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={targetProfitInput}
+                    onChange={(e) => setTargetProfitInput(e.target.value)}
+                    placeholder="예: 300000"
+                    className="mt-2 w-full min-h-[44px] rounded-xl border border-border bg-bg px-3 text-sm tabular-nums text-text-strong placeholder:text-text-subtle focus:border-text-strong focus:outline-none"
+                  />
+                </label>
+                {/^\d{1,9}$/.test(targetProfitInput.trim()) && Number(targetProfitInput) > 0 ? (
+                  <p className="text-[12px] font-medium tabular-nums tracking-ko text-text-muted">
+                    {Number(targetProfitInput).toLocaleString("ko-KR")}원을 벌려면{" "}
+                    {Math.ceil(Number(targetProfitInput) / receipt.perUnitProfitKrw).toLocaleString(
+                      "ko-KR",
+                    )}
+                    개를 판매해야 해요
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         {/* 나-1 — 홍보 문구(선택). 상품명·가격·메모 기반 AI 카피 + 수동 수정. */}
         <ProductCopyEditor

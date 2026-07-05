@@ -1,4 +1,4 @@
-import { TrendingUp } from "lucide-react";
+import { RotateCw, TrendingUp } from "lucide-react";
 
 // 공용 시세 어드바이저 — P5b(단위 헌법 1~3조) 표기 전면 교체.
 //   구조: ①개당(또는 kg당) 헤드라인 → ②환산 근거 줄 → ③3열 고정 표(도매/인터넷/제외)
@@ -73,6 +73,19 @@ export type PriceComposition = {
 function fmtWonH(n: number): string {
   return (Math.round(n / 100) * 100).toLocaleString("ko-KR");
 }
+
+// DR2-ⓑ 4-A 소매 단위 파서 — KAMIS retail 의 unit("1kg"/"100g" 류)만 kg 계수로 환산.
+//   무게 단위가 아니면(개·포기 등) null → 소매 점·행 미표시(생비교 금지 §0 — 정직 미표시).
+function parseUnitToKg(unit: string): number | null {
+  const m = /^\s*([\d.,]+)\s*(kg|㎏|g)\s*$/i.exec(unit);
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return m[2].toLowerCase() === "g" ? n / 1000 : n;
+}
+
+// DR2-ⓑ 4점 앵커 — 값 크기 순 배치용 점 모델. glyph 는 고정(도매● ▲내가격 ◇인터넷 ○소매).
+type AnchorPoint = { key: string; glyph: string; label: string; value: number };
 // "2026-07-03" → "7/3"
 function fmtRefDate(iso: string): string {
   const m = Number(iso.slice(5, 7));
@@ -89,15 +102,41 @@ function NoticeLine() {
   );
 }
 
+// DR2-ⓑ ②C — 수동 재조회(정적 버튼 · 스핀 없음, 로딩 표시는 기존 "시세 조회 중…"이 담당).
+function RefreshButton({ onRefresh }: { onRefresh: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onRefresh}
+      className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-muted hover:border-text-muted"
+    >
+      <RotateCw className="size-3.5" strokeWidth={2} />
+      다시 조회
+    </button>
+  );
+}
+
 // 시세 어드바이저 — 농가 가격 결정 참고용(§0: 추천/단정 아님, 농가 결정).
 export function PriceBandAdvisor({
   priceBand,
   loading,
   composition,
+  compositionLabel,
+  myPriceKrw,
+  onRefresh,
+  onAdjustPrice,
 }: {
   priceBand: PriceBandResult | null;
   loading: boolean;
   composition?: PriceComposition | null;
+  /** DR2-ⓑ ① 선언문 기반 라벨 — 있으면 근거줄·판매단위 강조에서 괄호 축약 대신 사용. */
+  compositionLabel?: string | null;
+  /** DR2-ⓑ ② 내 가격(구성 단위 판매가) — 4점 앵커·격차 문구용. 없으면 앵커 미표시. */
+  myPriceKrw?: number | null;
+  /** DR2-ⓑ ②C — [↻ 다시 조회](정적 버튼). */
+  onRefresh?: () => void;
+  /** DR2-ⓑ ②B — "시세 참고해 판매가 조정하기" → 판매가 입력 포커스 스크롤. */
+  onAdjustPrice?: () => void;
 }) {
   if (loading) {
     return (
@@ -108,13 +147,14 @@ export function PriceBandAdvisor({
     );
   }
   if (!priceBand) return null;
-  // unconfigured/error → 작은 안내만(등록 막지 않음).
+  // unconfigured/error → 작은 안내만(등록 막지 않음). C: 재조회 탈출구 제공.
   if (priceBand.status === "unconfigured" || priceBand.status === "error") {
     return (
       <div className="mt-2 space-y-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
         <p className="text-[12px] font-medium tracking-ko text-text-subtle">
           시세 정보를 불러올 수 없어요.
         </p>
+        {onRefresh ? <RefreshButton onRefresh={onRefresh} /> : null}
         <NoticeLine />
       </div>
     );
@@ -134,6 +174,13 @@ export function PriceBandAdvisor({
   const oMedian = o ? (o.median ?? o.avg) : null;
   // 헤드라인·내 판매단위의 kg 기준 밴드 — P5d 역전: 도매 우선, 인터넷은 신뢰될 때만 후보.
   const kgBand = w ? { min: w.min, max: w.max } : onlineTrusted && oBand ? oBand : null;
+  // DR2-ⓑ 4-A 소매 — legacy sources 의 retail 행을 kg당 환산(무게 단위 파싱 가능분만·아니면 미표시).
+  const retailSrc = priceBand.sources.find((s) => s.price_type === "retail") ?? null;
+  const retailUnitKg = retailSrc ? parseUnitToKg(retailSrc.unit) : null;
+  const retailKg =
+    retailSrc && retailUnitKg != null && retailSrc.low > 0
+      ? { min: retailSrc.low / retailUnitKg, max: retailSrc.high / retailUnitKg }
+      : null;
   // 제외 줄 — 다른 상품(순도 필터) + 구성 불명, 둘 다 정직 표기(§0).
   const exclusionParts = [
     filteredCount > 0 ? `다른 상품(가공품 등) ${filteredCount}건` : null,
@@ -152,6 +199,7 @@ export function PriceBandAdvisor({
         {exclusionLine ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">{exclusionLine}</p>
         ) : null}
+        {onRefresh ? <RefreshButton onRefresh={onRefresh} /> : null}
         <NoticeLine />
       </div>
     );
@@ -163,6 +211,59 @@ export function PriceBandAdvisor({
     : (priceBand.per_unit_weight_g ?? null);
   const hasPerUnit = perUnitG != null && perUnitG > 0;
   const toUnit = (kgWon: number) => kgWon * ((perUnitG as number) / 1000);
+
+  // DR2-ⓑ ② 4점 앵커 — 내 구성 단위(한 판매 단위) 환산값으로만 같은-단위 비교(생비교 금지 §0).
+  //   구성·내 가격 둘 다 있어야 성립 → 없으면 정직 미표시. 값 크기 순 정렬 배치.
+  const totalKg = composition ? composition.totalKg : null;
+  const anchorPoints: AnchorPoint[] = [];
+  if (totalKg != null && totalKg > 0 && myPriceKrw != null && myPriceKrw > 0) {
+    if (w) {
+      anchorPoints.push({ key: "wholesale", glyph: "●", label: "도매", value: w.avg * totalKg });
+    }
+    anchorPoints.push({ key: "mine", glyph: "▲", label: "내 가격", value: myPriceKrw });
+    if (o && oMedian != null) {
+      anchorPoints.push({ key: "online", glyph: "◇", label: "인터넷", value: oMedian * totalKg });
+    }
+    if (retailKg) {
+      anchorPoints.push({
+        key: "retail",
+        glyph: "○",
+        label: "소매",
+        value: ((retailKg.min + retailKg.max) / 2) * totalKg,
+      });
+    }
+  }
+  anchorPoints.sort((a, b) => a.value - b.value);
+  const showAnchor = anchorPoints.length >= 2; // 내 가격 + 최소 1소스
+  const aMin = showAnchor ? anchorPoints[0].value : 0;
+  const aSpan = showAnchor ? Math.max(anchorPoints[anchorPoints.length - 1].value - aMin, 1) : 1;
+  // 위치 %(8~92 패딩). 근접(14%p 미만) 시 라벨 두 줄 교차 배치(겹침 처리 · 정적).
+  const positioned = anchorPoints.map((p) => ({ ...p, pos: 8 + ((p.value - aMin) / aSpan) * 84 }));
+  const labelRows: number[] = [];
+  {
+    let lastPos = -100;
+    let lastRow = 1;
+    for (const p of positioned) {
+      const row = p.pos - lastPos < 14 ? (lastRow === 0 ? 1 : 0) : 0;
+      labelRows.push(row);
+      lastPos = p.pos;
+      lastRow = row;
+    }
+  }
+  // 격차 문구 2축 — 순수 산수(권유 어휘 0). 도매축 = 평균 대비 차액 / 인터넷축 = 밴드 위치 사실.
+  const wholesaleTotal = totalKg != null && totalKg > 0 && w ? w.avg * totalKg : null;
+  const gapWholesale =
+    wholesaleTotal != null && myPriceKrw != null && myPriceKrw > 0
+      ? myPriceKrw - wholesaleTotal
+      : null;
+  const onlineRelation =
+    totalKg != null && totalKg > 0 && o && oBand && myPriceKrw != null && myPriceKrw > 0
+      ? myPriceKrw < oBand.min * totalKg
+        ? "인터넷 시세보다 낮아요"
+        : myPriceKrw > oBand.max * totalKg
+          ? "인터넷 시세보다 높아요"
+          : "인터넷 시세와 나란해요"
+      : null;
 
   return (
     <div className="mt-2 space-y-3 rounded-xl border border-border bg-surface/40 p-4">
@@ -178,11 +279,13 @@ export function PriceBandAdvisor({
           : `kg당 약 ${fmtWonH(kgBand.min)}~${fmtWonH(kgBand.max)}원`}
       </p>
 
-      {/* ② 근거 줄 — 내 구성으로 환산했음을 명시(12px muted). 구성 없으면 생략. */}
+      {/* ② 근거 줄 — 내 구성으로 환산했음을 명시(12px muted). 구성 없으면 생략.
+          DR2-ⓑ: compositionLabel 있으면 선언문 라벨 사용(괄호 축약 노출 제거). */}
       {hasPerUnit && composition ? (
         <p className="text-[12px] font-medium tracking-ko text-text-muted">
-          개당 약 {Math.round(perUnitG as number).toLocaleString("ko-KR")}g 기준 · 내 구성(
-          {composition.unitCount}개 · {composition.totalKg}kg)으로 환산한 값
+          개당 약 {Math.round(perUnitG as number).toLocaleString("ko-KR")}g 기준 ·{" "}
+          {compositionLabel ?? `내 구성(${composition.unitCount}개 · ${composition.totalKg}kg)`}{" "}
+          기준으로 환산한 값
         </p>
       ) : null}
 
@@ -231,6 +334,21 @@ export function PriceBandAdvisor({
               </td>
             </tr>
           ) : null}
+          {/* DR2-ⓑ 4-A 소매 행 — 무게 단위 파싱 가능분만(아니면 미표시 · 생비교 금지). */}
+          {retailSrc && retailKg ? (
+            <tr className="border-t border-border">
+              <td className="font-bold text-text-strong">소매</td>
+              <td className="font-medium tabular-nums text-text-strong">
+                {hasPerUnit
+                  ? `개당 약 ${fmtWonH(toUnit(retailKg.min))}~${fmtWonH(toUnit(retailKg.max))}원`
+                  : `kg당 약 ${fmtWonH(retailKg.min)}~${fmtWonH(retailKg.max)}원`}{" "}
+                · 환산가
+              </td>
+              <td className="text-right text-[11px] font-medium tabular-nums text-text-muted">
+                {retailSrc.rank_note} · {fmtRefDate(retailSrc.ref_date)}
+              </td>
+            </tr>
+          ) : null}
           {exclusionLine ? (
             <tr className="border-t border-border">
               <td className="font-bold text-text-subtle">제외</td>
@@ -242,16 +360,80 @@ export function PriceBandAdvisor({
         </tbody>
       </table>
 
-      {/* ④ 내 판매단위 강조 — 구성 입력이 있을 때만. 우측 정렬 금액. */}
+      {/* DR2-ⓑ 4점 앵커 — 정적 위치 바(도매● ▲내가격 ◇인터넷 ○소매 · 값 크기 순). */}
+      {showAnchor ? (
+        <div className="space-y-1 pt-1">
+          <div className="relative h-6">
+            <div className="absolute left-0 right-0 top-1/2 h-px bg-border" />
+            {positioned.map((p) => (
+              <span
+                key={p.key}
+                style={{ left: `${p.pos}%` }}
+                className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-[13px] ${
+                  p.key === "mine" ? "text-accent" : "text-text-muted"
+                }`}
+              >
+                {p.glyph}
+              </span>
+            ))}
+          </div>
+          <div className="relative h-9 text-[10px] font-medium tabular-nums tracking-ko text-text-muted">
+            {positioned.map((p, i) => (
+              <span
+                key={p.key}
+                style={{ left: `${p.pos}%`, top: labelRows[i] === 1 ? 16 : 0 }}
+                className={`absolute -translate-x-1/2 whitespace-nowrap ${
+                  p.key === "mine" ? "font-semibold text-text-strong" : ""
+                }`}
+              >
+                {p.label} 약 {fmtWonH(p.value)}원
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* 격차 문구 2축 — 순수 산수(권유 어휘 0). */}
+      {gapWholesale != null ? (
+        <p className="text-[12px] font-medium tabular-nums tracking-ko text-text-strong">
+          {gapWholesale > 0
+            ? `도매(평균)보다 +${fmtWonH(gapWholesale)}원이 생산자님 몫`
+            : gapWholesale < 0
+              ? `도매(평균)보다 약 ${fmtWonH(-gapWholesale)}원 낮은 가격이에요`
+              : `도매(평균)와 같은 가격이에요`}
+        </p>
+      ) : null}
+      {onlineRelation ? (
+        <p className="text-[12px] font-medium tracking-ko text-text-muted">{onlineRelation}</p>
+      ) : null}
+
+      {/* ④ 내 판매단위 강조 — 구성 입력이 있을 때만. 우측 정렬 금액.
+          DR2-ⓑ: compositionLabel 있으면 선언문 라벨(괄호 축약·모드 불일치 라벨 제거). */}
       {composition ? (
         <div className="flex items-baseline justify-between gap-2 rounded-lg bg-surface px-3 py-2.5">
           <span className="shrink-0 text-xs font-semibold tracking-ko text-text-strong">
-            {composition.unitCount}개들이 {composition.packType}
+            {compositionLabel ?? `${composition.unitCount}개들이 ${composition.packType}`}
           </span>
           <span className="text-right text-sm font-bold tabular-nums tracking-ko text-text-strong">
             = 약 {fmtWonH(kgBand.min * composition.totalKg)}~
             {fmtWonH(kgBand.max * composition.totalKg)}원
           </span>
+        </div>
+      ) : null}
+
+      {/* DR2-ⓑ ②B/C — 판매가 조정 이동 · 수동 재조회(둘 다 정적 버튼). */}
+      {onAdjustPrice || onRefresh ? (
+        <div className="flex gap-2">
+          {onAdjustPrice ? (
+            <button
+              type="button"
+              onClick={onAdjustPrice}
+              className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-strong hover:border-text-muted"
+            >
+              시세 참고해 판매가 조정하기
+            </button>
+          ) : null}
+          {onRefresh ? <RefreshButton onRefresh={onRefresh} /> : null}
         </div>
       ) : null}
 
