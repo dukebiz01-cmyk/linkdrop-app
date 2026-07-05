@@ -164,6 +164,15 @@ function HectoTestPage() {
   const [chargeStatus, setChargeStatus] = useState("");
   const [balanceError, setBalanceError] = useState("");
 
+  // CASH-c3 — 충전 취소(선차감·역분개). 내 최근 charge 원장 3건 중 선택.
+  const [chargeList, setChargeList] = useState<
+    { ref_mcht_trd_no: string; paid_delta: number; created_at: string }[]
+  >([]);
+  const [chargeCancelTrdNo, setChargeCancelTrdNo] = useState("");
+  const [chargeCancelAmount, setChargeCancelAmount] = useState("1000");
+  const [chargeCancelBusy, setChargeCancelBusy] = useState(false);
+  const [chargeCancelStatus, setChargeCancelStatus] = useState("");
+
   // c2.1 — 진행 중 잠금 = 주문 생성·SDK 로드 단계만. "paying"(결제창 팝업 호출됨)은 제외 →
   //   팝업이 별창에서 뜬 뒤 버튼 재활성(결제창 닫힘 후 영구 잠금 해소). idle/ready/error 도 클릭 가능.
   const busy = phase === "ordering" || phase === "sdk-loading";
@@ -229,6 +238,68 @@ function HectoTestPage() {
   useEffect(() => {
     void refreshBalance();
   }, [refreshBalance]);
+
+  // CASH-c3 — 최근 충전(charge) 3건 로드(cash_ledger 본인 SELECT 정책).
+  const loadRecentCharges = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    const { data: sess } = await supabase.auth.getSession();
+    const uid = sess.session?.user.id;
+    if (!uid) return;
+    const sb = supabase as unknown as SupabaseClient;
+    const { data } = await sb
+      .from("cash_ledger")
+      .select("ref_mcht_trd_no, paid_delta, created_at")
+      .eq("user_id", uid)
+      .eq("entry_type", "charge")
+      .order("created_at", { ascending: false })
+      .limit(3);
+    setChargeList(
+      (data as { ref_mcht_trd_no: string; paid_delta: number; created_at: string }[] | null) ?? [],
+    );
+  }, []);
+  useEffect(() => {
+    void loadRecentCharges();
+  }, [loadRecentCharges]);
+
+  // CASH-c3 — 충전 취소: {chargeTrdNo} 모드로 cancel-tx 호출(서버가 선차감→PG→finalize).
+  const onChargeCancel = useCallback(async () => {
+    console.log("[hecto-test] charge-cancel click", { chargeCancelTrdNo, chargeCancelBusy });
+    if (chargeCancelBusy) return;
+    const chargeTrdNo = chargeCancelTrdNo.trim();
+    const amountKrw = Number(chargeCancelAmount);
+    if (!chargeTrdNo) {
+      setChargeCancelStatus("취소할 충전 건을 선택하세요.");
+      return;
+    }
+    if (!Number.isFinite(amountKrw) || amountKrw <= 0) {
+      setChargeCancelStatus("취소 금액이 올바르지 않아요.");
+      return;
+    }
+    setChargeCancelBusy(true);
+    setChargeCancelStatus("충전 취소 요청 중… (선차감→PG→정산)");
+    try {
+      const res = await fetch("/api/hecto/cancel-tx", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chargeTrdNo, amountKrw }),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        message?: string;
+        finalized?: string;
+        outStatCd?: string;
+      };
+      if (!res.ok) throw new Error(json.message ?? json.error ?? `취소 실패 (HTTP ${res.status})`);
+      setChargeCancelStatus(`결과: ${json.finalized ?? "-"} (PG ${json.outStatCd || "-"})`);
+      await refreshBalance();
+      await loadRecentCharges();
+    } catch (e) {
+      setChargeCancelStatus(`오류: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setChargeCancelBusy(false);
+    }
+  }, [chargeCancelTrdNo, chargeCancelAmount, chargeCancelBusy, refreshBalance, loadRecentCharges]);
 
   // CASH-c2 — 주문 생성→SDK→pay 공통 흐름(일반 테스트결제·캐시충전 공유, orderBody 만 다름).
   const runOrderPay = useCallback(
@@ -525,6 +596,52 @@ function HectoTestPage() {
           {useResult && (
             <p className="rounded-lg bg-[#F8FAFC] p-3 font-mono text-xs text-[#0F172A]">{useResult}</p>
           )}
+        </div>
+
+        {/* CASH-c3 — 충전 취소(선차감·역분개). 내 최근 충전 3건 선택 → PG 취소 → 확정/복원. */}
+        <div className="flex flex-col gap-3 rounded-lg border border-[#D7DEE7] p-4">
+          <h2 className="text-base font-bold tracking-ko text-[#0F172A]">충전 취소</h2>
+          <label className="flex flex-col gap-1 text-xs tracking-ko text-[#64748B]">
+            최근 충전 (LDW)
+            <select
+              value={chargeCancelTrdNo}
+              onChange={(e) => setChargeCancelTrdNo(e.target.value)}
+              className="min-h-[44px] rounded-lg border border-[#D7DEE7] bg-[#FFFFFF] px-3 text-sm text-[#0F172A]"
+            >
+              <option value="">선택</option>
+              {chargeList.map((c) => (
+                <option key={c.ref_mcht_trd_no} value={c.ref_mcht_trd_no}>
+                  {c.ref_mcht_trd_no} · {c.paid_delta.toLocaleString("ko-KR")}원
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs tracking-ko text-[#64748B]">
+            취소 금액 (원)
+            <input
+              type="number"
+              value={chargeCancelAmount}
+              onChange={(e) => setChargeCancelAmount(e.target.value)}
+              min={1}
+              className="min-h-[44px] rounded-lg border border-[#D7DEE7] bg-[#FFFFFF] px-3 text-sm text-[#0F172A] placeholder:text-[#94A3B8]"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={onChargeCancel}
+            disabled={chargeCancelBusy}
+            className="min-h-[44px] rounded-lg bg-[#171717] px-6 font-semibold tracking-ko text-[#FFFFFF] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {chargeCancelBusy ? "취소 중…" : "충전 취소"}
+          </button>
+          {chargeCancelStatus && (
+            <p className="rounded-lg bg-[#F8FAFC] px-3 py-2 font-mono text-xs text-[#0F172A]">
+              {chargeCancelStatus}
+            </p>
+          )}
+          <p className="rounded-lg bg-[#F8FAFC] p-3 text-[11px] leading-relaxed tracking-ko text-[#64748B]">
+            미사용 캐시만 취소 가능(D2). 선차감 후 PG 취소 성공 시 확정, 실패 시 자동 복원됩니다.
+          </p>
         </div>
 
         {/* v1.6 — 취소 테스트 (서버→헥토 APICancel.do). 결제창 리턴 수신 /api/hecto/cancel 과 별개. */}

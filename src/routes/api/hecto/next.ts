@@ -34,15 +34,17 @@ function esc(s: string): string {
 function renderHtml(fields: Record<string, string>): string {
   const outStatCd = esc(fields.outStatCd ?? "");
   const mchtTrdNo = esc(fields.mchtTrdNo ?? "");
+  // CASH-c3 — 운영 일반취소용: 헥토 원거래번호(trdNo) 표기(취소 요청 orgTrdNo 로 사용).
+  const trdNo = esc(fields.trdNo ?? "");
   return `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>결제 완료</title>
-<style>body{font-family:system-ui,-apple-system,sans-serif;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F1F5F9;color:#0F172A}.card{max-width:360px;padding:32px;text-align:center}.h{font-size:18px;font-weight:700;margin:0 0 12px}.p{font-size:14px;line-height:1.6;color:#64748B;margin:0 0 16px}.meta{font-size:12px;color:#94A3B8}</style>
+<style>body{font-family:system-ui,-apple-system,sans-serif;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F1F5F9;color:#0F172A}.card{max-width:360px;padding:32px;text-align:center}.h{font-size:18px;font-weight:700;margin:0 0 12px}.p{font-size:14px;line-height:1.6;color:#64748B;margin:0 0 16px}.meta{font-size:12px;color:#94A3B8;word-break:break-all}</style>
 </head><body><div class="card">
 <div class="h">결제 완료</div>
 <div class="p">주문 확정은 서버 통보(노티) 기준입니다.<br>이 창은 닫으셔도 됩니다.</div>
-<div class="meta">상태 ${outStatCd || "-"} · 주문 ${mchtTrdNo || "-"}</div>
+<div class="meta">상태 ${outStatCd || "-"} · 주문 ${mchtTrdNo || "-"}<br>원거래번호(trdNo) ${trdNo || "-"}</div>
 </div><script>try{window.close()}catch(e){}</script></body></html>`;
 }
 
