@@ -386,144 +386,203 @@ export function PriceBandAdvisor({
         </p>
       ) : null}
 
-      {/* ③ 3열 고정 표 — 64px/auto/118px, 고정 레이아웃, 숫자 tabular.
-          DR2-fix1 F1 — 값 셀 nowrap 제거(줄바꿈 허용): fixed 레이아웃+전 셀 nowrap 이 375px 에서
-          가운데 열(약 90px)을 넘쳐 우측 열·이웃 텍스트 위로 포개지던 원인. 라벨·메타 열만 nowrap. */}
-      <table
-        className="w-full border-collapse text-[12px] tracking-ko"
-        style={{ tableLayout: "fixed" }}
-      >
+      {/* ③ STUDIO-fix1 G2 — 컴팩트 정식 표(문장형 나열 → 숫자 전용 셀).
+          행 = 도매/소매/인터넷(개당)/인터넷(kg당·n 있을 때만) · 열 = 최저|평균|최고|기준(N건·날짜).
+          셀 안 문장 금지 — 숫자만(tabular 우측 정렬), 축 라벨은 행 머리("kg당"/"개당") 아래 줄.
+          "약"·단위는 표 아래 캡션 1회. 320~375px 한 행 한 줄(가로 스크롤 금지 — 숫자 11px·기준 10px).
+          문장류(제외·표본부족·품종·소매 기준·1개월 대비)는 전폭 캡션 블록으로 이동. */}
+      <table className="w-full border-collapse tracking-ko" style={{ tableLayout: "fixed" }}>
         <colgroup>
-          <col style={{ width: 64 }} />
+          <col style={{ width: 52 }} />
           <col />
-          <col style={{ width: 118 }} />
+          <col />
+          <col />
+          <col style={{ width: 60 }} />
         </colgroup>
+        <thead>
+          <tr className="text-[10px] font-semibold text-text-subtle">
+            <th className="pb-1 text-left font-semibold" scope="col">
+              {" "}
+            </th>
+            <th className="pb-1 text-right font-semibold" scope="col">
+              최저
+            </th>
+            <th className="pb-1 text-right font-semibold" scope="col">
+              평균
+            </th>
+            <th className="pb-1 text-right font-semibold" scope="col">
+              최고
+            </th>
+            <th className="pb-1 text-right font-semibold" scope="col">
+              기준
+            </th>
+          </tr>
+        </thead>
         <tbody className="[&_td]:py-2 [&_td]:align-baseline">
           {w ? (
             <tr className="border-t border-border">
-              <td className="whitespace-nowrap font-bold text-text-strong">도매</td>
-              <td className="font-medium tabular-nums text-text-strong">
-                kg당 약 {fmtWonH(w.min)}~{fmtWonH(w.max)}원 · 평균 약 {fmtWonH(w.avg)}원
+              <td className="whitespace-nowrap">
+                <span className="text-[12px] font-bold text-text-strong">도매</span>
+                <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-muted">
-                {w.market_count}개 시장 · {fmtRefDate(w.as_of)}
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(w.min)}
               </td>
-            </tr>
-          ) : null}
-          {/* T3a-ⓑ [1] — 이원축 표기: unit축(개당가) 우선 + kg축 병기(축 라벨 명시).
-              개당가는 소액이라 백원 반올림 대신 실값 표기(스펙 문법) · kg축은 기존 백원+약 유지.
-              axes 없는 구응답은 아래 기존(F4) kg 3값 행 폴백. */}
-          {unitAxis || kgAxisBlk ? (
-            <tr className="border-t border-border">
-              <td className="whitespace-nowrap font-bold text-text-strong">인터넷</td>
-              <td className="font-medium tabular-nums text-text-strong">
-                네이버 유사상품
-                {unitAxis ? (
-                  <span className="block">
-                    개당 최저 {(unitAxis.min as number).toLocaleString("ko-KR")} · 평균{" "}
-                    {(unitAxis.avg as number).toLocaleString("ko-KR")} · 최고{" "}
-                    {(unitAxis.max as number).toLocaleString("ko-KR")}원 — {unitAxis.n}건 기준
-                  </span>
-                ) : null}
-                {kgAxisBlk ? (
-                  <span className="block">
-                    kg당 최저 약 {fmtWonH(kgAxisBlk.min as number)} · 평균 약{" "}
-                    {fmtWonH(kgAxisBlk.avg as number)} · 최고 약 {fmtWonH(kgAxisBlk.max as number)}
-                    원 — {kgAxisBlk.n}건 기준
-                  </span>
-                ) : null}
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(w.avg)}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-muted">
-                {(unitAxis?.n ?? kgAxisBlk?.n) as number}건 기준
-                {priceBand.online?.as_of ? ` · ${fmtRefDate(priceBand.online.as_of)}` : ""}
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(w.max)}
               </td>
-            </tr>
-          ) : o && oBand && oAvg != null ? (
-            <tr className="border-t border-border">
-              <td className="whitespace-nowrap font-bold text-text-strong">인터넷</td>
-              <td className="font-medium tabular-nums text-text-strong">
-                네이버 유사상품 ·{" "}
-                {hasPerUnit
-                  ? `최저 약 ${fmtWonH(toUnit(oBand.min))} · 평균 약 ${fmtWonH(toUnit(oAvg))} · 최고 약 ${fmtWonH(toUnit(oBand.max))}원`
-                  : `kg당 최저 약 ${fmtWonH(oBand.min)} · 평균 약 ${fmtWonH(oAvg)} · 최고 약 ${fmtWonH(oBand.max)}원`}
-                {!onlineTrusted ? (
-                  // P5d 강등 배지 — 표본 <10 이면 헤드라인 후보 제외 + 참고 표시(muted).
-                  <span className="ml-1 rounded-lg bg-surface px-1 text-[11px] font-semibold text-text-subtle">
-                    표본 부족 · 참고만
-                  </span>
-                ) : null}
-              </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-muted">
-                {o.converted_count}건 기준 · {fmtRefDate(o.as_of)}
+              <td className="text-right text-[10px] font-medium tabular-nums text-text-muted">
+                <span className="block">{w.market_count}개 시장</span>
+                <span className="block">{fmtRefDate(w.as_of)}</span>
               </td>
             </tr>
           ) : null}
-          {/* T3a-ⓑ [3] — 품종 구성 공개(분리 앵커 아님 · 정직한 구성 공개, T3b 예고석). */}
-          {onlineKindsTop.length > 0 ? (
-            <tr>
-              <td />
-              <td colSpan={2} className="!py-0 pb-2 text-[11px] font-medium text-text-subtle">
-                품종 포함: {onlineKindsTop.map(([k, n]) => `${k} ${n}`).join(" · ")}
-              </td>
-            </tr>
-          ) : null}
-          {/* DR2-ⓑ 4-A 소매 행 — 무게 단위 파싱 가능분만(아니면 아래 부재 안내 · 생비교 금지). */}
+          {/* 소매 — kg당 환산(상·중품 low~high · 평균 열은 중간값, 캡션에 명시). */}
           {retailSrc && retailKg ? (
             <tr className="border-t border-border">
-              <td className="whitespace-nowrap font-bold text-text-strong">소매</td>
-              <td className="font-medium tabular-nums text-text-strong">
-                {hasPerUnit
-                  ? `개당 약 ${fmtWonH(toUnit(retailKg.min))}~${fmtWonH(toUnit(retailKg.max))}원`
-                  : `kg당 약 ${fmtWonH(retailKg.min)}~${fmtWonH(retailKg.max)}원`}{" "}
-                · 환산가
-                {/* T3a-ⓑ [3] — KAMIS 조사 품종 기준 병기(retail_kind). */}
-                {retailKindLabel ? ` (${retailKindLabel} 기준)` : ""}
-                {/* T3a-ⓑ [4] — 1개월 전 대비: 일어난 사실만(예측 어휘 0). */}
-                {prevMonthKg != null && prevPct != null ? (
-                  <span className="block text-[11px] font-medium text-text-muted">
-                    1개월 전 kg당 약 {fmtWonH(prevMonthKg)}원 (
-                    {prevPct === 0
-                      ? "변동 없음"
-                      : prevPct > 0
-                        ? `+${prevPct}%`
-                        : `−${Math.abs(prevPct)}%`}
-                    )
-                  </span>
-                ) : null}
+              <td className="whitespace-nowrap">
+                <span className="text-[12px] font-bold text-text-strong">소매</span>
+                <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-muted">
-                {retailSrc.rank_note} · {fmtRefDate(retailSrc.ref_date)}
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(retailKg.min)}
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH((retailKg.min + retailKg.max) / 2)}
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(retailKg.max)}
+              </td>
+              <td className="text-right text-[10px] font-medium tabular-nums text-text-muted">
+                <span className="block">{retailSrc.rank_note}</span>
+                <span className="block">{fmtRefDate(retailSrc.ref_date)}</span>
               </td>
             </tr>
           ) : null}
-          {exclusionLine ? (
+          {/* T3a-ⓑ [1] — 인터넷 이원축: 개당(실값) / kg당(백원 반올림). 구응답은 kg당 행 폴백. */}
+          {unitAxis ? (
             <tr className="border-t border-border">
-              <td className="whitespace-nowrap font-bold text-text-subtle">제외</td>
-              <td colSpan={2} className="text-[11px] font-medium text-text-subtle">
-                {exclusionLine}
+              <td className="whitespace-nowrap">
+                <span className="text-[12px] font-bold text-text-strong">인터넷</span>
+                <span className="block text-[10px] font-medium text-text-subtle">개당</span>
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {(unitAxis.min as number).toLocaleString("ko-KR")}
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {(unitAxis.avg as number).toLocaleString("ko-KR")}
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {(unitAxis.max as number).toLocaleString("ko-KR")}
+              </td>
+              <td className="text-right text-[10px] font-medium tabular-nums text-text-muted">
+                <span className="block">{unitAxis.n}건</span>
+                {priceBand.online?.as_of ? (
+                  <span className="block">{fmtRefDate(priceBand.online.as_of)}</span>
+                ) : null}
+              </td>
+            </tr>
+          ) : null}
+          {kgAxisBlk ? (
+            <tr className="border-t border-border">
+              <td className="whitespace-nowrap">
+                <span className="text-[12px] font-bold text-text-strong">인터넷</span>
+                <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(kgAxisBlk.min as number)}
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(kgAxisBlk.avg as number)}
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(kgAxisBlk.max as number)}
+              </td>
+              <td className="text-right text-[10px] font-medium tabular-nums text-text-muted">
+                <span className="block">{kgAxisBlk.n}건</span>
+                {priceBand.online?.as_of ? (
+                  <span className="block">{fmtRefDate(priceBand.online.as_of)}</span>
+                ) : null}
+              </td>
+            </tr>
+          ) : null}
+          {!unitAxis && !kgAxisBlk && o && oBand && oAvg != null ? (
+            <tr className="border-t border-border">
+              <td className="whitespace-nowrap">
+                <span className="text-[12px] font-bold text-text-strong">인터넷</span>
+                <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(oBand.min)}
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(oAvg)}
+              </td>
+              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+                {fmtWonH(oBand.max)}
+              </td>
+              <td className="text-right text-[10px] font-medium tabular-nums text-text-muted">
+                <span className="block">{o.converted_count}건</span>
+                <span className="block">{fmtRefDate(o.as_of)}</span>
               </td>
             </tr>
           ) : null}
         </tbody>
       </table>
 
-      {/* DR2-fix1 F4ⓒ — 데이터 없는 소스 침묵 금지(도매·인터넷·소매 동일 원칙). */}
-      {!w ? (
-        <p className="text-[11px] font-medium tracking-ko text-text-subtle">
-          도매가: 표시할 시세가 없어요
+      {/* G2 캡션 블록 — 문장은 전폭 캡션에서만(셀 안 금지). 단위·약 표기 1회. */}
+      <div className="space-y-1">
+        <p className="text-[10px] font-medium tracking-ko text-text-subtle">
+          단위: 원 · kg당 값은 백원 반올림(약) · 소매 평균은 상·중품 중간값 · 참고용
         </p>
-      ) : null}
-      {/* T3a-ⓑ — 이원축·구응답 전부 비었을 때만(기존 침묵 금지 유지). */}
-      {!(unitAxis || kgAxisBlk || (o && oBand && oAvg != null)) ? (
-        <p className="text-[11px] font-medium tracking-ko text-text-subtle">
-          인터넷가: 표시할 유사상품이 없어요
-        </p>
-      ) : null}
-      {!retailKg ? (
-        <p className="text-[11px] font-medium tracking-ko text-text-subtle">
-          소매가: 표시할 시세가 없어요
-        </p>
-      ) : null}
+        {/* T3a-ⓑ [3] — 품종 구성 공개(분리 앵커 아님 · T3b 예고석). */}
+        {onlineKindsTop.length > 0 ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+            품종 포함: {onlineKindsTop.map(([k, n]) => `${k} ${n}`).join(" · ")}
+          </p>
+        ) : null}
+        {/* T3a-ⓑ [3] — 소매 조사 품종 기준(retail_kind). */}
+        {retailKg && retailKindLabel ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+            소매 기준: {retailKindLabel}
+          </p>
+        ) : null}
+        {/* T3a-ⓑ [4] — 1개월 전 대비(사실만 · 예측 어휘 0). */}
+        {retailKg && prevMonthKg != null && prevPct != null ? (
+          <p className="text-[11px] font-medium tabular-nums tracking-ko text-text-muted">
+            소매 1개월 전 kg당 약 {fmtWonH(prevMonthKg)}원 (
+            {prevPct === 0 ? "변동 없음" : prevPct > 0 ? `+${prevPct}%` : `−${Math.abs(prevPct)}%`})
+          </p>
+        ) : null}
+        {/* P5d 강등 — 구응답 폴백 행의 표본 부족 표시(캡션으로 이동). */}
+        {!unitAxis && !kgAxisBlk && o && !onlineTrusted ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+            인터넷: 표본 부족 · 참고만
+          </p>
+        ) : null}
+        {exclusionLine ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle">{exclusionLine}</p>
+        ) : null}
+        {/* DR2-fix1 F4ⓒ — 데이터 없는 소스 침묵 금지(도매·인터넷·소매 동일 원칙). */}
+        {!w ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+            도매가: 표시할 시세가 없어요
+          </p>
+        ) : null}
+        {!(unitAxis || kgAxisBlk || (o && oBand && oAvg != null)) ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+            인터넷가: 표시할 유사상품이 없어요
+          </p>
+        ) : null}
+        {!retailKg ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+            소매가: 표시할 시세가 없어요
+          </p>
+        ) : null}
+      </div>
 
       {/* DR2-ⓑ 4점 앵커 — 정적 위치 바(도매● ▲내가격 ◇인터넷 ○소매 · 값 크기 순). */}
       {showAnchor ? (

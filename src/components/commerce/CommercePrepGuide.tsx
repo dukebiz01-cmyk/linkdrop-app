@@ -9,7 +9,8 @@ export function CommercePrepGuide() {
   return (
     <section className="rounded-2xl border border-border bg-surface p-6">
       <header>
-        <h2 className="text-lg font-bold tracking-ko text-text-strong">커머스 준비</h2>
+        {/* STUDIO-fix1 G3 — 노출 용어 통일: 커머스→상품판매(표시층만 · 컴포넌트명 불변). */}
+        <h2 className="text-lg font-bold tracking-ko text-text-strong">상품판매 준비</h2>
         <p className="mt-1 text-sm font-medium tracking-ko text-text-muted">
           상품을 등록하면 판매 카드가 만들어져요
         </p>
@@ -19,10 +20,7 @@ export function CommercePrepGuide() {
       <ul className="mt-5 flex flex-col gap-3">
         {/* 항목1 — 사업자 인증: 항상 완료(approved 진입) */}
         <li className="flex items-start gap-3 rounded-2xl border border-border bg-bg p-4">
-          <CheckCircle2
-            className="mt-0.5 size-5 shrink-0 text-intent-success"
-            strokeWidth={2}
-          />
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-intent-success" strokeWidth={2} />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold tracking-ko text-text-strong">사업자 인증</p>
             <p className="mt-0.5 text-xs font-medium tracking-ko text-text-muted">완료</p>

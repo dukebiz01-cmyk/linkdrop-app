@@ -117,7 +117,9 @@ function toVideoSlot(c: DiscoverCandidate): VideoSlot {
   return {
     videoId: c.source_id,
     // youtube 16:9 썸네일(mqdefault) — 카드 슬롯도 리스트와 동일 비율. source_id 없으면 원본 폴백.
-    thumbnailUrl: c.source_id ? `https://i.ytimg.com/vi/${c.source_id}/mqdefault.jpg` : (c.thumbnail_url ?? ""),
+    thumbnailUrl: c.source_id
+      ? `https://i.ytimg.com/vi/${c.source_id}/mqdefault.jpg`
+      : (c.thumbnail_url ?? ""),
     title: c.title ?? "영상",
     isShorts: (c.duration_sec ?? 999) <= 60,
     durationLabel: c.duration_sec ? formatDuration(c.duration_sec) : undefined,
@@ -130,7 +132,8 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     id: "calendar",
     label: "예약 캘린더",
     desc: "날짜 고르고 바로 예약",
-    detail: "고객이 카드 안에서 날짜·시간을 골라 바로 예약해요. 전화나 DM 없이 전환되는 가장 강한 레버예요.",
+    detail:
+      "고객이 카드 안에서 날짜·시간을 골라 바로 예약해요. 전화나 DM 없이 전환되는 가장 강한 레버예요.",
     icon: Calendar,
     category: "purpose",
     power: 30,
@@ -140,7 +143,8 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     id: "content",
     label: "영상 · 핵심구간",
     desc: "TimeLink로 0:42 명장면만 콕",
-    detail: "긴 영상에서 가장 설득력 있는 구간만 골라 보여줘요. 첫 3초에 눈길을 잡아 이탈을 막아요.",
+    detail:
+      "긴 영상에서 가장 설득력 있는 구간만 골라 보여줘요. 첫 3초에 눈길을 잡아 이탈을 막아요.",
     icon: Video,
     category: "content",
     power: 28,
@@ -149,7 +153,8 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     id: "coupon",
     label: "쿠폰 연결",
     desc: "내 매장 쿠폰 중 선택",
-    detail: "내 매장에 등록된 쿠폰을 카드에 붙여 방문 동기를 만들어요. 할인폭이 클수록 전환이 올라가요.",
+    detail:
+      "내 매장에 등록된 쿠폰을 카드에 붙여 방문 동기를 만들어요. 할인폭이 클수록 전환이 올라가요.",
     icon: Ticket,
     category: "purpose",
     power: 18,
@@ -158,7 +163,8 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     id: "product",
     label: "상품 등록",
     desc: "사진 · 이름 · 가격 한 번에",
-    detail: "상품 사진과 이름·가격을 한 블록에서 등록해요. 사진이 카드 본체가 되고, 보는 사람이 바로 가격을 확인하고 주문할 수 있어요.",
+    detail:
+      "상품 사진과 이름·가격을 한 블록에서 등록해요. 사진이 카드 본체가 되고, 보는 사람이 바로 가격을 확인하고 주문할 수 있어요.",
     icon: Tag,
     category: "purpose",
     power: 45, // productimage(28) 흡수 — 사진이 상품 카드 필수라 완성 기여 상향.
@@ -168,7 +174,8 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     id: "seasonal",
     label: "판매 캘린더",
     desc: "판매 기간·가능일을 한눈에",
-    detail: "상품을 살 수 있는 기간과 판매 가능일을 캘린더로 보여줘요. 지금이 구매 적기라는 걸 알려 주문을 앞당겨요.",
+    detail:
+      "상품을 살 수 있는 기간과 판매 가능일을 캘린더로 보여줘요. 지금이 구매 적기라는 걸 알려 주문을 앞당겨요.",
     icon: Calendar,
     category: "purpose",
     power: 30,
@@ -178,7 +185,8 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     id: "image",
     label: "대표 이미지",
     desc: "썸네일 한 장으로 눈길",
-    detail: "피드에서 가장 먼저 보이는 한 장이에요. 분위기가 잘 드러난 사진일수록 클릭률이 높아져요.",
+    detail:
+      "피드에서 가장 먼저 보이는 한 장이에요. 분위기가 잘 드러난 사진일수록 클릭률이 높아져요.",
     icon: ImageIcon,
     category: "content",
     power: 10,
@@ -225,7 +233,8 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     id: "marketing",
     label: "마케팅 강화",
     desc: "내 채널에 직접 발행",
-    detail: "내 네이버 블로그·인스타·유튜브에 발행해 더 많은 사람을 카드로 데려와요. 전환 설계가 끝난 뒤 마지막으로 더하는 단계예요.",
+    detail:
+      "내 네이버 블로그·인스타·유튜브에 발행해 더 많은 사람을 카드로 데려와요. 전환 설계가 끝난 뒤 마지막으로 더하는 단계예요.",
     icon: Megaphone,
     category: "enhance",
     power: 0,
@@ -249,7 +258,17 @@ const blockById = (id: string) => STUDIO_BLOCKS.find((b) => b.id === id)!;
 const DECK_IDS: Record<"general" | "reserve" | "commerce", string[]> = {
   // C14① — 퍼블릭 덱 정리: 대표이미지(image)·행동링크(link) 제거(영상+강화만). reserve/commerce 0터치.
   general: ["content", "bgcolor", "top", "boost", "marketing"],
-  reserve: ["calendar", "content", "coupon", "image", "link", "bgcolor", "top", "boost", "marketing"],
+  reserve: [
+    "calendar",
+    "content",
+    "coupon",
+    "image",
+    "link",
+    "bgcolor",
+    "top",
+    "boost",
+    "marketing",
+  ],
   commerce: ["product", "seasonal", "coupon", "link", "bgcolor", "top", "boost", "marketing"],
 };
 // v0 CARD_BASE — 세 모드 기본 카드색 흰색 통일. CARD_COLORS 팔레트는 유지(사용자가 다크색 선택 가능).
@@ -367,10 +386,10 @@ export function CardStudioPage() {
   useEffect(() => {
     const el = heroRef.current;
     if (!el) return;
-    const io = new IntersectionObserver(
-      ([entry]) => setHeroVisible(entry.isIntersecting),
-      { rootMargin: "-60px 0px 0px 0px", threshold: 0 },
-    );
+    const io = new IntersectionObserver(([entry]) => setHeroVisible(entry.isIntersecting), {
+      rootMargin: "-60px 0px 0px 0px",
+      threshold: 0,
+    });
     io.observe(el);
     return () => io.disconnect();
   }, []);
@@ -384,7 +403,8 @@ export function CardStudioPage() {
 
   // 덱 = 현재 모드의 id 목록 → 블록 데이터 매핑(bgcolor 숨김 규칙 보존). 모듈 const DECK 대체.
   const DECK = useMemo(
-    () => DECK_IDS[buildMode].map(blockById).filter((b) => ENABLE_COLOR_PICKER || b.id !== "bgcolor"),
+    () =>
+      DECK_IDS[buildMode].map(blockById).filter((b) => ENABLE_COLOR_PICKER || b.id !== "bgcolor"),
     [buildMode],
   );
 
@@ -434,7 +454,12 @@ export function CardStudioPage() {
 
   // 코치(lingo) — 모드-인지. 불변식: 현재 buildMode 의 DECK 에 있는 블록만 추천(action·텍스트 둘 다).
   //   DECK 에 없는 블록(예: 커머스인데 content/calendar)은 절대 가리키지 않는다.
-  const lingo = useMemo<{ text: string; short: string; action: string | null; done?: boolean }>(() => {
+  const lingo = useMemo<{
+    text: string;
+    short: string;
+    action: string | null;
+    done?: boolean;
+  }>(() => {
     const deckBlocks = DECK; // 현재 모드 덱만
 
     // 거짓완성 차단 — 블록이 '실제로 채워졌는지'(탭 여부 아님). 데이터 state 있으면 그걸로, 없으면 applied 폴백.
@@ -466,7 +491,8 @@ export function CardStudioPage() {
     const firstMissingMain = deckBlocks.find((b) => b.isMain && !isFilled(b.id));
     if (firstMissingMain) {
       const HINTS: Record<string, string> = {
-        content: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
+        content:
+          "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
         image: "본체 이미지 한 장이면 카드가 확 살아나요. 가장 잘 나온 컷부터 올려보세요.",
         calendar: "예약 카드인데 누를 곳이 없어요. 예약 캘린더를 장착해야 친구가 바로 행동해요.",
         product: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
@@ -507,11 +533,19 @@ export function CardStudioPage() {
       short: nextLever ? `${nextLever.label} 추가해요` : "조금만 더 채워요",
       action: nextLever?.id ?? null,
     };
-  }, [applied, score, buildMode, selectedVideo, selectedCouponId, productName, productPrice, productImageUrl]);
+  }, [
+    applied,
+    score,
+    buildMode,
+    selectedVideo,
+    selectedCouponId,
+    productName,
+    productPrice,
+    productImageUrl,
+  ]);
 
   // 블록 설정 아코디언 토글 — 같은 걸 다시 누르면 접힘, 다른 걸 누르면 그것만 펼침.
-  const toggleBlockSettings = (id: string) =>
-    setExpandedBlockId((cur) => (cur === id ? null : id));
+  const toggleBlockSettings = (id: string) => setExpandedBlockId((cur) => (cur === id ? null : id));
 
   // 영상 검색 — /api/discover 직접 호출(인프라 이미 배포, DiscoverSection 컴포넌트 미사용).
   //   1차: URL/키워드 구분 없이 그대로 keyword 로 전달(엔드포인트가 검색 처리).
@@ -871,7 +905,11 @@ export function CardStudioPage() {
     selectedCouponId && selectedCoupon ? (
       <section className="space-y-3">
         <div className="space-y-2">
-          <h2 className={`text-sm font-bold tracking-ko ${isLightCard ? "text-text-strong" : "text-white"}`}>예약하면 받는 혜택</h2>
+          <h2
+            className={`text-sm font-bold tracking-ko ${isLightCard ? "text-text-strong" : "text-white"}`}
+          >
+            예약하면 받는 혜택
+          </h2>
           <div className="space-y-3">
             {/* Phase 2 — 마감 타이머(수신카드 1-C couponPanel 동형, relative 스트립).
                 L6 예외: 미리보기 한정 클라 시계 폴백(31창 승인) — serverNow 미주입. */}
@@ -881,7 +919,9 @@ export function CardStudioPage() {
               </div>
             ) : null}
             <CouponPreview coupon={{ ...selectedCoupon, title: selectedCoupon.title ?? "" }} />
-            <p className={`text-xs font-medium tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}>
+            <p
+              className={`text-xs font-medium tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}
+            >
               예약을 신청하면 쿠폰이 지갑에 담겨요.
             </p>
           </div>
@@ -929,7 +969,9 @@ export function CardStudioPage() {
   //   submitProduct 와 동일한 POST /api/drops(self_upload:true 등 payload 는 폼이 그대로 구성).
   //   성공 시 결과를 스튜디오 상태에 즉시 미러 → 카드 미리보기(productPreview)에 바로 붙고,
   //   생성된 상품 드롭 참조는 attachedProducts(덱 자산, 모드 전환에도 보존)에 적재.
-  async function submitStudioProduct(payload: ProductRegisterPayload): Promise<ProductRegisterResult> {
+  async function submitStudioProduct(
+    payload: ProductRegisterPayload,
+  ): Promise<ProductRegisterResult> {
     const res = await fetch("/api/drops", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1002,9 +1044,7 @@ export function CardStudioPage() {
           buyUrl: "",
           selfUpload: true,
           ...(productCopy.headline ? { headline: productCopy.headline } : {}),
-          ...(productCopy.sellingPoints.length
-            ? { sellingPoints: productCopy.sellingPoints }
-            : {}),
+          ...(productCopy.sellingPoints.length ? { sellingPoints: productCopy.sellingPoints } : {}),
         };
   // 손님 local 중 어댑터가 읽는 필드(name/address)만 — store 기반. 나머지는 cast 로 생략(손님 :1480 패턴).
   const previewLocal = store?.display_name
@@ -1029,9 +1069,7 @@ export function CardStudioPage() {
         className={`flex aspect-[4/3] w-full flex-col items-center justify-center gap-1.5 rounded-2xl ring-1 ${isLightCard ? "text-text-subtle" : "bg-white/10 ring-white/15 text-white/45"}`}
         // S6-2 — 카드 표면 순백: accent 배경 틴트(3%) 제거. ring 목적색 틴트만 유지(모드 구분 자산).
         style={
-          isLightCard
-            ? ({ "--tw-ring-color": `${accent}30` } as React.CSSProperties)
-            : undefined
+          isLightCard ? ({ "--tw-ring-color": `${accent}30` } as React.CSSProperties) : undefined
         }
       >
         <Tag className="h-7 w-7" strokeWidth={1.5} />
@@ -1041,7 +1079,20 @@ export function CardStudioPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] pb-[150px]">
+    <div
+      // STUDIO-fix1 G1ⓐ — 발행바 가림 해소: 바 실높이(세그먼트44+멘트+버튼48+멘트+URL행 최대 ≈250px)
+      //   + 하단 네비 오프셋(66px) + 여유 = 320px + 안전영역. 종전 pb-[150px]는 바 높이 미달로
+      //   마지막 입력 필드가 가려졌음. 바 자체는 무변경(G1ⓒ).
+      className="min-h-screen bg-[#FAFAFA] pb-[calc(320px+env(safe-area-inset-bottom))]"
+      // G1ⓑ — 입력 포커스 시 발행바+모바일 키보드 이중 가림 완화: focusin 위임 1곳(React onFocus
+      //   = focusin 버블). 입력류만 화면 중앙으로 보정(버튼 제외 · 개별 필드 무수정 · 애니 없음).
+      onFocus={(e) => {
+        const t = e.target as HTMLElement;
+        if (t.matches?.("input, textarea, select")) {
+          setTimeout(() => t.scrollIntoView({ block: "center" }), 0);
+        }
+      }}
+    >
       <style>{STUDIO_BUILD_CSS}</style>
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[#EDEDED] bg-white/90 backdrop-blur-lg">
@@ -1062,7 +1113,8 @@ export function CardStudioPage() {
                   className="rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white"
                   style={{ backgroundColor: accent }}
                 >
-                  {({ general: "퍼블릭", reserve: "예약·쿠폰", commerce: "커머스" })[buildMode]}
+                  {/* STUDIO-fix1 G3 — 노출 용어 통일: 커머스→상품판매(표시층만 · 식별자 불변). */}
+                  {{ general: "퍼블릭", reserve: "예약·쿠폰", commerce: "상품판매" }[buildMode]}
                 </span>
               </div>
             </div>
@@ -1106,43 +1158,59 @@ export function CardStudioPage() {
       {!heroVisible && (
         <div className="fixed left-0 right-0 top-[56px] z-30 flex justify-center px-5 pointer-events-none">
           <div className="w-full max-w-md pointer-events-auto">
-          {/* 탭하면 히어로 풀카드로 부드럽게 스크롤. */}
-          <div
-            onClick={() => heroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            className="mt-2 flex cursor-pointer items-center gap-3 rounded-2xl border border-[#EDEDED] bg-white/95 p-2.5 backdrop-blur"
-          >
-            {/* 썸네일 — 영상 선택 시 썸네일, 아니면 메이커 cardColor 빈 박스(까만 고정 폐기). */}
+            {/* 탭하면 히어로 풀카드로 부드럽게 스크롤. */}
             <div
-              className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl"
-              style={selectedVideo?.thumbnailUrl ? undefined : { backgroundColor: cardColor }}
+              onClick={() =>
+                heroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+              className="mt-2 flex cursor-pointer items-center gap-3 rounded-2xl border border-[#EDEDED] bg-white/95 p-2.5 backdrop-blur"
             >
-              {/* S10 — commerce 게이트(이중 방어): 커머스에선 영상 미니 썸네일 미표시 */}
-              {selectedVideo?.thumbnailUrl && buildMode !== "commerce" ? (
-                <img src={selectedVideo.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-white/70">
-                  <Video className="h-5 w-5" strokeWidth={1.75} />
-                </div>
-              )}
-            </div>
-            {/* 코칭(lingo) + 제목 + 전환력 게이지 */}
-            <div className="min-w-0 flex-1">
-              {/* 링고AI 코칭 줄 — 본문 코칭 이관(lingo.text). 완성 시 체크(POINT). 노랑은 아이콘만 은은하게. */}
-              <div className="flex items-center gap-1.5">
-                {lingo.done ? (
-                  <CircleCheck className="h-3.5 w-3.5 shrink-0" style={{ color: POINT }} strokeWidth={2.5} />
+              {/* 썸네일 — 영상 선택 시 썸네일, 아니면 메이커 cardColor 빈 박스(까만 고정 폐기). */}
+              <div
+                className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl"
+                style={selectedVideo?.thumbnailUrl ? undefined : { backgroundColor: cardColor }}
+              >
+                {/* S10 — commerce 게이트(이중 방어): 커머스에선 영상 미니 썸네일 미표시 */}
+                {selectedVideo?.thumbnailUrl && buildMode !== "commerce" ? (
+                  <img
+                    src={selectedVideo.thumbnailUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
-                  <Lightbulb className="ai-breathe h-3.5 w-3.5 shrink-0" style={{ color: "#D97706" }} strokeWidth={2} />
+                  <div className="flex h-full w-full items-center justify-center text-white/70">
+                    <Video className="h-5 w-5" strokeWidth={1.75} />
+                  </div>
                 )}
-                <span className="truncate text-[11px] text-[#525252]">{lingo.short ?? lingo.text}</span>
               </div>
-              <div className="mt-1 flex items-center gap-1.5">
-                <span className="truncate text-[13px] font-medium text-[#0A0A0A]">
-                  {store?.display_name ?? "내 매장"}
-                </span>
+              {/* 코칭(lingo) + 제목 + 전환력 게이지 */}
+              <div className="min-w-0 flex-1">
+                {/* 링고AI 코칭 줄 — 본문 코칭 이관(lingo.text). 완성 시 체크(POINT). 노랑은 아이콘만 은은하게. */}
+                <div className="flex items-center gap-1.5">
+                  {lingo.done ? (
+                    <CircleCheck
+                      className="h-3.5 w-3.5 shrink-0"
+                      style={{ color: POINT }}
+                      strokeWidth={2.5}
+                    />
+                  ) : (
+                    <Lightbulb
+                      className="ai-breathe h-3.5 w-3.5 shrink-0"
+                      style={{ color: "#D97706" }}
+                      strokeWidth={2}
+                    />
+                  )}
+                  <span className="truncate text-[11px] text-[#525252]">
+                    {lingo.short ?? lingo.text}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="truncate text-[13px] font-medium text-[#0A0A0A]">
+                    {store?.display_name ?? "내 매장"}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
           </div>
         </div>
       )}
@@ -1153,7 +1221,8 @@ export function CardStudioPage() {
           {[
             { key: "general", label: "퍼블릭", Icon: Globe },
             { key: "reserve", label: "예약·쿠폰", Icon: Calendar },
-            { key: "commerce", label: "커머스", Icon: Store },
+            // STUDIO-fix1 G3 — 노출 용어 통일: 커머스→상품판매(표시층만 · key 불변).
+            { key: "commerce", label: "상품판매", Icon: Store },
           ].map(({ key, label, Icon }) => {
             const isOn = buildMode === key;
             // P6-3(A안) — 비사업자: 사업자 모드 탭 잠금 표시(구 셸 :133-153 계열 재사용 —
@@ -1165,7 +1234,11 @@ export function CardStudioPage() {
                 type="button"
                 onClick={() => switchMode(key as "general" | "reserve" | "commerce")}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-bold transition-all duration-200 ${isOn ? "text-white" : locked ? "text-[#A3A3A3] opacity-70" : "text-[#737373]"}`}
-                style={isOn ? { backgroundColor: MODE_ACCENT[key as "general" | "reserve" | "commerce"] } : undefined}
+                style={
+                  isOn
+                    ? { backgroundColor: MODE_ACCENT[key as "general" | "reserve" | "commerce"] }
+                    : undefined
+                }
                 aria-pressed={isOn}
                 aria-disabled={locked || undefined}
                 aria-label={locked ? `${label} — 사업자 전용` : undefined}
@@ -1199,15 +1272,20 @@ export function CardStudioPage() {
                 >
                   {burstKey > 0 && (
                     <div className="forge-burst flex h-8 w-8 items-center justify-center rounded-full bg-white/90">
-                      <Zap className="h-4 w-4" style={{ color: POINT }} strokeWidth={2.5} fill={POINT} />
+                      <Zap
+                        className="h-4 w-4"
+                        style={{ color: POINT }}
+                        strokeWidth={2.5}
+                        fill={POINT}
+                      />
                     </div>
                   )}
                 </div>
               }
             >
-                {/* 카드 본체 = 단일 CardBody(실콘텐츠만). 손님 /d 도 4단계에서 같은 CardBody 채택. */}
-                {/* 라이트 셸 — 상속 텍스트(제목 h3·ButtonBlock 라벨)를 어두운 색으로. 다크 셸이면 undefined=기존 흰 상속. */}
-                <div className={isLightCard ? "text-[#0F172A]" : undefined}>
+              {/* 카드 본체 = 단일 CardBody(실콘텐츠만). 손님 /d 도 4단계에서 같은 CardBody 채택. */}
+              {/* 라이트 셸 — 상속 텍스트(제목 h3·ButtonBlock 라벨)를 어두운 색으로. 다크 셸이면 undefined=기존 흰 상속. */}
+              <div className={isLightCard ? "text-[#0F172A]" : undefined}>
                 <CardBody
                   mode="preview"
                   cardColor={cardColor}
@@ -1227,63 +1305,82 @@ export function CardStudioPage() {
                   // S13 — 형님 확정: 정보 카드에 전화·길찾기·예약 칩 없음(양면 거울). 연락 블록은 reserve 에서만.
                   contactBlock={buildMode === "reserve" ? contactBlockPreview : null}
                   purpose={
-                    applied["calendar"] ? "예약" : applied["coupon"] && selectedCouponId ? "쿠폰" : "정보"
+                    applied["calendar"]
+                      ? "예약"
+                      : applied["coupon"] && selectedCouponId
+                        ? "쿠폰"
+                        : "정보"
                   }
                 />
-                </div>
+              </div>
 
-                {/* ── preview placeholder (CardBody 밖, 스튜디오 authoring 안내 — 문구·게이트 그대로) ── */}
-                {/* 영상 슬롯 — 미선택 시. selectedVideo 있으면 CardBody 가 임베드.
+              {/* ── preview placeholder (CardBody 밖, 스튜디오 authoring 안내 — 문구·게이트 그대로) ── */}
+              {/* 영상 슬롯 — 미선택 시. selectedVideo 있으면 CardBody 가 임베드.
                     커머스는 본체=ProductWidget 상품사진이라 영상 placeholder 무의미 → 게이트. */}
-                {!selectedVideo && buildMode !== "commerce" && (
-                  <div
-                    className={`mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl ring-1 ${isLightCard ? "" : "bg-white/10 ring-white/15"}`}
-                    // S6-2 — 카드 표면 순백: accent 배경 틴트(3%) 제거. ring 목적색 틴트만 유지.
-                    style={
-                      isLightCard
-                        ? ({ "--tw-ring-color": `${accent}30` } as React.CSSProperties)
-                        : undefined
-                    }
-                  >
-                    {applied["content"] ? (
-                      // 영상 블록 장착했지만 미선택 — 아래 설정에서 검색·선택 유도(가짜 영상 표시 안 함).
-                      <div className={`flex flex-col items-center gap-1.5 ${isLightCard ? "text-text-subtle" : "text-white/45"}`}>
-                        <Video className="h-7 w-7" strokeWidth={1.5} />
-                        <span className="text-[11px] font-medium">아래에서 영상을 검색해 선택하세요</span>
+              {!selectedVideo && buildMode !== "commerce" && (
+                <div
+                  className={`mt-3 flex aspect-video items-center justify-center overflow-hidden rounded-2xl ring-1 ${isLightCard ? "" : "bg-white/10 ring-white/15"}`}
+                  // S6-2 — 카드 표면 순백: accent 배경 틴트(3%) 제거. ring 목적색 틴트만 유지.
+                  style={
+                    isLightCard
+                      ? ({ "--tw-ring-color": `${accent}30` } as React.CSSProperties)
+                      : undefined
+                  }
+                >
+                  {applied["content"] ? (
+                    // 영상 블록 장착했지만 미선택 — 아래 설정에서 검색·선택 유도(가짜 영상 표시 안 함).
+                    <div
+                      className={`flex flex-col items-center gap-1.5 ${isLightCard ? "text-text-subtle" : "text-white/45"}`}
+                    >
+                      <Video className="h-7 w-7" strokeWidth={1.5} />
+                      <span className="text-[11px] font-medium">
+                        아래에서 영상을 검색해 선택하세요
+                      </span>
+                    </div>
+                  ) : applied["image"] ? (
+                    // 대표 이미지만 장착(영상 아님) — 기존 placeholder 보존.
+                    <div className="relative flex h-full w-full items-center justify-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 backdrop-blur animate-scale-in">
+                        <Play
+                          className="ml-0.5 h-5 w-5 fill-[#0A0A0A] text-[#0A0A0A]"
+                          strokeWidth={0}
+                        />
                       </div>
-                    ) : applied["image"] ? (
-                      // 대표 이미지만 장착(영상 아님) — 기존 placeholder 보존.
-                      <div className="relative flex h-full w-full items-center justify-center">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 backdrop-blur animate-scale-in">
-                          <Play className="ml-0.5 h-5 w-5 fill-[#0A0A0A] text-[#0A0A0A]" strokeWidth={0} />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className={`flex flex-col items-center gap-1.5 ${isLightCard ? "text-text-subtle" : "text-white/45"}`}>
-                        <ImageIcon className="h-7 w-7" strokeWidth={1.5} />
-                        <span className="text-[11px] font-medium">덱에서 콘텐츠를 장착하세요</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  ) : (
+                    <div
+                      className={`flex flex-col items-center gap-1.5 ${isLightCard ? "text-text-subtle" : "text-white/45"}`}
+                    >
+                      <ImageIcon className="h-7 w-7" strokeWidth={1.5} />
+                      <span className="text-[11px] font-medium">덱에서 콘텐츠를 장착하세요</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
-                {/* 한마디 placeholder — CardBody tagline 슬롯으로 이관(taglinePlaceholder).
+              {/* 한마디 placeholder — CardBody tagline 슬롯으로 이관(taglinePlaceholder).
                     제목 바로 밑(채워진 tagline 과 같은 위치)에 표시 → 거울 위치 정합. */}
 
-                {/* 행동영역 placeholder — 쿠폰/연락/목적 미장착 안내. 커머스는 행동=ProductWidget 선주문하기 → 게이트. */}
-                {buildMode !== "commerce" && (
+              {/* 행동영역 placeholder — 쿠폰/연락/목적 미장착 안내. 커머스는 행동=ProductWidget 선주문하기 → 게이트. */}
+              {buildMode !== "commerce" && (
                 <div className="mt-4 space-y-2">
                   {/* 거울 1c — 예약 "예약 날짜 선택" ButtonBlock 은 CardBody reservationBlock 로 이관(3c). 여기선 미렌더. */}
                   {applied["coupon"] && !(selectedCouponId && selectedCoupon) && (
                     <div className="animate-slide-up space-y-2">
                       {coupons.length > 0 ? (
                         // 쿠폰은 있으나 미선택 — 아래 설정에서 고르도록 안내.
-                        <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`} style={isLightCard ? { borderColor: `${accent}30` } : undefined}>
+                        <div
+                          className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}
+                          style={isLightCard ? { borderColor: `${accent}30` } : undefined}
+                        >
                           아래에서 쿠폰을 선택하세요
                         </div>
                       ) : (
                         // 매장에 활성 쿠폰 없음.
-                        <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`} style={isLightCard ? { borderColor: `${accent}30` } : undefined}>
+                        <div
+                          className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}
+                          style={isLightCard ? { borderColor: `${accent}30` } : undefined}
+                        >
                           매장에 활성 쿠폰이 없어요
                         </div>
                       )}
@@ -1291,76 +1388,85 @@ export function CardStudioPage() {
                   )}
                   {applied["link"] &&
                     !(store?.contact_phone || store?.address || store?.reservation_url) && (
-                      <div className={`rounded-xl py-3 text-center text-[12px] animate-slide-up ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`} style={isLightCard ? { borderColor: `${accent}30` } : undefined}>
+                      <div
+                        className={`rounded-xl py-3 text-center text-[12px] animate-slide-up ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}
+                        style={isLightCard ? { borderColor: `${accent}30` } : undefined}
+                      >
                         매장 정보를 등록하면 표시돼요
                       </div>
                     )}
                   {!applied["calendar"] && !applied["coupon"] && !applied["link"] && (
-                    <div className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`} style={isLightCard ? { borderColor: `${accent}30` } : undefined}>
+                    <div
+                      className={`rounded-xl py-3 text-center text-[12px] ${isLightCard ? "border border-dashed text-text-muted" : "border border-dashed border-white/25 text-white/55"}`}
+                      style={isLightCard ? { borderColor: `${accent}30` } : undefined}
+                    >
                       목적 카드를 장착하면 여기에 행동 버튼이 생겨요
                     </div>
                   )}
                 </div>
-                )}
+              )}
 
-                {/* C13 S2 — 손님 정본 순서 정합: 손님은 shareFooter 가 카드 내부(쿠폰받기 sticky 보다 위)라
+              {/* C13 S2 — 손님 정본 순서 정합: 손님은 shareFooter 가 카드 내부(쿠폰받기 sticky 보다 위)라
                     스튜디오도 shareFooter stub 을 쿠폰받기 stub 위로 이동(내용·조건·클래스 불변, 순서만). */}
-                {/* 거울 5a — 공유 푸터 stub. CardBody.shareFooter prop 에서 형제로 이동 — 시각 stub(onClick·href 없음). 클래스는 손님 푸터와 1:1. */}
-                <div className="mt-6" data-testid="share-footer">
-                  <div data-testid="share-block" className="mt-4 flex items-center gap-2">
-                    {/* S5 — 형님 확정: 푸터는 3목적+손님 4면 동일. Wand2는 스튜디오 발행 도구(크롬)이므로 손님 기능조건 미러 대상 아님 (C6c 역전). */}
-                    <div
-                      aria-hidden="true"
-                      className="flex h-12 flex-1 items-center justify-center rounded-2xl text-white shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
-                      style={{ backgroundColor: MODE_ACCENT[buildMode] }}
-                    >
-                      <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
-                    </div>
-                    <div
-                      aria-hidden="true"
-                      className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
-                    >
-                      <Copy className="h-5 w-5" strokeWidth={2.25} />
-                    </div>
-                    <div
-                      aria-hidden="true"
-                      className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
-                    >
-                      <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
-                    </div>
+              {/* 거울 5a — 공유 푸터 stub. CardBody.shareFooter prop 에서 형제로 이동 — 시각 stub(onClick·href 없음). 클래스는 손님 푸터와 1:1. */}
+              <div className="mt-6" data-testid="share-footer">
+                <div data-testid="share-block" className="mt-4 flex items-center gap-2">
+                  {/* S5 — 형님 확정: 푸터는 3목적+손님 4면 동일. Wand2는 스튜디오 발행 도구(크롬)이므로 손님 기능조건 미러 대상 아님 (C6c 역전). */}
+                  <div
+                    aria-hidden="true"
+                    className="flex h-12 flex-1 items-center justify-center rounded-2xl text-white shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
+                    style={{ backgroundColor: MODE_ACCENT[buildMode] }}
+                  >
+                    <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
                   </div>
-                  <p className={`mt-3 text-center text-[10px] leading-relaxed ${isLightCard ? "text-text-subtle" : "text-white/45"}`}>
-                    본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
-                  </p>
-                  <div className={`mt-2 text-center text-[11px] underline underline-offset-2 ${isLightCard ? "text-text-subtle" : "text-white/50"}`}>
-                    문제 신고
+                  <div
+                    aria-hidden="true"
+                    className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
+                  >
+                    <Copy className="h-5 w-5" strokeWidth={2.25} />
+                  </div>
+                  <div
+                    aria-hidden="true"
+                    className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${isLightCard ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
+                  >
+                    <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
                   </div>
                 </div>
+                <p
+                  className={`mt-3 text-center text-[10px] leading-relaxed ${isLightCard ? "text-text-subtle" : "text-white/45"}`}
+                >
+                  본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
+                </p>
+                <div
+                  className={`mt-2 text-center text-[11px] underline underline-offset-2 ${isLightCard ? "text-text-subtle" : "text-white/50"}`}
+                >
+                  문제 신고
+                </div>
+              </div>
 
-                {/* 거울 5b — 손님 sticky "쿠폰 받기"(fixed bottom-0)를 인라인 시각 stub 으로 미러.
+              {/* 거울 5b — 손님 sticky "쿠폰 받기"(fixed bottom-0)를 인라인 시각 stub 으로 미러.
                     div(onClick 없음 = 시각만). 게이트 = 쿠폰 단독(쿠폰 선택 + 캘린더 미장착) = 손님 !isCombined && isCoupon. */}
-                {applied["coupon"] && selectedCouponId && !applied["calendar"] ? (
-                  <div className="mx-auto w-full max-w-[480px] px-6 pt-3">
-                    <div
-                      className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 text-base font-bold text-white"
-                      style={{ backgroundColor: MODE_ACCENT[buildMode] }}
-                    >
-                      <span className="truncate">쿠폰 받기</span>
-                    </div>
+              {applied["coupon"] && selectedCouponId && !applied["calendar"] ? (
+                <div className="mx-auto w-full max-w-[480px] px-6 pt-3">
+                  <div
+                    className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 text-base font-bold text-white"
+                    style={{ backgroundColor: MODE_ACCENT[buildMode] }}
+                  >
+                    <span className="truncate">쿠폰 받기</span>
                   </div>
-                ) : null}
+                </div>
+              ) : null}
 
-                {/* 거울 5b' — 손님 인라인 "쿠폰 받기"(L1367, isCombined=예약+쿠폰 통합, 흰배경 보조버튼 cta-coupon-only)를
+              {/* 거울 5b' — 손님 인라인 "쿠폰 받기"(L1367, isCombined=예약+쿠폰 통합, 흰배경 보조버튼 cta-coupon-only)를
                     시각 stub 으로 미러. div(onClick 없음 = 시각만). 게이트 = 통합(쿠폰 선택 + 캘린더 장착) = 손님 isCombined.
                     위 sticky-미러 stub(쿠폰 단독, !applied["calendar"])과 applied["calendar"] 유무로 배타. */}
-                {applied["coupon"] && selectedCouponId && applied["calendar"] ? (
-                  <div className="mx-auto w-full max-w-[480px] px-6 pt-3">
-                    <div className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-bold tracking-ko text-[#0A0A0A]">
-                      쿠폰 받기
-                    </div>
+              {applied["coupon"] && selectedCouponId && applied["calendar"] ? (
+                <div className="mx-auto w-full max-w-[480px] px-6 pt-3">
+                  <div className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-bold tracking-ko text-[#0A0A0A]">
+                    쿠폰 받기
                   </div>
-                ) : null}
-
+                </div>
+              ) : null}
             </DropCardShell>
           </div>
         </section>
@@ -1409,17 +1515,23 @@ export function CardStudioPage() {
                         type="button"
                         disabled={atMax}
                         onClick={() =>
-                          setPickedPoints((p) =>
-                            picked ? p.filter((x) => x !== kp) : [...p, kp],
-                          )
+                          setPickedPoints((p) => (picked ? p.filter((x) => x !== kp) : [...p, kp]))
                         }
                         className="flex items-start gap-2 rounded-lg bg-white p-2.5 text-left text-[13px] transition-shadow disabled:opacity-40"
-                        style={{ boxShadow: picked ? "0 0 0 1.5px #0A0A0A" : "0 0 0 0.5px #E5E5E5" }}
+                        style={{
+                          boxShadow: picked ? "0 0 0 1.5px #0A0A0A" : "0 0 0 0.5px #E5E5E5",
+                        }}
                       >
                         {picked ? (
-                          <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#0A0A0A]" strokeWidth={2} />
+                          <CircleCheck
+                            className="mt-0.5 h-4 w-4 shrink-0 text-[#0A0A0A]"
+                            strokeWidth={2}
+                          />
                         ) : (
-                          <Circle className="mt-0.5 h-4 w-4 shrink-0 text-[#C4C4C4]" strokeWidth={2} />
+                          <Circle
+                            className="mt-0.5 h-4 w-4 shrink-0 text-[#C4C4C4]"
+                            strokeWidth={2}
+                          />
                         )}
                         <span className={picked ? "font-medium text-[#0A0A0A]" : "text-[#525252]"}>
                           {kp}
@@ -1447,330 +1559,386 @@ export function CardStudioPage() {
         </div>
 
         {/* 블록 설정 영역 — 장착한 블록을 인라인으로 다듬기 (S2 골격, S3에서 내부 채움) */}
-        {STUDIO_BLOCKS.filter((b) => SETTING_BLOCK_IDS.includes(b.id) && applied[b.id]).length > 0 && (
+        {STUDIO_BLOCKS.filter((b) => SETTING_BLOCK_IDS.includes(b.id) && applied[b.id]).length >
+          0 && (
           <section className="mt-5">
             <div className="mb-2 flex items-center gap-1.5 px-0.5 text-[12px] font-medium text-[#737373]">
               <Sliders className="h-3.5 w-3.5" strokeWidth={2} />
               블록 설정 · 장착한 블록을 여기서 다듬어요
             </div>
             <div className="flex flex-col gap-2">
-              {STUDIO_BLOCKS.filter((b) => SETTING_BLOCK_IDS.includes(b.id) && applied[b.id]).map((block) => {
-                const Icon = block.icon;
-                const isExpanded = expandedBlockId === block.id;
-                return (
-                  <div
-                    key={block.id}
-                    className="overflow-hidden rounded-2xl bg-white"
-                    style={{ boxShadow: isExpanded ? "0 0 0 1.5px #0A0A0A" : "0 0 0 1px #EDEDED" }}
-                  >
-                    {/* 헤더 — 덱 카드 아이콘박스/label/desc/power 토큰 복제 */}
-                    <button
-                      type="button"
-                      onClick={() => toggleBlockSettings(block.id)}
-                      className="flex w-full items-center gap-3 p-3.5 text-left"
+              {STUDIO_BLOCKS.filter((b) => SETTING_BLOCK_IDS.includes(b.id) && applied[b.id]).map(
+                (block) => {
+                  const Icon = block.icon;
+                  const isExpanded = expandedBlockId === block.id;
+                  return (
+                    <div
+                      key={block.id}
+                      className="overflow-hidden rounded-2xl bg-white"
+                      style={{
+                        boxShadow: isExpanded ? "0 0 0 1.5px #0A0A0A" : "0 0 0 1px #EDEDED",
+                      }}
                     >
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0A0A0A]/[0.05] text-[#0A0A0A]">
-                        <Icon className="h-5 w-5" strokeWidth={1.75} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[14px] font-bold leading-tight text-[#0A0A0A]">{block.label}</span>
-                        <span className="mt-0.5 block text-[12px] leading-[1.4] text-[#5C5C5C]">{block.desc}</span>
-                      </span>
-                      {block.power > 0 ? (
-                        <span
-                          className="flex shrink-0 items-center gap-0.5 text-[13px] font-bold tabular-nums"
-                          style={{ color: POINT }}
-                        >
-                          <Zap className="h-3.5 w-3.5" strokeWidth={2.5} fill={POINT} />+{block.power}
+                      {/* 헤더 — 덱 카드 아이콘박스/label/desc/power 토큰 복제 */}
+                      <button
+                        type="button"
+                        onClick={() => toggleBlockSettings(block.id)}
+                        className="flex w-full items-center gap-3 p-3.5 text-left"
+                      >
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0A0A0A]/[0.05] text-[#0A0A0A]">
+                          <Icon className="h-5 w-5" strokeWidth={1.75} />
                         </span>
-                      ) : null}
-                      <ChevronDown
-                        className="h-4.5 w-4.5 shrink-0 text-[#9A9A9A] transition-transform duration-200"
-                        strokeWidth={2}
-                        style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
-                      />
-                    </button>
-                    {/* 펼침 영역 — coupon/calendar 실제 UI, 나머지는 placeholder(S3 예정) */}
-                    {/* calendar는 embedded 래퍼 px-1 + body px-5 가 이미 좌우 여백 → 펼침 px-0(3중 패딩 해소) */}
-                    {isExpanded && (
-                      <div className={`animate-slide-up pb-3.5 ${block.id === "calendar" ? "px-0" : "px-3.5"}`}>
-                        {block.id === "coupon" ? (
-                          // 쿠폰 선택(인라인 라디오, 카드 CouponPreview 즉시 갱신) + 새 쿠폰 만들기(시트).
-                          <div className="space-y-3">
-                            {coupons.length > 0 ? (
-                              <div className="space-y-2">
-                                <p className="text-[11px] text-[#A3A3A3]">내 쿠폰에서 선택</p>
-                                <div className="flex flex-col gap-1.5">
-                                  {coupons.map((c) => {
-                                    // 체크 표시 = selectedCouponId(원본). selectedCoupon(?? coupons[0] fallback)
-                                    //   을 쓰면 미선택에도 첫 쿠폰이 체크돼 보여 저장(가드=selectedCouponId)과 불일치.
-                                    const isSel = selectedCouponId === c.id;
-                                    return (
-                                      <button
-                                        key={c.id}
-                                        type="button"
-                                        onClick={() => setSelectedCouponId(c.id)}
-                                        className="flex items-center gap-2 rounded-lg bg-white p-2.5 text-left transition-shadow"
-                                        style={{
-                                          boxShadow: isSel ? "0 0 0 1.5px #0A0A0A" : "0 0 0 0.5px #E5E5E5",
-                                        }}
-                                      >
-                                        {isSel ? (
-                                          <CircleCheck className="h-4 w-4 shrink-0 text-[#0A0A0A]" strokeWidth={2} />
-                                        ) : (
-                                          <Circle className="h-4 w-4 shrink-0 text-[#C4C4C4]" strokeWidth={2} />
-                                        )}
-                                        <span
-                                          className={`min-w-0 flex-1 truncate text-[13px] ${
-                                            isSel ? "font-bold text-[#0A0A0A]" : "text-[#525252]"
-                                          }`}
-                                        >
-                                          {c.title ?? "쿠폰"}
-                                        </span>
-                                        {c.discount_value != null ? (
-                                          <span className="shrink-0 text-[11px] text-[#A3A3A3]">
-                                            {c.discount_value}
-                                            {c.discount_unit ?? ""}
-                                          </span>
-                                        ) : null}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ) : (
-                              <p className="text-center text-[12px] text-[#A3A3A3]">아직 등록한 쿠폰이 없어요</p>
-                            )}
-                            <div className={coupons.length > 0 ? "border-t border-dashed border-[#D4D4D4] pt-3" : ""}>
-                              <button
-                                type="button"
-                                onClick={() => setCouponSheetOpen(true)}
-                                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#D4D4D4] py-2.5 text-[13px] font-medium text-[#525252] transition-colors hover:bg-[#FAFAFA]"
-                              >
-                                <Plus className="h-4 w-4" strokeWidth={2} />
-                                새 쿠폰 만들기
-                              </button>
-                            </div>
-                            {/* 확인 = 선택 매듭 + 아코디언 닫기(영상 패턴). selectedCouponId 있을 때만 활성. */}
-                            {coupons.length > 0 ? (
-                              <button
-                                type="button"
-                                onClick={() => setExpandedBlockId(null)}
-                                disabled={!selectedCouponId}
-                                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0A0A0A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#171717] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
-                              >
-                                <Check className="h-4 w-4" strokeWidth={2.5} />
-                                확인
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : block.id === "calendar" ? (
-                          // 캘린더 인라인 — embedded(헤더 없는 body만). ClientOnly 없이 자체 mounted 가드로 #418 차단(1차).
-                          <PartnerCalendarPage
-                            embedded
-                            partnerId={store?.id ?? ""}
-                            partnerName={store?.display_name ?? null}
-                          />
-                        ) : block.id === "content" ? (
-                          // 영상 — 미선택이면 검색 모드, 선택되면 완료 모드("정했어요"+다시 고르기).
-                          //   탭하면 setSelectedVideo → 카드 슬롯 즉시 반영(WYSIWYG).
-                          selectedVideo ? (
-                            // 완료 모드 — 검색 리스트 접고 선택한 영상 + 다시 고르기.
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[14px] font-bold leading-tight text-[#0A0A0A]">
+                            {block.label}
+                          </span>
+                          <span className="mt-0.5 block text-[12px] leading-[1.4] text-[#5C5C5C]">
+                            {block.desc}
+                          </span>
+                        </span>
+                        {block.power > 0 ? (
+                          <span
+                            className="flex shrink-0 items-center gap-0.5 text-[13px] font-bold tabular-nums"
+                            style={{ color: POINT }}
+                          >
+                            <Zap className="h-3.5 w-3.5" strokeWidth={2.5} fill={POINT} />+
+                            {block.power}
+                          </span>
+                        ) : null}
+                        <ChevronDown
+                          className="h-4.5 w-4.5 shrink-0 text-[#9A9A9A] transition-transform duration-200"
+                          strokeWidth={2}
+                          style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+                        />
+                      </button>
+                      {/* 펼침 영역 — coupon/calendar 실제 UI, 나머지는 placeholder(S3 예정) */}
+                      {/* calendar는 embedded 래퍼 px-1 + body px-5 가 이미 좌우 여백 → 펼침 px-0(3중 패딩 해소) */}
+                      {isExpanded && (
+                        <div
+                          className={`animate-slide-up pb-3.5 ${block.id === "calendar" ? "px-0" : "px-3.5"}`}
+                        >
+                          {block.id === "coupon" ? (
+                            // 쿠폰 선택(인라인 라디오, 카드 CouponPreview 즉시 갱신) + 새 쿠폰 만들기(시트).
                             <div className="space-y-3">
-                              <div className="flex items-center gap-1.5 text-[13px] font-bold text-[#0A0A0A]">
-                                <Check className="h-4 w-4" strokeWidth={2.5} />
-                                이 영상으로 정했어요
-                              </div>
-                              <div className="flex items-center gap-2.5 rounded-lg bg-white p-2 [box-shadow:0_0_0_1px_#E5E5E5]">
-                                <div className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-md bg-[#F5F5F5]">
-                                  {selectedVideo.thumbnailUrl ? (
-                                    <img
-                                      src={selectedVideo.thumbnailUrl}
-                                      alt=""
-                                      className="absolute inset-0 h-full w-full object-cover"
-                                    />
-                                  ) : (
-                                    <div className="absolute inset-0 flex items-center justify-center text-[#A3A3A3]">
-                                      <Video className="h-5 w-5" strokeWidth={1.75} />
-                                    </div>
-                                  )}
+                              {coupons.length > 0 ? (
+                                <div className="space-y-2">
+                                  <p className="text-[11px] text-[#A3A3A3]">내 쿠폰에서 선택</p>
+                                  <div className="flex flex-col gap-1.5">
+                                    {coupons.map((c) => {
+                                      // 체크 표시 = selectedCouponId(원본). selectedCoupon(?? coupons[0] fallback)
+                                      //   을 쓰면 미선택에도 첫 쿠폰이 체크돼 보여 저장(가드=selectedCouponId)과 불일치.
+                                      const isSel = selectedCouponId === c.id;
+                                      return (
+                                        <button
+                                          key={c.id}
+                                          type="button"
+                                          onClick={() => setSelectedCouponId(c.id)}
+                                          className="flex items-center gap-2 rounded-lg bg-white p-2.5 text-left transition-shadow"
+                                          style={{
+                                            boxShadow: isSel
+                                              ? "0 0 0 1.5px #0A0A0A"
+                                              : "0 0 0 0.5px #E5E5E5",
+                                          }}
+                                        >
+                                          {isSel ? (
+                                            <CircleCheck
+                                              className="h-4 w-4 shrink-0 text-[#0A0A0A]"
+                                              strokeWidth={2}
+                                            />
+                                          ) : (
+                                            <Circle
+                                              className="h-4 w-4 shrink-0 text-[#C4C4C4]"
+                                              strokeWidth={2}
+                                            />
+                                          )}
+                                          <span
+                                            className={`min-w-0 flex-1 truncate text-[13px] ${
+                                              isSel ? "font-bold text-[#0A0A0A]" : "text-[#525252]"
+                                            }`}
+                                          >
+                                            {c.title ?? "쿠폰"}
+                                          </span>
+                                          {c.discount_value != null ? (
+                                            <span className="shrink-0 text-[11px] text-[#A3A3A3]">
+                                              {c.discount_value}
+                                              {c.discount_unit ?? ""}
+                                            </span>
+                                          ) : null}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                                <span className="line-clamp-2 min-w-0 flex-1 text-[13px] font-medium leading-tight text-[#0A0A0A]">
-                                  {selectedVideo.title}
-                                </span>
-                              </div>
-                              <div className="flex gap-2">
-                                {/* 다시 고르기 = 취소(영상 비우고 검색 복귀). AI 키포인트도 리셋. */}
+                              ) : (
+                                <p className="text-center text-[12px] text-[#A3A3A3]">
+                                  아직 등록한 쿠폰이 없어요
+                                </p>
+                              )}
+                              <div
+                                className={
+                                  coupons.length > 0
+                                    ? "border-t border-dashed border-[#D4D4D4] pt-3"
+                                    : ""
+                                }
+                              >
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setSelectedVideo(null);
-                                    aiVideoRef.current = null;
-                                    setAiKeyPoints([]);
-                                    setPickedPoints([]);
-                                    setAiLoading(false);
-                                  }}
-                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white py-2.5 text-[13px] font-medium text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] transition-colors hover:bg-[#FAFAFA]"
+                                  onClick={() => setCouponSheetOpen(true)}
+                                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#D4D4D4] py-2.5 text-[13px] font-medium text-[#525252] transition-colors hover:bg-[#FAFAFA]"
                                 >
-                                  <RefreshCw className="h-4 w-4" strokeWidth={2} />
-                                  다시 고르기
+                                  <Plus className="h-4 w-4" strokeWidth={2} />새 쿠폰 만들기
                                 </button>
-                                {/* 확인 = 매듭(selectedVideo 유지, 아코디언만 닫기). 카드 반영은 이미 됨(WYSIWYG). */}
+                              </div>
+                              {/* 확인 = 선택 매듭 + 아코디언 닫기(영상 패턴). selectedCouponId 있을 때만 활성. */}
+                              {coupons.length > 0 ? (
                                 <button
                                   type="button"
                                   onClick={() => setExpandedBlockId(null)}
-                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#0A0A0A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#171717]"
+                                  disabled={!selectedCouponId}
+                                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0A0A0A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#171717] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
                                 >
                                   <Check className="h-4 w-4" strokeWidth={2.5} />
                                   확인
                                 </button>
-                              </div>
+                              ) : null}
                             </div>
-                          ) : (
-                            // 검색 모드 — 검색창 + 결과 리스트.
-                            <div className="space-y-3">
-                              <div className="flex gap-2">
-                                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-[#E5E5E5] bg-white px-3">
-                                  <Search className="h-4 w-4 shrink-0 text-[#A3A3A3]" strokeWidth={2} />
-                                  <input
-                                    type="search"
-                                    value={videoQuery}
-                                    onChange={(e) => setVideoQuery(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") void handleVideoSearch();
-                                    }}
-                                    placeholder="영상 검색 또는 유튜브 링크"
-                                    className="h-10 min-w-0 flex-1 bg-transparent text-[13px] text-[#0A0A0A] placeholder:text-[#A3A3A3] focus:outline-none"
-                                  />
+                          ) : block.id === "calendar" ? (
+                            // 캘린더 인라인 — embedded(헤더 없는 body만). ClientOnly 없이 자체 mounted 가드로 #418 차단(1차).
+                            <PartnerCalendarPage
+                              embedded
+                              partnerId={store?.id ?? ""}
+                              partnerName={store?.display_name ?? null}
+                            />
+                          ) : block.id === "content" ? (
+                            // 영상 — 미선택이면 검색 모드, 선택되면 완료 모드("정했어요"+다시 고르기).
+                            //   탭하면 setSelectedVideo → 카드 슬롯 즉시 반영(WYSIWYG).
+                            selectedVideo ? (
+                              // 완료 모드 — 검색 리스트 접고 선택한 영상 + 다시 고르기.
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-1.5 text-[13px] font-bold text-[#0A0A0A]">
+                                  <Check className="h-4 w-4" strokeWidth={2.5} />이 영상으로
+                                  정했어요
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleVideoSearch()}
-                                  disabled={!videoQuery.trim() || videoSearching}
-                                  className="shrink-0 rounded-lg bg-[#0A0A0A] px-3 py-2 text-[13px] font-bold text-white transition-colors hover:bg-[#171717] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
-                                >
-                                  {videoSearching ? "찾는 중…" : "확인"}
-                                </button>
+                                <div className="flex items-center gap-2.5 rounded-lg bg-white p-2 [box-shadow:0_0_0_1px_#E5E5E5]">
+                                  <div className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-md bg-[#F5F5F5]">
+                                    {selectedVideo.thumbnailUrl ? (
+                                      <img
+                                        src={selectedVideo.thumbnailUrl}
+                                        alt=""
+                                        className="absolute inset-0 h-full w-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="absolute inset-0 flex items-center justify-center text-[#A3A3A3]">
+                                        <Video className="h-5 w-5" strokeWidth={1.75} />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span className="line-clamp-2 min-w-0 flex-1 text-[13px] font-medium leading-tight text-[#0A0A0A]">
+                                    {selectedVideo.title}
+                                  </span>
+                                </div>
+                                <div className="flex gap-2">
+                                  {/* 다시 고르기 = 취소(영상 비우고 검색 복귀). AI 키포인트도 리셋. */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedVideo(null);
+                                      aiVideoRef.current = null;
+                                      setAiKeyPoints([]);
+                                      setPickedPoints([]);
+                                      setAiLoading(false);
+                                    }}
+                                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white py-2.5 text-[13px] font-medium text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] transition-colors hover:bg-[#FAFAFA]"
+                                  >
+                                    <RefreshCw className="h-4 w-4" strokeWidth={2} />
+                                    다시 고르기
+                                  </button>
+                                  {/* 확인 = 매듭(selectedVideo 유지, 아코디언만 닫기). 카드 반영은 이미 됨(WYSIWYG). */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedBlockId(null)}
+                                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#0A0A0A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#171717]"
+                                  >
+                                    <Check className="h-4 w-4" strokeWidth={2.5} />
+                                    확인
+                                  </button>
+                                </div>
                               </div>
+                            ) : (
+                              // 검색 모드 — 검색창 + 결과 리스트.
+                              <div className="space-y-3">
+                                <div className="flex gap-2">
+                                  <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-[#E5E5E5] bg-white px-3">
+                                    <Search
+                                      className="h-4 w-4 shrink-0 text-[#A3A3A3]"
+                                      strokeWidth={2}
+                                    />
+                                    <input
+                                      type="search"
+                                      value={videoQuery}
+                                      onChange={(e) => setVideoQuery(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") void handleVideoSearch();
+                                      }}
+                                      placeholder="영상 검색 또는 유튜브 링크"
+                                      className="h-10 min-w-0 flex-1 bg-transparent text-[13px] text-[#0A0A0A] placeholder:text-[#A3A3A3] focus:outline-none"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleVideoSearch()}
+                                    disabled={!videoQuery.trim() || videoSearching}
+                                    className="shrink-0 rounded-lg bg-[#0A0A0A] px-3 py-2 text-[13px] font-bold text-white transition-colors hover:bg-[#171717] disabled:bg-[#E5E5E5] disabled:text-[#A3A3A3]"
+                                  >
+                                    {videoSearching ? "찾는 중…" : "확인"}
+                                  </button>
+                                </div>
 
-                              {videoError ? (
-                                <p className="text-center text-[12px] text-[#B91C1C]">{videoError}</p>
-                              ) : videoSearching ? (
-                                <p className="text-center text-[12px] text-[#A3A3A3]">찾는 중…</p>
-                              ) : videoResults.length > 0 ? (
-                                <ul className="max-h-[280px] space-y-2 overflow-y-auto px-0.5 py-0.5">
-                                  {videoResults.map((c) => (
-                                    <li key={`${c.provider}|${c.source_id}`}>
-                                      <button
-                                        type="button"
-                                        onClick={() => void handleSelectVideo(c)}
-                                        className="flex w-full items-center gap-2.5 rounded-lg bg-white p-2 text-left transition-shadow [box-shadow:0_0_0_0.5px_#E5E5E5] hover:[box-shadow:0_0_0_1px_#0A0A0A]"
-                                      >
-                                        <div className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-[#F5F5F5]">
-                                          {/* youtube 16:9 썸네일(mqdefault 320×180) — high(4:3) 상하 크롭 방지. */}
-                                          {c.source_id ? (
-                                            <img
-                                              src={`https://i.ytimg.com/vi/${c.source_id}/mqdefault.jpg`}
-                                              alt=""
-                                              className="absolute inset-0 h-full w-full object-cover"
-                                            />
-                                          ) : c.thumbnail_url ? (
-                                            <img
-                                              src={c.thumbnail_url}
-                                              alt=""
-                                              className="absolute inset-0 h-full w-full object-cover"
-                                            />
-                                          ) : (
-                                            <div className="absolute inset-0 flex items-center justify-center text-[#A3A3A3]">
-                                              <Video className="h-5 w-5" strokeWidth={1.75} />
-                                            </div>
-                                          )}
-                                        </div>
-                                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                                          <span className="line-clamp-2 text-[13px] font-medium leading-tight text-[#0A0A0A]">
-                                            {c.title ?? "영상"}
+                                {videoError ? (
+                                  <p className="text-center text-[12px] text-[#B91C1C]">
+                                    {videoError}
+                                  </p>
+                                ) : videoSearching ? (
+                                  <p className="text-center text-[12px] text-[#A3A3A3]">찾는 중…</p>
+                                ) : videoResults.length > 0 ? (
+                                  <ul className="max-h-[280px] space-y-2 overflow-y-auto px-0.5 py-0.5">
+                                    {videoResults.map((c) => (
+                                      <li key={`${c.provider}|${c.source_id}`}>
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleSelectVideo(c)}
+                                          className="flex w-full items-center gap-2.5 rounded-lg bg-white p-2 text-left transition-shadow [box-shadow:0_0_0_0.5px_#E5E5E5] hover:[box-shadow:0_0_0_1px_#0A0A0A]"
+                                        >
+                                          <div className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-[#F5F5F5]">
+                                            {/* youtube 16:9 썸네일(mqdefault 320×180) — high(4:3) 상하 크롭 방지. */}
+                                            {c.source_id ? (
+                                              <img
+                                                src={`https://i.ytimg.com/vi/${c.source_id}/mqdefault.jpg`}
+                                                alt=""
+                                                className="absolute inset-0 h-full w-full object-cover"
+                                              />
+                                            ) : c.thumbnail_url ? (
+                                              <img
+                                                src={c.thumbnail_url}
+                                                alt=""
+                                                className="absolute inset-0 h-full w-full object-cover"
+                                              />
+                                            ) : (
+                                              <div className="absolute inset-0 flex items-center justify-center text-[#A3A3A3]">
+                                                <Video className="h-5 w-5" strokeWidth={1.75} />
+                                              </div>
+                                            )}
+                                          </div>
+                                          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                            <span className="line-clamp-2 text-[13px] font-medium leading-tight text-[#0A0A0A]">
+                                              {c.title ?? "영상"}
+                                            </span>
+                                            {c.author_name ? (
+                                              <span className="truncate text-[11px] text-[#A3A3A3]">
+                                                {c.author_name}
+                                              </span>
+                                            ) : null}
+                                            {c.duration_sec ? (
+                                              <span className="text-[11px] text-[#A3A3A3]">
+                                                {formatDuration(c.duration_sec)}
+                                              </span>
+                                            ) : null}
                                           </span>
-                                          {c.author_name ? (
-                                            <span className="truncate text-[11px] text-[#A3A3A3]">
-                                              {c.author_name}
-                                            </span>
-                                          ) : null}
-                                          {c.duration_sec ? (
-                                            <span className="text-[11px] text-[#A3A3A3]">
-                                              {formatDuration(c.duration_sec)}
-                                            </span>
-                                          ) : null}
-                                        </span>
-                                      </button>
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : videoSearched ? (
-                                <p className="text-center text-[12px] text-[#A3A3A3]">검색 결과가 없어요</p>
-                              ) : (
-                                <p className="text-center text-[12px] text-[#A3A3A3]">
-                                  영상을 검색하거나 링크를 붙여넣으세요
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : videoSearched ? (
+                                  <p className="text-center text-[12px] text-[#A3A3A3]">
+                                    검색 결과가 없어요
+                                  </p>
+                                ) : (
+                                  <p className="text-center text-[12px] text-[#A3A3A3]">
+                                    영상을 검색하거나 링크를 붙여넣으세요
+                                  </p>
+                                )}
+                              </div>
+                            )
+                          ) : block.id === "link" ? (
+                            // 매장 연락처 표시(편집 아님 — 매장 설정 소관). 등록된 것만 리스트.
+                            store?.contact_phone || store?.address || store?.reservation_url ? (
+                              <ul className="space-y-2">
+                                {store?.contact_phone ? (
+                                  <li className="flex items-center gap-2.5 rounded-lg bg-white p-2.5 [box-shadow:0_0_0_0.5px_#E5E5E5]">
+                                    <Phone
+                                      className="h-4 w-4 shrink-0 text-[#0A0A0A]"
+                                      strokeWidth={2}
+                                    />
+                                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#0A0A0A]">
+                                      {store.contact_phone}
+                                    </span>
+                                    <span className="shrink-0 text-[11px] text-[#A3A3A3]">
+                                      카드에 표시됨
+                                    </span>
+                                  </li>
+                                ) : null}
+                                {store?.address ? (
+                                  <li className="flex items-center gap-2.5 rounded-lg bg-white p-2.5 [box-shadow:0_0_0_0.5px_#E5E5E5]">
+                                    <MapPin
+                                      className="h-4 w-4 shrink-0 text-[#0A0A0A]"
+                                      strokeWidth={2}
+                                    />
+                                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#0A0A0A]">
+                                      {store.address}
+                                    </span>
+                                    <span className="shrink-0 text-[11px] text-[#A3A3A3]">
+                                      길찾기
+                                    </span>
+                                  </li>
+                                ) : null}
+                                {store?.reservation_url ? (
+                                  <li className="flex items-center gap-2.5 rounded-lg bg-white p-2.5 [box-shadow:0_0_0_0.5px_#E5E5E5]">
+                                    <ExternalLink
+                                      className="h-4 w-4 shrink-0 text-[#0A0A0A]"
+                                      strokeWidth={2}
+                                    />
+                                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#0A0A0A]">
+                                      {store.reservation_url}
+                                    </span>
+                                    <span className="shrink-0 text-[11px] text-[#A3A3A3]">
+                                      예약 링크
+                                    </span>
+                                  </li>
+                                ) : null}
+                              </ul>
+                            ) : (
+                              <div className="rounded-xl border border-dashed border-[#D4D4D4] bg-[#FAFAFA] px-3 py-5 text-center">
+                                <p className="text-[13px] font-medium text-[#525252]">
+                                  매장 등록에서 전화·주소를 입력하면 카드에 나타나요
                                 </p>
-                              )}
-                            </div>
-                          )
-                        ) : block.id === "link" ? (
-                          // 매장 연락처 표시(편집 아님 — 매장 설정 소관). 등록된 것만 리스트.
-                          store?.contact_phone || store?.address || store?.reservation_url ? (
-                            <ul className="space-y-2">
-                              {store?.contact_phone ? (
-                                <li className="flex items-center gap-2.5 rounded-lg bg-white p-2.5 [box-shadow:0_0_0_0.5px_#E5E5E5]">
-                                  <Phone className="h-4 w-4 shrink-0 text-[#0A0A0A]" strokeWidth={2} />
-                                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#0A0A0A]">
-                                    {store.contact_phone}
-                                  </span>
-                                  <span className="shrink-0 text-[11px] text-[#A3A3A3]">카드에 표시됨</span>
-                                </li>
-                              ) : null}
-                              {store?.address ? (
-                                <li className="flex items-center gap-2.5 rounded-lg bg-white p-2.5 [box-shadow:0_0_0_0.5px_#E5E5E5]">
-                                  <MapPin className="h-4 w-4 shrink-0 text-[#0A0A0A]" strokeWidth={2} />
-                                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#0A0A0A]">
-                                    {store.address}
-                                  </span>
-                                  <span className="shrink-0 text-[11px] text-[#A3A3A3]">길찾기</span>
-                                </li>
-                              ) : null}
-                              {store?.reservation_url ? (
-                                <li className="flex items-center gap-2.5 rounded-lg bg-white p-2.5 [box-shadow:0_0_0_0.5px_#E5E5E5]">
-                                  <ExternalLink className="h-4 w-4 shrink-0 text-[#0A0A0A]" strokeWidth={2} />
-                                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#0A0A0A]">
-                                    {store.reservation_url}
-                                  </span>
-                                  <span className="shrink-0 text-[11px] text-[#A3A3A3]">예약 링크</span>
-                                </li>
-                              ) : null}
-                            </ul>
+                              </div>
+                            )
+                          ) : block.id === "product" ? (
+                            // P2(결정ⓐ) — 등록폼 공용화: ProductRegisterForm 임베드(B-2 인라인 입력 대체).
+                            //   사진 업로드·KAMIS 품목/시세(§0 제작화면 전용)·홍보 문구는 폼이 내장.
+                            //   제출 → submitStudioProduct 가 /api/drops 저장 + 미리보기·attachedProducts 즉시 반영.
+                            //   embedded = 폼 카드 크롬·"새 상품" 헤더·완료 화면 '카드 보기'(외부 이동) 숨김.
+                            <ProductRegisterForm embedded onSubmit={submitStudioProduct} />
                           ) : (
                             <div className="rounded-xl border border-dashed border-[#D4D4D4] bg-[#FAFAFA] px-3 py-5 text-center">
-                              <p className="text-[13px] font-medium text-[#525252]">
-                                매장 등록에서 전화·주소를 입력하면 카드에 나타나요
+                              <Wrench
+                                className="mx-auto h-5 w-5 text-[#A3A3A3]"
+                                strokeWidth={1.75}
+                              />
+                              <p className="mt-1.5 text-[13px] font-medium text-[#525252]">
+                                여기에 {block.label} 설정이 들어갑니다
+                              </p>
+                              <p className="mt-0.5 text-[11px] text-[#A3A3A3]">
+                                다음 단계에서 제작
                               </p>
                             </div>
-                          )
-                        ) : block.id === "product" ? (
-                          // P2(결정ⓐ) — 등록폼 공용화: ProductRegisterForm 임베드(B-2 인라인 입력 대체).
-                          //   사진 업로드·KAMIS 품목/시세(§0 제작화면 전용)·홍보 문구는 폼이 내장.
-                          //   제출 → submitStudioProduct 가 /api/drops 저장 + 미리보기·attachedProducts 즉시 반영.
-                          //   embedded = 폼 카드 크롬·"새 상품" 헤더·완료 화면 '카드 보기'(외부 이동) 숨김.
-                          <ProductRegisterForm embedded onSubmit={submitStudioProduct} />
-                        ) : (
-                          <div className="rounded-xl border border-dashed border-[#D4D4D4] bg-[#FAFAFA] px-3 py-5 text-center">
-                            <Wrench className="mx-auto h-5 w-5 text-[#A3A3A3]" strokeWidth={1.75} />
-                            <p className="mt-1.5 text-[13px] font-medium text-[#525252]">여기에 {block.label} 설정이 들어갑니다</p>
-                            <p className="mt-0.5 text-[11px] text-[#A3A3A3]">다음 단계에서 제작</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                },
+              )}
             </div>
           </section>
         )}
@@ -1808,8 +1976,12 @@ export function CardStudioPage() {
       {/* ───────── 강화 카드 덱 (스와이프 → 탭 장착) ───────── */}
       <section className="mt-6">
         <div className="mx-auto flex max-w-md items-center justify-between px-5">
-          <p className="text-[12px] font-bold uppercase tracking-wider text-[#737373]">강화 카드 덱</p>
-          <span className="text-[11px] font-medium text-[#9A9A9A]">밀어서 고르고 · 탭해서 장착</span>
+          <p className="text-[12px] font-bold uppercase tracking-wider text-[#737373]">
+            강화 카드 덱
+          </p>
+          <span className="text-[11px] font-medium text-[#9A9A9A]">
+            밀어서 고르고 · 탭해서 장착
+          </span>
         </div>
 
         {/* Coverflow */}
@@ -1873,10 +2045,12 @@ export function CardStudioPage() {
                         block.isPaid
                           ? "bg-[#F5F5F5] text-[#737373]"
                           : block.isMain
-                          ? "text-white"
-                          : "bg-[#F5F5F5] text-[#525252]"
+                            ? "text-white"
+                            : "bg-[#F5F5F5] text-[#525252]"
                       }`}
-                      style={block.isMain && !block.isPaid ? { backgroundColor: accent } : undefined}
+                      style={
+                        block.isMain && !block.isPaid ? { backgroundColor: accent } : undefined
+                      }
                     >
                       {block.isPaid ? "강화" : block.isMain ? "핵심" : "레버"}
                     </span>
@@ -1896,7 +2070,9 @@ export function CardStudioPage() {
                   <div className="mt-2 flex flex-1 items-center justify-center">
                     <div
                       className={`flex h-[76px] w-[76px] items-center justify-center rounded-2xl transition-colors ${
-                        locked ? "bg-[#F5F5F5] text-[#C4C4C4]" : "bg-[#0A0A0A]/[0.05] text-[#0A0A0A]"
+                        locked
+                          ? "bg-[#F5F5F5] text-[#C4C4C4]"
+                          : "bg-[#0A0A0A]/[0.05] text-[#0A0A0A]"
                       }`}
                     >
                       <Icon className="h-9 w-9" strokeWidth={1.75} />
@@ -1905,7 +2081,9 @@ export function CardStudioPage() {
 
                   {/* 라벨/설명 */}
                   <div>
-                    <p className="text-[16px] font-bold leading-tight text-[#0A0A0A]">{block.label}</p>
+                    <p className="text-[16px] font-bold leading-tight text-[#0A0A0A]">
+                      {block.label}
+                    </p>
                     <p className="mt-1 text-[12px] leading-[1.45] text-[#5C5C5C]">{block.desc}</p>
                   </div>
 
@@ -1918,7 +2096,10 @@ export function CardStudioPage() {
                   {isOn && !locked && (
                     <div
                       className="chip-pop absolute -right-1.5 -top-1.5 flex h-7 w-7 items-center justify-center rounded-full text-white"
-                      style={{ backgroundColor: accent, boxShadow: "0 4px 10px rgba(15,23,42,0.25)" }}
+                      style={{
+                        backgroundColor: accent,
+                        boxShadow: "0 4px 10px rgba(15,23,42,0.25)",
+                      }}
                     >
                       <Check className="h-4 w-4" strokeWidth={3} />
                     </div>
@@ -1936,12 +2117,17 @@ export function CardStudioPage() {
                         "linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.62) 55%, rgba(255,255,255,0.86) 100%)",
                       backdropFilter: "blur(14px) saturate(140%)",
                       WebkitBackdropFilter: "blur(14px) saturate(140%)",
-                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 0 0 1px rgba(255,255,255,0.55)",
+                      boxShadow:
+                        "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 0 0 1px rgba(255,255,255,0.55)",
                       transform: pressedId === block.id ? "translateY(0)" : "translateY(6px)",
                     }}
                   >
                     <div className="flex items-center gap-1.5">
-                      <Sparkles className="h-3.5 w-3.5" style={{ color: accent }} strokeWidth={2.5} />
+                      <Sparkles
+                        className="h-3.5 w-3.5"
+                        style={{ color: accent }}
+                        strokeWidth={2.5}
+                      />
                       <span className="text-[12px] font-bold text-[#0A0A0A]">{block.label}</span>
                     </div>
                     <p className="mt-1.5 text-[12.5px] font-medium leading-[1.5] text-[#1F2937]">
@@ -1998,8 +2184,8 @@ export function CardStudioPage() {
               activeLocked
                 ? "cursor-not-allowed bg-white text-[#C4C4C4] [box-shadow:0_0_0_1px_#EDEDED]"
                 : activeApplied
-                ? "bg-white text-[#0A0A0A] [box-shadow:0_0_0_1.5px_#0A0A0A]"
-                : "text-white"
+                  ? "bg-white text-[#0A0A0A] [box-shadow:0_0_0_1.5px_#0A0A0A]"
+                  : "text-white"
             }`}
             style={!activeLocked && !activeApplied ? { backgroundColor: INK } : undefined}
           >
@@ -2063,7 +2249,9 @@ export function CardStudioPage() {
             </div>
             {/* P7b (2-2) 상태 안내 멘트 */}
             <p className="mt-1 text-xs text-neutral-500">
-              {isPublic ? "홈·탐색·내 페이지에 게시됩니다" : "내 페이지에만 저장돼요 · 링크로만 공유"}
+              {isPublic
+                ? "홈·탐색·내 페이지에 게시됩니다"
+                : "내 페이지에만 저장돼요 · 링크로만 공유"}
             </p>
             {/* P7b (2-3) 게시/저장(보조) + 카톡 전송(주) — 전송 강조 flex 1:1.4 */}
             <div className="mt-2 flex gap-2">
