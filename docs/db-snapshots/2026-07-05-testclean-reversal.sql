@@ -1,0 +1,5 @@
+﻿-- 테스트 장부 역분개 박제 (migrations 아님 · 재적용 금지)
+-- 2026-07-05 · 원행 10(전환 2건·₩16,500 pending·self 오염 4행 포함) → reversed 10행 INSERT → 순액 0
+-- 근거: reward_ledger append-only 가드(DELETE 차단) → 자체 처방 reversal_of 사용. 멱등: testclean: 접두 + NOT EXISTS.
+-- ⚠ 3-B 정산 엔진 요건: reversal_of 짝 행은 지급 계산 제외 (정본 백로그)
+-- [검증] total 20 · net 0 · reversal 10 (통과)
