@@ -15,6 +15,7 @@ import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 import type { AttachedProduct } from "@/components/create/types";
 // P3 — 구매 미리보기 미러: 손님 /d purchase 와 동일 변환(buildProductWidget) 재사용(단일 소스).
 import { buildProductWidget } from "@/lib/adapters";
+import { resizeToJpegBlob } from "@/lib/image-upload";
 import type { InfoDropPageProps } from "@/components/info-drop-page";
 // P6-7(형님 확정 A안) — CreatorCoachCard 는 홈(RoleHome 사업자 세그먼트)으로 이동. 스튜디오=빌더 복귀.
 // Phase 2 — 미리보기 쿠폰 타이머(1-A 배지 재사용, 수신카드 1-C couponPanel 동형).
@@ -43,7 +44,9 @@ import {
   Star,
   Check,
   Send,
-  Play,
+  // STUDIO-fix2 G5 — Play(가짜 재생 placeholder) 제거, 실업로더 아이콘 추가.
+  ImagePlus,
+  Loader2,
   Lock,
   Store,
   Zap,
@@ -347,6 +350,17 @@ export function CardStudioPage() {
   const [productPrice, setProductPrice] = useState<number | null>(null);
   // 커머스 홍보 문구(나-1) — headline/sellingPoints. 등록폼 제출 결과 미러.
   const [productCopy, setProductCopy] = useState<ProductCopyValue>(EMPTY_PRODUCT_COPY);
+  // STUDIO-fix2 G5 — 대표 이미지 블록 전용 상태(종전 미구현 placeholder → 실 업로더).
+  //   heroImagePreview = 즉시 프리뷰(선택 직후 objectURL → 업로드 완료 시 실URL 교체).
+  //   heroImageUrl = 업로드 완료된 실URL(코치 done 판정·표시 기준).
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+  const [heroImagePreview, setHeroImagePreview] = useState<string | null>(null);
+  const [heroUploading, setHeroUploading] = useState(false);
+  const [heroUploadError, setHeroUploadError] = useState<string | null>(null);
+  const heroFileInputRef = useRef<HTMLInputElement>(null);
+  // STUDIO-fix2 G4 — 입력 중(키보드 열림) 발행바 숨김. 상태는 보존, 표시만 토글.
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCouponPicker, setShowCouponPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
   // S2-a 저장 — POST /api/drops(영상+한마디만). 단축 URL 반환 확인까지.
@@ -429,6 +443,10 @@ export function CardStudioPage() {
     setProductName("");
     setProductPrice(null);
     setProductCopy(EMPTY_PRODUCT_COPY);
+    // STUDIO-fix2 G5 — S12 전면 리셋에 대표 이미지 상태 동참(잔재 방지).
+    setHeroImageUrl(null);
+    setHeroImagePreview(null);
+    setHeroUploadError(null);
     // 카드 콘텐츠 전면 리셋(무조건) — 영상 트랙(영상·AI요약·셀링포인트) + 한마디 + 쿠폰 선택.
     //   검색도구(videoQuery/Results/Searched)·덱 자산(attachedProducts)은 보존(0터치).
     setSelectedVideo(null);
@@ -475,7 +493,8 @@ export function CardStudioPage() {
           // 상품 = 사진 + 이름 + 결정가 통합(productimage 블록 흡수).
           return !!productImageUrl && !!productName.trim() && (productPrice ?? 0) > 0;
         case "image":
-          return !!applied["image"]; // 대표이미지 전용 state 없음 → applied 폴백
+          // STUDIO-fix2 G5 — 전용 state 생김: 실제 업로드 완료 시에만 done(장착만으론 미완).
+          return !!heroImageUrl;
         case "seasonal":
           return !!applied["seasonal"]; // 판매 캘린더 데이터 UI 미구현 → applied 폴백
         default:
@@ -542,6 +561,7 @@ export function CardStudioPage() {
     productName,
     productPrice,
     productImageUrl,
+    heroImageUrl, // STUDIO-fix2 G5 — image done 판정 dep
   ]);
 
   // 블록 설정 아코디언 토글 — 같은 걸 다시 누르면 접힘, 다른 걸 누르면 그것만 펼침.
@@ -965,6 +985,50 @@ export function CardStudioPage() {
     </div>
   ) : null;
 
+  // STUDIO-fix2 G5 — 대표 이미지 업로드. 관례 = ProductRegisterForm 업로더 동일(리사이즈 →
+  //   product-images 버킷 `${userId}/uuid.jpg`(RLS 첫 세그먼트) → publicUrl). 차이 1가지:
+  //   선택 즉시 objectURL 로컬 프리뷰 → 업로드 완료 시 실URL 교체(넣은 즉시 썸네일).
+  async function handleHeroImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setHeroUploadError(null);
+    const localUrl = URL.createObjectURL(file);
+    setHeroImagePreview(localUrl);
+    setHeroUploading(true);
+    try {
+      const supabase = getSupabase();
+      const { data: sess } = await supabase.auth.getSession();
+      const userId = sess.session?.user.id;
+      if (!userId) {
+        setHeroUploadError("로그인이 필요해요.");
+        setHeroImagePreview(null);
+        return;
+      }
+      const blob = await resizeToJpegBlob(file);
+      const path = `${userId}/${crypto.randomUUID()}.jpg`;
+      const { error: upErr } = await supabase.storage.from("product-images").upload(path, blob, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+      if (upErr) {
+        console.error("[studio-build] hero upload failed:", upErr);
+        setHeroUploadError("사진 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        setHeroImagePreview(null);
+        return;
+      }
+      const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path);
+      setHeroImageUrl(pub.publicUrl);
+      setHeroImagePreview(pub.publicUrl);
+    } catch (err) {
+      console.error("[studio-build] hero unexpected:", err);
+      setHeroUploadError(err instanceof Error ? err.message : "사진 처리 중 문제가 생겼어요.");
+      setHeroImagePreview(null);
+    } finally {
+      setHeroUploading(false);
+      URL.revokeObjectURL(localUrl);
+    }
+  }
+
   // P2 — 스튜디오 상품 등록 핸들러(ProductRegisterForm onSubmit 주입). 저장은 partner.products.new
   //   submitProduct 와 동일한 POST /api/drops(self_upload:true 등 payload 는 폼이 그대로 구성).
   //   성공 시 결과를 스튜디오 상태에 즉시 미러 → 카드 미리보기(productPreview)에 바로 붙고,
@@ -1086,10 +1150,21 @@ export function CardStudioPage() {
       className="min-h-screen bg-[#FAFAFA] pb-[calc(320px+env(safe-area-inset-bottom))]"
       // G1ⓑ — 입력 포커스 시 발행바+모바일 키보드 이중 가림 완화: focusin 위임 1곳(React onFocus
       //   = focusin 버블). 입력류만 화면 중앙으로 보정(버튼 제외 · 개별 필드 무수정 · 애니 없음).
+      // STUDIO-fix2 G4 — 같은 위임 지점에서 isTyping 토글: 키보드 중 발행바 숨김(패딩·scrollIntoView
+      //   로 해결 불가 실증 — fixed 바가 키보드 위로 뜸). focusout 은 120ms 지연(필드 간 이동 깜빡임 방지).
       onFocus={(e) => {
         const t = e.target as HTMLElement;
         if (t.matches?.("input, textarea, select")) {
+          if (typingTimerRef.current != null) clearTimeout(typingTimerRef.current);
+          setIsTyping(true);
           setTimeout(() => t.scrollIntoView({ block: "center" }), 0);
+        }
+      }}
+      onBlur={(e) => {
+        const t = e.target as HTMLElement;
+        if (t.matches?.("input, textarea, select")) {
+          if (typingTimerRef.current != null) clearTimeout(typingTimerRef.current);
+          typingTimerRef.current = setTimeout(() => setIsTyping(false), 120);
         }
       }}
     >
@@ -1338,15 +1413,24 @@ export function CardStudioPage() {
                       </span>
                     </div>
                   ) : applied["image"] ? (
-                    // 대표 이미지만 장착(영상 아님) — 기존 placeholder 보존.
-                    <div className="relative flex h-full w-full items-center justify-center">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 backdrop-blur animate-scale-in">
-                        <Play
-                          className="ml-0.5 h-5 w-5 fill-[#0A0A0A] text-[#0A0A0A]"
-                          strokeWidth={0}
-                        />
+                    // STUDIO-fix2 G5 — 대표 이미지 실렌더(종전 Play 아이콘 placeholder → 실썸네일).
+                    //   업로드 전엔 업로드 유도 안내(가짜 이미지 표시 안 함).
+                    heroImagePreview ? (
+                      <img
+                        src={heroImagePreview}
+                        alt="대표 이미지 미리보기"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className={`flex flex-col items-center gap-1.5 ${isLightCard ? "text-text-subtle" : "text-white/45"}`}
+                      >
+                        <ImageIcon className="h-7 w-7" strokeWidth={1.5} />
+                        <span className="text-[11px] font-medium">
+                          아래 블록 설정에서 사진을 올려주세요
+                        </span>
                       </div>
-                    </div>
+                    )
                   ) : (
                     <div
                       className={`flex flex-col items-center gap-1.5 ${isLightCard ? "text-text-subtle" : "text-white/45"}`}
@@ -1919,6 +2003,48 @@ export function CardStudioPage() {
                             //   제출 → submitStudioProduct 가 /api/drops 저장 + 미리보기·attachedProducts 즉시 반영.
                             //   embedded = 폼 카드 크롬·"새 상품" 헤더·완료 화면 '카드 보기'(외부 이동) 숨김.
                             <ProductRegisterForm embedded onSubmit={submitStudioProduct} />
+                          ) : block.id === "image" ? (
+                            // STUDIO-fix2 G5 — 대표 이미지 업로더(종전 "다음 단계에서 제작" placeholder).
+                            //   ProductRegisterForm 사진 업로더 문법 복제 + 즉시 프리뷰.
+                            <div className="space-y-2">
+                              <button
+                                type="button"
+                                onClick={() => heroFileInputRef.current?.click()}
+                                disabled={heroUploading}
+                                className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#CBD5E1] bg-[#FAFAFA] px-4 py-8 text-sm font-semibold text-[#64748B] hover:bg-[#F1F5F9] disabled:opacity-60"
+                              >
+                                {heroUploading ? (
+                                  <>
+                                    <Loader2 className="size-5 animate-spin" strokeWidth={2} />
+                                    올리는 중…
+                                  </>
+                                ) : (
+                                  <>
+                                    <ImagePlus className="size-5" strokeWidth={2} />
+                                    {heroImagePreview ? "다른 사진으로 바꾸기" : "사진 선택"}
+                                  </>
+                                )}
+                              </button>
+                              <input
+                                ref={heroFileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleHeroImageChange}
+                                className="hidden"
+                              />
+                              {heroImagePreview ? (
+                                <div className="overflow-hidden rounded-xl border border-[#E5E7EB]">
+                                  <img
+                                    src={heroImagePreview}
+                                    alt="대표 이미지 미리보기"
+                                    className="aspect-video w-full object-cover"
+                                  />
+                                </div>
+                              ) : null}
+                              {heroUploadError ? (
+                                <p className="text-[11px] text-[#EF4444]">{heroUploadError}</p>
+                              ) : null}
+                            </div>
                           ) : (
                             <div className="rounded-xl border border-dashed border-[#D4D4D4] bg-[#FAFAFA] px-3 py-5 text-center">
                               <Wrench
@@ -2212,7 +2338,12 @@ export function CardStudioPage() {
       {/* ───────── 카드 드롭하기 ─────────
           P6-9(S21) — 하단 네비(66px+safe, z-30) 상시 노출: 발행 바를 bottom-0 덮개에서
           네비 위 안착으로 이동(z-40 유지 — 네비와 영역 분리라 충돌 없음). safe-area 는 네비가 소화. */}
-      <div className="fixed inset-x-0 bottom-[calc(66px+env(safe-area-inset-bottom))] z-40">
+      {/* STUDIO-fix2 G4 — 입력 중(isTyping) 표시만 숨김(hidden): 마크업·공개토글·게시상태 완전 보존. */}
+      <div
+        className={`fixed inset-x-0 bottom-[calc(66px+env(safe-area-inset-bottom))] z-40 ${
+          isTyping ? "hidden" : ""
+        }`}
+      >
         <div className="pointer-events-none h-6 bg-gradient-to-t from-[#FAFAFA] to-transparent" />
         <div className="bg-[#FAFAFA]/95 backdrop-blur-md">
           <div className="mx-auto max-w-md px-5 pb-4">
