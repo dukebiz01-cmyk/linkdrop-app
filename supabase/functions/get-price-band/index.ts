@@ -57,7 +57,10 @@ const MIN_COMPARABLE = 5; // 비교매물 미만이면 시세 숨김(§0 gracefu
 const MIN_CONFIDENT = 10; // 최종 통과 표본 미만 → online.confidence="low"(통계는 제공, 저신뢰 표시)
 const CROSS_GUARD_LOW = 0.3; // 교차 정합 — 환산 단가 < wholesale.avg×0.3 → outlier 제외
 const CROSS_GUARD_HIGH = 8; // 교차 정합 — 환산 단가 > wholesale.avg×8 → outlier 제외
-const CACHE_VERSION = "v2"; // 가드 로직 변경 시 범프(구캐시 무효)
+const CACHE_VERSION = "v3"; // 가드 로직 변경 시 범프(구캐시 무효). T3a-ⓐv2: v3(축 신설·IQR·품종 보존)
+// T3a-ⓐv2 [7] — puw 캐시 키 10g 버킷(puw33·34→puw30 동일 키): 파편화 억제.
+//   개당가축 신설로 puw 의존 자체가 감소 → 정확도 영향 미미.
+const PUW_BUCKET_G = 10;
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -125,6 +128,16 @@ type OnlineBlock = {
   as_of: string;
 };
 
+// T3a-ⓐv2 [2][3] — 축 통계 블록(ADDITIVE · 소비는 ⓑ). kg축=원/kg(리스팅 자기 정보 환산만),
+//   unit축=원/개(리스팅 자신의 count 토큰 lprice÷count). excluded = IQR 이상치 제거 건수.
+type AxisBlock = {
+  min: number | null;
+  avg: number | null;
+  max: number | null;
+  n: number;
+  excluded: number;
+};
+
 type PriceBandResult = {
   status: "ok" | "no_data" | "unconfigured" | "error";
   item_code: string;
@@ -138,6 +151,14 @@ type PriceBandResult = {
   online?: OnlineBlock | null;
   per_unit_weight_g?: number; // 요청 파라미터 에코
   unit_count?: number; // 요청 파라미터 에코
+  // T3a-ⓐv2 ADDITIVE — [2] 이중축 / [5] 소스별 품종 보존 / [6] 소매 이력(1일전·1개월전).
+  online_axes?: { kg: AxisBlock; unit: AxisBlock } | null;
+  kinds?: {
+    retail?: string | null; // KAMIS kind_name(대표 행)
+    wholesale?: Record<string, number>; // 경락 품목명 괄호부 태그별 n
+    online?: Record<string, number>; // 네이버 제목 품종 태그별 n
+  };
+  retail_prev?: { day: number | null; month: number | null } | null;
 };
 
 // KAMIS item 한 행(필요 필드만).
@@ -149,6 +170,9 @@ type KamisItem = {
   rank_code?: string;
   unit?: string;
   dpr1?: string; // 당일가(콤마 포함)
+  // T3a-ⓐv2 [6] — 이력 재료: dpr2=1일전 · dpr3=1개월전(dailyPriceByCategoryList 응답 필드).
+  dpr2?: string;
+  dpr3?: string;
 };
 
 // 도매경락(katRealTime2) item 한 행(필요 필드만).
@@ -188,7 +212,13 @@ async function fetchKamisRetail(
   rankCode: "04" | "05" | undefined,
   certKey: string,
   certId: string,
-): Promise<{ source: PriceSource; item_name: string | null } | null> {
+): Promise<{
+  source: PriceSource;
+  item_name: string | null;
+  // T3a-ⓐv2 [5]ⓐ/[6] — 품종(kind_name)·이력(1일전/1개월전) 보존(대표 행 기준).
+  kind: string | null;
+  prev: { day: number | null; month: number | null };
+} | null> {
   // regday 부터 최대 KAT_LOOKBACK_DAYS 역행하며 가격 있는 영업일 탐색.
   //   KAMIS 소매는 주말·휴일 dpr1="-"(미조사) → 단일 호출이면 주말엔 no_data.
   //   도매(fetchWholesale)와 동일 역행 패턴으로 직전 영업일 자동 보정.
@@ -272,7 +302,14 @@ async function fetchKamisRetail(
     rank_note: rankNote,
     ref_date: usedDate,
   };
-  return { source, item_name: itemName };
+  // T3a-ⓐv2 — 대표 행(상품 우선) 기준 품종·이력. kind_name 은 응답에 있으나 종래 미소비였음.
+  const repRow = sangPum ?? jungPum ?? rows[0];
+  return {
+    source,
+    item_name: itemName,
+    kind: typeof repRow?.kind_name === "string" && repRow.kind_name.trim() ? repRow.kind_name.trim() : null,
+    prev: { day: parsePrice(repRow?.dpr2), month: parsePrice(repRow?.dpr3) },
+  };
 }
 
 // "YYYY-MM-DD" + n일 (UTC 단순 가감 — TZ 무관). 영업일 역행 탐색용.
@@ -303,7 +340,13 @@ async function fetchWholesale(
   itemName: string,
   regday: string,
   apiKey: string,
-): Promise<{ source: PriceSource; item_name: string | null; stats: WholesaleBlock } | null> {
+): Promise<{
+  source: PriceSource;
+  item_name: string | null;
+  stats: WholesaleBlock;
+  // T3a-ⓐv2 [5]ⓑ — 품목명 괄호부(품종/산지 병기) 태그별 건수(집계 전 태깅 보존).
+  kinds: Record<string, number>;
+} | null> {
   // cond[필드::연산자]=값. 대괄호·콜론 인코딩 필수. serviceKey 는 인코딩 1회.
   const cond = (field: string, op: string, val: string) =>
     `${encodeURIComponent(`cond[${field}::${op}]`)}=${encodeURIComponent(val)}`;
@@ -361,7 +404,11 @@ async function fetchWholesale(
   // kg당 정규화: 낙찰가 ÷ 단위수량 (unit_nm=kg 행만). 그 외 단위 제외.
   const kgPrices: number[] = [];
   const markets = new Set<string>();
+  // T3a-ⓐv2 [5]ⓑ — split("(")[0] 로 버려지던 괄호부를 집계 전 태깅해 보존(품종 후보).
+  const kinds: Record<string, number> = {};
   for (const r of matched) {
+    const paren = r.corp_gds_item_nm?.match(/\(([^)]+)\)/)?.[1]?.trim();
+    if (paren) kinds[paren] = (kinds[paren] ?? 0) + 1;
     if (r.unit_nm !== "kg") continue;
     const prc = parsePrice(r.scsbd_prc);
     const uq = Number(r.unit_qty);
@@ -397,6 +444,7 @@ async function fetchWholesale(
       market_count: markets.size,
       as_of: usedDate,
     },
+    kinds,
   };
 }
 
@@ -435,6 +483,9 @@ type NaverShopResult = {
   // P5d: 교차 정합 가드(wholesale.avg ×0.3~×8 밖)로 제외한 환산 단가 수.
   outlierCount: number;
   crossCheck: "applied" | "unavailable";
+  // T3a-ⓐv2 [2][3] — 이중축(kg=원/kg IQR 통과분 · unit=원/개) + [5]ⓒ 품종 태그 분포.
+  axes: { kg: AxisBlock; unit: AxisBlock };
+  kinds: Record<string, number>;
 };
 
 // ── P5a 리스팅 구성 파싱(단위 헌법) — 온라인 비교는 kg 환산가로만. ──
@@ -540,6 +591,65 @@ function quantile(sortedAsc: number[], p: number): number {
   const hi = Math.ceil(idx);
   const v = sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * (idx - lo);
   return Math.round(v);
+}
+
+// T3a-ⓐv2 [3] — IQR 주가드(축 공통). n≥4 에서 Q1−1.5IQR ~ Q3+1.5IQR 밖 제거.
+//   기존 교차 정합 가드(×0.3~×8)는 kg축 보조로 강등(도매 avg 있을 때만 — 현행 조건 유지).
+function iqrTrim(values: number[]): { kept: number[]; removed: number } {
+  const sorted = values.slice().sort((a, b) => a - b);
+  if (sorted.length < 4) return { kept: sorted, removed: 0 };
+  const q1 = quantile(sorted, 0.25);
+  const q3 = quantile(sorted, 0.75);
+  const iqr = q3 - q1;
+  const lo = q1 - 1.5 * iqr;
+  const hi = q3 + 1.5 * iqr;
+  const kept = sorted.filter((v) => v >= lo && v <= hi);
+  return { kept, removed: sorted.length - kept.length };
+}
+
+// 축 블록 산출 — kept(오름차순)·IQR 제거 수 → {min,avg,max,n,excluded}. 빈 축은 null 통계.
+function axisBlockOf(kept: number[], removed: number): AxisBlock {
+  if (kept.length === 0) return { min: null, avg: null, max: null, n: 0, excluded: removed };
+  const avg = Math.round(kept.reduce((s, v) => s + v, 0) / kept.length);
+  return {
+    min: Math.round(kept[0]),
+    avg,
+    max: Math.round(kept[kept.length - 1]),
+    n: kept.length,
+    excluded: removed,
+  };
+}
+
+// T3a-ⓐv2 [4] — "100g당 2,780원" 단가 토큰 정파싱(→원/kg 직산) + 총중량 오인 방어.
+//   구성 파싱 전에 단가 패턴을 제거(선차단)해 "100g"이 총중량으로 읽히는 오염을 막는다.
+const UNIT_PRICE_RE = /([\d.,]+)\s*(kg|g)\s*당\s*([\d,]+)\s*원/i;
+function parseUnitPriceToken(title: string): number | null {
+  const m = UNIT_PRICE_RE.exec(title);
+  if (!m) return null;
+  const qty = Number(m[1].replace(/,/g, ""));
+  const price = parsePrice(m[3]);
+  if (!Number.isFinite(qty) || qty <= 0 || price == null) return null;
+  const kg = m[2].toLowerCase() === "g" ? qty / 1000 : qty;
+  const won = price / kg;
+  return Number.isFinite(won) && won > 0 ? won : null;
+}
+function stripUnitPriceTokens(title: string): string {
+  // 가격 없는 "100g당" 꼬리도 함께 제거(총중량 오인 방어 — 선차단).
+  return title.replace(/([\d.,]+)\s*(kg|g)\s*당(\s*[\d,]+\s*원)?/gi, " ");
+}
+
+// T3a-ⓐv2 [5]ⓒ — 네이버 제목 품종 태깅 경량 사전. 긴 토큰 우선("대학찰"·"흑찰"이 "찰"보다 먼저).
+//   태깅 전용(순도 필터와 무관 · 분리 앵커 판단은 ⓑ/후속).
+//   ★ 확장 자리: 품목명 키에 배열만 추가하면 됨(코드 무변경). 차단어에 품목명 금지 헌법과 별개 사전.
+const VARIETY_TAGS: Record<string, string[]> = {
+  옥수수: ["대학찰", "흑찰", "미백", "초당", "찰"],
+  고구마: ["호박", "자색", "꿀", "밤"],
+};
+function tagVariety(title: string, itemName: string): string | null {
+  for (const tag of VARIETY_TAGS[itemName] ?? []) {
+    if (title.includes(tag)) return tag;
+  }
+  return null;
 }
 
 // count/volume 규격 정확매칭 필터(순수, 단위검증 가능). kg환산 STOP — listing 가격 그대로 반환.
@@ -692,6 +802,9 @@ async function fetchNaverShop(
       filteredCount: 0,
       outlierCount: 0,
       crossCheck: "unavailable",
+      // S4 규격 경로 — listing 가격 자체가 규격 단위라 unit축에 그대로(kg축 빈 축).
+      axes: { kg: axisBlockOf([], 0), unit: axisBlockOf(arr, 0) },
+      kinds: {},
     };
   }
 
@@ -703,46 +816,62 @@ async function fetchNaverShop(
     typeof opts?.wholesaleAvgKg === "number" && opts.wholesaleAvgKg > 0
       ? opts.wholesaleAvgKg
       : null;
-  const perKg: number[] = [];
+  const perKgRaw: number[] = [];
+  const perUnitRaw: number[] = []; // T3a-ⓐv2 [2] 개당가축 — 원/개(lprice ÷ 자기 count 토큰)
+  const kinds: Record<string, number> = {}; // [5]ⓒ 품종 태그 분포(순도 통과 리스팅만)
   let excluded = 0;
   let filtered = 0;
   let outliers = 0;
   for (const it of items) {
-    const title = stripTag(it.title ?? "");
-    if (!title.includes(itemName)) continue; // 무관 리스팅 — 집계 자체에서 제외
-    if (isImpure(title, itemName, itemCode)) {
+    const rawTitle = stripTag(it.title ?? "");
+    if (!rawTitle.includes(itemName)) continue; // 무관 리스팅 — 집계 자체에서 제외
+    if (isImpure(rawTitle, itemName, itemCode)) {
       filtered++; // 다른 상품(가공품·별종) — 파싱 전 단계 컷
       continue;
     }
     const lp = parsePrice(it.lprice);
     if (lp == null) continue;
-    const comp = parseListingComposition(title);
-    let kg: number | null = null;
-    if (comp.kind === "kg") kg = comp.kg;
-    else if (
-      comp.kind === "count_only" &&
-      typeof opts?.perUnitWeightG === "number" &&
-      opts.perUnitWeightG > 0
-    ) {
-      kg = (comp.count * opts.perUnitWeightG) / 1000;
+    const tag = tagVariety(rawTitle, itemName);
+    if (tag) kinds[tag] = (kinds[tag] ?? 0) + 1;
+    // [4] 단가 토큰 정파싱(원/kg 직산) + 선차단 — "100g당"이 총중량으로 오인되지 않게 제거본으로 파싱.
+    const unitPriceKg = parseUnitPriceToken(rawTitle);
+    const title = stripUnitPriceTokens(rawTitle);
+    // [2] 개당가축 — 리스팅 자신의 count 토큰만 사용(§0: 타인 리스팅에 외부 가정 주입 금지).
+    const cnt = extractCount(title);
+    if (cnt != null && cnt >= 1) perUnitRaw.push(lp / cnt);
+    // kg축 — 자기 정보(중량 표기 또는 단가 토큰)로만 환산.
+    //   [1] §0: count-only 리스팅에 판매자 perUnitWeightG 를 적용하던 환산 폐지(타인 무게 주입 오염).
+    let won: number | null = null;
+    if (unitPriceKg != null) {
+      won = unitPriceKg;
+    } else {
+      const comp = parseListingComposition(title);
+      if (comp.kind === "kg" && comp.kg >= 0.1 && comp.kg <= 50) won = lp / comp.kg;
     }
-    if (kg == null || kg < 0.1 || kg > 50) {
-      excluded++; // 구성 불명/모호/환산범위 밖
+    if (won == null) {
+      excluded++; // 구성 불명/모호/범위 밖/개수-only(kg축 기준 — unit축엔 위에서 집계됨)
       continue;
     }
-    const won = lp / kg;
+    // [3] 교차 정합 가드 — kg축 보조 가드로 강등(도매 avg 있을 때만 · 현행 조건 유지).
     if (
       wholesaleAvgKg != null &&
       (won < wholesaleAvgKg * CROSS_GUARD_LOW || won > wholesaleAvgKg * CROSS_GUARD_HIGH)
     ) {
-      outliers++; // 교차 정합 가드 — 도매 평균 대비 비상식 단가
+      outliers++;
       continue;
     }
-    perKg.push(won);
+    perKgRaw.push(won);
   }
 
   const crossCheck: "applied" | "unavailable" = wholesaleAvgKg != null ? "applied" : "unavailable";
-  const arr = perKg.slice().sort((a, b) => a - b);
+  // [3] IQR 주가드 — 축별 Q1−1.5IQR~Q3+1.5IQR(n≥4). kg축 통과분이 기존 comparables 계약을 승계.
+  const kgTrim = iqrTrim(perKgRaw);
+  const unitTrim = iqrTrim(perUnitRaw);
+  const axes = {
+    kg: axisBlockOf(kgTrim.kept, kgTrim.removed),
+    unit: axisBlockOf(unitTrim.kept, unitTrim.removed),
+  };
+  const arr = kgTrim.kept; // iqrTrim 이 오름차순 보장
   // 환산 표본이 MIN_COMPARABLE 미만 — sources 미표시(source=null), 건수만 정직 반환.
   if (arr.length < MIN_COMPARABLE) {
     return {
@@ -754,6 +883,8 @@ async function fetchNaverShop(
       filteredCount: filtered,
       outlierCount: outliers,
       crossCheck,
+      axes,
+      kinds,
     };
   }
   const { low, high, avg } = bandStats(arr);
@@ -777,6 +908,8 @@ async function fetchNaverShop(
     filteredCount: filtered,
     outlierCount: outliers,
     crossCheck,
+    axes,
+    kinds,
   };
 }
 
@@ -1019,11 +1152,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     } satisfies PriceBandResult);
   }
 
-  // 1) 캐시 조회 — 품목별 동적 cache_key. P5a: 개당중량은 온라인 환산 결과를 바꾸므로 키에 포함.
-  //   P5d: 가드 로직 버전(CACHE_VERSION) 포함 — 범프 시 구캐시 자연 무효.
+  // 1) 캐시 조회 — 품목별 동적 cache_key. P5d: 가드 버전(CACHE_VERSION) 포함 — 범프 시 자연 무효.
+  //   T3a-ⓐv2 [7]: puw 를 10g 버킷으로 반올림(puw33·34→puw30) — 키 파편화 억제.
+  //   [1] 이후 puw 는 리스팅 환산에 미사용(에코·키 전용)이라 정확도 영향 없음.
+  const puwBucket =
+    perUnitWeightG != null ? Math.round(perUnitWeightG / PUW_BUCKET_G) * PUW_BUCKET_G : null;
   const cacheKey =
     `kamis|${itemCode}|${COUNTRY_CODE}|${regday}|${CACHE_VERSION}` +
-    (perUnitWeightG != null ? `|puw${perUnitWeightG}` : "");
+    (puwBucket != null ? `|puw${puwBucket}` : "");
   try {
     const { data: cached } = await supabase
       .from("price_cache")
@@ -1042,6 +1178,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
           base_unit?: "kg";
           wholesale?: WholesaleBlock | null;
           online?: OnlineBlock | null;
+          // T3a-ⓐv2 ADDITIVE 패스스루.
+          online_axes?: { kg: AxisBlock; unit: AxisBlock } | null;
+          kinds?: PriceBandResult["kinds"];
+          retail_prev?: { day: number | null; month: number | null } | null;
         };
         // P5a 이전 캐시(구조화 블록 없음)는 미스 취급 → 실호출로 재적재(1 TTL 내 자연 전환).
         if (payload.base_unit === "kg") {
@@ -1054,6 +1194,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
             base_unit: "kg",
             wholesale: payload.wholesale ?? null,
             online: payload.online ?? null,
+            online_axes: payload.online_axes ?? null,
+            ...(payload.kinds ? { kinds: payload.kinds } : {}),
+            retail_prev: payload.retail_prev ?? null,
             ...(perUnitWeightG != null ? { per_unit_weight_g: perUnitWeightG } : {}),
             ...(unitCount != null ? { unit_count: unitCount } : {}),
           } satisfies PriceBandResult);
@@ -1070,9 +1213,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const sources: PriceSource[] = [];
   let itemName: string | null = null;
+  // T3a-ⓐv2 [5]ⓐ/[6] — 품종·이력 보존.
+  let retailKind: string | null = null;
+  let retailPrev: { day: number | null; month: number | null } | null = null;
   if (kamis) {
     sources.push(kamis.source); // 4-C 인터넷가는 여기 추가 push
     itemName = kamis.item_name;
+    retailKind = kamis.kind;
+    retailPrev = kamis.prev;
   }
 
   // 품목 한글명 1회 해결 — kamis 응답 → 없으면 kamis_items 조회(옥수수 등 미조사 품목 대응).
@@ -1097,11 +1245,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // 2-B) 도매경락 실호출(4-B). WHOLESALE_API_KEY + 품목명 있을 때만.
   let wholesaleBlock: WholesaleBlock | null = null;
+  let wholesaleKinds: Record<string, number> = {};
   if (WHOLESALE_API_KEY && itemNameKo) {
     const wholesale = await fetchWholesale(itemNameKo, regday, WHOLESALE_API_KEY);
     if (wholesale) {
       sources.push(wholesale.source);
       wholesaleBlock = wholesale.stats;
+      wholesaleKinds = wholesale.kinds;
       if (!itemName) itemName = wholesale.item_name;
     }
   }
@@ -1111,6 +1261,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
   //   P5d: 순도 필터(itemCode) + 교차 정합 가드(도매 평균 — 2-B 선행이라 여기서 주입) +
   //   p25/p75/median 강건 통계 + 표본 < MIN_CONFIDENT 저신뢰 강등.
   let onlineBlock: OnlineBlock | null = null;
+  let onlineAxes: { kg: AxisBlock; unit: AxisBlock } | null = null;
+  let onlineKinds: Record<string, number> = {};
   if (NAVER_CLIENT_ID && NAVER_CLIENT_SECRET && itemNameKo) {
     const naver = await fetchNaverShop(itemNameKo, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, {
       perUnitWeightG,
@@ -1118,6 +1270,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       wholesaleAvgKg: wholesaleBlock?.avg,
     });
     if (naver) {
+      onlineAxes = naver.axes;
+      onlineKinds = naver.kinds;
       if (naver.source) {
         sources.push(naver.source);
         if (!itemName) itemName = naver.item_name;
@@ -1160,6 +1314,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
   }
 
+  // T3a-ⓐv2 [5] — 소스별 품종 분포(ADDITIVE · 분리 앵커 판단은 ⓑ/후속).
+  const kinds: PriceBandResult["kinds"] = {
+    retail: retailKind,
+    wholesale: wholesaleKinds,
+    online: onlineKinds,
+  };
+
   const result: PriceBandResult = {
     status: sources.length > 0 ? "ok" : "no_data",
     item_code: itemCode,
@@ -1169,6 +1330,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     base_unit: "kg",
     wholesale: wholesaleBlock,
     online: onlineBlock,
+    online_axes: onlineAxes,
+    kinds,
+    retail_prev: retailPrev,
     ...(perUnitWeightG != null ? { per_unit_weight_g: perUnitWeightG } : {}),
     ...(unitCount != null ? { unit_count: unitCount } : {}),
   };
@@ -1184,6 +1348,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
           base_unit: "kg",
           wholesale: wholesaleBlock,
           online: onlineBlock,
+          online_axes: onlineAxes,
+          kinds,
+          retail_prev: retailPrev,
         },
         ref_date: regday,
         fetched_at: new Date().toISOString(),
