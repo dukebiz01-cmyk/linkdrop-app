@@ -9,6 +9,9 @@ import { useEffect, useRef, useState } from "react";
  *   refreshing=true → await onRefresh() → finally 해제.
  * preventDefault: scrollTop===0 && 당김 중일 때만(touchmove, {passive:false}) — iOS 바운스와의
  *   이중 스크롤 충돌 차단. 그 외 상황은 기본 스크롤 그대로.
+ * STUDIO-fix3 H4⑴ — 비수동 touchmove 상시 등록 폐지(전역 스크롤 컴포지터 최적화 차단 = 터치
+ *   무빙감 저하 원인): 평상시엔 touchstart/end(passive)만 두고, touchstart 에서 scrollTop===0
+ *   일 때만 비수동 move 리스너를 동적 부착 → 당김 아님 확정·touchend 에서 즉시 해제.
  * SSR 가드: window 접근은 전부 effect 내부. 데스크톱 마우스는 미지원(모바일 전용).
  */
 export function usePullToRefresh({
@@ -34,8 +37,7 @@ export function usePullToRefresh({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const scrollTop = () =>
-      (document.scrollingElement ?? document.documentElement).scrollTop;
+    const scrollTop = () => (document.scrollingElement ?? document.documentElement).scrollTop;
 
     function reset() {
       pullingRef.current = false;
@@ -43,19 +45,35 @@ export function usePullToRefresh({
       setPullDistance(0);
     }
 
+    // H4⑴ — 비수동 move 리스너는 최상단 제스처 동안만 존재(동적 부착/해제).
+    let moveAttached = false;
+    function attachMove() {
+      if (moveAttached) return;
+      window.addEventListener("touchmove", onTouchMove, { passive: false });
+      moveAttached = true;
+    }
+    function detachMove() {
+      if (!moveAttached) return;
+      window.removeEventListener("touchmove", onTouchMove);
+      moveAttached = false;
+    }
+
     function onTouchStart(e: TouchEvent) {
       if (refreshingRef.current) return;
       if (scrollTop() > 0) return; // 최상단에서만 활성
       startYRef.current = e.touches[0]?.clientY ?? null;
       pullingRef.current = false;
+      attachMove(); // 이 제스처가 당김 후보일 때만 비수동 리스너 존재
     }
 
     function onTouchMove(e: TouchEvent) {
       if (refreshingRef.current || startYRef.current == null) return;
       const dy = (e.touches[0]?.clientY ?? 0) - startYRef.current;
       if (dy <= 0 || scrollTop() > 0) {
-        // 위로 스크롤 전환·스크롤 발생 → 당김 취소(무개입 복귀).
+        // 위로 스크롤 전환·스크롤 발생 → 당김 취소(무개입 복귀) + 남은 제스처 동안 수동성 복원.
         if (pullingRef.current) reset();
+        startYRef.current = null;
+        detachMove();
         return;
       }
       pullingRef.current = true;
@@ -67,6 +85,7 @@ export function usePullToRefresh({
     }
 
     function onTouchEnd() {
+      detachMove(); // 제스처 종료 = 비수동 리스너 즉시 해제(평상시 0개)
       if (startYRef.current == null) return;
       startYRef.current = null;
       if (!pullingRef.current) return;
@@ -92,12 +111,11 @@ export function usePullToRefresh({
     }
 
     window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: false });
     window.addEventListener("touchend", onTouchEnd, { passive: true });
     window.addEventListener("touchcancel", onTouchEnd, { passive: true });
     return () => {
       window.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchmove", onTouchMove);
+      detachMove();
       window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("touchcancel", onTouchEnd);
     };

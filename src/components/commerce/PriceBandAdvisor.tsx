@@ -392,49 +392,52 @@ export function PriceBandAdvisor({
           "약"·단위는 표 아래 캡션 1회. 320~375px 한 행 한 줄(가로 스크롤 금지 — 숫자 11px·기준 10px).
           문장류(제외·표본부족·품종·소매 기준·1개월 대비)는 전폭 캡션 블록으로 이동. */}
       <table className="w-full border-collapse tracking-ko" style={{ tableLayout: "fixed" }}>
+        {/* STUDIO-fix3 H3 — 열 트랙: 행머리 40 고정·숫자 3열 균등(fixed 잔여 균등분)·기준 56
+            우측 끝 고정. 열 간격은 pl-1(4px — px-2 는 320px 한 줄·스크롤 0 조건과 충돌해 축소). */}
         <colgroup>
-          <col style={{ width: 52 }} />
+          <col style={{ width: 40 }} />
           <col />
           <col />
           <col />
-          <col style={{ width: 60 }} />
+          <col style={{ width: 56 }} />
         </colgroup>
         <thead>
-          <tr className="text-[10px] font-semibold text-text-subtle">
+          <tr className="border-b border-[#F1F5F9] text-[10px] font-semibold text-text-subtle">
             <th className="pb-1 text-left font-semibold" scope="col">
               {" "}
             </th>
-            <th className="pb-1 text-right font-semibold" scope="col">
+            <th className="pb-1 pl-1 text-right font-semibold" scope="col">
               최저
             </th>
-            <th className="pb-1 text-right font-semibold" scope="col">
+            <th className="pb-1 pl-1 text-right font-semibold" scope="col">
               평균
             </th>
-            <th className="pb-1 text-right font-semibold" scope="col">
+            <th className="pb-1 pl-1 text-right font-semibold" scope="col">
               최고
             </th>
-            <th className="pb-1 text-right font-semibold" scope="col">
+            <th className="pb-1 pl-1 text-right font-semibold" scope="col">
               기준
             </th>
           </tr>
         </thead>
-        <tbody className="[&_td]:py-2 [&_td]:align-baseline">
+        {/* H3 — 행 구분선(연회색)·행머리 좌측 정렬 고정·숫자 전부 우측 정렬 유지. */}
+        <tbody className="divide-y divide-[#F1F5F9] [&_td]:py-2 [&_td]:align-baseline">
           {w ? (
-            <tr className="border-t border-border">
+            <tr>
               <td className="whitespace-nowrap">
                 <span className="text-[12px] font-bold text-text-strong">도매</span>
                 <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(w.min)}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(w.avg)}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(w.max)}
               </td>
-              <td className="text-right text-[10px] font-medium tabular-nums text-text-muted">
+              <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
                 <span className="block">{w.market_count}개 시장</span>
                 <span className="block">{fmtRefDate(w.as_of)}</span>
               </td>
@@ -442,21 +445,21 @@ export function PriceBandAdvisor({
           ) : null}
           {/* 소매 — kg당 환산(상·중품 low~high · 평균 열은 중간값, 캡션에 명시). */}
           {retailSrc && retailKg ? (
-            <tr className="border-t border-border">
+            <tr>
               <td className="whitespace-nowrap">
                 <span className="text-[12px] font-bold text-text-strong">소매</span>
                 <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(retailKg.min)}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH((retailKg.min + retailKg.max) / 2)}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(retailKg.max)}
               </td>
-              <td className="text-right text-[10px] font-medium tabular-nums text-text-muted">
+              <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
                 <span className="block">{retailSrc.rank_note}</span>
                 <span className="block">{fmtRefDate(retailSrc.ref_date)}</span>
               </td>
@@ -464,21 +467,21 @@ export function PriceBandAdvisor({
           ) : null}
           {/* T3a-ⓑ [1] — 인터넷 이원축: 개당(실값) / kg당(백원 반올림). 구응답은 kg당 행 폴백. */}
           {unitAxis ? (
-            <tr className="border-t border-border">
+            <tr>
               <td className="whitespace-nowrap">
                 <span className="text-[12px] font-bold text-text-strong">인터넷</span>
                 <span className="block text-[10px] font-medium text-text-subtle">개당</span>
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {(unitAxis.min as number).toLocaleString("ko-KR")}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {(unitAxis.avg as number).toLocaleString("ko-KR")}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {(unitAxis.max as number).toLocaleString("ko-KR")}
               </td>
-              <td className="text-right text-[10px] font-medium tabular-nums text-text-muted">
+              <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
                 <span className="block">{unitAxis.n}건</span>
                 {priceBand.online?.as_of ? (
                   <span className="block">{fmtRefDate(priceBand.online.as_of)}</span>
@@ -487,21 +490,21 @@ export function PriceBandAdvisor({
             </tr>
           ) : null}
           {kgAxisBlk ? (
-            <tr className="border-t border-border">
+            <tr>
               <td className="whitespace-nowrap">
                 <span className="text-[12px] font-bold text-text-strong">인터넷</span>
                 <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(kgAxisBlk.min as number)}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(kgAxisBlk.avg as number)}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(kgAxisBlk.max as number)}
               </td>
-              <td className="text-right text-[10px] font-medium tabular-nums text-text-muted">
+              <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
                 <span className="block">{kgAxisBlk.n}건</span>
                 {priceBand.online?.as_of ? (
                   <span className="block">{fmtRefDate(priceBand.online.as_of)}</span>
@@ -510,21 +513,21 @@ export function PriceBandAdvisor({
             </tr>
           ) : null}
           {!unitAxis && !kgAxisBlk && o && oBand && oAvg != null ? (
-            <tr className="border-t border-border">
+            <tr>
               <td className="whitespace-nowrap">
                 <span className="text-[12px] font-bold text-text-strong">인터넷</span>
                 <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(oBand.min)}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(oAvg)}
               </td>
-              <td className="whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-text-strong">
+              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(oBand.max)}
               </td>
-              <td className="text-right text-[10px] font-medium tabular-nums text-text-muted">
+              <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
                 <span className="block">{o.converted_count}건</span>
                 <span className="block">{fmtRefDate(o.as_of)}</span>
               </td>

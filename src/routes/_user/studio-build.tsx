@@ -297,6 +297,37 @@ function getStage(score: number) {
 // 블록 설정 아코디언 대상 — 설정이 필요한 5개만. bgcolor(색=덱 팔레트)·강화 3종 제외.
 const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link", "product"];
 
+// STUDIO-fix3 H4⑵ — 키보드 인지 바 wrapper: 문서 focusin/focusout 을 자체 구독해 입력 중엔
+//   children(발행바)을 display 만 숨김. 상태가 이 컴포넌트에 갇혀 있어 포커스 전환마다
+//   스튜디오 거대 트리가 리렌더되던 G4 방식(최상위 isTyping)의 성능 회귀를 격리한다.
+//   120ms 지연 해제 = 필드 간 이동 깜빡임 방지(G4 시맨틱 유지 · 바 상태 완전 보존).
+function KeyboardAwareBar({ children }: { children: React.ReactNode }) {
+  const [hidden, setHidden] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const isField = (t: EventTarget | null) =>
+      t instanceof HTMLElement && t.matches("input, textarea, select");
+    const onIn = (e: FocusEvent) => {
+      if (!isField(e.target)) return;
+      if (timerRef.current != null) clearTimeout(timerRef.current);
+      setHidden(true);
+    };
+    const onOut = (e: FocusEvent) => {
+      if (!isField(e.target)) return;
+      if (timerRef.current != null) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setHidden(false), 120);
+    };
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("focusout", onOut);
+    return () => {
+      document.removeEventListener("focusin", onIn);
+      document.removeEventListener("focusout", onOut);
+      if (timerRef.current != null) clearTimeout(timerRef.current);
+    };
+  }, []);
+  return <div className={hidden ? "hidden" : ""}>{children}</div>;
+}
+
 // v0 globals 부재 keyframes 동봉 — 룩 보존용(기존 파일 무수정).
 const STUDIO_BUILD_CSS = `
 @keyframes sb-forge-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
@@ -358,9 +389,6 @@ export function CardStudioPage() {
   const [heroUploading, setHeroUploading] = useState(false);
   const [heroUploadError, setHeroUploadError] = useState<string | null>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
-  // STUDIO-fix2 G4 — 입력 중(키보드 열림) 발행바 숨김. 상태는 보존, 표시만 토글.
-  const [isTyping, setIsTyping] = useState(false);
-  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCouponPicker, setShowCouponPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
   // S2-a 저장 — POST /api/drops(영상+한마디만). 단축 URL 반환 확인까지.
@@ -658,7 +686,10 @@ export function CardStudioPage() {
     //   드롭A)도 인정: switchMode 리셋이 productImageUrl 미러만 지우고 덱 자산은 보존하는
     //   비대칭으로, 재사용 분기 도달 전에 이 가드가 오차단하던 문제 해소.
     if (buildMode === "commerce") {
-      const hasProductImage = !!productImageUrl || !!attachedProducts?.[0]?.refDropId;
+      // STUDIO-fix3 H1 — 사진 계보 통일: 폼 미러(productImageUrl)·대표 이미지(heroImageUrl)·
+      //   덱 자산(attachedProducts) 어느 경로로 올려도 가드 충족(계보 불일치로 인한 오경고 해소).
+      const hasProductImage =
+        !!productImageUrl || !!heroImageUrl || !!attachedProducts?.[0]?.refDropId;
       if (!hasProductImage) {
         setSaveError("상품 사진을 올려주세요.");
         return null;
@@ -1034,6 +1065,8 @@ export function CardStudioPage() {
       const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path);
       setHeroImageUrl(pub.publicUrl);
       setHeroImagePreview(pub.publicUrl);
+      // STUDIO-fix3 H2 — 링고 경유 업로드 시 블록 장착 자동 동기(업로드 성공 = 대표 이미지 채움).
+      setApplied((p) => ({ ...p, image: true }));
     } catch (err) {
       console.error("[studio-build] hero unexpected:", err);
       setHeroUploadError(err instanceof Error ? err.message : "사진 처리 중 문제가 생겼어요.");
@@ -1165,25 +1198,26 @@ export function CardStudioPage() {
       className="min-h-screen bg-[#FAFAFA] pb-[calc(320px+env(safe-area-inset-bottom))]"
       // G1ⓑ — 입력 포커스 시 발행바+모바일 키보드 이중 가림 완화: focusin 위임 1곳(React onFocus
       //   = focusin 버블). 입력류만 화면 중앙으로 보정(버튼 제외 · 개별 필드 무수정 · 애니 없음).
-      // STUDIO-fix2 G4 — 같은 위임 지점에서 isTyping 토글: 키보드 중 발행바 숨김(패딩·scrollIntoView
-      //   로 해결 불가 실증 — fixed 바가 키보드 위로 뜸). focusout 은 120ms 지연(필드 간 이동 깜빡임 방지).
+      // STUDIO-fix3 H4⑵ — isTyping 최상위 state 폐지(거대 트리 전체 리렌더 원인) → 발행바 숨김은
+      //   KeyboardAwareBar(문서 focusin/focusout 자체 구독 · 바 wrapper 만 리렌더)로 격리.
+      //   scrollIntoView 는 rAF 1회.
       onFocus={(e) => {
         const t = e.target as HTMLElement;
         if (t.matches?.("input, textarea, select")) {
-          if (typingTimerRef.current != null) clearTimeout(typingTimerRef.current);
-          setIsTyping(true);
-          setTimeout(() => t.scrollIntoView({ block: "center" }), 0);
-        }
-      }}
-      onBlur={(e) => {
-        const t = e.target as HTMLElement;
-        if (t.matches?.("input, textarea, select")) {
-          if (typingTimerRef.current != null) clearTimeout(typingTimerRef.current);
-          typingTimerRef.current = setTimeout(() => setIsTyping(false), 120);
+          requestAnimationFrame(() => t.scrollIntoView({ block: "center" }));
         }
       }}
     >
       <style>{STUDIO_BUILD_CSS}</style>
+      {/* STUDIO-fix3 H2 — 대표 이미지 파일 input 상시 렌더(아코디언 밖): 링고 코칭 줄·블록 설정
+          버튼이 같은 ref 를 클릭 → 업로더 1계보(handleHeroImageChange 단일 핸들러). */}
+      <input
+        ref={heroFileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleHeroImageChange}
+        className="hidden"
+      />
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[#EDEDED] bg-white/90 backdrop-blur-lg">
         <div className="mx-auto flex max-w-md items-center justify-between px-5 py-3">
@@ -1275,8 +1309,16 @@ export function CardStudioPage() {
               </div>
               {/* 코칭(lingo) + 제목 + 전환력 게이지 */}
               <div className="min-w-0 flex-1">
-                {/* 링고AI 코칭 줄 — 본문 코칭 이관(lingo.text). 완성 시 체크(POINT). 노랑은 아이콘만 은은하게. */}
-                <div className="flex items-center gap-1.5">
+                {/* 링고AI 코칭 줄 — 본문 코칭 이관(lingo.text). 완성 시 체크(POINT).
+                    STUDIO-fix3 H2 — 코칭이 대표 이미지(action==="image")면 줄 탭 = 같은 파일
+                    input 클릭(업로더 1계보 합류) + heroImagePreview 미니 썸네일 병기. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (lingo.action === "image") heroFileInputRef.current?.click();
+                  }}
+                  className="flex w-full items-center gap-1.5 text-left"
+                >
                   {lingo.done ? (
                     <CircleCheck
                       className="h-3.5 w-3.5 shrink-0"
@@ -1293,7 +1335,14 @@ export function CardStudioPage() {
                   <span className="truncate text-[11px] text-[#525252]">
                     {lingo.short ?? lingo.text}
                   </span>
-                </div>
+                  {heroImagePreview ? (
+                    <img
+                      src={heroImagePreview}
+                      alt="대표 이미지"
+                      className="ml-auto h-6 w-6 shrink-0 rounded-lg object-cover"
+                    />
+                  ) : null}
+                </button>
                 <div className="mt-1 flex items-center gap-1.5">
                   <span className="truncate text-[13px] font-medium text-[#0A0A0A]">
                     {store?.display_name ?? "내 매장"}
@@ -2040,13 +2089,8 @@ export function CardStudioPage() {
                                   </>
                                 )}
                               </button>
-                              <input
-                                ref={heroFileInputRef}
-                                type="file"
-                                accept="image/*"
-                                onChange={handleHeroImageChange}
-                                className="hidden"
-                              />
+                              {/* STUDIO-fix3 H2 — 파일 input 은 루트 상시 렌더로 이동(링고 경로와
+                                  동일 ref 공유 — 업로더 1계보). 여기 버튼은 같은 ref 클릭만. */}
                               {heroImagePreview ? (
                                 <div className="overflow-hidden rounded-xl border border-[#E5E7EB]">
                                   <img
@@ -2353,122 +2397,121 @@ export function CardStudioPage() {
       {/* ───────── 카드 드롭하기 ─────────
           P6-9(S21) — 하단 네비(66px+safe, z-30) 상시 노출: 발행 바를 bottom-0 덮개에서
           네비 위 안착으로 이동(z-40 유지 — 네비와 영역 분리라 충돌 없음). safe-area 는 네비가 소화. */}
-      {/* STUDIO-fix2 G4 — 입력 중(isTyping) 표시만 숨김(hidden): 마크업·공개토글·게시상태 완전 보존. */}
-      <div
-        className={`fixed inset-x-0 bottom-[calc(66px+env(safe-area-inset-bottom))] z-40 ${
-          isTyping ? "hidden" : ""
-        }`}
-      >
-        <div className="pointer-events-none h-6 bg-gradient-to-t from-[#FAFAFA] to-transparent" />
-        <div className="bg-[#FAFAFA]/95 backdrop-blur-md">
-          <div className="mx-auto max-w-md px-5 pb-4">
-            {/* P7b (2-1) 공개/비공개 세그먼트 토글 — 자체 구현(Radix 금지), 정적 상태 전환(L7). */}
-            <div className="flex gap-2" role="group" aria-label="공개 범위 선택">
-              <button
-                type="button"
-                onClick={() => setIsPublic(true)}
-                disabled={saving}
-                aria-pressed={isPublic}
-                aria-label="공개로 게시"
-                className={`h-11 flex-1 rounded-lg text-[13px] font-semibold ${
-                  isPublic
-                    ? "bg-[#2563EB] text-white"
-                    : "border border-[#E5E5E5] bg-white text-[#525252]"
-                }`}
-              >
-                공개
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsPublic(false)}
-                disabled={saving}
-                aria-pressed={!isPublic}
-                aria-label="비공개로 저장"
-                className={`h-11 flex-1 rounded-lg text-[13px] font-semibold ${
-                  !isPublic
-                    ? "bg-[#2563EB] text-white"
-                    : "border border-[#E5E5E5] bg-white text-[#525252]"
-                }`}
-              >
-                비공개
-              </button>
-            </div>
-            {/* P7b (2-2) 상태 안내 멘트 */}
-            <p className="mt-1 text-xs text-neutral-500">
-              {isPublic
-                ? "홈·탐색·내 페이지에 게시됩니다"
-                : "내 페이지에만 저장돼요 · 링크로만 공유"}
-            </p>
-            {/* P7b (2-3) 게시/저장(보조) + 카톡 전송(주) — 전송 강조 flex 1:1.4 */}
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={() => void handleSaveDrop()}
-                disabled={score < 40 || saving}
-                aria-label={isPublic ? "카드 게시하기" : "카드 저장하기"}
-                className={`h-12 flex-[1] rounded-2xl text-[14px] font-bold ${
-                  score >= 40
-                    ? "border border-[#D4D4D4] bg-white text-[#0A0A0A]"
-                    : "border border-[#EDEDED] bg-white text-[#A3A3A3]"
-                }`}
-              >
-                {saving
-                  ? "저장 중…"
-                  : dropped
-                    ? isPublic
-                      ? "게시했어요! ✓"
-                      : "저장했어요! ✓"
-                    : score >= 40
+      {/* STUDIO-fix2 G4/H4⑵ — 입력 중 표시만 숨김: KeyboardAwareBar 가 자체 구독(트리 리렌더 0),
+          마크업·공개토글·게시상태 완전 보존. */}
+      <KeyboardAwareBar>
+        <div className="fixed inset-x-0 bottom-[calc(66px+env(safe-area-inset-bottom))] z-40">
+          <div className="pointer-events-none h-6 bg-gradient-to-t from-[#FAFAFA] to-transparent" />
+          <div className="bg-[#FAFAFA]/95 backdrop-blur-md">
+            <div className="mx-auto max-w-md px-5 pb-4">
+              {/* P7b (2-1) 공개/비공개 세그먼트 토글 — 자체 구현(Radix 금지), 정적 상태 전환(L7). */}
+              <div className="flex gap-2" role="group" aria-label="공개 범위 선택">
+                <button
+                  type="button"
+                  onClick={() => setIsPublic(true)}
+                  disabled={saving}
+                  aria-pressed={isPublic}
+                  aria-label="공개로 게시"
+                  className={`h-11 flex-1 rounded-lg text-[13px] font-semibold ${
+                    isPublic
+                      ? "bg-[#2563EB] text-white"
+                      : "border border-[#E5E5E5] bg-white text-[#525252]"
+                  }`}
+                >
+                  공개
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPublic(false)}
+                  disabled={saving}
+                  aria-pressed={!isPublic}
+                  aria-label="비공개로 저장"
+                  className={`h-11 flex-1 rounded-lg text-[13px] font-semibold ${
+                    !isPublic
+                      ? "bg-[#2563EB] text-white"
+                      : "border border-[#E5E5E5] bg-white text-[#525252]"
+                  }`}
+                >
+                  비공개
+                </button>
+              </div>
+              {/* P7b (2-2) 상태 안내 멘트 */}
+              <p className="mt-1 text-xs text-neutral-500">
+                {isPublic
+                  ? "홈·탐색·내 페이지에 게시됩니다"
+                  : "내 페이지에만 저장돼요 · 링크로만 공유"}
+              </p>
+              {/* P7b (2-3) 게시/저장(보조) + 카톡 전송(주) — 전송 강조 flex 1:1.4 */}
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={() => void handleSaveDrop()}
+                  disabled={score < 40 || saving}
+                  aria-label={isPublic ? "카드 게시하기" : "카드 저장하기"}
+                  className={`h-12 flex-[1] rounded-2xl text-[14px] font-bold ${
+                    score >= 40
+                      ? "border border-[#D4D4D4] bg-white text-[#0A0A0A]"
+                      : "border border-[#EDEDED] bg-white text-[#A3A3A3]"
+                  }`}
+                >
+                  {saving
+                    ? "저장 중…"
+                    : dropped
                       ? isPublic
-                        ? "게시하기"
-                        : "저장하기"
-                      : "레버를 더 채워주세요"}
-              </button>
-              {/* P7b 폴리시(B1) — 게시 완료 후에만 활성(클릭 즉시 공유 = 제스처 유효, 팝업 차단 해소).
+                        ? "게시했어요! ✓"
+                        : "저장했어요! ✓"
+                      : score >= 40
+                        ? isPublic
+                          ? "게시하기"
+                          : "저장하기"
+                        : "레버를 더 채워주세요"}
+                </button>
+                {/* P7b 폴리시(B1) — 게시 완료 후에만 활성(클릭 즉시 공유 = 제스처 유효, 팝업 차단 해소).
                   색 위계: 파랑=토글상태 / 검정=주액션(전송) / 아웃라인=보조(게시). */}
-              <button
-                onClick={() => void handleSendKakao()}
-                disabled={!dropped || !savedUrl || saving || sending}
-                aria-label="카카오톡으로 카드 전송"
-                className={`flex h-12 flex-[1.4] items-center justify-center gap-2 rounded-2xl text-[14px] font-bold ${
-                  dropped && savedUrl && !saving && !sending
-                    ? "bg-[#0A0A0A] text-white"
-                    : "bg-[#E5E5E5] text-[#A3A3A3]"
-                }`}
-              >
-                <Send className="h-4 w-4" strokeWidth={2} />
-                {sending ? "전송 중…" : "전송"}
-              </button>
+                <button
+                  onClick={() => void handleSendKakao()}
+                  disabled={!dropped || !savedUrl || saving || sending}
+                  aria-label="카카오톡으로 카드 전송"
+                  className={`flex h-12 flex-[1.4] items-center justify-center gap-2 rounded-2xl text-[14px] font-bold ${
+                    dropped && savedUrl && !saving && !sending
+                      ? "bg-[#0A0A0A] text-white"
+                      : "bg-[#E5E5E5] text-[#A3A3A3]"
+                  }`}
+                >
+                  <Send className="h-4 w-4" strokeWidth={2} />
+                  {sending ? "전송 중…" : "전송"}
+                </button>
+              </div>
+              <p className="mt-1 text-center text-xs text-neutral-500">
+                {dropped ? "받는 사람에게 카드를 전송합니다" : "게시 후 전송할 수 있어요"}
+              </p>
+              {/* S2-a 저장 결과 — 단축 URL + 복사(유지) + P7b 성공 멘트. */}
+              {saveError ? (
+                <p className="mt-2 text-center text-[12px] text-[#B91C1C]">{saveError}</p>
+              ) : savedUrl ? (
+                <>
+                  <div className="mt-2 flex items-center justify-center gap-2 text-[12px] text-[#525252]">
+                    <span className="truncate font-medium text-[#0A0A0A]">{savedUrl}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.clipboard) {
+                          void navigator.clipboard.writeText(savedUrl);
+                        }
+                      }}
+                      className="shrink-0 rounded-lg bg-white px-2 py-1 font-semibold text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] hover:bg-[#FAFAFA]"
+                    >
+                      복사
+                    </button>
+                  </div>
+                  <p className="mt-1 text-center text-xs text-neutral-500">
+                    {isPublic ? "홈·탐색·내 페이지에서 볼 수 있어요" : "내 페이지에서 볼 수 있어요"}
+                  </p>
+                </>
+              ) : null}
             </div>
-            <p className="mt-1 text-center text-xs text-neutral-500">
-              {dropped ? "받는 사람에게 카드를 전송합니다" : "게시 후 전송할 수 있어요"}
-            </p>
-            {/* S2-a 저장 결과 — 단축 URL + 복사(유지) + P7b 성공 멘트. */}
-            {saveError ? (
-              <p className="mt-2 text-center text-[12px] text-[#B91C1C]">{saveError}</p>
-            ) : savedUrl ? (
-              <>
-                <div className="mt-2 flex items-center justify-center gap-2 text-[12px] text-[#525252]">
-                  <span className="truncate font-medium text-[#0A0A0A]">{savedUrl}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (typeof navigator !== "undefined" && navigator.clipboard) {
-                        void navigator.clipboard.writeText(savedUrl);
-                      }
-                    }}
-                    className="shrink-0 rounded-lg bg-white px-2 py-1 font-semibold text-[#525252] [box-shadow:0_0_0_1px_#E5E5E5] hover:bg-[#FAFAFA]"
-                  >
-                    복사
-                  </button>
-                </div>
-                <p className="mt-1 text-center text-xs text-neutral-500">
-                  {isPublic ? "홈·탐색·내 페이지에서 볼 수 있어요" : "내 페이지에서 볼 수 있어요"}
-                </p>
-              </>
-            ) : null}
           </div>
         </div>
-      </div>
+      </KeyboardAwareBar>
 
       {/* ───────── 새 쿠폰 만들기 바텀시트 (CouponManageView 무수정 임베드) ───────── */}
       {/* S3에서 아래 설정 영역(아코디언)으로 이전 예정 — 임시 보존 */}
