@@ -30,6 +30,31 @@ function fallbackToApp(): Response {
   return Response.redirect(`https://${APP_HOST}/`, 302);
 }
 
+// S2c — 매장 slug 폴백 조회(코드 미스일 때만 호출 — 코드 우선, 기존 6자 링크 불파손).
+//   raw PostgREST + publishable key(기존 resolve_short_link 패턴 동일). RLS partners_public_read
+//   (approved 만 public SELECT)가 비승인 매장을 자동 배제 — 추가 필터 불요.
+//   실패(형식·env 부재·조회오류·미존재)는 전부 null → 호출측 기존 fallbackToApp 유지.
+const PARTNER_SLUG_RE = /^[a-z0-9-]{2,40}$/;
+
+async function resolvePartnerSlug(raw: string): Promise<string | null> {
+  const s = raw.toLowerCase();
+  if (!PARTNER_SLUG_RE.test(s)) return null;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+  if (!supabaseUrl || !supabaseKey) return null;
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/partners?select=slug&slug=eq.${encodeURIComponent(s)}&limit=1`,
+      { headers: { apikey: supabaseKey, authorization: `Bearer ${supabaseKey}` } },
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as unknown[];
+    return Array.isArray(rows) && rows.length > 0 ? s : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function handleShortLink(request: Request, ctx: WaitUntilCtx): Promise<Response> {
   const url = new URL(request.url);
 
@@ -41,8 +66,14 @@ export async function handleShortLink(request: Request, ctx: WaitUntilCtx): Prom
   // 첫 segment 만 단축 코드로 처리 — drop.how/abc123 또는 drop.how/abc123/anything
   const shareCode = url.pathname.slice(1).split("/")[0];
 
-  // 6자 base62 패턴 검증 — 형식 오류는 즉시 홈으로
+  // 6자 base62 패턴 검증 — 형식 오류는 매장 slug 시도 후 홈으로.
+  // S2c — 하이픈 포함·2~5자·7~40자 slug 는 전부 이 지점(실패 A)으로 온다.
   if (!SHORT_CODE_RE.test(shareCode)) {
+    const slug = await resolvePartnerSlug(shareCode);
+    if (slug) {
+      // click 추적 없음 — 매장 페이지 방문은 공유 체인 아님(추적은 공유 코드 전용).
+      return Response.redirect(`https://${APP_HOST}/alliance/${slug}`, 302);
+    }
     return fallbackToApp();
   }
 
@@ -77,7 +108,11 @@ export async function handleShortLink(request: Request, ctx: WaitUntilCtx): Prom
   }
 
   if (!Array.isArray(resolveRows) || resolveRows.length === 0) {
-    // 미존재 또는 만료된 코드 → 홈
+    // 미존재 또는 만료된 코드 → S2c: 6자 순수 영숫자 slug 폴백(실패 B — 코드 우선 순서 유지) → 홈.
+    const slug = await resolvePartnerSlug(shareCode);
+    if (slug) {
+      return Response.redirect(`https://${APP_HOST}/alliance/${slug}`, 302);
+    }
     return fallbackToApp();
   }
 

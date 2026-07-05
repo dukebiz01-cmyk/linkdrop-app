@@ -218,9 +218,14 @@ function normalizeSlug(raw: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** CHECK 동일 정규식 + 예약어. 통과 시 null, 실패 시 사유 문구. */
+/** CHECK 동일 정규식 + 예약어 + 6자 충돌 차단. 통과 시 null, 실패 시 사유 문구. */
 function validateSlug(s: string): string | null {
   if (!SLUG_RE.test(s)) return "영문 주소는 2~40자, 영문 소문자·숫자·하이픈(-)만 쓸 수 있어요.";
+  // 6자 순수 영숫자 = share_code(base62 6자)와 형태 충돌 → apex에서 코드 우선 판별이라
+  // slug가 가려질 수 있음. 형태 자체를 차단해 충돌 클래스 원천 소멸(S2c).
+  if (/^[a-z0-9]{6}$/.test(s)) {
+    return "6자 영문·숫자만으로는 사용할 수 없어요. 7자 이상이거나 하이픈(-)을 포함해주세요.";
+  }
   if (RESERVED_SLUGS.has(s)) return "사용할 수 없는 주소입니다.";
   return null;
 }
