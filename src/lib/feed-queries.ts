@@ -326,15 +326,34 @@ const SENT_SELECT = `
 
 // 탐색 3탭 필터 — purposes(drop_purpose enum 값)·bizOnly(매장 연결 카드만). 둘 다 없으면 기존 동작(하위호환).
 // P7c FEED-1 — currentUserId 주입 시 각 카드 isMine 산출(내/남 구분 칩).
+// DOCK-1 — searchTerm: 제목 검색. info_drops 에 title 컬럼이 없어(제목=content_sources.title)
+//   검색 시에만 content_sources 임베드를 !inner 로 전환 + 임베드 컬럼 ilike 로 부모 행을 거른다.
+//   searchTerm 미지정 = 종전 select/체인 그대로(하위호환 0터치).
 export async function getDiscoverDrops(
   client: SupabaseClient,
-  opts?: { purposes?: string[]; bizOnly?: boolean; currentUserId?: string | null },
+  opts?: {
+    purposes?: string[];
+    bizOnly?: boolean;
+    currentUserId?: string | null;
+    searchTerm?: string;
+  },
 ): Promise<DropFeedItem[]> {
+  const searchTerm = opts?.searchTerm?.trim();
   let query = client
     .from("info_drops")
-    .select(DISCOVER_SELECT)
+    .select(
+      searchTerm
+        ? DISCOVER_SELECT.replace(
+            "content_sources!info_drops_source_id_fkey (",
+            "content_sources!info_drops_source_id_fkey!inner (",
+          )
+        : DISCOVER_SELECT,
+    )
     .eq("status", "published")
     .eq("is_public", true);
+  if (searchTerm) {
+    query = query.ilike("content_sources.title", `%${searchTerm}%`);
+  }
   if (opts?.purposes && opts.purposes.length > 0) {
     query = query.in("purpose", opts.purposes);
   }
@@ -479,4 +498,139 @@ export async function getSentDrops(
       ),
     )
     .filter((x): x is DropFeedItem => x !== null);
+}
+
+// ════════════════════════ DOCK-1 카드 도킹 후보 ════════════════════════
+// 도킹 피커 전용 후보 조회 — 공개 발행 카드(내 것+남의 것)를 검색·목적필터로 찾아
+//   ref 블록 재료(refDropId/refShareUuid/이름/가격/이미지/출처 생산자명)로 돌려준다.
+//   · ref_share_uuid = 그 드롭의 "첫 share_event"(created_at ASC — get_my_products
+//     '메이커 원본' 시맨틱 동일). share_event 없는 드롭은 /d 이동 불가라 후보 제외.
+//   · producerName = owner_user_id → public_profiles.display_name 배치 1회 조회
+//     (N+1 금지). 실패 = 이름 미표기(후보는 생존).
+//   · 가격 = content_sources.price_krw 우선, 본체 product 블록(block_data.price_krw,
+//     ref_drop_id 없는 것) 폴백 — get_my_products COALESCE 순서 미러.
+
+export type DockCandidate = {
+  refDropId: string;
+  refShareUuid: string;
+  name: string;
+  priceKrw: number | null;
+  imageUrl: string | null;
+  purpose: string | null;
+  producerName: string | null;
+  isMine: boolean;
+};
+
+type DockRow = {
+  id: string;
+  purpose: string | null;
+  owner_user_id: string | null;
+  content_sources: {
+    title: string | null;
+    thumbnail_url: string | null;
+    price_krw: number | null;
+  } | null;
+  share_events: Array<{ share_uuid: string }> | null;
+  component_blocks: Array<{
+    block_kind: string | null;
+    price_krw: string | null;
+    ref_drop_id: string | null;
+  }> | null;
+};
+
+const DOCK_SELECT = `
+  id,
+  purpose,
+  owner_user_id,
+  content_sources!info_drops_source_id_fkey ( title, thumbnail_url, price_krw ),
+  share_events ( share_uuid ),
+  component_blocks ( block_kind, price_krw:block_data->>price_krw, ref_drop_id:block_data->>ref_drop_id )
+`;
+
+export async function getDockCandidates(
+  client: SupabaseClient,
+  opts?: { searchTerm?: string; purposes?: string[]; currentUserId?: string | null },
+): Promise<DockCandidate[]> {
+  const searchTerm = opts?.searchTerm?.trim();
+  let query = client
+    .from("info_drops")
+    .select(
+      searchTerm
+        ? DOCK_SELECT.replace(
+            "content_sources!info_drops_source_id_fkey (",
+            "content_sources!info_drops_source_id_fkey!inner (",
+          )
+        : DOCK_SELECT,
+    )
+    .eq("status", "published")
+    .eq("is_public", true);
+  if (searchTerm) {
+    query = query.ilike("content_sources.title", `%${searchTerm}%`);
+  }
+  if (opts?.purposes && opts.purposes.length > 0) {
+    query = query.in("purpose", opts.purposes);
+  }
+  const { data, error } = await query
+    // 메이커 원본 share_event = 첫 행(ASC). 임베드 정렬+1개 제한(부모 행 무영향).
+    .order("created_at", { ascending: true, referencedTable: "share_events" })
+    .limit(1, { referencedTable: "share_events" })
+    // 정렬 기준 = created_at(getDiscoverDrops 동일 사유 — published_at NULL 다수).
+    .order("created_at", { ascending: false, nullsFirst: false })
+    .limit(20);
+  if (error || !data) {
+    if (error) console.error("[feed-queries] getDockCandidates failed:", error.message);
+    return [];
+  }
+  const rows = data as unknown as DockRow[];
+
+  // 출처 생산자명 — owner id 배치 1회. 실패해도 후보는 그대로(이름만 미표기).
+  const ownerIds = Array.from(
+    new Set(rows.map((r) => r.owner_user_id).filter((v): v is string => Boolean(v))),
+  );
+  const nameByOwner = new Map<string, string>();
+  if (ownerIds.length > 0) {
+    try {
+      const { data: profs, error: pErr } = await client
+        .from("public_profiles")
+        .select("id, display_name")
+        .in("id", ownerIds);
+      if (pErr) {
+        console.error("[feed-queries] public_profiles lookup failed:", pErr.message);
+      }
+      for (const p of (profs ?? []) as Array<{ id: string | null; display_name: string | null }>) {
+        if (p.id && p.display_name?.trim()) nameByOwner.set(p.id, p.display_name.trim());
+      }
+    } catch (e) {
+      console.error("[feed-queries] public_profiles lookup error:", e);
+    }
+  }
+
+  return rows
+    .map((r): DockCandidate | null => {
+      const shareUuid = r.share_events?.[0]?.share_uuid;
+      if (!shareUuid) return null; // /d 이동 불가 카드는 도킹 대상 제외
+      const cs = r.content_sources;
+      // 가격 폴백: 본체 product 블록(ref_drop_id 없는 것)의 price_krw 텍스트 파싱.
+      const selfProductBlock = r.component_blocks?.find(
+        (b) => b.block_kind === "product" && !b.ref_drop_id,
+      );
+      const blockPrice = selfProductBlock?.price_krw ? Number(selfProductBlock.price_krw) : NaN;
+      const priceKrw =
+        typeof cs?.price_krw === "number"
+          ? cs.price_krw
+          : Number.isFinite(blockPrice)
+            ? blockPrice
+            : null;
+      return {
+        refDropId: r.id,
+        refShareUuid: shareUuid,
+        name: cs?.title?.trim() || "(제목 없음)",
+        priceKrw,
+        imageUrl: cs?.thumbnail_url ?? null,
+        purpose: r.purpose ?? null,
+        producerName: (r.owner_user_id && nameByOwner.get(r.owner_user_id)) || null,
+        isMine: opts?.currentUserId != null && r.owner_user_id === opts.currentUserId,
+      };
+    })
+    .filter((x): x is DockCandidate => x !== null);
 }

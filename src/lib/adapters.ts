@@ -275,6 +275,10 @@ function buildAttachedProducts(d: DropDetailRpc): InfoDropPageProps["attachedPro
           ? { headline: bd.headline.trim() }
           : {}),
         ...(sp.length > 0 ? { sellingPoints: sp } : {}),
+        // DOCK-6 — 출처(생산자명) 스냅샷(도킹 시점 박제값). 없으면 미표기(회귀 0).
+        ...(typeof bd.producer_name === "string" && bd.producer_name.trim()
+          ? { producerName: bd.producer_name.trim() }
+          : {}),
       };
     });
   return items.length > 0 ? items : undefined;

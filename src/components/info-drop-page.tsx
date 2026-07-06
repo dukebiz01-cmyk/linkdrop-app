@@ -132,6 +132,8 @@ export interface InfoDropPageProps {
     /** 나-2 — 담을 때 동봉된 카피 스냅샷. 컴팩트 렌더에 헤드라인 태그라인으로만. */
     headline?: string;
     sellingPoints?: string[];
+    /** DOCK-6 — 출처(원본 생산자명) 스냅샷. 있으면 관련 상품 행에 출처 라인 표시. */
+    producerName?: string;
   }>;
   /** B 상품 홍보 카드 — 큰 이미지 + 헤드라인 + 셀링포인트 + 구매버튼(리치). "관련 상품"보다 상단·강조. */
   promoCards?: Array<{
@@ -1801,6 +1803,12 @@ export function InfoDropPage({
                       {p.headline ? (
                         <p className="truncate text-xs font-medium tracking-ko text-text-subtle">
                           {p.headline}
+                        </p>
+                      ) : null}
+                      {/* DOCK-6 — 출처(원본 생산자명). 도킹 시점 스냅샷 있을 때만(회귀 0). */}
+                      {p.producerName ? (
+                        <p className="truncate text-xs font-medium tracking-ko text-text-subtle">
+                          {p.producerName} 님의 카드
                         </p>
                       ) : null}
                       <p className="text-xs font-medium tracking-ko text-text-muted">

@@ -229,6 +229,57 @@ function CreateWizardPage() {
           });
         }
 
+        // DOCK-5 — 출처(생산자) 스냅샷: ref 블록의 원본 카드 owner 를 public_profiles 로
+        //   조회해 block_data.producer_name 에 박제(도킹 시점 사실 박제 — 수신카드 출처 표시
+        //   재료). 배치 2쿼리(info_drops owner → public_profiles), N+1 금지. best-effort:
+        //   실패 = 출처 미표기일 뿐 발행은 진행(스냅샷이 발행을 죽이면 안 됨).
+        try {
+          const refIds = Array.from(
+            new Set(
+              blocks
+                .map((b) => (b.block_data as Record<string, unknown> | undefined)?.ref_drop_id)
+                .filter((v): v is string => typeof v === "string" && v.length > 0),
+            ),
+          );
+          if (refIds.length > 0) {
+            const { getSupabase } = await import("@/lib/supabase");
+            const supabase = getSupabase();
+            if (supabase) {
+              const { data: ownerRows } = await supabase
+                .from("info_drops")
+                .select("id, owner_user_id")
+                .in("id", refIds);
+              const ownerByDrop = new Map(
+                ((ownerRows ?? []) as Array<{ id: string; owner_user_id: string | null }>)
+                  .filter((r) => r.owner_user_id)
+                  .map((r) => [r.id, r.owner_user_id as string]),
+              );
+              const ownerIds = Array.from(new Set(ownerByDrop.values()));
+              if (ownerIds.length > 0) {
+                const { data: profs } = await supabase
+                  .from("public_profiles")
+                  .select("id, display_name")
+                  .in("id", ownerIds);
+                const nameByOwner = new Map(
+                  ((profs ?? []) as Array<{ id: string | null; display_name: string | null }>)
+                    .filter((p) => p.id && p.display_name?.trim())
+                    .map((p) => [p.id as string, (p.display_name as string).trim()]),
+                );
+                for (const b of blocks) {
+                  const bd = b.block_data as Record<string, unknown> | undefined;
+                  const ref = bd?.ref_drop_id;
+                  if (typeof ref !== "string") continue;
+                  const owner = ownerByDrop.get(ref);
+                  const producerName = owner ? nameByOwner.get(owner) : undefined;
+                  if (bd && producerName) bd.producer_name = producerName;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[wizard] producer_name snapshot failed:", e);
+        }
+
         const res = await fetch("/api/drops", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

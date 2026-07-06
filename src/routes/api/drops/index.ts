@@ -47,6 +47,51 @@ type CreateDropBody = {
   is_public?: boolean;
 };
 
+// DOCK-4 — ref 블록 서버 검증(보안). blocks 의 block_data.ref_drop_id 는 클라이언트가
+//   임의 주입 가능하고 create_drop_v2 는 jsonb passthrough(검증 0)라, 발행 전 각 ref 가
+//   ① 존재 ② status='published' ③ 공개(is_public=true) 또는 요청자 본인 소유인지 확인한다.
+//   본인 소유 예외 = 기존 '카드 담기'(get_my_products — 비공개 자기 상품 허용) 회귀 방지.
+//   반환 = 위반 ref 값(null = 전부 유효). 조회 실패는 fail-closed(차단).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function findInvalidRefDropId(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  blocks: unknown[] | undefined,
+  userId: string,
+): Promise<string | null> {
+  const refIds: string[] = [];
+  for (const b of blocks ?? []) {
+    const bd = (b as { block_data?: Record<string, unknown> } | null)?.block_data;
+    const ref = bd?.ref_drop_id;
+    if (ref === undefined || ref === null) continue;
+    if (typeof ref !== "string" || !UUID_RE.test(ref)) return String(ref);
+    refIds.push(ref);
+  }
+  if (refIds.length === 0) return null;
+  const unique = Array.from(new Set(refIds));
+  const { data, error } = await supabase
+    .from("info_drops")
+    .select("id, is_public, owner_user_id")
+    .eq("status", "published")
+    .in("id", unique);
+  if (error) {
+    console.error("[/api/drops] ref validation query failed:", error.message);
+    return unique[0];
+  }
+  const okIds = new Set(
+    (
+      (data ?? []) as Array<{
+        id: string;
+        is_public: boolean | null;
+        owner_user_id: string | null;
+      }>
+    )
+      .filter((r) => r.is_public === true || r.owner_user_id === userId)
+      .map((r) => r.id),
+  );
+  return unique.find((id) => !okIds.has(id)) ?? null;
+}
+
 export const Route = createFileRoute("/api/drops/")({
   server: {
     handlers: {
@@ -216,6 +261,14 @@ export const Route = createFileRoute("/api/drops/")({
                 };
               }
             }
+            // DOCK-4 — self_upload 분기도 blocks passthrough(body.blocks)라 동일 검증.
+            const selfInvalidRef = await findInvalidRefDropId(supabase, selfBlocks, user.id);
+            if (selfInvalidRef != null) {
+              return Response.json(
+                { error: "INVALID_REF_DROP", message: "연결할 수 없는 카드가 포함돼 있어요." },
+                { status: 400 },
+              );
+            }
             const { data: selfDropRes, error: selfDropErr } = await supabase.rpc("create_drop_v2", {
               p_intent_id: selfIntentId,
               p_source_id: selfSourceId,
@@ -373,6 +426,15 @@ export const Route = createFileRoute("/api/drops/")({
             console.error("gen_share_code failed:", shareCodeErr);
           }
           const shareCode = typeof shareCodeData === "string" ? shareCodeData : null;
+
+          // DOCK-4 — ref 블록 검증(비공개·미존재·비발행 주입 차단). create_drop_v2 호출 전.
+          const invalidRef = await findInvalidRefDropId(supabase, body.blocks, user.id);
+          if (invalidRef != null) {
+            return Response.json(
+              { error: "INVALID_REF_DROP", message: "연결할 수 없는 카드가 포함돼 있어요." },
+              { status: 400 },
+            );
+          }
 
           // 7. create_drop_v2 (트랜잭션 — info_drops + component_blocks + share_events)
           const { data: dropRes, error: dropErr } = await supabase.rpc("create_drop_v2", {

@@ -70,7 +70,10 @@ import {
   Tag,
   Globe,
   ShoppingCart,
+  Layers,
 } from "lucide-react";
+// DOCK-3 — 카드 도킹 피커(신규 v1). 인라인 아코디언 전용(Radix 금지 락).
+import { CardDockingPicker, type DockedProduct } from "@/components/studio/CardDockingPicker";
 
 // =============================================================================
 // /studio/build — 격리 프리뷰 라우트 (룩 확인 전용).
@@ -186,6 +189,16 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     isMain: true,
   },
   {
+    id: "dock",
+    label: "카드 도킹",
+    desc: "다른 카드 연결해 함께 보내기",
+    detail:
+      "탐색에서 다른 메이커의 공개 카드를 찾아 내 카드에 연결해요. 받은 사람이 관련 카드로 바로 넘어가고, 주문·혜택은 원본 카드가 그대로 받아요.",
+    icon: Layers,
+    category: "purpose",
+    power: 12,
+  },
+  {
     id: "image",
     label: "대표 이미지",
     desc: "썸네일 한 장으로 눈길",
@@ -268,6 +281,9 @@ const DECK_IDS: Record<"general" | "reserve" | "commerce", string[]> = {
     "coupon",
     "image",
     "link",
+    // DOCK-3 — 카드 도킹(reserve 전용 편입). commerce 는 attachedProducts 재사용 발행
+    //   (:746 reusedProduct)과 시맨틱 충돌이라 미편입(Phase 2 검토).
+    "dock",
     "bgcolor",
     "top",
     "boost",
@@ -295,8 +311,8 @@ function getStage(score: number) {
 
 // 덱 구성은 컴포넌트 내부 useMemo(buildMode 의존)로 이동 — DECK_IDS[buildMode] 기반.
 
-// 블록 설정 아코디언 대상 — 설정이 필요한 5개만. bgcolor(색=덱 팔레트)·강화 3종 제외.
-const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link", "product"];
+// 블록 설정 아코디언 대상 — 설정이 필요한 블록만. bgcolor(색=덱 팔레트)·강화 3종 제외.
+const SETTING_BLOCK_IDS = ["calendar", "content", "coupon", "image", "link", "product", "dock"];
 
 // STUDIO-fix3 H4⑵ 의 KeyboardAwareBar 는 NAV-fix1 에서 @/components/keyboard-aware-bar 로
 //   공용 추출(하단 네비와 공유) — 동작·시맨틱 동일(중복 제거만).
@@ -345,6 +361,10 @@ export function CardStudioPage() {
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
   // 상품 블록 — 내 등록상품(get_my_products) 선택. 쿠폰 selectedCouponId 패턴. 미리보기·저장 배선은 다음 단계.
   const [attachedProducts, setAttachedProducts] = useState<AttachedProduct[]>([]);
+  // DOCK-3 — 카드 도킹 자산(남의 공개 카드 참조 다건). ★ attachedProducts(내 상품, 커머스
+  //   발행 재사용 :746·사진 가드 :665 판정 재료)와 별도 상태 — 남의 드롭이 그 판정에 섞이면
+  //   발행이 남의 카드를 재사용하는 오동작이라 분리(§0). 모드 전환에도 덱 자산으로 보존.
+  const [dockedProducts, setDockedProducts] = useState<DockedProduct[]>([]);
   // 커머스 상품 상태 — P2: 입력은 ProductRegisterForm(임베드)이 소유, 여기는 등록 결과 미러
   //   (카드 미리보기 productPreview·발행 payload·코치 isFilled 가 읽는다). §0: 시세 없음.
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
@@ -692,6 +712,30 @@ export function CardStudioPage() {
       const hasReservation = !!applied["calendar"];
       // purpose 우선순위(비커머스): 예약 > 쿠폰 > 정보. (커머스는 self_upload 서버가 "구매" 고정.)
       const dropPurpose = hasReservation ? "예약" : hasCoupon ? "쿠폰" : "정보";
+      // DOCK-3 — 도킹 ref 블록(발행 payload 재료). create-wizard :179-191 block_data 계약
+      //   동일 + producer_name(출처 생산자명 스냅샷, 피커가 public_profiles 로 조회한 값).
+      //   dock 블록 장착 시에만 합류. 주문·전환은 원본 카드 몫(§0 — create_preorder 0터치).
+      const dockBlocks =
+        applied["dock"] && dockedProducts.length > 0
+          ? dockedProducts.map((p) => ({
+              block_kind: "product",
+              block_data: {
+                ref_drop_id: p.refDropId,
+                ref_share_uuid: p.refShareUuid,
+                name: p.name,
+                price_krw: p.priceKrw,
+                image_url: p.imageUrl,
+                ...(p.producerName ? { producer_name: p.producerName } : {}),
+              },
+            }))
+          : [];
+      // HERO-2 대표 이미지 + DOCK-3 도킹 블록 병합 — position 연속 재부여(create-wizard 관례).
+      const extraBlocks = [
+        ...(applied["image"] && heroImageUrl
+          ? [{ block_kind: "image", block_data: { image_url: heroImageUrl } }]
+          : []),
+        ...dockBlocks,
+      ].map((b, i) => ({ ...b, position: i }));
       // 6d body 분기 — 커머스=self_upload(영상 0), 비커머스=기존 media_url 경로(1줄도 안 바꿈).
       const body =
         buildMode === "commerce"
@@ -725,17 +769,8 @@ export function CardStudioPage() {
               //   p_blocks) 계약 그대로(신규 payload 필드 0 · enum 'image' 값은 마이그레이션
               //   hero2_block_kind_image 로 수용). 수신카드 포스터·피드 타일 썸네일이 이 블록으로
               //   오버라이드되고 영상 재생 기능은 보존된다. 없으면 기존 동작 그대로.
-              ...(applied["image"] && heroImageUrl
-                ? {
-                    blocks: [
-                      {
-                        block_kind: "image",
-                        block_data: { image_url: heroImageUrl },
-                        position: 0,
-                      },
-                    ],
-                  }
-                : {}),
+              // DOCK-3 — 도킹 ref 블록도 같은 자리(extraBlocks 병합)로 합류.
+              ...(extraBlocks.length > 0 ? { blocks: extraBlocks } : {}),
             };
       // P6-6(A안) — 커머스 발행 = 폼 제출로 이미 생성된 상품 드롭 A(완전체: 고지·신선·kamis·카피
       //   보유) 재사용. /api/drops 재호출 제거 → 이중 생성 + 발행본 데이터 열화(§0·고시 결함) 해소.
@@ -2034,6 +2069,13 @@ export function CardStudioPage() {
                                 </p>
                               </div>
                             )
+                          ) : block.id === "dock" ? (
+                            // DOCK-3 — 카드 도킹 피커 임베드(ProductRegisterForm 임베드 문법 동일).
+                            //   인라인 펼침 + 자체 mounted 게이트(#418) — Radix 미사용.
+                            <CardDockingPicker
+                              value={dockedProducts}
+                              onChange={setDockedProducts}
+                            />
                           ) : block.id === "product" ? (
                             // P2(결정ⓐ) — 등록폼 공용화: ProductRegisterForm 임베드(B-2 인라인 입력 대체).
                             //   사진 업로드·KAMIS 품목/시세(§0 제작화면 전용)·홍보 문구는 폼이 내장.
