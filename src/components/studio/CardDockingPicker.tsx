@@ -16,15 +16,17 @@ import type { AttachedProduct } from "@/components/create/types";
 export type DockedProduct = AttachedProduct & {
   /** 도킹 시점 원본 카드 owner 의 public_profiles.display_name 스냅샷. */
   producerName?: string;
+  /** 도킹 시점 원본 카드 purpose — 스튜디오 미리보기 표시 전용(block_data 미전송). */
+  purpose?: string;
 };
 
-// 목적 필터 칩 — drop_purpose enum 5값 중 상담 제외(도킹 대상 아님). null = 전체.
+// 목적 필터 칩 — 탐색 4탭(explore.tsx:47-52)과 동일 분류: 전체 / 정보 / 쿠폰·예약(묶음) /
+//   상품판매(구매). 상담 제외. null = 전체(미지정).
 const PURPOSE_CHIPS: Array<{ label: string; purposes: string[] | null }> = [
   { label: "전체", purposes: null },
-  { label: "구매", purposes: ["구매"] },
-  { label: "쿠폰", purposes: ["쿠폰"] },
-  { label: "예약", purposes: ["예약"] },
   { label: "정보", purposes: ["정보"] },
+  { label: "쿠폰·예약", purposes: ["쿠폰", "예약"] },
+  { label: "상품판매", purposes: ["구매"] },
 ];
 
 function priceLabel(krw: number | null): string {
@@ -34,9 +36,12 @@ function priceLabel(krw: number | null): string {
 export function CardDockingPicker({
   value,
   onChange,
+  onDone,
 }: {
   value: DockedProduct[];
   onChange: (next: DockedProduct[]) => void;
+  /** 완료(확정) — 부모 아코디언 접기. 미지정 시 버튼 미렌더. */
+  onDone?: () => void;
 }) {
   // mounted 게이트 — SSR/hydration 시 데이터 의존 UI 미렌더(#418 차단, 캘린더 인라인 관례).
   const [mounted, setMounted] = useState(false);
@@ -93,6 +98,7 @@ export function CardDockingPicker({
         priceKrw: c.priceKrw,
         imageUrl: c.imageUrl,
         ...(c.producerName ? { producerName: c.producerName } : {}),
+        ...(c.purpose ? { purpose: c.purpose } : {}),
       },
     ]);
   }
@@ -267,6 +273,19 @@ export function CardDockingPicker({
             ))}
           </ul>
         </div>
+      ) : null}
+
+      {/* 완료(확정) — 쿠폰 블록 "확인" 버튼(studio-build :1815-1824) 톤 동일. 도킹은 즉시
+          미리보기 반영이라 완료 = 확정·아코디언 접기 역할만. */}
+      {onDone ? (
+        <button
+          type="button"
+          onClick={onDone}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#0A0A0A] py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-[#171717]"
+        >
+          <Check className="h-4 w-4" strokeWidth={2.5} />
+          완료{value.length > 0 ? ` (${value.length}개 도킹됨)` : ""}
+        </button>
       ) : null}
     </div>
   );

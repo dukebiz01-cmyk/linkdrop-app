@@ -1562,6 +1562,59 @@ export function CardStudioPage() {
                 </div>
               )}
 
+              {/* DOCK-Fix1 — 관련 상품(도킹) 미리보기: 수신카드 info-drop-page :1773-1833 관련
+                    상품 섹션과 동형(썸네일·제목·생산자명·가격 + 목적칩은 스튜디오 참고용).
+                    게이트 = 발행 payload(dockBlocks) 와 동일 조건(applied["dock"] && 다건) → L5
+                    (미리보기=전송분 동일). dockedProducts 표시 전용 — attachedProducts 가드
+                    (:665·:746)·발행 로직 0터치. */}
+              {applied["dock"] && dockedProducts.length > 0 && (
+                <div className="mt-4">
+                  <h2
+                    className={`text-sm font-bold tracking-ko ${isLightCard ? "text-[#0F172A]" : "text-white"}`}
+                  >
+                    관련 상품
+                  </h2>
+                  <ul className="mt-3 space-y-2">
+                    {dockedProducts.map((p) => (
+                      <li
+                        key={p.refDropId}
+                        className="flex items-center gap-3 rounded-2xl border border-[#E8EDF3] bg-white p-3"
+                      >
+                        {p.imageUrl ? (
+                          <img
+                            src={p.imageUrl}
+                            alt=""
+                            className="size-14 shrink-0 rounded-lg object-cover"
+                          />
+                        ) : (
+                          <span className="size-14 shrink-0 rounded-lg bg-[#F1F5F9]" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold tracking-ko text-[#0F172A]">
+                            {p.name}
+                          </p>
+                          {p.producerName ? (
+                            <p className="truncate text-xs font-medium tracking-ko text-[#94A3B8]">
+                              {p.producerName} 님의 카드
+                            </p>
+                          ) : null}
+                          <p className="text-xs font-medium tracking-ko text-[#64748B]">
+                            {p.priceKrw != null
+                              ? `${p.priceKrw.toLocaleString("ko-KR")}원`
+                              : "가격 미정"}
+                          </p>
+                        </div>
+                        {p.purpose ? (
+                          <span className="shrink-0 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-bold text-[#64748B]">
+                            {p.purpose}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* C13 S2 — 손님 정본 순서 정합: 손님은 shareFooter 가 카드 내부(쿠폰받기 sticky 보다 위)라
                     스튜디오도 shareFooter stub 을 쿠폰받기 stub 위로 이동(내용·조건·클래스 불변, 순서만). */}
               {/* 거울 5a — 공유 푸터 stub. CardBody.shareFooter prop 에서 형제로 이동 — 시각 stub(onClick·href 없음). 클래스는 손님 푸터와 1:1. */}
@@ -2075,6 +2128,8 @@ export function CardStudioPage() {
                             <CardDockingPicker
                               value={dockedProducts}
                               onChange={setDockedProducts}
+                              // Fix3 — 완료(확정) = 아코디언 접기(쿠폰 확인 버튼 동작 동일).
+                              onDone={() => setExpandedBlockId(null)}
                             />
                           ) : block.id === "product" ? (
                             // P2(결정ⓐ) — 등록폼 공용화: ProductRegisterForm 임베드(B-2 인라인 입력 대체).
