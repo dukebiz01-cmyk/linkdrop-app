@@ -39,6 +39,7 @@ import { getMakerRepDrops } from "@/lib/feed-queries";
 import type { DropFeedItem } from "@/components/home-page";
 import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 import { parseVideoUrl } from "@/lib/video-metadata";
+import { CashSection } from "@/components/wallet/CashSection";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -704,6 +705,9 @@ function MePage() {
             <Wallet className="size-4 text-[#2563EB]" strokeWidth={2} />
             <h3 className="text-base font-bold text-[#0F172A]">내지갑</h3>
           </div>
+
+          {/* CASH-c4 — cash 섹션(잔액·충전·내역·고지). walletTab/쿠폰/드로피 로직 무관 독립 블록. */}
+          <CashSection />
 
           {/* 상위 탭 — 쿠폰 / 드로피. V4 흰칩 세그먼트(선택=흰 bg+섀도). */}
           <div className="mb-4 flex rounded-xl bg-[#F1F5F9] p-1">
