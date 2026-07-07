@@ -464,8 +464,8 @@ function MePage() {
 
   // 쿠폰 지갑 필터 칩 — 기본 '사용 가능'(usable). 클라이언트 로컬 state(서버 호출 없음).
   const [couponFilter, setCouponFilter] = useState<CouponFilter>("available");
-  // 내지갑 상위 탭 — 쿠폰 / 드로피(드로피=빈 상태 placeholder). 기본 쿠폰. 클라 로컬 state.
-  const [walletTab, setWalletTab] = useState<"coupon" | "dropy">("coupon");
+  // 내지갑 상위 탭 — 캐시 / 쿠폰 / 드로피(드로피=빈 상태 placeholder). 기본 캐시. 클라 로컬 state.
+  const [walletTab, setWalletTab] = useState<"cash" | "coupon" | "dropy">("cash");
 
   // 상태별 카운트 (coupon-status 헬퍼). usable(쓸 수 있는) = 사용 가능 + 곧 만료.
   const usableCount = data.coupons.filter((c) => isCouponUsable(c)).length;
@@ -706,13 +706,11 @@ function MePage() {
             <h3 className="text-base font-bold text-[#0F172A]">내지갑</h3>
           </div>
 
-          {/* CASH-c4 — cash 섹션(잔액·충전·내역·고지). walletTab/쿠폰/드로피 로직 무관 독립 블록. */}
-          <CashSection />
-
-          {/* 상위 탭 — 쿠폰 / 드로피. V4 흰칩 세그먼트(선택=흰 bg+섀도). */}
+          {/* 상위 탭 — 캐시 / 쿠폰 / 드로피. V4 흰칩 세그먼트(선택=흰 bg+섀도). */}
           <div className="mb-4 flex rounded-xl bg-[#F1F5F9] p-1">
             {(
               [
+                { key: "cash", label: "캐시" },
                 { key: "coupon", label: "쿠폰" },
                 { key: "dropy", label: "드로피" },
               ] as const
@@ -734,6 +732,9 @@ function MePage() {
               );
             })}
           </div>
+
+          {/* CASH-c4 — cash 섹션(잔액·충전·내역·고지). 캐시 탭 콘텐츠. */}
+          {walletTab === "cash" && <CashSection />}
 
           {walletTab === "coupon" && (
             <>
