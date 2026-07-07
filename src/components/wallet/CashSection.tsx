@@ -6,7 +6,7 @@
 //   (d) 국문 상시 고지(콘텐츠 전용·환급 없음).
 //   스타일 = me.tsx V4 토큰(흰카드·#0F172A/#64748B/#2563EB·rounded-xl/lg) 그대로 — 위화감 0.
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase";
 import { useHectoCharge } from "./useHectoCharge";
@@ -30,6 +30,23 @@ const CHARGE_PRODUCTS = [
   { sku: "30000", name: "cash 30,000", amount: 30000 },
 ] as const;
 const PROVIDE_PERIOD = "구매 즉시 지급 · 소진 시까지";
+
+// 표준 초안 — 최종 문구는 법무(변호사) 검수 후 확정
+const AGREE_PURCHASE =
+  "본 상품은 링크드롭 콘텐츠 이용에 사용되는 캐시(cash)이며, 결제 완료 즉시 지급됩니다. 구매조건에 동의하고 결제를 진행합니다.";
+// 표준 초안 — 최종 문구는 법무(변호사) 검수 후 확정
+const AGREE_CASH_TERMS =
+  "캐시는 링크드롭 콘텐츠 이용 전용이며 현금으로 환급되지 않습니다. 결제 취소 시에만 미사용 잔액 한도 내에서 차감·취소됩니다. 반복적 충전 취소는 서비스 이용이 제한될 수 있습니다.";
+// 표준 초안 — 최종 문구는 법무(변호사) 검수 후 확정
+const AGREE_PRIVACY =
+  "결제 처리를 위해 결제대행사(헥토파이낸셜)에 결제·거래에 필요한 정보가 제공됩니다. 제공 정보는 결제 처리 목적으로만 이용됩니다.";
+
+// 네이버 표준 계층 — 전체동의 + 필수 3항목([＞] 탭 시 전문 인라인 펼침).
+const AGREE_TERMS = [
+  { key: "purchase", label: "구매조건 확인 및 결제진행 동의", body: AGREE_PURCHASE },
+  { key: "cash", label: "캐시 이용약관 (환급 불가)", body: AGREE_CASH_TERMS },
+  { key: "privacy", label: "개인정보 수집·이용 동의", body: AGREE_PRIVACY },
+] as const;
 
 // cash_ledger.entry_type → 국문 라벨(미지 타입은 원문 노출).
 const ENTRY_LABEL: Record<string, string> = {
@@ -58,7 +75,9 @@ export function CashSection() {
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
   const [selectedSku, setSelectedSku] = useState<string>("5000");
   const [customAmount, setCustomAmount] = useState("");
-  const [agreed, setAgreed] = useState(false);
+  // 약관 동의 — 필수 3항목 개별 체크(전체동의는 파생). 전문 펼침은 항목별 독립 토글.
+  const [agreedKeys, setAgreedKeys] = useState<Record<string, boolean>>({});
+  const [expandedTerm, setExpandedTerm] = useState<Record<string, boolean>>({});
   const [cancelBusyTrdNo, setCancelBusyTrdNo] = useState<string | null>(null);
   const [cancelStatus, setCancelStatus] = useState("");
   // 이용내역 아코디언 — 기본 접힘(첫 진입 시 화면 늘어짐 방지). SSR 안전 로컬 토글.
@@ -118,7 +137,9 @@ export function CashSection() {
   const selectedProduct = CHARGE_PRODUCTS.find((p) => p.sku === selectedSku);
   const amount = selectedSku === "custom" ? Number(customAmount) : (selectedProduct?.amount ?? 0);
   const amountValid = Number.isFinite(amount) && amount > 0;
-  const canCharge = agreed && amountValid && !chargeBusy;
+  // 전체동의 = 필수 3항목 전부 체크 시 파생 on(부분 해제 시 자동 off).
+  const allAgreed = AGREE_TERMS.every((t) => agreedKeys[t.key]);
+  const canCharge = allAgreed && amountValid && !chargeBusy;
 
   const onCharge = useCallback(() => {
     if (!canCharge) return;
@@ -270,18 +291,60 @@ export function CashSection() {
           </label>
         ) : null}
 
-        {/* [필수] 약관 동의 + 결제 버튼 — 그리드 하단 고정 배치. 미체크 시 결제 비활성. */}
-        <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            checked={agreed}
-            onChange={(e) => setAgreed(e.target.checked)}
-            className="mt-0.5 size-5 shrink-0 accent-[#2563EB]"
-          />
-          <span className="text-xs font-medium leading-relaxed tracking-ko text-[#64748B]">
-            <span className="font-bold text-[#DC2626]">[필수]</span> 구매조건 확인 및 결제진행 동의
-          </span>
-        </label>
+        {/* 약관 동의 — 네이버 표준 계층(전체동의 + 필수 3). [＞] 탭 = 전문 인라인 펼침(항목별 독립·SSR 안전). */}
+        <div className="rounded-xl border border-[#E8EDF3]">
+          {/* 전체 동의 — 체크 시 하위 3개 일괄 on/off. 하위 파생이라 부분 해제 자동 반영. */}
+          <label className="flex items-center gap-2 px-4 py-3">
+            <input
+              type="checkbox"
+              checked={allAgreed}
+              onChange={(e) =>
+                setAgreedKeys(Object.fromEntries(AGREE_TERMS.map((t) => [t.key, e.target.checked])))
+              }
+              className="size-5 shrink-0 accent-[#2563EB]"
+            />
+            <span className="text-sm font-bold tracking-ko text-[#0F172A]">전체 동의</span>
+          </label>
+
+          {/* 필수 3항목 — 체크박스는 항상 노출, 전문만 [＞]로 접힘. */}
+          <div className="border-t border-[#E8EDF3]">
+            {AGREE_TERMS.map((t) => {
+              const open = !!expandedTerm[t.key];
+              return (
+                <div key={t.key} className="px-4">
+                  <div className="flex items-center gap-2 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={!!agreedKeys[t.key]}
+                      onChange={() => setAgreedKeys((p) => ({ ...p, [t.key]: !p[t.key] }))}
+                      className="size-5 shrink-0 accent-[#2563EB]"
+                    />
+                    <span className="flex-1 text-xs font-medium leading-relaxed tracking-ko text-[#64748B]">
+                      <span className="font-bold text-[#DC2626]">[필수]</span> {t.label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedTerm((p) => ({ ...p, [t.key]: !p[t.key] }))}
+                      aria-expanded={open}
+                      aria-label={`${t.label} 전문 보기`}
+                      className="flex size-8 shrink-0 items-center justify-center text-[#94A3B8]"
+                    >
+                      <ChevronRight
+                        className={`size-4 transition-transform ${open ? "rotate-90" : ""}`}
+                        strokeWidth={2}
+                      />
+                    </button>
+                  </div>
+                  {open ? (
+                    <p className="mb-2.5 rounded-lg bg-[#F1F5F9] px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-[#64748B]">
+                      {t.body}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         <button
           type="button"
