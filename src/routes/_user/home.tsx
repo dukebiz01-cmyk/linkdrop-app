@@ -2,7 +2,12 @@ import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router"
 import { Loader2 } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
-import { getFollowedMakerDrops, getDiscoverDrops, getSentDrops } from "@/lib/feed-queries";
+import {
+  getFollowedMakerDrops,
+  getDiscoverDrops,
+  getSentDrops,
+  getMyCreatedDrops,
+} from "@/lib/feed-queries";
 import { getCouponDisplayStatus } from "@/lib/coupon-status";
 import {
   RoleHome,
@@ -91,12 +96,14 @@ export const Route = createFileRoute("/_user/home")({
 
     // 유저(비사업자) 홈 — 곧 쓸 혜택(get_my_wallet → expiring) + 구독 메이커 새 카드.
     if (!isBusiness) {
-      const [walletRes, followedDrops, recommendedDrops, sentDrops] = await Promise.all([
-        supabase.rpc("get_my_wallet"),
-        getFollowedMakerDrops(supabase, userId, { currentUserId: userId }),
-        getDiscoverDrops(supabase, { currentUserId: userId }),
-        getSentDrops(supabase, userId),
-      ]);
+      const [walletRes, followedDrops, recommendedDrops, sentDrops, myCreatedDrops] =
+        await Promise.all([
+          supabase.rpc("get_my_wallet"),
+          getFollowedMakerDrops(supabase, userId, { currentUserId: userId }),
+          getDiscoverDrops(supabase, { currentUserId: userId }),
+          getSentDrops(supabase, userId),
+          getMyCreatedDrops(supabase),
+        ]);
       const walletRows = (walletRes.data as WalletRow[] | null) ?? [];
       const expiringCoupons: HomeCoupon[] = walletRows
         .filter(
@@ -121,6 +128,7 @@ export const Route = createFileRoute("/_user/home")({
           followedDrops: followedDrops.slice(0, FOLLOWED_DROP_LIMIT),
           recommendedDrops: recommendedDrops.slice(0, RECOMMENDED_DROP_LIMIT),
           sentDrops,
+          myCreatedDrops,
         },
         serverNow: new Date().toISOString(),
       };
@@ -137,32 +145,41 @@ export const Route = createFileRoute("/_user/home")({
 
     // 병렬: 오늘의 AI(캐시 SELECT) / 새 예약(RPC) / 제안(pending) /
     //   + 상인홈 새 디자인용 피드(유저 분기와 동일 함수): 추천·내공유·구독 + 구독자 count(partner.index 재사용).
-    const [guideRes, reservationRes, proposalRes, recommendedDrops, sentDrops, followedDrops, subscriberRes] =
-      await Promise.all([
-        supabase
-          .from("guide_history")
-          .select("diagnosis, prescriptions, snapshot_at")
-          .eq("partner_id", partnerId)
-          .order("snapshot_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase.rpc("get_partner_reservations", { p_partner_id: partnerId }),
-        supabase
-          .from("maker_connections")
-          .select(
-            "id, requester:partners!maker_connections_requester_partner_id_fkey(display_name)",
-          )
-          .eq("target_partner_id", partnerId)
-          .eq("status", "pending"),
-        getDiscoverDrops(supabase, { currentUserId: userId }),
-        getSentDrops(supabase, userId),
-        getFollowedMakerDrops(supabase, userId, { currentUserId: userId }),
-        supabase
-          .from("maker_follows")
-          .select("*", { count: "exact", head: true })
-          .eq("followed_partner_id", partnerId)
-          .eq("status", "active"),
-      ]);
+    const [
+      guideRes,
+      reservationRes,
+      proposalRes,
+      recommendedDrops,
+      sentDrops,
+      followedDrops,
+      myCreatedDrops,
+      subscriberRes,
+    ] = await Promise.all([
+      supabase
+        .from("guide_history")
+        .select("diagnosis, prescriptions, snapshot_at")
+        .eq("partner_id", partnerId)
+        .order("snapshot_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase.rpc("get_partner_reservations", { p_partner_id: partnerId }),
+      supabase
+        .from("maker_connections")
+        .select(
+          "id, requester:partners!maker_connections_requester_partner_id_fkey(display_name)",
+        )
+        .eq("target_partner_id", partnerId)
+        .eq("status", "pending"),
+      getDiscoverDrops(supabase, { currentUserId: userId }),
+      getSentDrops(supabase, userId),
+      getFollowedMakerDrops(supabase, userId, { currentUserId: userId }),
+      getMyCreatedDrops(supabase),
+      supabase
+        .from("maker_follows")
+        .select("*", { count: "exact", head: true })
+        .eq("followed_partner_id", partnerId)
+        .eq("status", "active"),
+    ]);
 
     // 오늘의 AI — guide_history 최신 스냅샷(diagnosis/prescriptions jsonb).
     const guideRow = guideRes.data as { diagnosis: unknown; prescriptions: unknown } | null;
@@ -215,6 +232,7 @@ export const Route = createFileRoute("/_user/home")({
         followedDrops: followedDrops.slice(0, FOLLOWED_DROP_LIMIT),
         recommendedDrops: recommendedDrops.slice(0, RECOMMENDED_DROP_LIMIT),
         sentDrops,
+        myCreatedDrops,
       },
       serverNow: new Date().toISOString(),
     };

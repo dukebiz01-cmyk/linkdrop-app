@@ -500,6 +500,60 @@ export async function getSentDrops(
     .filter((x): x is DropFeedItem => x !== null);
 }
 
+// ════════════════════════ "내가만든" 카드(get_my_drops) ════════════════════════
+// /me 만든카드와 동일 RPC(get_my_drops, SECURITY DEFINER auth.uid())를 홈 활동 세그먼트
+//   "내가만든" 탭용 DropFeedItem 으로 재사용. 파생필드(shareCount/dropyReward/expiresAt/
+//   remainingStock)는 내 카드 관점에 자연히 없음 = undefined(가짜 채우기 금지 — 정상 미렌더).
+
+// get_my_drops jsonb 행 중 어댑터가 쓰는 필드만(me.tsx MyDropRow 부분집합).
+type MyDropRpcRow = {
+  purpose: string | null;
+  status: string | null;
+  created_at: string | null;
+  published_at: string | null;
+  source: { title: string | null; thumbnail_url: string | null; provider: string | null } | null;
+  // v5.5: 첫 share_event 의 share_uuid. 없으면 null(공유 안 된 카드) → 타일 링크 불가라 제외.
+  share_uuid: string | null;
+};
+
+// MyDropRpcRow → DropFeedItem. share_uuid 없는(미게시/미공유) 행은 제외(게시된 것만).
+function adaptMyDropRow(row: MyDropRpcRow): DropFeedItem | null {
+  if (!row.share_uuid) return null;
+  const cs = row.source;
+  return {
+    shareUuid: row.share_uuid,
+    isMine: true,
+    // 본인 표시 — 내 카드이므로 메이커명은 "나"(별도 프로필 조회 없이). droppedAgo = 게시/생성시각.
+    maker: { ...MAKER_FALLBACK, name: "나", droppedAgo: formatDroppedAgo(row.published_at ?? row.created_at) },
+    // 무썸네일이면 "" → ShareCardTile 이 Play/Image 폴백 렌더(내 카드 전부 노출).
+    videoThumbnailUrl: cs?.thumbnail_url ?? "",
+    videoSourceLabel: providerToLabel(cs?.provider),
+    videoDurationSec: 0,
+    intent: safeIntent(row.purpose),
+    title: cs?.title ?? "(제목 없음)",
+    // 파생필드(shareCount/dropyReward/expiresAt/remainingStock)는 의도적 미주입(내 카드엔 자연히 없음).
+  };
+}
+
+// 홈 활동 세그먼트 "내가만든" — get_my_drops(published) → 어댑터. 실패 = 빈 배열(홈 생존).
+export async function getMyCreatedDrops(
+  client: SupabaseClient,
+  opts?: { limit?: number },
+): Promise<DropFeedItem[]> {
+  const { data, error } = (await client.rpc("get_my_drops", {
+    p_status: "published",
+    p_limit: opts?.limit ?? 12,
+    p_offset: 0,
+  } as never)) as { data: unknown; error: { message?: string } | null };
+  if (error || !Array.isArray(data)) {
+    if (error) console.error("[feed-queries] get_my_drops failed:", error.message);
+    return [];
+  }
+  return (data as MyDropRpcRow[])
+    .map(adaptMyDropRow)
+    .filter((x): x is DropFeedItem => x !== null);
+}
+
 // ════════════════════════ DOCK-1 카드 도킹 후보 ════════════════════════
 // 도킹 피커 전용 후보 조회 — 공개 발행 카드(내 것+남의 것)를 검색·목적필터로 찾아
 //   ref 블록 재료(refDropId/refShareUuid/이름/가격/이미지/출처 생산자명)로 돌려준다.

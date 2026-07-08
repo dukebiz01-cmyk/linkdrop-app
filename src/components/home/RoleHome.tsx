@@ -59,8 +59,10 @@ export type UserHomeData = {
   followedDrops: DropFeedItem[];
   /** 링고 추천 영상 — 공개 탐색 카드(getDiscoverDrops) 상위 N. (탐색 이관 — 유저홈 미사용, 데이터 보존) */
   recommendedDrops: DropFeedItem[];
-  /** 내가 sender 로 공유한 카드(getSentDrops) — 활동 세그먼트 "내 공유" 탭. */
+  /** 내가 sender 로 공유한 카드(getSentDrops) — 활동 세그먼트 "공유한" 탭. */
   sentDrops: DropFeedItem[];
+  /** 내가 만든(published) 카드(getMyCreatedDrops) — 활동 세그먼트 "내가만든" 탭. */
+  myCreatedDrops: DropFeedItem[];
 };
 
 const SEVERITY_RANK: Record<GuideDiagnosis["severity"], number> = {
@@ -233,6 +235,7 @@ export function RoleHome({
   if (!isBusiness || !merchant) {
     const followedDrops = user?.followedDrops ?? [];
     const sentDrops = user?.sentDrops ?? [];
+    const myCreatedDrops = user?.myCreatedDrops ?? [];
     // 추천 카드 — loader(getDiscoverDrops)에서 이미 옴. 새 데이터 배선 0. 최신순 단일(HOT 토글은 Phase3).
     const recommendedDrops = user?.recommendedDrops ?? [];
     return (
@@ -263,10 +266,11 @@ export function RoleHome({
           <RecommendedSwipe drops={recommendedDrops} serverNow={serverNow} onOpen={openDrop} />
         ) : null}
 
-        {/* 활동 세그먼트 — 내 공유 / 구독 토글. 빈상태 자체 처리. */}
+        {/* 활동 세그먼트 — 공유한 / 구독한 / 내가만든 토글. 빈상태 자체 처리. */}
         <HomeActivitySegment
           sentDrops={sentDrops}
           followedDrops={followedDrops}
+          myCreatedDrops={myCreatedDrops}
           serverNow={serverNow}
         />
       </div>
@@ -277,6 +281,7 @@ export function RoleHome({
   const recommendedDrops = user?.recommendedDrops ?? [];
   const sentDrops = user?.sentDrops ?? [];
   const followedDrops = user?.followedDrops ?? [];
+  const myCreatedDrops = user?.myCreatedDrops ?? [];
 
   return (
     <div className="mx-auto max-w-md space-y-6 bg-white px-4 pt-6 pb-24">
@@ -353,10 +358,11 @@ export function RoleHome({
         <RecommendedSwipe drops={recommendedDrops} serverNow={serverNow} onOpen={openDrop} />
       ) : null}
 
-      {/* 활동 세그먼트 — 내 공유 / 구독 토글. 빈상태 자체 처리. */}
+      {/* 활동 세그먼트 — 공유한 / 구독한 / 내가만든 토글. 빈상태 자체 처리. */}
       <HomeActivitySegment
         sentDrops={sentDrops}
         followedDrops={followedDrops}
+        myCreatedDrops={myCreatedDrops}
         serverNow={serverNow}
       />
     </div>
