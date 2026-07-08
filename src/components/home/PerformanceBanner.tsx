@@ -21,6 +21,8 @@ function StatCell({
   unit: string;
   accent?: boolean;
 }) {
+  // STEP 3 v0 룩 — 숫자 천단위 구분(toLocaleString). 값 로직·placeholder(0)는 호출부 유지.
+  const display = typeof value === "number" ? value.toLocaleString() : value;
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-2 py-4">
       <div className="mb-2 flex items-center gap-1">
@@ -28,16 +30,16 @@ function StatCell({
           className={`size-3.5 ${accent ? "text-[#2563EB]" : "text-[#94A3B8]"}`}
           strokeWidth={2}
         />
-        <span className="text-[11px] font-medium text-[#64748B]">{label}</span>
+        <span className="text-[11.5px] font-medium text-[#64748B]">{label}</span>
       </div>
-      <div className="flex items-baseline gap-0.5">
+      <div className="flex items-baseline gap-1">
         <span
-          className="text-[26px] font-bold leading-none tracking-tight tabular-nums"
+          className="text-[25px] font-bold leading-none tracking-[-0.02em] tabular-nums"
           style={{ color: accent ? "#2563EB" : "#0F172A" }}
         >
-          {value}
+          {display}
         </span>
-        <span className="text-[11px] font-medium text-[#94A3B8]">{unit}</span>
+        <span className="text-[11.5px] font-semibold text-[#94A3B8]">{unit}</span>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Sparkles, Users, ChevronRight, ArrowRight, TrendingUp, Bell } from "lucide-react";
 import { PerformanceBanner } from "@/components/home/PerformanceBanner";
@@ -6,6 +7,8 @@ import { PerformanceBanner } from "@/components/home/PerformanceBanner";
 import { LingoAiHomeCard } from "@/components/home/LingoAiHomeCard";
 import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
+// STEP 3 — v0(home-v5) 링고 스타터(모핑 히어로 + 4목적 아코디언 + 정적 CTA). 양 분기 최상단.
+import { LingoStarter } from "@/components/home/LingoStarter";
 import { SectionHeader } from "@/components/home/v4-bits";
 import type { DropFeedItem } from "@/components/home-page";
 import { reshareDrop } from "@/lib/reshare-drop";
@@ -14,6 +17,7 @@ import { reshareDrop } from "@/lib/reshare-drop";
 //   카드 생성 진입은 스튜디오 탭으로 일원화 — 홈엔 "카드 만들기" CTA 없음(중복 제거).
 //   상인 홈만 채우고(링고 매장 진단·새 예약·제안·명함), 유저 홈은 placeholder(4b에서 채움).
 //   항목 없으면 블록 숨김(빈 박스 방지) · 한정 개수 · 무한스크롤 없음(끝 있음).
+//   STEP 3 — v0 home-v5 디자인 이식: 링고 스타터(모두) + 성과 스트립 + 가로 스와이프 피드. 2분기 유지.
 
 type GuideDiagnosis = {
   axis: string;
@@ -71,6 +75,23 @@ const SEVERITY_LABEL: Record<GuideDiagnosis["severity"], string> = {
   low: "낮음",
   info: "안내",
 };
+
+// STEP 3 v0 포트 — 가로 스와이프 행("오늘 공유하기 좋은" 등, 카드가 세로로 길어지지 않게 옆으로 흐름).
+//   hide-scrollbar 유틸이 styles.css에 없어 인라인 arbitrary variant로 스크롤바 숨김(styles.css 무접촉).
+function HScrollRow({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="-mx-4 flex touch-pan-x snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      style={{ WebkitOverflowScrolling: "touch" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SwipeItem({ children }: { children: ReactNode }) {
+  return <div className="w-[46%] shrink-0 snap-start sm:w-[42%]">{children}</div>;
+}
 
 // 링고 매장 진단 — 매출관리 자동진단(캐시 = guide_history 최신 1행)에서 가장 급한 1개 + 액션.
 //   재계산 없음(추가 RPC 0). 진단 없으면 "매출관리에서 진단 받기" 포인터.
@@ -134,6 +155,54 @@ function TodayAiCard({ guide, onGoResults }: { guide: HomeGuide; onGoResults: ()
   );
 }
 
+// STEP 3 — "오늘 공유하기 좋은" 가로 스와이프 섹션(양 분기 공용). ShareCardTile 호출 props 동일.
+function RecommendedSwipe({
+  drops,
+  serverNow,
+  onOpen,
+}: {
+  drops: DropFeedItem[];
+  serverNow?: string;
+  onOpen: (shareUuid: string) => void;
+}) {
+  return (
+    <section>
+      <SectionHeader icon={TrendingUp} title="오늘 공유하기 좋은" badge="NEW" />
+      <HScrollRow>
+        {drops.map((drop) => (
+          <SwipeItem key={drop.shareUuid}>
+            <ShareCardTile
+              drop={drop}
+              // Phase 0 — 홈 뱃지 주입(탐색 explore.tsx 와 동일 소스 drop.intent). 3종 락.
+              purpose={drop.intent}
+              // P7c FEED-1 — isMine 데이터 유지(ShareCardTile 렌더는 STEP3에서 보류).
+              isMine={drop.isMine}
+              // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
+              expiresAt={drop.expiresAt}
+              serverNow={serverNow}
+              // 1-C-3 — 파생 재고(1-B-2 배치값, L4).
+              remainingStock={drop.remainingStock}
+              // SM-3 — 확산 규모.
+              shareCount={drop.shareCount}
+              // BADGE-ⓑ(4b) — Droppy 예상 보상(배치값). 미주입=미렌더.
+              dropyReward={drop.dropyReward}
+              onShare={() =>
+                void reshareDrop({
+                  shareUuid: drop.shareUuid,
+                  title: drop.title,
+                  imageUrl: drop.videoThumbnailUrl,
+                  purpose: drop.intent,
+                })
+              }
+              onClick={() => onOpen(drop.shareUuid)}
+            />
+          </SwipeItem>
+        ))}
+      </HScrollRow>
+    </section>
+  );
+}
+
 export function RoleHome({
   isBusiness,
   merchant,
@@ -153,8 +222,14 @@ export function RoleHome({
   onGoProposals: () => void;
 }) {
   const navigate = useNavigate();
-  // 유저 홈(비사업자) — 성과 배너 + 활동 세그먼트(내 공유 | 구독). 상인은 아래 merchant 홈.
-  //   추천영상→탐색·받은쿠폰→나 탭 이관(유저홈에서 제거). 빈상태는 세그먼트가 자체 처리.
+  // STEP 3 — 링고 스타터 4목적 라우팅(기존 온보딩 선택지 라우팅 유지).
+  const onCreate = () => void navigate({ to: "/create-wizard" });
+  const onExplore = () => void navigate({ to: "/explore" });
+  const openDrop = (shareUuid: string) =>
+    void navigate({ to: "/d/$shareUuid", params: { shareUuid } });
+
+  // 유저 홈(비사업자) — 링고 스타터 + 성과 2셀 + 오늘 공유(스와이프) + 활동 세그먼트(내 공유 | 구독).
+  //   상인 전용(성과진단·구독자·새제안·예약벨)은 절대 미노출 — 분기 유지가 핵심.
   if (!isBusiness || !merchant) {
     const followedDrops = user?.followedDrops ?? [];
     const sentDrops = user?.sentDrops ?? [];
@@ -169,53 +244,23 @@ export function RoleHome({
               <span className="text-[17px] font-bold text-white">L</span>
             </span>
             <div>
-              <p className="text-[18px] font-bold leading-tight text-[#0F172A]">LinkDrop</p>
+              <p className="text-[18px] font-bold leading-tight text-[#0F172A]">
+                Link<span className="text-[#2563EB]">Drop</span>
+              </p>
               <p className="text-[11.5px] text-[#64748B]">링크는 목적을 만나 행동이 된다</p>
             </div>
           </div>
         </header>
 
-        {/* 성과 배너 — 이번 달 내 성과(placeholder, 데이터 배선 추후). 순수 ADDITIVE 최상단. */}
+        {/* 🆕 링고 스타터 — 모핑 히어로 + 4목적 아코디언 + 정적 CTA. 모두에게. */}
+        <LingoStarter onCreate={onCreate} onExplore={onExplore} />
+
+        {/* 성과 2셀 — 전환·적립(placeholder 0, 데이터 배선 추후). v0 룩. */}
         <PerformanceBanner conversionCount={0} dropyAmount={0} />
 
-        {/* 오늘 공유하기 좋은 카드 — 추천 영상(있을 때만) 2열 그리드. 카드=공유(카톡 재공유)·열기.
-            빈 박스 방지(L12 원칙) — 없으면 섹션 자체 숨김. */}
+        {/* 오늘 공유하기 좋은 — 추천 영상(있을 때만) 가로 스와이프. 빈 박스 방지(L12) — 없으면 숨김. */}
         {recommendedDrops.length > 0 ? (
-          <section>
-            <SectionHeader icon={TrendingUp} title="오늘 공유하기 좋은" badge="NEW" />
-            <div className="grid grid-cols-2 gap-3">
-              {recommendedDrops.map((drop) => (
-                <ShareCardTile
-                  key={drop.shareUuid}
-                  drop={drop}
-                  // Phase 0 — 홈 뱃지 주입(탐색 explore.tsx 와 동일 소스 drop.intent). 3종 락.
-                  purpose={drop.intent}
-                  // P7c FEED-1 — 내/남 구분 칩(feed-queries 산출).
-                  isMine={drop.isMine}
-                  // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
-                  expiresAt={drop.expiresAt}
-                  serverNow={serverNow}
-                  // 1-C-3 — 파생 재고(1-B-2 배치값, L4).
-                  remainingStock={drop.remainingStock}
-                  // SM-3 — 확산 규모.
-                  shareCount={drop.shareCount}
-                  // BADGE-ⓑ(4b) — Droppy 예상 보상(배치값). 미주입=미렌더.
-                  dropyReward={drop.dropyReward}
-                  onShare={() =>
-                    void reshareDrop({
-                      shareUuid: drop.shareUuid,
-                      title: drop.title,
-                      imageUrl: drop.videoThumbnailUrl,
-                      purpose: drop.intent,
-                    })
-                  }
-                  onClick={() =>
-                    void navigate({ to: "/d/$shareUuid", params: { shareUuid: drop.shareUuid } })
-                  }
-                />
-              ))}
-            </div>
-          </section>
+          <RecommendedSwipe drops={recommendedDrops} serverNow={serverNow} onOpen={openDrop} />
         ) : null}
 
         {/* 활동 세그먼트 — 내 공유 / 구독 토글. 빈상태 자체 처리. */}
@@ -228,22 +273,23 @@ export function RoleHome({
     );
   }
 
-  // 상인 홈 — 유저홈과 동일 언어(성과 3타일 + 추천 그리드 + 활동 세그먼트). 피드 데이터는 user 로 옴(loader 비즈 분기).
-  //   관리(새예약 목록·명함)는 /partner 로 이관 → 홈은 🔔 배지·매장명 줄로 축약. 제안은 컴팩트 유지(액션은 /partner).
+  // 상인 홈 — 유저홈과 동일 언어 + 상인 전용 보존(성과진단·새제안·구독자·예약벨). 피드 데이터는 user 로 옴.
   const recommendedDrops = user?.recommendedDrops ?? [];
   const sentDrops = user?.sentDrops ?? [];
   const followedDrops = user?.followedDrops ?? [];
 
   return (
     <div className="mx-auto max-w-md space-y-6 bg-white px-4 pt-6 pb-24">
-      {/* 헤더 — V4 로고마크 + 워드마크 + 매장명(파란 도트) + 🔔(pending 새예약 빨간 배지, 0이면 숨김, 클릭→/partner/reservations). */}
+      {/* 헤더 — 로고 + 워드마크 + 매장명(파란 도트) + 🔔(pending 새예약 빨강 배지, 0이면 숨김, 클릭→/partner/reservations). */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <span className="flex size-9 items-center justify-center rounded-[11px] bg-[#0F172A] shadow-[0_4px_12px_rgba(15,23,42,0.18)]">
             <span className="text-[17px] font-bold text-white">L</span>
           </span>
           <div>
-            <p className="text-[18px] font-bold leading-tight text-[#0F172A]">LinkDrop</p>
+            <p className="text-[18px] font-bold leading-tight text-[#0F172A]">
+              Link<span className="text-[#2563EB]">Drop</span>
+            </p>
             <p className="flex items-center gap-1 text-[11.5px] text-[#64748B]">
               <span className="size-1.5 rounded-full bg-[#2563EB]" />
               {merchant.partnerName || "내 매장"}
@@ -265,16 +311,17 @@ export function RoleHome({
         </button>
       </header>
 
-      {/* 성과 스탯 3타일 — 전환·적립·구독자. */}
+      {/* 🆕 링고 스타터 — 유저홈과 동일(+CTA 알약). */}
+      <LingoStarter onCreate={onCreate} onExplore={onExplore} />
+
+      {/* 성과 3셀 — 전환·적립·구독자. */}
       <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />
 
-      {/* P6-8 — AI 한 지붕: 링고AI 셸 1개(가이드 상시 + 성과 진단 접힘). AI 박스 2겹 소멸.
-          ★TodayAiCard 컴포넌트 0터치 — 셸에 콘텐츠 주입만(크롬 중화는 셸 래퍼 담당). */}
-      <LingoAiHomeCard
-        guideSlot={<TodayAiCard guide={merchant.guide} onGoResults={onGoResults} />}
-      />
+      {/* ✅ 성과진단 보존 — 링고AI 셸: 즉석 진단(TodayAiCard) 제거, "성과 진단 보기" 진입만 유지.
+          guideSlot 미주입 → 상단 슬롯·디바이더 미렌더(헤더 + 성과 진단 아코디언만). */}
+      <LingoAiHomeCard />
 
-      {/* 제안 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. 스타일만 V4 톤. */}
+      {/* ✅ 새 제안 보존 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. */}
       {merchant.proposals.length > 0 ? (
         <section>
           <SectionHeader icon={Users} title="새 제안" badge={merchant.proposals.length} />
@@ -301,43 +348,9 @@ export function RoleHome({
         </section>
       ) : null}
 
-      {/* 오늘 공유하기 좋은 카드 — 추천 영상(있을 때만) 2열 그리드. 유저홈과 동일. 빈 박스 방지(L12) — 없으면 숨김. */}
+      {/* 오늘 공유하기 좋은 — 추천 영상(있을 때만) 가로 스와이프. 유저홈과 동일. 빈 박스 방지(L12). */}
       {recommendedDrops.length > 0 ? (
-        <section>
-          <SectionHeader icon={TrendingUp} title="오늘 공유하기 좋은" badge="NEW" />
-          <div className="grid grid-cols-2 gap-3">
-            {recommendedDrops.map((drop) => (
-              <ShareCardTile
-                key={drop.shareUuid}
-                drop={drop}
-                // Phase 0 — 홈 뱃지 주입(탐색과 동일 소스 drop.intent). 3종 락.
-                purpose={drop.intent}
-                // P7c FEED-1 — 내/남 구분 칩(feed-queries 산출).
-                isMine={drop.isMine}
-                // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
-                expiresAt={drop.expiresAt}
-                serverNow={serverNow}
-                // 1-C-3 — 파생 재고(1-B-2 배치값, L4).
-                remainingStock={drop.remainingStock}
-                // SM-3 — 확산 규모.
-                shareCount={drop.shareCount}
-                // BADGE-ⓑ(4b) — Droppy 예상 보상(배치값). 미주입=미렌더.
-                dropyReward={drop.dropyReward}
-                onShare={() =>
-                  void reshareDrop({
-                    shareUuid: drop.shareUuid,
-                    title: drop.title,
-                    imageUrl: drop.videoThumbnailUrl,
-                    purpose: drop.intent,
-                  })
-                }
-                onClick={() =>
-                  void navigate({ to: "/d/$shareUuid", params: { shareUuid: drop.shareUuid } })
-                }
-              />
-            ))}
-          </div>
-        </section>
+        <RecommendedSwipe drops={recommendedDrops} serverNow={serverNow} onOpen={openDrop} />
       ) : null}
 
       {/* 활동 세그먼트 — 내 공유 / 구독 토글. 빈상태 자체 처리. */}

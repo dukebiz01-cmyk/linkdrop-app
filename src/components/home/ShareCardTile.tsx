@@ -1,22 +1,23 @@
 import { useState } from "react";
-import { Play, Send, Image as ImageIcon, Diamond, Package, User, ChevronRight } from "lucide-react";
+import { Play, Send, Image as ImageIcon, Diamond, Package, Users, Route, ArrowUpRight } from "lucide-react";
 import type { DropFeedItem } from "@/components/home-page";
 import { useCountdown } from "@/hooks/use-countdown";
-// SM-4 — 확산 필 탭 → 그 자리 바텀시트(무Radix 자체 구현·타일 자체 호스팅 = 피드 표면 0터치).
+// SM-4 통합 — 카드 펼침 여정도 공용 A(share-journey) 소비. 자체 mock(buildJourney/ShareJourneyInline) 폐기.
+//   ShareJourneySheet = 실 RPC(get_share_journey) lazy 바텀시트(펼칠 때만 1콜 · 카드 렌더 시 fetch 0).
 import { ShareJourneySheet } from "@/components/share-journey";
 
 /**
  * ShareCardTile — V4 카드(정사각 썸네일 + 솔리드 정보영역 + 슬레이트 + 도트칩 + 섀도).
  *   유저홈 "오늘 공유하기 좋은 카드" · 탐색 그리드 공용. (아크릴 오버레이 → V4 솔리드로 교체.)
  *
- * 구조: 루트 article(group, flex-col, rounded-2xl, border #E8EDF3, V4 카드 섀도, hover -translate+elevation)
- *   / 썸네일 aspect-square(고정 1:1 → 카드 높이 정렬, group-hover scale) + 상단 스크림
- *   / 종류칩(top-left, 도트+라벨, purpose 주입 시만) · 공유 아이콘버튼(top-right, 44px 탭) · duration(좌하단)
- *   / 솔리드 정보영역(메이커·지역 1줄 + 제목 2줄 clamp, min-h 컬럼 정렬).
+ * STEP 2 그래프트(외과적 렌더 교체) — 렌더 레이아웃은 v0(share-card-tile.v0)로 교체하되
+ *   ⏱ 타이머·📦 재고 배지는 live(TimerBadge/StockMeta)를 그대로 재사용(피드·/d·스튜디오 한 룩 =
+ *   거울 일관성). 종류칩은 live purposeMeta(3종 락). v0 신규 부품(DropyBadge/ShareChainMeta/
+ *   buildJourney/공유여정 인라인 아코디언·layout row) 편입. isMine=작은 'my' 마커, localName=옵셔널 가드.
  *
  * 공리 V4(styles.css 600b062): 슬레이트+섀도+blue accent 허용, raw hex 허용, backdrop-blur 허용. Lucide만, 이모지 0.
  * 루트=article(비-button) + onClick → 공유만 내부 button + stopPropagation(중첩 button 금지).
- * ★ props 계약 유지: { drop, purpose?, onShare?, onClick? }. 홈=purpose 미주입(칩X), 탐색=주입(칩O).
+ * ★ props 계약 유지: { drop, purpose?, onShare?, onClick?, ... } + layout?("grid" 기본). 명시 prop 우선·drop.* 폴백.
  */
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -49,14 +50,6 @@ function purposeMeta(v: string | undefined): ChipMeta | null {
       return null;
   }
 }
-
-// Phase 1-A — 공유 여정 노드. [보정2] props 타입 신설까지만 — 렌더 코드는 후속 Phase(작성 금지).
-export type ShareJourneyNode = {
-  name: string;
-  role: string;
-  kind: "peer" | "me" | "buyer";
-  emphasis?: boolean;
-};
 
 // ── Phase 1-A 하드락 (fix3 = L7 최종판) ──
 //   L1/L3 — 기준은 expiresAt 하나: 리셋·재계산 금지(새로고침 동일값. 계산은 use-countdown 훅 소관).
@@ -120,47 +113,27 @@ export function StockMeta({ remaining }: { remaining: number }) {
   );
 }
 
-// SM-3 — 확산 컴팩트 필(1-A 보정2 shareCount 렌더 금지 해제분). 익명 아바타 스택(제네릭
-//   실루엣 최대 3 — 이니셜·실명·이미지 0) + "N명 확산"("모집" 계열 금지). 재고 뱃지 동일
-//   계열(rounded·px-1.5·py-0.5·text-[10px]) · 모션 0.
-//   SM-4 — 탭 동선 신설: 필 탭 = 그 자리 여정 바텀시트(카드 본체 탭 /d 는 그대로).
-//   [㉮] 정적 셰브론 1자(size-3 = 아바타 원과 동일 → 필 높이 무변경) · 모션 0 · 마스킹 무변경.
-function SpreadPill({ count, onOpen }: { count: number; onOpen: (e: React.MouseEvent) => void }) {
+// ── v0 그래프트: 🎁 드로피 배지(블루 솔리드 강조, 비현금 기여보상 +N P) ──────────
+//   Phase 0 편입 — live 슬레이트 인라인 → v0 솔리드 블루(잘 보이게). 코드명 dropy 유지.
+//   모집·수익 뉘앙스 문안 금지(값 점등 + aria 만).
+function DropyBadge({ reward }: { reward: number }) {
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={`${count}명 전달 — 공유 여정 보기`}
-      // BADGE-ⓑ(SM-5) — 승격: 11px·bold·#334155·틴트 #EFF3F8(대비↑). 구조·아바타 스택 무변경, 정적.
-      // BADGE-fix1 — 라벨 "N명 전달"(역할 4종 락 어휘 통일) + 아이콘 잉크 계열(#334155) 대비 강화.
-      className="inline-flex shrink-0 items-center gap-1 rounded border border-[#E8EDF3] bg-[#EFF3F8] px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-[#334155]"
+    <span
+      aria-label="판매 성사 시 적립"
+      className="inline-flex items-center gap-0.5 rounded-md bg-[#2563EB] px-1.5 py-1 text-[10px] font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]"
     >
-      <span className="flex -space-x-1">
-        {Array.from({ length: Math.min(3, count) }).map((_, i) => (
-          <span
-            key={i}
-            className="flex size-3 items-center justify-center rounded-full border border-white bg-[#334155]"
-          >
-            <User className="size-2 text-white" strokeWidth={2.5} />
-          </span>
-        ))}
-      </span>
-      {count}명 전달
-      <ChevronRight className="size-3 text-[#334155]" strokeWidth={2} />
-    </button>
+      <Diamond className="size-3 fill-white/30" strokeWidth={2.5} />+{reward.toLocaleString()}P
+    </span>
   );
 }
 
-// 드로피 배지 — [보정1] 아이콘+숫자만("+{n}"), 단위 문자(P) 보류. 모집·수익 뉘앙스 문안 금지(코드명 dropy).
-function DropyBadge({ amount }: { amount: number }) {
+// ── v0 그래프트: 🔗 공유지도 컴팩트 미니체인(익명 노드·신원 마스킹) ─────────
+//   기여도만 집계(모집 개념 없음). compact = 카드 바닥 콤팩트(명수만).
+function ShareChainMeta({ count, compact = false }: { count: number; compact?: boolean }) {
   return (
-    // V4 앱 액센트 — 목적색(mode-accent) 체계와 무관.
-    // BADGE-ⓑ(4b) — 값 점등: toLocaleString(3,200) + 조건 문구는 aria 만(시각 무노출, §0 절제 락).
-    <span
-      aria-label="판매 성사 시 적립"
-      className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-bold tabular-nums text-[#2563EB]"
-    >
-      <Diamond className="size-3" strokeWidth={2.5} />+{amount.toLocaleString()}
+    <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10.5px] font-semibold tabular-nums text-[#475569]">
+      <Users className="size-3 flex-shrink-0 text-[#94A3B8]" strokeWidth={2.25} />
+      {compact ? `${count.toLocaleString()}명` : `${count.toLocaleString()}명 전달`}
     </span>
   );
 }
@@ -170,44 +143,170 @@ export function ShareCardTile({
   purpose,
   onShare,
   onClick,
-  expiresAt,
-  serverNow,
-  remainingStock,
-  dropyReward,
-  shareCount,
   isMine,
+  expiresAt: expiresAtProp,
+  serverNow,
+  remainingStock: remainingStockProp,
+  dropyReward: dropyRewardProp,
+  shareCount: shareCountProp,
+  layout = "grid",
 }: {
   drop: DropFeedItem;
   purpose?: string;
   onShare?: (uuid: string) => void;
   onClick?: () => void;
-  /** P7c FEED-1 — 내 카드 칩. prop 우선, 미주입 시 drop.isMine 폴백. 둘 다 없으면 미렌더. */
+  /** P7c FEED-1 — 내 카드 마커. prop 우선, 미주입 시 drop.isMine 폴백. 둘 다 없으면 미렌더. */
   isMine?: boolean;
-  /** Phase 1-A — ISO 마감시각(coupons.valid_until 계열). 미주입 = 타이머 미렌더. */
+  /** Phase 1-A — ISO 마감시각. prop 우선, 없으면 drop.expiresAt. 미주입 = 타이머 미렌더. */
   expiresAt?: string;
-  /** 1-C-2(L6) — 서버 기준시각(표면 loader 1회 공급). use-countdown offset 보정. */
+  /** 1-C-2(L6) — 서버 기준시각(표면 loader 1회 공급). live TimerBadge offset 보정. */
   serverNow?: string;
-  /** Phase 1-A — 파생 재고(1-B 공급). 미주입 = 미렌더. L4: 공급값 표시만. */
+  /** Phase 1-A — 파생 재고(1-B 공급). prop 우선, 없으면 drop.remainingStock. L4: 공급값 표시만. */
   remainingStock?: number;
-  /** Phase 1-A — 드로피 보상(값 주입은 P6 이후 — 렌더만 선구현). */
+  /** BADGE-ⓑ — 드로피 보상. prop 우선, 없으면 drop.dropyReward. 0/미주입 = 미렌더. */
   dropyReward?: number;
-  /** SM-3 — 확산 규모("N명 확산" 컴팩트 필, 1-A 보정2 렌더 금지 해제). 0/미주입 = 미렌더. */
+  /** SM-3 — 확산 규모("N명 전달" 컴팩트 필). prop 우선, 없으면 drop.shareCount. 0/미주입 = 미렌더. */
   shareCount?: number;
-  /** [보정2] 타입 신설까지만 — 렌더 코드 없음(후속 Phase). */
-  shareJourney?: ShareJourneyNode[];
+  /** v0 편입 — grid=세로 카드(기본) / row=가로 리스트. 현 호출부 미사용(기본 grid). */
+  layout?: "grid" | "row";
 }) {
-  const isVideo = drop.videoDurationSec > 0;
-  const chip = purposeMeta(purpose);
-  // P7c FEED-1 — prop 우선, 없으면 피드 산출값(drop.isMine).
-  const mine = isMine ?? drop.isMine ?? false;
+  // 호출부 하위호환 — 명시 prop 우선, 없으면 drop.*(feed-queries 산출값). 값 동일이라 무해.
+  const expiresAt = expiresAtProp ?? drop.expiresAt;
+  const remainingStock = remainingStockProp ?? drop.remainingStock;
+  const dropyReward = dropyRewardProp ?? drop.dropyReward;
+  const shareCount = shareCountProp ?? drop.shareCount;
+  // P7c FEED-1 — isMine prop·데이터 유지(나중 부활 대비). STEP 3에서 'my' 마커 렌더만 제거.
+  void (isMine ?? drop.isMine);
+
+  const chip = purposeMeta(purpose); // live purposeMeta — 홈 미주입=칩 숨김 / 주입 시 표시
+  const accent = chip?.tone.dot ?? "#2563EB"; // 여정 강조색 — 칩 없으면 앱 블루
+  // v0 칩 틴트(row 레이아웃용) — 쿠폰(#2563EB)=블루 틴트, 그 외=슬레이트(v0 토큰 일치).
+  const chipBg = accent === "#2563EB" ? "bg-[#EEF3FE]" : "bg-[#F1F5F9]";
+  const chipBorder = accent === "#2563EB" ? "border-[#DBE6FD]" : "border-[#E2E8F0]";
+
   const hasThumb = Boolean(drop.videoThumbnailUrl);
-  // SM-4 — 여정 시트 개폐. 시트는 닫혀도 마운트 유지(open=false 는 null 렌더) → rows 캐시 보존.
+  const isVideo = drop.videoDurationSec > 0;
+  const hasStock = typeof remainingStock === "number";
+  const hasDropy = typeof dropyReward === "number" && dropyReward > 0;
+  const hasChain = typeof shareCount === "number" && shareCount > 0;
+  const hasMetaRow = hasStock || hasChain;
   const [journeyOpen, setJourneyOpen] = useState(false);
 
+  // ── 가로형 리스트 행(row) ──────────────────────────────────────
+  if (layout === "row") {
+    return (
+      <article
+        onClick={onClick}
+        className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-[#E8EDF3] bg-white p-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_4px_12px_rgba(15,23,42,0.04)] transition-all duration-200 hover:border-[#CBD5E1] hover:shadow-[0_8px_22px_rgba(15,23,42,0.09)]"
+      >
+        {/* 썸네일(고정 정사각) */}
+        <div className="relative aspect-square w-[92px] flex-shrink-0 overflow-hidden rounded-xl bg-[#F1F5F9]">
+          {hasThumb ? (
+            <img
+              src={drop.videoThumbnailUrl}
+              alt={drop.title}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              {isVideo ? (
+                <Play className="size-6 text-[#94A3B8]" />
+              ) : (
+                <ImageIcon className="size-6 text-[#94A3B8]" />
+              )}
+            </div>
+          )}
+          {/* STEP 3 — 'my' 마커 렌더 제거(isMine 데이터는 보존, 나중 부활 대비). */}
+          {/* ⏱ live 타이머(우선, absolute) 또는 재생시간(좌하단) */}
+          {isVideo && !expiresAt ? (
+            <span className="absolute bottom-1 left-1 rounded bg-black/65 px-1 py-0.5 text-[9px] font-semibold tabular-nums text-white">
+              {formatDuration(drop.videoDurationSec)}
+            </span>
+          ) : null}
+          {expiresAt ? <TimerBadge expiresAt={expiresAt} serverNow={serverNow} /> : null}
+        </div>
+
+        {/* 본문 */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            {chip ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${chipBg} ${chipBorder} ${chip.tone.text}`}
+              >
+                <span className="size-1 rounded-full" style={{ backgroundColor: accent }} />
+                {chip.label}
+              </span>
+            ) : null}
+            <span className="truncate text-[11px] font-medium text-[#94A3B8]">
+              {drop.maker.name}
+              {drop.localName ? ` · ${drop.localName}` : ""}
+            </span>
+          </div>
+          <div className="mt-1 line-clamp-2 text-[13.5px] font-semibold leading-[1.4] text-[#0F172A]">
+            {drop.title}
+          </div>
+          {/* 📦 재고 · 🔗 공유체인(탭 → 공유지도) · 🎁 드로피 메타 */}
+          {hasMetaRow || hasDropy ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              {hasStock ? <StockMeta remaining={remainingStock!} /> : null}
+              {hasChain ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setJourneyOpen((v) => !v);
+                  }}
+                  aria-haspopup="dialog"
+                  className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 -mx-1 transition-colors active:bg-[#F1F5F9]"
+                >
+                  <ShareChainMeta count={shareCount!} />
+                  <span
+                    className="inline-flex items-center gap-0.5 text-[11px] font-semibold"
+                    style={{ color: accent }}
+                  >
+                    <Route className="size-3.5" strokeWidth={2.25} />
+                    <ArrowUpRight className="size-3.5" strokeWidth={2.5} />
+                  </span>
+                </button>
+              ) : null}
+              {hasDropy ? <DropyBadge reward={dropyReward!} /> : null}
+            </div>
+          ) : null}
+          {/* SM-4 통합 — 펼침 여정 = 공용 실 RPC lazy 바텀시트(포털·1콜, 카드 렌더 시 fetch 0). */}
+          {hasChain ? (
+            <ShareJourneySheet
+              open={journeyOpen}
+              onClose={() => setJourneyOpen(false)}
+              shareUuid={drop.shareUuid}
+            />
+          ) : null}
+        </div>
+
+        {/* 공유 */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onShare?.(drop.shareUuid);
+          }}
+          className="flex h-11 w-11 flex-shrink-0 items-center justify-center"
+          aria-label="공유"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[#EAEEF3] bg-white transition-all duration-150 group-hover:border-[#BFD3F9] group-hover:bg-[#F5F8FF] active:scale-90">
+            <Send
+              className="size-4 text-[#475569] transition-colors group-hover:text-[#2563EB]"
+              strokeWidth={2}
+            />
+          </span>
+        </button>
+      </article>
+    );
+  }
+
+  // ── 세로형 그리드 카드(기본) ─────────────────────────────
   return (
     <article
-      className="group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-[#E8EDF3] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05),0_4px_12px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#CBD5E1] hover:shadow-[0_10px_28px_rgba(15,23,42,0.1)]"
       onClick={onClick}
+      className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-[#E8EDF3] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.05),0_4px_12px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#CBD5E1] hover:shadow-[0_10px_28px_rgba(15,23,42,0.1)]"
     >
       {/* 썸네일 — 고정 1:1 정사각(모든 카드 높이 정렬). 없으면 폴백(영상=Play / 사진=Image). */}
       <div className="relative aspect-square w-full overflow-hidden bg-[#F1F5F9]">
@@ -218,42 +317,36 @@ export function ShareCardTile({
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-[450ms] ease-[cubic-bezier(0.19,1,0.22,1)] group-hover:scale-[1.05]"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-[#94A3B8]">
+          <div className="absolute inset-0 flex items-center justify-center">
             {isVideo ? (
-              <Play className="h-8 w-8" strokeWidth={1.5} />
+              <Play className="size-7 text-[#94A3B8]" />
             ) : (
-              <ImageIcon className="h-8 w-8" strokeWidth={1.5} />
+              <ImageIcon className="size-7 text-[#94A3B8]" />
             )}
           </div>
         )}
 
         {/* 상단 스크림 — 칩·공유 가독성. */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/30 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-black/25 to-transparent" />
+        {/* 하단 스크림 — 재생시간·재고·타이머 대비(영상일 때만). */}
+        {isVideo ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/30 to-transparent" />
+        ) : null}
 
-        {/* 종류칩 — 좌상단, 도트+라벨(글래스 펄). purpose 주입 시만(홈 미주입=숨김).
-            P7c FEED-1 — "내 카드" 칩을 종류칩 우측에 나란히(같은 좌상단 영역, 정적·모션 0). */}
-        {chip || mine ? (
+        {/* 종류칩(좌상단, 도트+라벨, purpose 주입 시만). STEP 3 — 'my' 마커 렌더 제거(isMine 데이터 보존). */}
+        {chip ? (
           <div className="absolute left-2 top-2 flex items-center gap-1">
-            {chip ? (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold shadow-[0_2px_6px_rgba(15,23,42,0.16)] backdrop-blur-sm ${chip.tone.text}`}
-              >
-                <span className="size-1.5 rounded-full" style={{ backgroundColor: chip.tone.dot }} />
-                {chip.label}
-              </span>
-            ) : null}
-            {mine ? (
-              // P7c 완성 — 흰 배경(종류칩 동일 톤): 어두운 썸네일 위 검정칩 매몰 해소. 그림자도 종류칩 동일.
-              <span className="inline-flex items-center rounded-full bg-white/95 px-2 py-0.5 text-[10px] font-bold text-neutral-800 shadow-[0_2px_6px_rgba(15,23,42,0.16)] backdrop-blur-sm">
-                내 카드
-              </span>
-            ) : null}
+            <span
+              className={`inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold shadow-[0_2px_6px_rgba(15,23,42,0.16)] backdrop-blur-sm ${chip.tone.text}`}
+            >
+              <span className="size-1.5 rounded-full" style={{ backgroundColor: accent }} />
+              {chip.label}
+            </span>
           </div>
         ) : null}
 
-        {/* 공유 — 우상단 아이콘 버튼. 탭영역 44px, 가시 원 32px. 카드 열기 방지 stopPropagation. */}
+        {/* 공유 — 우상단 아이콘 버튼(탭영역 44px, 가시 원 32px). stopPropagation. */}
         <button
-          type="button"
           onClick={(e) => {
             e.stopPropagation();
             onShare?.(drop.shareUuid);
@@ -269,70 +362,70 @@ export function ShareCardTile({
           </span>
         </button>
 
-        {/* 재생시간 — 좌하단(영상만). BADGE-ⓑ(S24) — 재고 오버레이와 동시 존재 시 재고 우선
-            (커머스 셀프업로드는 duration 없어 실충돌 희박 — 방어 게이트만). */}
-        {isVideo && remainingStock == null ? (
-          <span className="absolute bottom-2 left-2 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white">
+        {/* 재생시간 — 좌하단(영상·타이머 없을 때). 타이머 있으면 우하단 live TimerBadge 로 대체. */}
+        {isVideo && !expiresAt ? (
+          <span className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white backdrop-blur-sm">
             {formatDuration(drop.videoDurationSec)}
           </span>
         ) : null}
-
-        {/* BADGE-ⓑ(S24) — 재고 썸네일 좌하단 승격: TimerBadge(우하단)와 대칭·동일 문법. */}
-        {remainingStock != null ? (
-          <span className="absolute bottom-2 left-2">
-            <StockMeta remaining={remainingStock} />
-          </span>
-        ) : null}
-
-        {/* Phase 1-A — 마감 타이머(우하단, 재생시간 배지 계열·종류칩과 충돌 없음). 미주입 = 미렌더.
-            1-C-2 — serverNow 관통(L6). */}
+        {/* ⏱ live 타이머(우하단, absolute) — 미주입 = 미렌더. serverNow 관통(L6). */}
         {expiresAt ? <TimerBadge expiresAt={expiresAt} serverNow={serverNow} /> : null}
       </div>
 
-      {/* 정보영역 — 솔리드, 고정 높이 컬럼 정렬(메이커·지역 1줄 + 제목 2줄).
-          BADGE-ⓑ(S24) — 재고는 썸네일 오버레이로 이동 → 메타행 = 메이커명 + DropyBadge + SpreadPill(폭 압박 해소). */}
-      <div className="flex flex-col px-3 pb-3 pt-2.5">
-        {dropyReward != null || (shareCount ?? 0) > 0 ? (
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 truncate text-[11px] font-semibold text-[#64748B]">
-              {drop.maker.name}
-              {drop.localName ? ` · ${drop.localName}` : ""}
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {dropyReward != null ? <DropyBadge amount={dropyReward} /> : null}
-              {/* SM-3 — 확산 필(0/미주입 = 미렌더).
-                  SM-4 — 필 탭 = 여정 시트(stopPropagation — 타일 onClick=/d 오발화 차단). */}
-              {(shareCount ?? 0) > 0 ? (
-                <SpreadPill
-                  count={shareCount as number}
-                  onOpen={(e) => {
-                    e.stopPropagation();
-                    setJourneyOpen(true);
-                  }}
-                />
-              ) : null}
-            </div>
-          </div>
-        ) : (
-          <div className="truncate text-[11px] font-semibold text-[#64748B]">
-            {drop.maker.name}
-            {drop.localName ? ` · ${drop.localName}` : ""}
-          </div>
-        )}
+      {/* 정보영역 — 솔리드, flex-1 채우고 하단 메타는 바닥 정렬. */}
+      <div className="flex flex-1 flex-col px-3 pb-3 pt-2.5">
+        <div className="truncate text-[11px] font-semibold text-[#64748B]">
+          {drop.maker.name}
+          {drop.localName ? ` · ${drop.localName}` : ""}
+        </div>
         <div className="mt-1 line-clamp-2 min-h-[37px] text-[13.5px] font-semibold leading-[1.4] tracking-[-0.01em] text-[#0F172A]">
           {drop.title}
         </div>
+        {/* 🎁 드로피 — 제목 바로 아래 고정(위치 통일). 타이머는 썸네일로 이동(live 룩). */}
+        {hasDropy ? (
+          <div className="mt-2 flex min-h-[24px] items-center gap-1.5">
+            <DropyBadge reward={dropyReward!} />
+          </div>
+        ) : null}
+        {/* 📦 재고 · 🔗 공유체인(탭 → 공유지도) 메타 — 항상 카드 바닥 고정. */}
+        <div className="mt-auto flex flex-col">
+          {hasMetaRow ? (
+            <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#F1F5F9] pt-2.5">
+              {hasChain ? (
+                <ShareChainMeta count={shareCount!} compact />
+              ) : hasStock ? (
+                <StockMeta remaining={remainingStock!} />
+              ) : (
+                <span />
+              )}
+              {hasChain ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setJourneyOpen((v) => !v);
+                  }}
+                  aria-haspopup="dialog"
+                  className="inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 -mr-1 text-[11px] font-semibold transition-colors active:bg-[#EEF3FE]"
+                  style={{ color: accent }}
+                >
+                  <Route className="size-3.5 flex-none" strokeWidth={2.25} />
+                  여정
+                  <ArrowUpRight className="size-3.5" strokeWidth={2.5} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        {/* SM-4 통합 — 펼침 여정 = 공용 실 RPC lazy 바텀시트(포털·1콜, 카드 렌더 시 fetch 0). */}
+        {hasChain ? (
+          <ShareJourneySheet
+            open={journeyOpen}
+            onClose={() => setJourneyOpen(false)}
+            shareUuid={drop.shareUuid}
+          />
+        ) : null}
       </div>
-
-      {/* SM-4 — 여정 바텀시트(포털 → body). 확산 필 있을 때만 배선. 시트 내부 클릭은
-          share-journey 루트 stopPropagation 이 타일 onClick 버블을 차단. */}
-      {(shareCount ?? 0) > 0 ? (
-        <ShareJourneySheet
-          open={journeyOpen}
-          onClose={() => setJourneyOpen(false)}
-          shareUuid={drop.shareUuid}
-        />
-      ) : null}
     </article>
   );
 }

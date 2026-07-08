@@ -9,9 +9,26 @@ import { reshareDrop } from "@/lib/reshare-drop";
 /**
  * HomeActivitySegment — 유저홈 활동 세그먼트(내 공유 | 구독). V4: SectionHeader + iOS 흰칩 SegmentToggle.
  *
- * 토글 2탭(기본 활성 = 내 공유). 2열 그리드(ShareCardTile 재사용). 빈상태 = EmptyState(탭별 문구).
- * 카드 열기 = useNavigate 내장(기존 onOpenDrop 동작 보존). 재공유 = reshareDrop(데이터·핸들러 0변경).
+ * STEP 3 — 토글 2탭 유지(기본 = 내 공유). v0 룩 = 가로 스와이프 행(ShareCardTile 재사용).
+ *   빈상태 = EmptyState(탭별 문구). 카드 열기 = useNavigate 내장. 재공유 = reshareDrop(데이터·핸들러 0변경).
  */
+
+// STEP 3 v0 포트 — 가로 스와이프 행(카드가 세로로 길어지지 않게 옆으로 흐름).
+//   hide-scrollbar 유틸이 styles.css에 없어 인라인 arbitrary variant로 스크롤바 숨김(styles.css 무접촉).
+function HScrollRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="-mx-4 flex touch-pan-x snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      style={{ WebkitOverflowScrolling: "touch" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SwipeItem({ children }: { children: React.ReactNode }) {
+  return <div className="w-[46%] shrink-0 snap-start sm:w-[42%]">{children}</div>;
+}
 export function HomeActivitySegment({
   sentDrops,
   followedDrops,
@@ -48,33 +65,34 @@ export function HomeActivitySegment({
       </div>
 
       {drops.length > 0 ? (
-        // 2열 그리드 — ShareCardTile 재사용. 공유=재공유, 클릭=/d 이동.
-        <div className="grid grid-cols-2 gap-3">
+        // STEP 3 — 가로 스와이프 행. ShareCardTile 재사용. 공유=재공유, 클릭=/d 이동.
+        <HScrollRow>
           {drops.map((drop) => (
-            <ShareCardTile
-              key={drop.shareUuid}
-              drop={drop}
-              // Phase 0 — 홈 뱃지 주입(탐색과 동일 소스 drop.intent). 3종 락.
-              purpose={drop.intent}
-              // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
-              expiresAt={drop.expiresAt}
-              serverNow={serverNow}
-              // 1-C-3 — 파생 재고(1-B-2 배치값, L4).
-              remainingStock={drop.remainingStock}
-              // SM-3 — 확산 규모.
-              shareCount={drop.shareCount}
-              onClick={() => openDrop(drop.shareUuid)}
-              onShare={() =>
-                void reshareDrop({
-                  shareUuid: drop.shareUuid,
-                  title: drop.title,
-                  imageUrl: drop.videoThumbnailUrl,
-                  purpose: drop.intent,
-                })
-              }
-            />
+            <SwipeItem key={drop.shareUuid}>
+              <ShareCardTile
+                drop={drop}
+                // Phase 0 — 홈 뱃지 주입(탐색과 동일 소스 drop.intent). 3종 락.
+                purpose={drop.intent}
+                // 1-C-2 — 마감 타이머(피드 expiresAt + loader serverNow).
+                expiresAt={drop.expiresAt}
+                serverNow={serverNow}
+                // 1-C-3 — 파생 재고(1-B-2 배치값, L4).
+                remainingStock={drop.remainingStock}
+                // SM-3 — 확산 규모.
+                shareCount={drop.shareCount}
+                onClick={() => openDrop(drop.shareUuid)}
+                onShare={() =>
+                  void reshareDrop({
+                    shareUuid: drop.shareUuid,
+                    title: drop.title,
+                    imageUrl: drop.videoThumbnailUrl,
+                    purpose: drop.intent,
+                  })
+                }
+              />
+            </SwipeItem>
           ))}
-        </div>
+        </HScrollRow>
       ) : (
         <EmptyState title={empty.title} subtitle={empty.subtitle} />
       )}
