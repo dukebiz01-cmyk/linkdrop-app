@@ -10,6 +10,8 @@ type OrderBody = {
   purpose?: "cash_charge";
   /** CASH-c1 — 충전 시 로그인 user_id → mchtParam(uid=)으로 운반, 노티가 회수해 캐시 발행. */
   userId?: string;
+  /** CC-HECTO-mobile — 결제수단. "mobile"=휴대폰결제. 미지정/그 외=card. method 값만 분기(파이프 동일). */
+  payMethod?: "card" | "mobile";
 };
 
 export const Route = createFileRoute("/api/hecto/order")({
@@ -44,9 +46,13 @@ export const Route = createFileRoute("/api/hecto/order")({
             );
           }
 
+          // CC-HECTO-mobile — 결제수단 화이트리스트(mobile 만 분기, 나머지 전부 card 로 폴백).
+          const payMethod = body.payMethod === "mobile" ? "mobile" : "card";
+
           const order = await createCardOrder({
             amountKrw,
             orderName,
+            payMethod,
             purpose: isCashCharge ? "cash_charge" : undefined,
             mchtParam: isCashCharge ? `uid=${userId}` : undefined,
           });

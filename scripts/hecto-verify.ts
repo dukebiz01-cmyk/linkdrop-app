@@ -5,6 +5,7 @@
 import {
   createCardOrder,
   HECTO_CARD_METHOD,
+  HECTO_MOBILE_METHOD,
   buildNotiVerifyHash,
   splitTrdDtm,
 } from "../src/server/payments/hecto/order";
@@ -49,6 +50,31 @@ async function main() {
   console.log("--- cross-check (independent recompute) ---");
   console.log("trdAmt match     :", order.trdAmt === trdAmtDirect);
   console.log("pktHash match    :", order.pktHash === pktHashDirect);
+
+  // ── 휴대폰결제(mobile) 주문 해시 케이스 (mobile-payment/01, method="mobile") ──
+  //   해시 조합은 카드와 완전 동일 — method 값만 "mobile"(문서 확정). 카드와 pktHash 가 달라야(method 반영) 정상.
+  //   trdAmt(암호문)는 method 무관이라 카드와 동일해야 정상(같은 금액·키).
+  const mobileOrder = await createCardOrder({
+    amountKrw,
+    orderName,
+    now: fixedNow,
+    mchtTrdNo: fixedMchtTrdNo,
+    payMethod: "mobile",
+  });
+  const mobilePktHashDirect = await sha256Hex(
+    cfg.mchtId + HECTO_MOBILE_METHOD + fixedMchtTrdNo + mobileOrder.trdDt + mobileOrder.trdTm + plainAmount + cfg.licenseKey,
+  );
+
+  console.log("=== HECTO mobile order verify (mobile-payment/01) ===");
+  console.log("method           :", mobileOrder.method);
+  console.log("mchtTrdNo(fixed) :", mobileOrder.mchtTrdNo);
+  console.log("amount(plain)    :", plainAmount);
+  console.log("trdAmt(cipher)   :", mobileOrder.trdAmt);
+  console.log("pktHash          :", mobileOrder.pktHash);
+  console.log("--- cross-check (independent recompute) ---");
+  console.log("pktHash match    :", mobileOrder.pktHash === mobilePktHashDirect);
+  console.log("differs from card:", mobileOrder.pktHash !== order.pktHash);
+  console.log("trdAmt == card   :", mobileOrder.trdAmt === order.trdAmt);
 
   // ── 노티(결과통보) 검증 케이스 (정본 규격) ──
   //   가짜 노티 페이로드를 만들어 정본 해시로 서명 → 검증 통과, 위조(1자 변조) → 실패 확인.

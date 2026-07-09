@@ -6,6 +6,10 @@ import { aesEcbEncryptBase64, sha256Hex } from "./crypto";
 
 // 카드 결제창 규격 method 코드값(헥토 표준결제창: card=신용카드).
 export const HECTO_CARD_METHOD = "card";
+// CC-HECTO-mobile — 휴대폰결제 규격 method 코드값(헥토 표준결제창 mobile-payment/01: mobile=휴대폰결제, AN20 고정값).
+//   해시 조합(mchtId+method+mchtTrdNo+trdDt+trdTm+금액평문+hashKey)·암호화·결제창 파라미터 세트는
+//   카드와 완전 동일 — method 값만 분기(문서 확정). 노티 수신 method 도 "mobile" 그대로.
+export const HECTO_MOBILE_METHOD = "mobile";
 
 export interface CreateCardOrderInput {
   /** 결제 금액(원, 정수). */
@@ -26,6 +30,8 @@ export interface CreateCardOrderInput {
   purpose?: "cash_charge";
   /** CASH-c1 — 헥토 mchtParam(상점 예약필드, 노티로 원값 반환). 충전 user 식별(uid=<user_id>) 운반용. */
   mchtParam?: string;
+  /** CC-HECTO-mobile — 결제수단. "card"(기본, 신용카드) | "mobile"(휴대폰결제). method 값만 분기, 나머지 파이프 동일. */
+  payMethod?: "card" | "mobile";
 }
 
 export interface CardOrder {
@@ -84,7 +90,10 @@ export async function createCardOrder(input: CreateCardOrderInput): Promise<Card
 
   // 금액 평문(정수 문자열). 암호화(trdAmt)와 해시(pktHash) 둘 다 이 평문을 입력으로 쓴다.
   const plainAmount = String(Math.trunc(input.amountKrw));
-  const method = HECTO_CARD_METHOD;
+  // CC-HECTO-mobile — 수단별 method 분기(문서 확정: mobile=휴대폰결제). 해시/암호화/파라미터 조합은 카드와 동일.
+  //   ※ 상점ID(cfg.mchtId)는 기존 config(카드 테스트베드 nxca_jt_il) 재사용 — 휴대폰결제 전용 상점ID는
+  //     헥토 입점 승인(상용 키 수령) 시 확정. method+파이프만으로 심사·개발 진행 가능.
+  const method = input.payMethod === "mobile" ? HECTO_MOBILE_METHOD : HECTO_CARD_METHOD;
 
   const trdAmt = aesEcbEncryptBase64(plainAmount, cfg.encKey);
   const pktHash = await sha256Hex(

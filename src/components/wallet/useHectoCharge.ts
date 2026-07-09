@@ -100,6 +100,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// CC-CASH-c2.2 — 충전 반영 자동 폴링: 2초 간격 최대 15회(~30초). 충전 전 잔액 대비 증가 감지 즉시 중단.
+const CHARGE_POLL_INTERVAL_MS = 2000;
+const CHARGE_POLL_MAX_TRIES = 15;
+// 완료/갱신 상태줄 자연 소멸까지(수 초).
+const STATUS_AUTODISMISS_MS = 4000;
+
 /**
  * 캐시 충전 훅. 마운트 시 SDK 선로딩, charge() 호출 시 주문→pay→잔액 폴링.
  * @param opts.refreshBalance 현재 총 잔액(유상+무상)을 반환하는 조회 함수. 폴링 델타 판정에 사용.
@@ -110,7 +116,11 @@ export function useHectoCharge(opts: { refreshBalance: () => Promise<number | nu
   const [phase, setPhase] = useState<ChargePhase>("sdk-loading");
   const [sdkError, setSdkError] = useState("");
   const [chargeStatus, setChargeStatus] = useState("");
+  // CC-CASH-c2.2 — 폴링 30초 초과·미반영 시에만 수동 새로고침 노출.
+  const [showManualRefresh, setShowManualRefresh] = useState(false);
   const preloadStartedRef = useRef(false);
+  // 완료/갱신 상태줄 자동 소멸 타이머.
+  const statusTimerRef = useRef<number | null>(null);
 
   // 진행 중 잠금 = 주문 생성·SDK 로드 단계만. "paying"(팝업 호출됨)은 제외 → 팝업 닫힘 후 버튼 재활성.
   const busy = phase === "ordering" || phase === "sdk-loading";
@@ -143,6 +153,19 @@ export function useHectoCharge(opts: { refreshBalance: () => Promise<number | nu
     };
   }, []);
 
+  // CC-CASH-c2.2 — 완료/갱신 상태줄을 수 초 후 자연 소멸. 새 트리거마다 이전 타이머 리셋.
+  const scheduleStatusClear = useCallback(() => {
+    if (statusTimerRef.current != null) window.clearTimeout(statusTimerRef.current);
+    statusTimerRef.current = window.setTimeout(() => setChargeStatus(""), STATUS_AUTODISMISS_MS);
+  }, []);
+
+  // 언마운트 시 상태줄 타이머 정리.
+  useEffect(() => {
+    return () => {
+      if (statusTimerRef.current != null) window.clearTimeout(statusTimerRef.current);
+    };
+  }, []);
+
   // 주문 생성→SDK→pay 공통 흐름. orderBody 만 다름(일반결제/충전 공유 형태 유지).
   const runOrderPay = useCallback(
     async (orderBody: Record<string, unknown>) => {
@@ -168,7 +191,8 @@ export function useHectoCharge(opts: { refreshBalance: () => Promise<number | nu
         pg.pay({
           env: order.env,
           mchtId: order.mchtId,
-          method: "card",
+          // CC-HECTO-mobile — 서버가 정한 수단(card/mobile) 그대로 사용(하드코딩 제거). 카드=기존 동작 동일.
+          method: order.method,
           trdDt: order.trdDt,
           trdTm: order.trdTm,
           mchtTrdNo: order.mchtTrdNo,
@@ -194,11 +218,20 @@ export function useHectoCharge(opts: { refreshBalance: () => Promise<number | nu
   );
 
   /**
-   * 캐시 충전 실행. 세션 uid → mchtParam(uid=) 결제창 호출 후, 팝업 닫힘 대비 잔액 폴링(3회·3초).
-   * 반영 감지 시 완료 문구, 미반영 시 대기 안내(노티 지연 가능).
+   * 캐시 충전 실행. 세션 uid → mchtParam(uid=) 결제창 호출 후, 팝업 닫힘 대비 잔액 자동 폴링(2초×최대15=~30초).
+   * 증가 감지 시 자동 갱신 + "충전 완료 +N cash"(수 초 후 소멸), 30초 미반영 시에만 수동 새로고침 노출.
    */
   const charge = useCallback(
-    async ({ amountKrw, orderName }: { amountKrw: number; orderName: string }) => {
+    async ({
+      amountKrw,
+      orderName,
+      payMethod = "card",
+    }: {
+      amountKrw: number;
+      orderName: string;
+      /** CC-HECTO-mobile — 결제수단. 미지정=card(기존 동작 그대로). */
+      payMethod?: "card" | "mobile";
+    }) => {
       if (busy) return;
       if (!Number.isFinite(amountKrw) || amountKrw <= 0) {
         setChargeStatus("충전 금액이 올바르지 않아요.");
@@ -210,6 +243,8 @@ export function useHectoCharge(opts: { refreshBalance: () => Promise<number | nu
         return;
       }
       setChargeStatus("");
+      setShowManualRefresh(false);
+      if (statusTimerRef.current != null) window.clearTimeout(statusTimerRef.current);
       try {
         const { data: sess } = await supabase.auth.getSession();
         const uid = sess.session?.user.id;
@@ -219,24 +254,45 @@ export function useHectoCharge(opts: { refreshBalance: () => Promise<number | nu
         }
         const beforeBal = await refreshBalance();
         const before = beforeBal ?? 0;
-        await runOrderPay({ amountKrw, orderName, purpose: "cash_charge", userId: uid });
-        // 팝업 닫힘 대비 — 노티 반영 폴링(3회·3초). 반영되면 완료, 아니면 대기 안내.
-        setChargeStatus("결제창 종료 — cash 반영 확인 중…");
-        for (let i = 0; i < 3; i += 1) {
-          await sleep(3000);
+        await runOrderPay({ amountKrw, orderName, purpose: "cash_charge", userId: uid, payMethod });
+        // CC-CASH-c2.2 — 팝업 닫힘 후 자동 폴링(2초×최대15=~30초). 충전 전 잔액 대비 증가 감지 즉시 중단·자동 갱신.
+        //   순수 잔액 조회(결제 파이프 무관). 30초 미반영 시에만 수동 새로고침 폴백(showManualRefresh).
+        setChargeStatus("결제 확인 중…");
+        let reflected = false;
+        for (let i = 0; i < CHARGE_POLL_MAX_TRIES; i += 1) {
+          await sleep(CHARGE_POLL_INTERVAL_MS);
           const after = await refreshBalance();
           if (after != null && after >= before + amountKrw) {
-            setChargeStatus(`충전 완료 · cash ${amountKrw.toLocaleString("ko-KR")} 지급`);
-            return;
+            const delta = after - before;
+            // 증가 감지 즉시 완료 — 잔액은 refreshBalance 가 이미 갱신. 상태줄은 수 초 후 자연 소멸.
+            setChargeStatus(`충전 완료 · +${delta.toLocaleString("ko-KR")} cash`);
+            scheduleStatusClear();
+            reflected = true;
+            break;
           }
         }
-        setChargeStatus("반영 대기 — 잠시 후 새로고침으로 확인하세요. (노티 지연 가능)");
+        if (!reflected) {
+          // 30초 초과 미반영 → 자동 안내 대신 수동 새로고침 노출(노티 지연 가능).
+          setChargeStatus("반영이 지연되고 있어요. 새로고침으로 확인하세요.");
+          setShowManualRefresh(true);
+        }
       } catch (e) {
         setChargeStatus(`오류: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
-    [busy, runOrderPay, refreshBalance],
+    [busy, runOrderPay, refreshBalance, scheduleStatusClear],
   );
 
-  return { phase, busy, chargeStatus, sdkError, charge };
+  // CC-CASH-c2.2 — 수동 새로고침(폴백 버튼). 즉시 잔액 재조회 + 폴백 상태 정리.
+  //   이용내역 갱신은 호출부(CashSection)가 loadLedger 로 함께 수행.
+  const manualRefresh = useCallback(async () => {
+    setShowManualRefresh(false);
+    const after = await refreshBalance();
+    if (after != null) {
+      setChargeStatus("잔액을 갱신했어요.");
+      scheduleStatusClear();
+    }
+  }, [refreshBalance, scheduleStatusClear]);
+
+  return { phase, busy, chargeStatus, sdkError, charge, showManualRefresh, manualRefresh };
 }

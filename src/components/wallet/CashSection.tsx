@@ -6,7 +6,17 @@
 //   (d) 국문 상시 고지(콘텐츠 전용·환급 없음).
 //   스타일 = me.tsx V4 토큰(흰카드·#0F172A/#64748B/#2563EB·rounded-xl/lg) 그대로 — 위화감 0.
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Coins, Plus, Minus, RotateCcw, Check } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Coins,
+  Plus,
+  Minus,
+  RotateCcw,
+  Check,
+  CreditCard,
+  Smartphone,
+} from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase";
 import { useHectoCharge } from "./useHectoCharge";
@@ -75,6 +85,8 @@ export function CashSection() {
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
   const [selectedSku, setSelectedSku] = useState<string>("5000");
   const [customAmount, setCustomAmount] = useState("");
+  // CC-HECTO-mobile — 충전 결제수단(카드=기본 / 휴대폰결제). order body 로만 전달, 결제 로직 무변경.
+  const [payMethod, setPayMethod] = useState<"card" | "mobile">("card");
   // 약관 동의 — 필수 3항목 개별 체크(전체동의는 파생). 전문 펼침은 항목별 독립 토글.
   const [agreedKeys, setAgreedKeys] = useState<Record<string, boolean>>({});
   const [expandedTerm, setExpandedTerm] = useState<Record<string, boolean>>({});
@@ -132,7 +144,8 @@ export function CashSection() {
     void loadLedger();
   }, [refreshBalance, loadLedger]);
 
-  const { busy: chargeBusy, chargeStatus, charge } = useHectoCharge({ refreshBalance });
+  const { busy: chargeBusy, chargeStatus, charge, showManualRefresh, manualRefresh } =
+    useHectoCharge({ refreshBalance });
 
   const selectedProduct = CHARGE_PRODUCTS.find((p) => p.sku === selectedSku);
   const amount = selectedSku === "custom" ? Number(customAmount) : (selectedProduct?.amount ?? 0);
@@ -148,10 +161,10 @@ export function CashSection() {
         ? `cash ${amount.toLocaleString("ko-KR")}`
         : (selectedProduct?.name ?? "cash 충전");
     void (async () => {
-      await charge({ amountKrw: amount, orderName: label });
+      await charge({ amountKrw: amount, orderName: label, payMethod });
       await loadLedger();
     })();
-  }, [canCharge, selectedSku, amount, selectedProduct, charge, loadLedger]);
+  }, [canCharge, selectedSku, amount, selectedProduct, charge, loadLedger, payMethod]);
 
   // charge 원장의 [결제 취소] — cancel-tx {chargeTrdNo}(D2Ⓐ). 유상 결제분(paid_delta)만 취소.
   const onCancelCharge = useCallback(
@@ -313,6 +326,41 @@ export function CashSection() {
             </label>
           ) : null}
 
+          {/* CC-HECTO-mobile — 결제 수단 선택 [카드 | 휴대폰결제]. payMethod state → order body 로만 전달.
+              v0 프리셋 카드와 동일 룩(파란 활성). 결제 파이프·약관 게이트 무변경. */}
+          <div className="flex flex-col gap-1.5">
+            <span className="px-0.5 text-[11.5px] font-semibold tracking-ko text-[#64748B]">
+              결제 수단
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  { key: "card", label: "카드", Icon: CreditCard },
+                  { key: "mobile", label: "휴대폰결제", Icon: Smartphone },
+                ] as const
+              ).map((m) => {
+                const active = payMethod === m.key;
+                const MIcon = m.Icon;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setPayMethod(m.key)}
+                    aria-pressed={active}
+                    className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border text-[13px] font-semibold tracking-ko transition-all active:scale-[0.98] ${
+                      active
+                        ? "border-[#2563EB] bg-[#EEF3FE] text-[#2563EB] ring-1 ring-inset ring-[#2563EB]"
+                        : "border-[#E8EDF3] bg-white text-[#64748B] hover:border-[#CBD5E1]"
+                    }`}
+                  >
+                    <MIcon className="size-4" strokeWidth={2.25} />
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* 약관 동의(v0 룩) — 전체동의 + 필수 3. 게이트(allAgreed) 그대로. [＞] 전문 인라인 펼침 보존(PG 심사 요건). */}
           <div className="rounded-xl bg-[#F8FAFC] p-3">
             {/* 전체 동의 — 하위 3개 일괄 토글(기존 setAgreedKeys 로직 유지). */}
@@ -399,6 +447,22 @@ export function CashSection() {
             <p className="rounded-lg bg-[#F1F5F9] px-3 py-2 text-xs font-medium tracking-ko text-[#0F172A]">
               {chargeStatus}
             </p>
+          ) : null}
+          {/* CC-CASH-c2.2 — 30초 미반영 폴백 새로고침. 탭 시 즉시 잔액 재조회 + 내역 갱신. */}
+          {showManualRefresh ? (
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  await manualRefresh();
+                  await loadLedger();
+                })();
+              }}
+              className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#E8EDF3] bg-white text-[13px] font-bold tracking-ko text-[#2563EB] transition-colors hover:bg-[#F8FAFC] active:scale-[0.99]"
+            >
+              <RotateCcw className="size-4" strokeWidth={2.25} />
+              새로고침
+            </button>
           ) : null}
 
           {/* (d) 국문 상시 고지 — v0: 충전 블록 내 배치. */}
