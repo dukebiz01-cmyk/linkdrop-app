@@ -8,7 +8,7 @@ import { LingoAiHomeCard } from "@/components/home/LingoAiHomeCard";
 import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
 // STEP 3 — v0(home-v5) 링고 스타터(모핑 히어로 + 4목적 아코디언 + 정적 CTA). 양 분기 최상단.
-import { LingoStarter } from "@/components/home/LingoStarter";
+import { LingoStarter, type StarterPurpose } from "@/components/home/LingoStarter";
 import { SectionHeader } from "@/components/home/v4-bits";
 import type { DropFeedItem } from "@/components/home-page";
 import { reshareDrop } from "@/lib/reshare-drop";
@@ -80,10 +80,12 @@ const SEVERITY_LABEL: Record<GuideDiagnosis["severity"], string> = {
 
 // STEP 3 v0 포트 — 가로 스와이프 행("오늘 공유하기 좋은" 등, 카드가 세로로 길어지지 않게 옆으로 흐름).
 //   hide-scrollbar 유틸이 styles.css에 없어 인라인 arbitrary variant로 스크롤바 숨김(styles.css 무접촉).
+//   좌우 여백 정렬 — 풀블리드(-mx-4/보정 px-4) 제거 → 컨테이너 px-4 inset 상속(첫·마지막 카드가
+//   상단/중단 콘텐츠와 같은 좌우 여백 안에 담김). 가로 스크롤 자체는 overflow-x-auto 로 유지.
 function HScrollRow({ children }: { children: ReactNode }) {
   return (
     <div
-      className="-mx-4 flex touch-pan-x snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex touch-pan-x snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       style={{ WebkitOverflowScrolling: "touch" }}
     >
       {children}
@@ -224,8 +226,11 @@ export function RoleHome({
   onGoProposals: () => void;
 }) {
   const navigate = useNavigate();
-  // STEP 3 — 링고 스타터 4목적 라우팅(기존 온보딩 선택지 라우팅 유지).
-  const onCreate = () => void navigate({ to: "/create-wizard" });
+  // 링고 스타터 라우팅 — 제작 진입 단일화(create-wizard 폐기 → studio-build?purpose=).
+  //   목적형(①②③) → studio-build 목적 프리셋 / ④ → 내 지갑(/me) / ⑤ → 탐색(/explore).
+  const onStartPurpose = (purpose: StarterPurpose) =>
+    void navigate({ to: "/studio-build", search: { purpose } });
+  const onWallet = () => void navigate({ to: "/me" });
   const onExplore = () => void navigate({ to: "/explore" });
   const openDrop = (shareUuid: string) =>
     void navigate({ to: "/d/$shareUuid", params: { shareUuid } });
@@ -256,7 +261,12 @@ export function RoleHome({
         </header>
 
         {/* 🆕 링고 스타터 — 모핑 히어로 + 4목적 아코디언 + 정적 CTA. 모두에게. */}
-        <LingoStarter onCreate={onCreate} onExplore={onExplore} />
+        <LingoStarter
+          isBusiness={isBusiness}
+          onStartPurpose={onStartPurpose}
+          onWallet={onWallet}
+          onExplore={onExplore}
+        />
 
         {/* 성과 2셀 — 전환·적립(placeholder 0, 데이터 배선 추후). v0 룩. */}
         <PerformanceBanner conversionCount={0} dropyAmount={0} />
@@ -317,7 +327,12 @@ export function RoleHome({
       </header>
 
       {/* 🆕 링고 스타터 — 유저홈과 동일(+CTA 알약). */}
-      <LingoStarter onCreate={onCreate} onExplore={onExplore} />
+      <LingoStarter
+        isBusiness={isBusiness}
+        onStartPurpose={onStartPurpose}
+        onWallet={onWallet}
+        onExplore={onExplore}
+      />
 
       {/* 성과 3셀 — 전환·적립·구독자. */}
       <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />

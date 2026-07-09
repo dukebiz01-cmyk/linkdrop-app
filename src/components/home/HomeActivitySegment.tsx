@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Layers } from "lucide-react";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
-import { SectionHeader, SegmentToggle, EmptyState } from "@/components/home/v4-bits";
+import { SectionHeader, EmptyState } from "@/components/home/v4-bits";
 import type { DropFeedItem } from "@/components/home-page";
 import { reshareDrop } from "@/lib/reshare-drop";
 
@@ -15,10 +15,12 @@ import { reshareDrop } from "@/lib/reshare-drop";
 
 // STEP 3 v0 포트 — 가로 스와이프 행(카드가 세로로 길어지지 않게 옆으로 흐름).
 //   hide-scrollbar 유틸이 styles.css에 없어 인라인 arbitrary variant로 스크롤바 숨김(styles.css 무접촉).
+//   좌우 여백 정렬 — 풀블리드(-mx-4/보정 px-4) 제거 → 컨테이너 px-4 inset 상속(카드가 상단/중단
+//   콘텐츠와 같은 좌우 여백 안에 담김). 가로 스크롤은 overflow-x-auto 로 유지.
 function HScrollRow({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="-mx-4 flex touch-pan-x snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex touch-pan-x snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       style={{ WebkitOverflowScrolling: "touch" }}
     >
       {children}
@@ -68,8 +70,24 @@ export function HomeActivitySegment({
     <section>
       {/* 헤더(v0) — 섹션헤더 위, 3토글 아래 풀폭(3탭 대응). */}
       <SectionHeader icon={Layers} title="내 활동" />
+      {/* 3토글 — active=블랙(#0F172A)+흰텍스트, inactive=회색(기존). v4-bits SegmentToggle 인라인화(active 색만 변경). */}
       <div className="mb-4">
-        <SegmentToggle options={TABS} value={tab} onChange={setTab} />
+        <div className="inline-flex rounded-xl border border-[#EAEEF3] bg-[#F1F5F9] p-1">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`min-h-[34px] rounded-lg px-3.5 text-[12.5px] font-semibold transition-all ${
+                tab === t.key
+                  ? "bg-[#0F172A] text-white shadow-[0_1px_3px_rgba(15,23,42,0.1)]"
+                  : "text-[#64748B] hover:text-[#475569]"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {drops.length > 0 ? (

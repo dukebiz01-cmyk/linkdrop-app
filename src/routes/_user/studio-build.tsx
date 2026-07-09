@@ -344,14 +344,26 @@ export function CardStudioPage() {
   //   무세션은 _user 부모 가드 소관(여기 도달 전 /login). 사업자는 false → 현행 완전 동일.
   const bizLocked = !isBusiness || !store;
   const router = useRouter();
+  // 링고 스타터 목적 프리셋 — ?purpose 를 초기 buildMode 로 매핑(쿠폰/예약→reserve · 구매→commerce ·
+  //   정보/미지정→general). 비사업자(bizLocked)는 사업자 모드 진입 차단(§0 게이트) → general 고정.
+  //   switchMode 미호출 = 콘텐츠 리셋 없음(fresh mount) · CardBody 거울은 buildMode 파생 props 를
+  //   늘 받던 대로 수신(초기값만 다름) = 미러 무영향.
+  const { purpose: purposeParam } = Route.useSearch();
+  const initialMode: "general" | "reserve" | "commerce" = bizLocked
+    ? "general"
+    : purposeParam === "구매"
+      ? "commerce"
+      : purposeParam === "쿠폰" || purposeParam === "예약"
+        ? "reserve"
+        : "general";
   // 쿠폰 만들기 바텀시트(CouponManageView 임베드) 노출 상태.
   const [couponSheetOpen, setCouponSheetOpen] = useState(false);
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   // 방금 켠 블록 id — 코칭이 "방금 켠 블록"에 반응하게(영상/쿠폰 내용검증 우선). 끄면 null.
   const [lastEquippedId, setLastEquippedId] = useState<string | null>(null);
-  // 커머스 3모드 — 퍼블릭/예약·쿠폰/커머스. 덱 구성·카드색·강조색의 단일 스위치.
-  const [buildMode, setBuildMode] = useState<"general" | "reserve" | "commerce">("general");
-  const [cardColor, setCardColor] = useState(MODE_CARD_COLOR.general); // 모드 파생(switchMode 가 갱신). 색 기능 재개 시 팔레트로 환원
+  // 커머스 3모드 — 퍼블릭/예약·쿠폰/커머스. 덱 구성·카드색·강조색의 단일 스위치. (초기값 = 목적 프리셋)
+  const [buildMode, setBuildMode] = useState<"general" | "reserve" | "commerce">(initialMode);
+  const [cardColor, setCardColor] = useState(MODE_CARD_COLOR[initialMode]); // 모드 파생(switchMode 가 갱신). 색 기능 재개 시 팔레트로 환원
   // 라이트 카드(흰 셸) 여부 — 흰 셸이면 CardBody·stub 텍스트를 어두운 토큰으로. 다크색 선택 시 false=기존 동작.
   const isLightCard = cardColor === "#FFFFFF";
   // C4d — 현재 모드 목적색(v0 MODE_ACCENT). 뱃지·별·게이지·placeholder 틴트에 사용(동적 hex → style 속성).
@@ -2657,6 +2669,14 @@ type StudioBuildLoaderData = {
 
 export const Route = createFileRoute("/_user/studio-build")({
   head: () => ({ meta: [{ title: "카드 스튜디오 — LinkDrop" }] }),
+  // 링고 스타터 목적 프리셋 — ?purpose=정보|쿠폰|예약|구매. 그 외/미지정 = undefined(무영향, 하위호환).
+  //   초기 buildMode 만 프리셋(switchMode 미호출·CardBody 거울 무영향). 비사업자 가드는 렌더가 담당.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { purpose?: "정보" | "쿠폰" | "예약" | "구매" } => {
+    const p = search.purpose;
+    return p === "정보" || p === "쿠폰" || p === "예약" || p === "구매" ? { purpose: p } : {};
+  },
   // S1 — 실데이터 로딩 길 + 비즈니스 게이트. 화면 하드코딩 치환은 다음 단계.
   //   인증은 부모 _user.tsx beforeLoad 담당 → 세션 throw 금지(graceful). 매장 없으면 등록 유도.
   loader: async (): Promise<StudioBuildLoaderData> => {
