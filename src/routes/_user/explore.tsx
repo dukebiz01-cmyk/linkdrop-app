@@ -10,7 +10,6 @@ import {
   Newspaper,
   TicketPercent,
   Tag,
-  Sparkles,
 } from "lucide-react";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { getAuthClient } from "@/lib/auth-context";
@@ -18,6 +17,20 @@ import { ShareCardTile } from "@/components/home/ShareCardTile";
 import { getDiscoverDrops } from "@/lib/feed-queries";
 import { reshareDrop } from "@/lib/reshare-drop";
 import type { DropFeedItem } from "@/components/home-page";
+
+// v0 explore 마크 — 컴퍼스(탐색) 인라인 SVG(외부 아이콘 대신, v0 헤더 비주얼 그대로).
+function ExploreMark({ className = "h-[22px] w-[22px]" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <circle cx="12" cy="12" r="9.2" fill="#0F172A" />
+      <path
+        d="m15.4 8.6-1.5 4.4a1.4 1.4 0 0 1-.9.9l-4.4 1.5 1.5-4.4a1.4 1.4 0 0 1 .9-.9l4.4-1.5Z"
+        fill="#FFFFFF"
+      />
+      <circle cx="12" cy="12" r="1.15" fill="#0F172A" />
+    </svg>
+  );
+}
 
 // 탐색 = 발견 전용(pull). 공개 published 카드를 [전체·정보·쿠폰·커머스] 4탭으로.
 //   탭별 서버 필터(purpose) — 카드 늘어도 클라가 안 터짐. 4탭 미리 로드(전환 즉각).
@@ -84,7 +97,6 @@ function ExplorePage() {
     navigate({ to: "/d/$shareUuid", params: { shareUuid } });
   }
 
-  const active = TABS.find((t) => t.key === tab)!;
   const drops = data[tab];
 
   return (
@@ -114,12 +126,12 @@ function ExplorePage() {
       <header className="flex items-center justify-between pt-5 pb-4">
         <div className="flex items-center gap-2.5">
           <span
-            className="flex size-9 items-center justify-center rounded-[11px] bg-[#0F172A] shadow-[0_4px_12px_rgba(15,23,42,0.18)]"
+            className="flex size-9 items-center justify-center rounded-xl bg-[#F1F5F9]"
             aria-hidden="true"
           >
-            <Compass className="size-5 text-white" strokeWidth={2} />
+            <ExploreMark className="h-[22px] w-[22px]" />
           </span>
-          <h1 className="text-[18px] font-bold tracking-[-0.01em] text-[#0F172A]">탐색</h1>
+          <h1 className="text-[20px] font-bold tracking-[-0.02em] text-[#0F172A]">탐색</h1>
         </div>
         <div className="flex items-center gap-0.5 rounded-xl border border-[#EAEEF3] bg-[#F1F5F9] p-1">
           {([
@@ -172,8 +184,14 @@ function ExplorePage() {
 
       {/* 카운트 + 최신순(고정 표시, 드롭다운 없음 — §0 vanity 정렬 금지). */}
       <div className="mb-3 flex items-center justify-between px-0.5">
-        <span className="text-[12px] font-medium text-[#64748B]">
-          {drops.length > 0 ? `${drops.length}개의 카드` : ""}
+        <span className="text-[12.5px] font-medium text-[#64748B]">
+          {drops.length > 0 ? (
+            <>
+              <b className="font-bold tabular-nums text-[#0F172A]">{drops.length}</b>개의 카드
+            </>
+          ) : (
+            ""
+          )}
         </span>
         <span className="flex items-center gap-1.5 rounded-full border border-[#EAEEF3] bg-white py-1.5 pl-3 pr-3 text-[12px] font-semibold text-[#475569]">
           <Clock className="size-3.5 text-[#2563EB]" strokeWidth={2.25} />
@@ -182,13 +200,14 @@ function ExplorePage() {
       </div>
 
       {drops.length > 0 ? (
-        // 그리드=2열(gap-3) / 리스트=1열(gap-2.5). 단일 ShareCardTile, grid-cols 만 전환(layout prop 미사용).
-        <div className={`grid items-stretch ${view === "grid" ? "grid-cols-2 gap-3" : "grid-cols-1 gap-2.5"}`}>
+        // v0 — 그리드=2열 세로카드(layout="grid") / 리스트=v0 가로카드(layout="row"). 데이터·props 계약 동일.
+        <div className={view === "grid" ? "grid grid-cols-2 items-stretch gap-3" : "flex flex-col gap-2.5"}>
           {drops.map((drop) => (
             <ShareCardTile
               key={drop.shareUuid}
               drop={drop}
               purpose={drop.intent}
+              layout={view === "grid" ? "grid" : "row"}
               // P7c FEED-1 — 내/남 구분 칩(feed-queries 산출).
               isMine={drop.isMine}
               // 1-C-2 — 마감 타이머 데이터 주입(피드 산출 expiresAt + loader serverNow).
@@ -213,12 +232,13 @@ function ExplorePage() {
           ))}
         </div>
       ) : (
-        // 빈상태 — 탭별 문구 유지(active.empty).
+        // 빈상태 — v0(컴퍼스 + 2줄 안내).
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#D7DEE7] bg-[#F8FAFC] px-6 py-14 text-center">
           <div className="mb-3 flex size-12 items-center justify-center rounded-full border border-[#EAEEF3] bg-white">
-            <Sparkles className="size-5 text-[#94A3B8]" strokeWidth={1.75} />
+            <Compass className="size-5 text-[#94A3B8]" strokeWidth={1.75} />
           </div>
-          <p className="text-[13px] font-semibold text-[#475569]">{active.empty}</p>
+          <p className="text-[13px] font-semibold text-[#475569]">아직 공개된 카드가 없어요</p>
+          <p className="mt-1 text-[12px] text-[#94A3B8]">다른 카테고리를 둘러보세요</p>
         </div>
       )}
     </div>
