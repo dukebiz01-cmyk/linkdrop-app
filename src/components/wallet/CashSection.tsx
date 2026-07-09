@@ -6,7 +6,7 @@
 //   (d) 국문 상시 고지(콘텐츠 전용·환급 없음).
 //   스타일 = me.tsx V4 토큰(흰카드·#0F172A/#64748B/#2563EB·rounded-xl/lg) 그대로 — 위화감 0.
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Coins, Plus, Minus, RotateCcw, Check } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase";
 import { useHectoCharge } from "./useHectoCharge";
@@ -196,255 +196,315 @@ export function CashSection() {
   );
 
   return (
-    <div className="mb-5 flex flex-col gap-4 border-b border-[#E8EDF3] pb-5">
-      {/* (a) 잔액 카드 — "cash N"(영문 소문자 고정) + 유상/무상 */}
-      <div className="rounded-xl bg-[#F1F5F9] p-4">
-        <p className="text-xs font-semibold tracking-ko text-[#64748B]">내 캐시</p>
-        <div className="mt-1 flex items-baseline gap-1.5">
-          <span className="text-sm font-bold text-[#64748B]">cash</span>
-          <span className="text-3xl font-extrabold tabular-nums tracking-ko text-[#0F172A]">
-            {balance ? fmtWon(balance.paid + balance.bonus) : "—"}
+    <div className="flex flex-col gap-4">
+      {/* (a) 잔액 카드(v0) — 다크 그라데이션 + Coins + "내 캐시" + 큰 숫자 + 유상/무상. 데이터·조회 로직 그대로. */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0F172A] p-4 shadow-[0_10px_24px_rgba(15,23,42,0.28)]">
+        <div className="pointer-events-none absolute -right-10 -top-12 size-36 rounded-full bg-white/[0.06] blur-2xl" />
+        <div className="relative flex items-center gap-2">
+          <span className="flex size-8 items-center justify-center rounded-lg bg-white/10 ring-1 ring-inset ring-white/20 backdrop-blur-sm">
+            <Coins className="size-[17px] text-white" strokeWidth={2.25} />
           </span>
+          <span className="text-[12px] font-semibold tracking-[0.02em] text-white/70">내 캐시</span>
         </div>
-        {balance ? (
-          <p className="mt-1 text-xs font-medium tracking-ko text-[#94A3B8]">
-            유상 {fmtWon(balance.paid)} · 무상 {fmtWon(balance.bonus)}
-          </p>
-        ) : null}
-        {/* 조회 실패는 표시만(버튼 잠금과 분리) — 탭하면 재조회. */}
+        <div className="relative mt-4 flex items-end justify-between">
+          <div className="flex items-baseline gap-1">
+            <span className="text-[32px] font-bold leading-none tabular-nums tracking-[-0.02em] text-white">
+              {balance ? fmtWon(balance.paid + balance.bonus) : "—"}
+            </span>
+            <span className="text-[14px] font-semibold text-white/70">cash</span>
+          </div>
+          {balance ? (
+            <span className="text-[11px] font-medium tabular-nums text-white/50">
+              유상 {fmtWon(balance.paid)} · 무상 {fmtWon(balance.bonus)}
+            </span>
+          ) : null}
+        </div>
+        {/* 조회 실패는 표시만(버튼 잠금과 분리) — 탭하면 재조회. 로직 그대로. */}
         {balanceError ? (
           <button
             type="button"
             onClick={() => void refreshBalance()}
-            className="mt-1 w-fit text-xs font-medium tracking-ko text-[#DC2626] underline underline-offset-2"
+            className="relative mt-2 w-fit text-[11px] font-medium tracking-ko text-[#FCA5A5] underline underline-offset-2"
           >
             {balanceError}
           </button>
         ) : null}
       </div>
 
-      {/* (b) 충전 = 단건 결제. 상품 3종 + 직접입력 카드 그리드 — 상품명·제공기간·금액(심사 요건). */}
-      <div className="flex flex-col gap-3">
-        <p className="text-sm font-bold tracking-ko text-[#0F172A]">캐시 충전</p>
-
-        {/* 상품 카드 그리드(2열) — 3종 + 직접입력. 선택 시 테두리 강조(V4 accent). */}
-        <div className="grid grid-cols-2 gap-2">
-          {CHARGE_PRODUCTS.map((p) => {
-            const selected = selectedSku === p.sku;
-            return (
-              <button
-                key={p.sku}
-                type="button"
-                onClick={() => setSelectedSku(p.sku)}
-                aria-pressed={selected}
-                className={`flex flex-col rounded-xl border px-3 py-3 text-left transition-colors ${
-                  selected
-                    ? "border-[#2563EB] bg-[#EFF4FF]"
-                    : "border-[#E8EDF3] bg-white hover:border-[#94A3B8]"
-                }`}
-              >
-                <span className="text-sm font-bold tracking-ko text-[#0F172A]">{p.name}</span>
-                <span className="mt-0.5 text-base font-extrabold tracking-ko text-[#0F172A]">
-                  {fmtWon(p.amount)}원
-                </span>
-                <span className="mt-1 text-[11px] font-medium leading-tight tracking-ko text-[#94A3B8]">
-                  {PROVIDE_PERIOD}
-                </span>
-              </button>
-            );
-          })}
-
-          {/* 직접입력 카드 */}
-          <button
-            type="button"
-            onClick={() => setSelectedSku("custom")}
-            aria-pressed={selectedSku === "custom"}
-            className={`flex flex-col rounded-xl border px-3 py-3 text-left transition-colors ${
-              selectedSku === "custom"
-                ? "border-[#2563EB] bg-[#EFF4FF]"
-                : "border-[#E8EDF3] bg-white hover:border-[#94A3B8]"
-            }`}
-          >
-            <span className="text-sm font-bold tracking-ko text-[#0F172A]">직접입력</span>
-            <span className="mt-0.5 text-base font-extrabold tracking-ko text-[#94A3B8]">
-              {selectedSku === "custom" && amountValid ? `${fmtWon(amount)}원` : "직접 설정"}
+      {/* (b) 충전 = 단건 결제(v0 카드 룩). 정적 헤더(Plus)+프리셋 그리드+약관+결제. 로직·게이트 그대로.
+          ※ 충전 콜랩스는 새 state 필요 → 미도입(항상 노출). 이용내역은 기존 ledgerOpen 재사용. */}
+      <div className="overflow-hidden rounded-2xl border border-[#EAEEF3] bg-white">
+        <div className="flex items-center gap-2.5 px-4 py-3.5">
+          <span className="flex size-8 items-center justify-center rounded-lg bg-[#EEF3FE]">
+            <Plus className="size-[18px] text-[#2563EB]" strokeWidth={2.5} />
+          </span>
+          <span className="flex-1">
+            <span className="block text-[14px] font-bold text-[#0F172A]">캐시 충전</span>
+            <span className="mt-0.5 block text-[11.5px] font-medium text-[#94A3B8]">
+              금액을 골라 바로 충전하세요
             </span>
-            <span className="mt-1 text-[11px] font-medium leading-tight tracking-ko text-[#94A3B8]">
-              {PROVIDE_PERIOD}
-            </span>
-          </button>
+          </span>
         </div>
 
-        {/* 직접입력 금액 필드 — 그리드 아래 전폭. */}
-        {selectedSku === "custom" ? (
-          <label className="flex flex-col gap-1 text-xs font-semibold tracking-ko text-[#64748B]">
-            충전 금액 (원)
-            <input
-              type="number"
-              inputMode="numeric"
-              value={customAmount}
-              onChange={(e) => setCustomAmount(e.target.value)}
-              min={1}
-              placeholder="예: 20000"
-              className="min-h-[44px] rounded-lg border border-[#E8EDF3] bg-white px-3 text-sm font-medium tracking-ko text-[#0F172A] placeholder:text-[#94A3B8]"
-            />
-          </label>
-        ) : null}
-
-        {/* 약관 동의 — 네이버 표준 계층(전체동의 + 필수 3). [＞] 탭 = 전문 인라인 펼침(항목별 독립·SSR 안전). */}
-        <div className="rounded-xl border border-[#E8EDF3]">
-          {/* 전체 동의 — 체크 시 하위 3개 일괄 on/off. 하위 파생이라 부분 해제 자동 반영. */}
-          <label className="flex items-center gap-2 px-4 py-3">
-            <input
-              type="checkbox"
-              checked={allAgreed}
-              onChange={(e) =>
-                setAgreedKeys(Object.fromEntries(AGREE_TERMS.map((t) => [t.key, e.target.checked])))
-              }
-              className="size-5 shrink-0 accent-[#2563EB]"
-            />
-            <span className="text-sm font-bold tracking-ko text-[#0F172A]">전체 동의</span>
-          </label>
-
-          {/* 필수 3항목 — 체크박스는 항상 노출, 전문만 [＞]로 접힘. */}
-          <div className="border-t border-[#E8EDF3]">
-            {AGREE_TERMS.map((t) => {
-              const open = !!expandedTerm[t.key];
+        <div className="flex flex-col gap-3 border-t border-[#F1F5F9] p-4">
+          {/* 프리셋 2열 그리드 — 라이브 CHARGE_PRODUCTS 값 유지, v0 활성 스타일(파란 border/bg/ring). */}
+          <div className="grid grid-cols-2 gap-2">
+            {CHARGE_PRODUCTS.map((p) => {
+              const selected = selectedSku === p.sku;
               return (
-                <div key={t.key} className="px-4">
-                  <div className="flex items-center gap-2 py-2.5">
-                    <input
-                      type="checkbox"
-                      checked={!!agreedKeys[t.key]}
-                      onChange={() => setAgreedKeys((p) => ({ ...p, [t.key]: !p[t.key] }))}
-                      className="size-5 shrink-0 accent-[#2563EB]"
-                    />
-                    <span className="flex-1 text-xs font-medium leading-relaxed tracking-ko text-[#64748B]">
-                      <span className="font-bold text-[#DC2626]">[필수]</span> {t.label}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedTerm((p) => ({ ...p, [t.key]: !p[t.key] }))}
-                      aria-expanded={open}
-                      aria-label={`${t.label} 전문 보기`}
-                      className="flex size-8 shrink-0 items-center justify-center text-[#94A3B8]"
-                    >
-                      <ChevronRight
-                        className={`size-4 transition-transform ${open ? "rotate-90" : ""}`}
-                        strokeWidth={2}
-                      />
-                    </button>
-                  </div>
-                  {open ? (
-                    <p className="mb-2.5 rounded-lg bg-[#F1F5F9] px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-[#64748B]">
-                      {t.body}
-                    </p>
-                  ) : null}
-                </div>
+                <button
+                  key={p.sku}
+                  type="button"
+                  onClick={() => setSelectedSku(p.sku)}
+                  aria-pressed={selected}
+                  className={`flex flex-col items-center rounded-xl border py-3 text-center transition-all active:scale-[0.98] ${
+                    selected
+                      ? "border-[#2563EB] bg-[#EEF3FE] ring-1 ring-inset ring-[#2563EB]"
+                      : "border-[#E8EDF3] bg-white hover:border-[#CBD5E1]"
+                  }`}
+                >
+                  <span className="text-[17px] font-bold tabular-nums text-[#0F172A]">
+                    {fmtWon(p.amount)}원
+                  </span>
+                  <span
+                    className={`mt-1 text-[10.5px] font-semibold ${selected ? "text-[#2563EB]" : "text-[#94A3B8]"}`}
+                  >
+                    {p.name}
+                  </span>
+                </button>
               );
             })}
-          </div>
-        </div>
 
-        <button
-          type="button"
-          onClick={onCharge}
-          disabled={!canCharge}
-          className="flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-[#2563EB] px-6 text-base font-bold tracking-ko text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {chargeBusy
-            ? "처리 중…"
-            : amountValid
-              ? `${fmtWon(amount)}원 결제하고 충전`
-              : "충전 금액을 선택하세요"}
-        </button>
-        {chargeStatus ? (
-          <p className="rounded-lg bg-[#F1F5F9] px-3 py-2 text-xs font-medium tracking-ko text-[#0F172A]">
-            {chargeStatus}
+            {/* 직접입력 카드 */}
+            <button
+              type="button"
+              onClick={() => setSelectedSku("custom")}
+              aria-pressed={selectedSku === "custom"}
+              className={`flex flex-col items-center rounded-xl border py-3 text-center transition-all active:scale-[0.98] ${
+                selectedSku === "custom"
+                  ? "border-[#2563EB] bg-[#EEF3FE] ring-1 ring-inset ring-[#2563EB]"
+                  : "border-[#E8EDF3] bg-white hover:border-[#CBD5E1]"
+              }`}
+            >
+              <span className="text-[17px] font-bold text-[#0F172A]">
+                {selectedSku === "custom" && amountValid ? `${fmtWon(amount)}원` : "직접입력"}
+              </span>
+              <span
+                className={`mt-1 text-[10.5px] font-semibold ${selectedSku === "custom" ? "text-[#2563EB]" : "text-[#94A3B8]"}`}
+              >
+                {PROVIDE_PERIOD}
+              </span>
+            </button>
+          </div>
+
+          {/* 직접입력 금액 필드 — 그리드 아래 전폭. */}
+          {selectedSku === "custom" ? (
+            <label className="flex flex-col gap-1 text-xs font-semibold tracking-ko text-[#64748B]">
+              충전 금액 (원)
+              <input
+                type="number"
+                inputMode="numeric"
+                value={customAmount}
+                onChange={(e) => setCustomAmount(e.target.value)}
+                min={1}
+                placeholder="예: 20000"
+                className="min-h-[44px] rounded-lg border border-[#E8EDF3] bg-white px-3 text-sm font-medium tracking-ko text-[#0F172A] placeholder:text-[#94A3B8]"
+              />
+            </label>
+          ) : null}
+
+          {/* 약관 동의(v0 룩) — 전체동의 + 필수 3. 게이트(allAgreed) 그대로. [＞] 전문 인라인 펼침 보존(PG 심사 요건). */}
+          <div className="rounded-xl bg-[#F8FAFC] p-3">
+            {/* 전체 동의 — 하위 3개 일괄 토글(기존 setAgreedKeys 로직 유지). */}
+            <button
+              type="button"
+              onClick={() =>
+                setAgreedKeys(Object.fromEntries(AGREE_TERMS.map((t) => [t.key, !allAgreed])))
+              }
+              className="flex w-full items-center gap-2.5 text-left"
+            >
+              <span
+                className={`flex size-5 shrink-0 items-center justify-center rounded-md transition-colors ${
+                  allAgreed ? "bg-[#2563EB]" : "border-2 border-[#CBD5E1] bg-white"
+                }`}
+              >
+                {allAgreed ? <Check className="size-3.5 text-white" strokeWidth={3} /> : null}
+              </span>
+              <span className="text-[13px] font-bold text-[#0F172A]">전체 동의</span>
+            </button>
+
+            <div className="mt-2.5 flex flex-col gap-2 border-t border-[#EAEEF3] pt-2.5">
+              {AGREE_TERMS.map((t) => {
+                const checked = !!agreedKeys[t.key];
+                const open = !!expandedTerm[t.key];
+                return (
+                  <div key={t.key}>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setAgreedKeys((p) => ({ ...p, [t.key]: !p[t.key] }))}
+                        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                      >
+                        <span
+                          className={`flex size-4 shrink-0 items-center justify-center rounded transition-colors ${checked ? "text-[#2563EB]" : "text-[#CBD5E1]"}`}
+                        >
+                          <Check className="size-4" strokeWidth={3} />
+                        </span>
+                        <span className="truncate text-[12px] font-medium text-[#475569]">
+                          <span className="font-bold text-[#DC2626]">[필수]</span> {t.label}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedTerm((p) => ({ ...p, [t.key]: !p[t.key] }))}
+                        aria-expanded={open}
+                        aria-label={`${t.label} 전문 보기`}
+                        className="flex size-7 shrink-0 items-center justify-center text-[#94A3B8]"
+                      >
+                        <ChevronRight
+                          className={`size-4 transition-transform ${open ? "rotate-90" : ""}`}
+                          strokeWidth={2}
+                        />
+                      </button>
+                    </div>
+                    {open ? (
+                      <p className="mt-1.5 rounded-lg bg-white px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-[#64748B]">
+                        {t.body}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 결제 버튼 — onCharge/canCharge/chargeBusy 그대로, v0 스타일. */}
+          <button
+            type="button"
+            onClick={onCharge}
+            disabled={!canCharge}
+            className={`flex w-full items-center justify-center gap-1.5 rounded-xl py-3.5 text-[14.5px] font-bold transition-all ${
+              canCharge
+                ? "bg-[#2563EB] text-white shadow-[0_8px_20px_-6px_rgba(37,99,235,0.5)] active:scale-[0.99]"
+                : "cursor-not-allowed bg-[#E2E8F0] text-[#94A3B8]"
+            }`}
+          >
+            {chargeBusy
+              ? "처리 중…"
+              : amountValid
+                ? `${fmtWon(amount)}원 결제하고 충전`
+                : "충전 금액을 선택하세요"}
+          </button>
+          {chargeStatus ? (
+            <p className="rounded-lg bg-[#F1F5F9] px-3 py-2 text-xs font-medium tracking-ko text-[#0F172A]">
+              {chargeStatus}
+            </p>
+          ) : null}
+
+          {/* (d) 국문 상시 고지 — v0: 충전 블록 내 배치. */}
+          <p className="px-0.5 text-[11px] leading-relaxed tracking-ko text-[#94A3B8]">
+            본 캐시는 링크드롭 콘텐츠 이용 전용이며 현금 환급되지 않습니다. 결제 취소 시에만 해당 금액이
+            차감·취소됩니다.
           </p>
-        ) : null}
+        </div>
       </div>
 
-      {/* (d) 국문 상시 고지 */}
-      <p className="rounded-lg bg-[#F1F5F9] p-3 text-[11px] font-medium leading-relaxed tracking-ko text-[#64748B]">
-        본 캐시는 링크드롭 콘텐츠 이용 전용이며 현금 환급되지 않습니다. 결제 취소 시에만 해당 금액이
-        차감·취소됩니다.
-      </p>
-
-      {/* (c) 이용 내역 — 아코디언(기본 접힘). 헤더 토글 + 화살표 회전(SSR 안전 로컬 토글). */}
-      <div className="flex flex-col gap-2">
+      {/* (c) 이용 내역 — v0 HistoryAccordion 룩(기존 ledgerOpen 재사용). [결제취소] cancel-tx 로직 그대로. */}
+      <div className="overflow-hidden rounded-2xl border border-[#EAEEF3] bg-white">
         <button
           type="button"
           onClick={() => setLedgerOpen((v) => !v)}
           aria-expanded={ledgerOpen}
-          className="flex min-h-[44px] items-center justify-between px-1 text-left"
+          className="flex w-full items-center gap-2.5 px-4 py-3.5 text-left transition-colors hover:bg-[#F8FAFC]"
         >
-          <span className="text-sm font-bold tracking-ko text-[#0F172A]">
-            이용 내역 ({ledger.length}건)
+          <span className="flex size-8 items-center justify-center rounded-lg bg-[#F1F5F9]">
+            <RotateCcw className="size-[17px] text-[#475569]" strokeWidth={2.25} />
+          </span>
+          <span className="flex-1">
+            <span className="block text-[14px] font-bold text-[#0F172A]">이용 내역</span>
+            <span className="mt-0.5 block text-[11.5px] font-medium text-[#94A3B8]">
+              충전 · 사용 · 결제취소 {ledger.length}건
+            </span>
           </span>
           <ChevronDown
-            className={`size-4 text-[#64748B] transition-transform ${ledgerOpen ? "rotate-180" : ""}`}
-            strokeWidth={2}
+            className="size-5 flex-shrink-0 text-[#94A3B8] transition-transform duration-300"
+            strokeWidth={2.25}
+            style={{ transform: ledgerOpen ? "rotate(180deg)" : "none" }}
           />
         </button>
 
-        {ledgerOpen ? (
-          <>
-            {cancelStatus ? (
-              <p className="rounded-lg bg-[#F1F5F9] px-3 py-2 text-xs font-medium tracking-ko text-[#0F172A]">
-                {cancelStatus}
-              </p>
-            ) : null}
-            {ledger.length === 0 ? (
-              <p className="rounded-xl bg-[#F1F5F9] px-4 py-6 text-center text-xs font-medium tracking-ko text-[#94A3B8]">
-                아직 이용 내역이 없어요.
-              </p>
-            ) : (
-              <ul className="flex flex-col divide-y divide-[#E8EDF3] rounded-xl border border-[#E8EDF3]">
-                {ledger.map((row) => {
-                  const label = ENTRY_LABEL[row.entry_type] ?? row.entry_type;
-                  const delta = row.paid_delta + row.bonus_delta;
-                  const positive = delta > 0;
-                  const canCancel =
-                    row.entry_type === "charge" && !!row.ref_mcht_trd_no && row.paid_delta > 0;
-                  const busyThis = cancelBusyTrdNo === row.ref_mcht_trd_no;
-                  return (
-                    <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                      <span className="flex min-w-0 flex-col">
-                        <span className="text-sm font-semibold tracking-ko text-[#0F172A]">
-                          {label}
-                        </span>
-                        <span className="mt-0.5 text-xs font-medium tracking-ko text-[#94A3B8]">
-                          {fmtDateTime(row.created_at)}
-                        </span>
-                      </span>
-                      <span className="flex shrink-0 items-center gap-2">
+        <div
+          className="grid transition-all duration-300 ease-out"
+          style={{ gridTemplateRows: ledgerOpen ? "1fr" : "0fr" }}
+        >
+          <div className="overflow-hidden">
+            <div className="border-t border-[#F1F5F9] px-4 pb-3">
+              {cancelStatus ? (
+                <p className="mt-3 rounded-lg bg-[#F1F5F9] px-3 py-2 text-xs font-medium tracking-ko text-[#0F172A]">
+                  {cancelStatus}
+                </p>
+              ) : null}
+              {ledger.length === 0 ? (
+                <p className="py-3 text-[13px] text-[#94A3B8]">내역이 없어요</p>
+              ) : (
+                <div className="divide-y divide-[#F1F5F9]">
+                  {ledger.map((row) => {
+                    const label = ENTRY_LABEL[row.entry_type] ?? row.entry_type;
+                    const delta = row.paid_delta + row.bonus_delta;
+                    const positive = delta > 0;
+                    // v0 CashTxnRow 색 — 충전=초록 / 결제취소=앰버 / 그 외=슬레이트.
+                    const meta =
+                      row.entry_type === "charge"
+                        ? { Icon: Plus, tint: "#059669", bg: "#ECFDF5" }
+                        : row.entry_type === "charge_cancel"
+                          ? { Icon: RotateCcw, tint: "#B45309", bg: "#FEF3C7" }
+                          : { Icon: Minus, tint: "#475569", bg: "#F1F5F9" };
+                    const RowIcon = meta.Icon;
+                    const canCancel =
+                      row.entry_type === "charge" && !!row.ref_mcht_trd_no && row.paid_delta > 0;
+                    const busyThis = cancelBusyTrdNo === row.ref_mcht_trd_no;
+                    return (
+                      <div key={row.id} className="flex items-center gap-3 py-3">
                         <span
-                          className={`text-sm font-bold tabular-nums tracking-ko ${
-                            positive ? "text-[#2563EB]" : "text-[#0F172A]"
-                          }`}
+                          className="flex size-8 flex-shrink-0 items-center justify-center rounded-full"
+                          style={{ backgroundColor: meta.bg }}
                         >
-                          {positive ? "+" : ""}
-                          {fmtWon(delta)}
+                          <RowIcon className="size-4" style={{ color: meta.tint }} strokeWidth={2.5} />
                         </span>
-                        {canCancel ? (
-                          <button
-                            type="button"
-                            onClick={() => void onCancelCharge(row)}
-                            disabled={busyThis || cancelBusyTrdNo !== null}
-                            className="min-h-[32px] rounded-lg border border-[#E8EDF3] px-2.5 text-xs font-semibold tracking-ko text-[#64748B] transition-colors hover:border-[#94A3B8] disabled:cursor-not-allowed disabled:opacity-40"
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] font-semibold text-[#0F172A]">{label}</div>
+                          <div className="mt-0.5 text-[11px] tabular-nums text-[#94A3B8]">
+                            {fmtDateTime(row.created_at)}
+                          </div>
+                        </div>
+                        <div className="flex flex-shrink-0 items-center gap-2">
+                          <span
+                            className={`text-[14px] font-bold tabular-nums ${
+                              positive ? "text-[#059669]" : "text-[#0F172A]"
+                            }`}
                           >
-                            {busyThis ? "취소 중…" : "결제 취소"}
-                          </button>
-                        ) : null}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </>
-        ) : null}
+                            {positive ? "+" : ""}
+                            {fmtWon(delta)}
+                          </span>
+                          {canCancel ? (
+                            <button
+                              type="button"
+                              onClick={() => void onCancelCharge(row)}
+                              disabled={busyThis || cancelBusyTrdNo !== null}
+                              className="min-h-[32px] rounded-lg border border-[#E8EDF3] px-2.5 text-xs font-semibold tracking-ko text-[#64748B] transition-colors hover:border-[#94A3B8] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {busyThis ? "취소 중…" : "결제 취소"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
