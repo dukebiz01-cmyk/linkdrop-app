@@ -58,6 +58,9 @@ import { Route as ApiHectoCancelRouteImport } from './routes/api/hecto/cancel'
 import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
 import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
 import { Route as ApiCashUseRouteImport } from './routes/api/cash/use'
+import { Route as UserSettingsPrivacyRouteImport } from './routes/_user/settings.privacy'
+import { Route as UserSettingsNotificationsRouteImport } from './routes/_user/settings.notifications'
+import { Route as UserSettingsLanguageRouteImport } from './routes/_user/settings.language'
 import { Route as UserResultsShareUuidRouteImport } from './routes/_user/results.$shareUuid'
 import { Route as UserCouponClaim_codeRouteImport } from './routes/_user/coupon.$claim_code'
 import { Route as UserCardEditShareUuidRouteImport } from './routes/_user/card-edit.$shareUuid'
@@ -322,6 +325,22 @@ const ApiCashUseRoute = ApiCashUseRouteImport.update({
   path: '/api/cash/use',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UserSettingsPrivacyRoute = UserSettingsPrivacyRouteImport.update({
+  id: '/settings/privacy',
+  path: '/settings/privacy',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserSettingsNotificationsRoute =
+  UserSettingsNotificationsRouteImport.update({
+    id: '/settings/notifications',
+    path: '/settings/notifications',
+    getParentRoute: () => UserRoute,
+  } as any)
+const UserSettingsLanguageRoute = UserSettingsLanguageRouteImport.update({
+  id: '/settings/language',
+  path: '/settings/language',
+  getParentRoute: () => UserRoute,
+} as any)
 const UserResultsShareUuidRoute = UserResultsShareUuidRouteImport.update({
   id: '/results/$shareUuid',
   path: '/results/$shareUuid',
@@ -484,6 +503,9 @@ export interface FileRoutesByFullPath {
   '/card-edit/$shareUuid': typeof UserCardEditShareUuidRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
+  '/settings/language': typeof UserSettingsLanguageRoute
+  '/settings/notifications': typeof UserSettingsNotificationsRoute
+  '/settings/privacy': typeof UserSettingsPrivacyRoute
   '/api/cash/use': typeof ApiCashUseRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
@@ -553,6 +575,9 @@ export interface FileRoutesByTo {
   '/card-edit/$shareUuid': typeof UserCardEditShareUuidRoute
   '/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/results/$shareUuid': typeof UserResultsShareUuidRoute
+  '/settings/language': typeof UserSettingsLanguageRoute
+  '/settings/notifications': typeof UserSettingsNotificationsRoute
+  '/settings/privacy': typeof UserSettingsPrivacyRoute
   '/api/cash/use': typeof ApiCashUseRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
@@ -626,6 +651,9 @@ export interface FileRoutesById {
   '/_user/card-edit/$shareUuid': typeof UserCardEditShareUuidRoute
   '/_user/coupon/$claim_code': typeof UserCouponClaim_codeRoute
   '/_user/results/$shareUuid': typeof UserResultsShareUuidRoute
+  '/_user/settings/language': typeof UserSettingsLanguageRoute
+  '/_user/settings/notifications': typeof UserSettingsNotificationsRoute
+  '/_user/settings/privacy': typeof UserSettingsPrivacyRoute
   '/api/cash/use': typeof ApiCashUseRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
@@ -697,6 +725,9 @@ export interface FileRouteTypes {
     | '/card-edit/$shareUuid'
     | '/coupon/$claim_code'
     | '/results/$shareUuid'
+    | '/settings/language'
+    | '/settings/notifications'
+    | '/settings/privacy'
     | '/api/cash/use'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
@@ -766,6 +797,9 @@ export interface FileRouteTypes {
     | '/card-edit/$shareUuid'
     | '/coupon/$claim_code'
     | '/results/$shareUuid'
+    | '/settings/language'
+    | '/settings/notifications'
+    | '/settings/privacy'
     | '/api/cash/use'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
@@ -838,6 +872,9 @@ export interface FileRouteTypes {
     | '/_user/card-edit/$shareUuid'
     | '/_user/coupon/$claim_code'
     | '/_user/results/$shareUuid'
+    | '/_user/settings/language'
+    | '/_user/settings/notifications'
+    | '/_user/settings/privacy'
     | '/api/cash/use'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
@@ -1238,6 +1275,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCashUseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_user/settings/privacy': {
+      id: '/_user/settings/privacy'
+      path: '/settings/privacy'
+      fullPath: '/settings/privacy'
+      preLoaderRoute: typeof UserSettingsPrivacyRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/settings/notifications': {
+      id: '/_user/settings/notifications'
+      path: '/settings/notifications'
+      fullPath: '/settings/notifications'
+      preLoaderRoute: typeof UserSettingsNotificationsRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/settings/language': {
+      id: '/_user/settings/language'
+      path: '/settings/language'
+      fullPath: '/settings/language'
+      preLoaderRoute: typeof UserSettingsLanguageRouteImport
+      parentRoute: typeof UserRoute
+    }
     '/_user/results/$shareUuid': {
       id: '/_user/results/$shareUuid'
       path: '/results/$shareUuid'
@@ -1475,6 +1533,9 @@ interface UserRouteChildren {
   UserCardEditShareUuidRoute: typeof UserCardEditShareUuidRoute
   UserCouponClaim_codeRoute: typeof UserCouponClaim_codeRoute
   UserResultsShareUuidRoute: typeof UserResultsShareUuidRoute
+  UserSettingsLanguageRoute: typeof UserSettingsLanguageRoute
+  UserSettingsNotificationsRoute: typeof UserSettingsNotificationsRoute
+  UserSettingsPrivacyRoute: typeof UserSettingsPrivacyRoute
 }
 
 const UserRouteChildren: UserRouteChildren = {
@@ -1495,6 +1556,9 @@ const UserRouteChildren: UserRouteChildren = {
   UserCardEditShareUuidRoute: UserCardEditShareUuidRoute,
   UserCouponClaim_codeRoute: UserCouponClaim_codeRoute,
   UserResultsShareUuidRoute: UserResultsShareUuidRoute,
+  UserSettingsLanguageRoute: UserSettingsLanguageRoute,
+  UserSettingsNotificationsRoute: UserSettingsNotificationsRoute,
+  UserSettingsPrivacyRoute: UserSettingsPrivacyRoute,
 }
 
 const UserRouteWithChildren = UserRoute._addFileChildren(UserRouteChildren)

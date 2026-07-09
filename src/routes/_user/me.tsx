@@ -19,6 +19,16 @@ import {
   Settings,
   Diamond,
   Clock,
+  Bell,
+  X,
+  Building2,
+  Share2,
+  TicketPercent,
+  Sparkles,
+  Globe,
+  ShieldCheck,
+  HelpCircle,
+  ShoppingBag,
 } from "lucide-react";
 // Wallet = 쿠폰 지갑 섹션 헤더. Send = 받은 쿠폰 메이커, Heart = 구독한 메이커. Gift = 증정 쿠폰 라벨.
 import { Toaster } from "@/components/ui/sonner";
@@ -33,10 +43,6 @@ import {
   getExpiryCountdown,
   type CouponDisplayStatus,
 } from "@/lib/coupon-status";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { DropFeedCard } from "@/components/drop-feed-card";
-import { getMakerRepDrops } from "@/lib/feed-queries";
-import type { DropFeedItem } from "@/components/home-page";
 import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import { CashSection } from "@/components/wallet/CashSection";
@@ -153,18 +159,6 @@ type MakerInfo = {
   verification_status: string | null;
 };
 
-// 받은 쿠폰 메이커 + 그 메이커의 대표 공개카드(있으면). repDrop 없으면 프로필 행만(fallback).
-type ReceivedMaker = MakerInfo & { repDrop?: DropFeedItem | null };
-
-// 받은 쿠폰 → 메이커 dedup 용 raw row (client GROUP BY 불가 → JS dedup).
-type ClaimMakerRow = {
-  issued_at: string | null;
-  coupon: {
-    partner_id: string | null;
-    partner: MakerInfo | null;
-  } | null;
-};
-
 // maker_follows(active) + partners 조인 raw row.
 type FollowRow = {
   followed_partner_id: string;
@@ -189,10 +183,12 @@ type MePageData = {
   businessLabels: Record<string, string>;
   // 발신자 id → display_name (public_profiles, RLS 우회 뷰). 발신자 라벨용.
   senderNames: Record<string, string>;
-  // 받은 쿠폰을 발행한 메이커(중복 제거) — 구독 버튼 부착 + 대표 공개카드(있으면) 임베드.
-  receivedMakers: ReceivedMaker[];
   // 현재 구독(active) 중인 메이커.
   subscribedMakers: MakerInfo[];
+  // v0 히어로 자산요약 — 캐시 잔액(유상+무상 스냅샷, 표시용). CashSection 이 실시간 소스.
+  cashBalance: number;
+  // v0 히어로 보조스탯 — 내가 sender 로 보낸(공유한) 카드 수.
+  sentCount: number;
 };
 
 /**
@@ -225,8 +221,9 @@ export const Route = createFileRoute("/_user/me")({
       coupons: [],
       businessLabels: {},
       senderNames: {},
-      receivedMakers: [],
       subscribedMakers: [],
+      cashBalance: 0,
+      sentCount: 0,
     };
 
     const supabase = await getAuthClient();
@@ -328,39 +325,6 @@ export const Route = createFileRoute("/_user/me")({
       }
     }
 
-    // 받은 쿠폰 메이커 — claims → coupons → partners. client GROUP BY 불가라
-    //   JS 에서 partner.id 기준 dedup(이미 issued_at desc 정렬 → 첫 등장이 최신).
-    //   partner null(미승인 RLS 탈락)은 skip.
-    const { data: claimMakerRows } = await supabase
-      .from("coupon_claims")
-      .select(
-        "issued_at, coupon:coupons(partner_id, partner:partners(id, display_name, partner_kind, metadata, verification_status))",
-      )
-      .eq("catcher_user_id", userId)
-      .order("issued_at", { ascending: false });
-
-    const receivedMakersBase: MakerInfo[] = [];
-    const seenMaker = new Set<string>();
-    for (const row of (claimMakerRows as ClaimMakerRow[] | null) ?? []) {
-      const partner = row.coupon?.partner;
-      if (!partner?.id || seenMaker.has(partner.id)) continue;
-      seenMaker.add(partner.id);
-      receivedMakersBase.push(partner);
-    }
-
-    // 받은 쿠폰 메이커별 대표 공개카드 — N+1 회피 한 번에 fetch(공개카드 없으면 프로필 행만).
-    //   카드 내부 메이커 이름은 fallback("익명") 이라 실제 메이커 display_name 으로 덮어씀.
-    const repMap = await getMakerRepDrops(
-      supabase,
-      receivedMakersBase.map((m) => m.id),
-    );
-    const receivedMakers: ReceivedMaker[] = receivedMakersBase.map((m) => {
-      const rep = repMap.get(m.id);
-      if (!rep) return m;
-      const name = m.display_name?.trim() || rep.maker.name;
-      return { ...m, repDrop: { ...rep, maker: { ...rep.maker, name } } };
-    });
-
     // 구독한 메이커 — maker_follows(본인 RLS, active) + partners(approved public read).
     const { data: follows } = await supabase
       .from("maker_follows")
@@ -375,6 +339,24 @@ export const Route = createFileRoute("/_user/me")({
       .map((f) => f.partner)
       .filter((p): p is MakerInfo => Boolean(p?.id));
 
+    // v0 히어로 자산요약 — 캐시 잔액(본인 SELECT, 표시 스냅샷). CashSection 이 실시간 갱신 소스.
+    //   결제 로직 무관(순수 조회). 조회 실패 = 0(히어로만 영향, 다른 섹션 무관).
+    const { data: cashRow } = await supabase
+      .from("cash_wallets")
+      .select("paid_balance, bonus_balance")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const cashBalance =
+      ((cashRow as { paid_balance?: number; bonus_balance?: number } | null)?.paid_balance ?? 0) +
+      ((cashRow as { paid_balance?: number; bonus_balance?: number } | null)?.bonus_balance ?? 0);
+
+    // v0 히어로 보조스탯 — 내가 보낸(공유한) 카드 수(share_events sender=본인 count).
+    const { count: sentCountRaw } = await supabase
+      .from("share_events")
+      .select("*", { count: "exact", head: true })
+      .eq("sender_user_id", userId);
+    const sentCount = sentCountRaw ?? 0;
+
     return {
       userId,
       email,
@@ -385,8 +367,9 @@ export const Route = createFileRoute("/_user/me")({
       coupons,
       businessLabels,
       senderNames,
-      receivedMakers,
       subscribedMakers,
+      cashBalance,
+      sentCount,
     };
   },
   component: MePage,
@@ -439,11 +422,26 @@ function NavCard({
   );
 }
 
+// v0 me 마크 — 사람(내 페이지) 인라인 SVG(외부 아이콘 대신, v0 헤더 비주얼 그대로).
+function MeMark({ className = "h-[22px] w-[22px]" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <circle cx="12" cy="8" r="3.9" fill="#0F172A" />
+      <path
+        d="M4.6 19.4a7.4 7.4 0 0 1 14.8 0 1.3 1.3 0 0 1-1.3 1.3H5.9a1.3 1.3 0 0 1-1.3-1.3Z"
+        fill="#0F172A"
+      />
+    </svg>
+  );
+}
+
 function MePage() {
   const data = Route.useLoaderData();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
+  // 설정 — 헤더 기어 → 인라인 아코디언(#418, 포털/시트 아님) 개폐.
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // 담기는 연출 — claim 직후 해당 카드 강조(입장 애니 + 하이라이트 링) ~2초.
   const [highlightCode, setHighlightCode] = useState<string | null>(null);
   const claimedCardRef = useRef<HTMLLIElement | null>(null);
@@ -453,7 +451,6 @@ function MePage() {
   // 명시적 구독 — subscribedMakers 를 로컬 상태로 들고 구독/취소 시 reactive 갱신.
   const [subscribedMakers, setSubscribedMakers] = useState<MakerInfo[]>(data.subscribedMakers);
   const [busyMakerId, setBusyMakerId] = useState<string | null>(null);
-  const subscribedIds = new Set(subscribedMakers.map((m) => m.id));
   // 작업 B: 내 카드 썸네일 탭 → 인앱 임베드 재생 (단일 모달 인스턴스)
   const [embedState, setEmbedState] = useState<{
     open: boolean;
@@ -532,37 +529,6 @@ function MePage() {
     });
   }
 
-  // 구독 — maker_follows upsert(active). UNIQUE(follower,partner) 충돌 시 status 갱신.
-  async function handleSubscribe(maker: MakerInfo) {
-    if (!data.userId) return;
-    setBusyMakerId(maker.id);
-    try {
-      const { error } = await getSupabase().from("maker_follows").upsert(
-        {
-          follower_user_id: data.userId,
-          followed_partner_id: maker.id,
-          source: "manual",
-          consent_at: new Date().toISOString(),
-          status: "active",
-        },
-        { onConflict: "follower_user_id,followed_partner_id" },
-      );
-      if (error) {
-        console.error("[me] subscribe failed:", error);
-        toast.error("구독에 실패했어요. 잠시 후 다시 시도해 주세요.");
-        return;
-      }
-      setSubscribedMakers((prev) =>
-        prev.some((m) => m.id === maker.id) ? prev : [maker, ...prev],
-      );
-      toast.success("구독했어요.");
-    } catch (err) {
-      console.error("[me] subscribe unexpected:", err);
-      toast.error("처리 중 문제가 생겼어요.");
-    } finally {
-      setBusyMakerId(null);
-    }
-  }
 
   // 구독 취소 — status='unfollowed'. 구독한 메이커 섹션에서 사라지고, 받은쿠폰 줄은 다시 [구독].
   async function handleUnsubscribe(partnerId: string) {
@@ -604,9 +570,147 @@ function MePage() {
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#F6F8FB] tracking-ko pb-24">
-      <header className="bg-white px-4 py-4 border-b border-[#F1F5F9]">
-        <h1 className="text-[22px] font-bold tracking-[-0.01em] text-[#0F172A]">나</h1>
+      {/* 헤더 — v0: MeMark + "내 페이지" + 🔔(→/inbox) + ⚙️(설정 인라인 토글). */}
+      <header className="flex items-center justify-between px-4 pb-2 pt-5">
+        <div className="flex items-center gap-2.5">
+          <span
+            className="flex size-9 items-center justify-center rounded-xl bg-[#F1F5F9]"
+            aria-hidden="true"
+          >
+            <MeMark className="h-[22px] w-[22px]" />
+          </span>
+          <h1 className="text-[20px] font-bold tracking-[-0.02em] text-[#0F172A]">내 페이지</h1>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => navigate({ to: "/inbox" })}
+            aria-label="알림함"
+            className="flex size-9 items-center justify-center rounded-full bg-white text-[#475569] shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-inset ring-[#EAEEF3] transition-colors hover:text-[#0F172A] active:scale-95"
+          >
+            <Bell className="size-[18px]" strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen((v) => !v)}
+            aria-label="설정"
+            aria-expanded={settingsOpen}
+            className="flex size-9 items-center justify-center rounded-full bg-white text-[#475569] shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-inset ring-[#EAEEF3] transition-colors hover:text-[#0F172A] active:scale-95"
+          >
+            <Settings className="size-[18px]" strokeWidth={2} />
+          </button>
+        </div>
       </header>
+
+      {/* 설정 — 헤더 기어 아래 인라인 아코디언(#418: 바텀시트/포털 아님, grid 0fr→1fr).
+          로그아웃 = 기존 AlertDialog + handleSignOut 그대로 보존(이동만). */}
+      <div
+        className="grid px-4 transition-all duration-300 ease-out"
+        style={{ gridTemplateRows: settingsOpen ? "1fr" : "0fr" }}
+        aria-hidden={!settingsOpen}
+      >
+        <div className="overflow-hidden">
+          <div className="mt-2 rounded-3xl bg-white px-5 pb-6 pt-4 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-inset ring-[#EAEEF3]">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[17px] font-bold tracking-[-0.01em] text-[#0F172A]">설정</h2>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                aria-label="닫기"
+                className="flex size-8 items-center justify-center rounded-full text-[#94A3B8] transition-colors hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+              >
+                <X className="size-5" strokeWidth={2.25} />
+              </button>
+            </div>
+
+            {/* v0-44 SettingsSheet 톤 — 설정 항목 리스트(인라인, #418: 포털 아님). 각 항목 → 설정 서브페이지. */}
+            <div className="mb-3 flex flex-col">
+              {(
+                [
+                  { icon: Globe, label: "언어", sub: "한국어", to: "/settings/language" as const },
+                  {
+                    icon: Bell,
+                    label: "알림 설정",
+                    sub: "푸시·이메일",
+                    to: "/settings/notifications" as const,
+                  },
+                  {
+                    icon: ShieldCheck,
+                    label: "개인정보 보호",
+                    sub: "보안·데이터",
+                    to: "/settings/privacy" as const,
+                  },
+                ]
+              ).map((row) => {
+                const RowIcon = row.icon;
+                return (
+                  <button
+                    key={row.label}
+                    type="button"
+                    onClick={() => navigate({ to: row.to })}
+                    className="flex min-h-[52px] items-center justify-between rounded-xl px-1 transition-colors hover:bg-[#F1F5F9]"
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className="flex size-9 items-center justify-center rounded-lg bg-[#F1F5F9]">
+                        <RowIcon className="size-[18px] text-[#475569]" strokeWidth={2} />
+                      </span>
+                      <span className="text-[14px] font-medium text-[#0F172A]">{row.label}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[12.5px] font-medium text-[#94A3B8]">{row.sub}</span>
+                      <ChevronRight className="size-4 text-[#CBD5E1]" />
+                    </span>
+                  </button>
+                );
+              })}
+              {/* 도움말·문의 — 서브페이지 미신설(라우트 없음). 죽은 탭·가짜 이동 방지: 준비 중 비활성 표기. */}
+              <div className="flex min-h-[52px] items-center justify-between rounded-xl px-1 opacity-60">
+                <span className="flex items-center gap-3">
+                  <span className="flex size-9 items-center justify-center rounded-lg bg-[#F1F5F9]">
+                    <HelpCircle className="size-[18px] text-[#475569]" strokeWidth={2} />
+                  </span>
+                  <span className="text-[14px] font-medium text-[#0F172A]">도움말 · 문의</span>
+                </span>
+                <span className="text-[11px] font-medium text-[#94A3B8]">준비 중</span>
+              </div>
+            </div>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  type="button"
+                  className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl border border-[#EAEEF3] bg-white text-[#64748B] transition-colors hover:border-[#E2E8F0] hover:bg-[#F8FAFC] hover:text-[#0F172A] active:scale-[0.99]"
+                >
+                  <LogOut className="size-[17px]" strokeWidth={2.25} />
+                  <span className="text-[13px] font-bold tracking-[0.06em]">로그아웃</span>
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>로그아웃 하시겠어요?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    다시 로그인할 때까지 이 기기에서 로그아웃돼요.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={signingOut}>취소</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={signingOut}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void handleSignOut();
+                    }}
+                    className="bg-[#0F172A] text-white hover:bg-[#1E293B]"
+                  >
+                    {signingOut ? "로그아웃 중…" : "로그아웃"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <p className="mt-4 text-center text-[11px] text-[#CBD5E1]">LinkDrop v1.0.0</p>
+          </div>
+        </div>
+      </div>
 
       <div className="space-y-4 px-4 pt-4">
         {/* ① 내 정보 — V4 잉크 히어로(아바타 + 이름/이메일 + 편집 + 자산요약 스트립). 데이터·편집 핸들러 보존. */}
@@ -648,71 +752,113 @@ function MePage() {
             </button>
           </div>
 
-          {/* 자산요약 스트립 — dropy(준비중·§0 숫자/원화 금지) · 쿠폰(사용가능 수) · 구독(매장 수). */}
+          {/* 자산요약 스트립(v0) — 자산 [캐시/드로피/쿠폰] 탭 이동 버튼. §0: 드로피 = "준비중"(숫자 금지).
+              캐시 = 로더 스냅샷(실시간 소스는 캐시 탭 CashSection). 쿠폰 = 사용가능 수. */}
           <div className="mt-5 grid grid-cols-3 overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-inset ring-white/10">
-            <div className="flex flex-col items-center py-3">
-              <span className="text-[13px] font-bold leading-none text-[#60A5FA]">준비중</span>
-              <span className="mt-2 text-[11.5px] font-semibold tracking-wide text-[#B6C2D2]">dropy</span>
-            </div>
-            <div className="flex flex-col items-center border-l border-white/10 py-3">
-              <span className="text-[19px] font-bold leading-none tabular-nums text-white">
-                {usableCount}
-              </span>
-              <span className="mt-2 text-[11.5px] font-semibold tracking-wide text-[#B6C2D2]">쿠폰</span>
-            </div>
-            <div className="flex flex-col items-center border-l border-white/10 py-3">
-              <span className="text-[19px] font-bold leading-none tabular-nums text-white">
-                {subscribedMakers.length}
-              </span>
-              <span className="mt-2 text-[11.5px] font-semibold tracking-wide text-[#B6C2D2]">구독</span>
-            </div>
+            {(
+              [
+                { key: "cash", label: "캐시", value: data.cashBalance.toLocaleString(), accent: true, ready: true },
+                { key: "dropy", label: "드로피", value: "준비중", accent: false, ready: false },
+                { key: "coupon", label: "쿠폰", value: String(usableCount), accent: false, ready: true },
+              ] as const
+            ).map((s, i) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setWalletTab(s.key)}
+                className={`flex flex-col items-center py-3.5 transition-colors hover:bg-white/[0.06] active:bg-white/10 ${i > 0 ? "border-l border-white/10" : ""}`}
+              >
+                <span
+                  className={`font-bold leading-none tabular-nums ${s.ready ? "text-[20px]" : "text-[13px]"} ${s.accent ? "text-[#60A5FA]" : "text-white"}`}
+                >
+                  {s.value}
+                </span>
+                <span className="mt-2 flex items-center gap-0.5 text-[11.5px] font-semibold tracking-wide text-[#B6C2D2]">
+                  {s.label}
+                  <ChevronRight className="size-3 text-[#7C8BA1]" strokeWidth={2.5} />
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* 보조 스탯(v0) — 만든 카드 / 보낸 카드 / 구독. */}
+          <div className="mt-3 grid grid-cols-3">
+            {(
+              [
+                { key: "made", label: "만든 카드", value: data.myDrops.length },
+                { key: "sent", label: "보낸 카드", value: data.sentCount },
+                { key: "sub", label: "구독", value: subscribedMakers.length },
+              ] as const
+            ).map((s, i) => (
+              <div
+                key={s.key}
+                className={`flex items-center justify-center gap-1.5 py-0.5 ${i > 0 ? "border-l border-white/10" : ""}`}
+              >
+                <span className="text-[13px] font-bold tabular-nums text-white">{s.value}</span>
+                <span className="text-[11px] font-medium text-[#8A99AD]">{s.label}</span>
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* 작업 A — 내 매장: 비지니스에게 1순위. 프로필 바로 아래로 이동.
-            비업주(팬)는 미표시. */}
-        {data.isBusiness ? (
-          // ★내 매장 — 옛 SectionCard 비주얼을 인라인 보존(V4 미적용, 추후 별도 수정). 핸들러(/partner) 0변경.
-          <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-            <div className="mb-4 flex items-center gap-2">
-              <Store className="size-4 text-[#0A0A0A]" strokeWidth={2} />
-              <h3 className="text-sm font-semibold text-[#0A0A0A]">내 매장</h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate({ to: "/partner" })}
-              className="flex w-full min-h-[44px] items-center justify-between rounded-xl bg-[#F8FAFC] px-4 py-3 text-sm font-semibold text-[#0F172A] hover:bg-[#F1F5F9]"
-            >
-              <span>매장 관리</span>
-              <ChevronRight className="size-4 text-[#64748B]" strokeWidth={2} />
-            </button>
-          </section>
-        ) : null}
+        {/* v0-44 정본 L815~823 구조: 비즈=[내 매장 + 판매관리] 2-col / 비즈아님=[내 주문].
+            ★ 진입 카드만(대상 페이지 무접촉). 내매장=/partner(임시, 트랙2 store-hub 재배선).
+            판매관리=/partner/products(임시, 트랙2 store-hub SalesManagementPage 재배선). */}
+        <div className={`grid gap-3 ${data.isBusiness ? "grid-cols-2" : "grid-cols-1"}`}>
+          {data.isBusiness ? (
+            <>
+              <NavCard
+                icon={Building2}
+                title="내 매장"
+                subtitle="매출·프로모션·예약"
+                onClick={() => navigate({ to: "/partner" })}
+              />
+              <NavCard
+                icon={Package}
+                title="판매관리"
+                subtitle="상품·주문 관리"
+                onClick={() => navigate({ to: "/partner/products" })}
+              />
+            </>
+          ) : (
+            <NavCard
+              icon={Package}
+              title="내 주문"
+              subtitle="주문·예약 내역"
+              onClick={() => navigate({ to: "/me-orders" })}
+            />
+          )}
+        </div>
 
-        {/* 내 주문 — 손님 선주문 상태(읽기전용) 진입. V4 NavCard. 핸들러(/me-orders) 보존. */}
-        <NavCard
-          icon={Package}
-          title="내 주문"
-          subtitle="주문·예약 내역"
-          onClick={() => navigate({ to: "/me-orders" })}
-        />
+        {/* 구독 요금제(비즈 전용, →/subscribe) — /subscribe beforeLoad 가 파트너오너 아니면 /home 리다이렉트하므로
+            노출도 isBusiness 게이트(비사업자에겐 dead-end 방지). 진입 카드만 — 요금제 화면 무접촉. */}
+        {data.isBusiness ? (
+          <NavCard
+            icon={Sparkles}
+            title="구독 요금제"
+            subtitle="비즈니스 구독 · 월 자동결제"
+            onClick={() => navigate({ to: "/subscribe" })}
+          />
+        ) : null}
 
         {/* ② 내 혜택 지갑 — 행동형 헤더 + 상태 필터 칩(2/5). 카드(1/5)·정렬·다른 섹션 무수정.
             필터는 클라이언트 로컬 state, 정렬은 loader 최신순 유지. */}
         <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-          {/* 헤더 — 쿠폰/드로피 공통 */}
-          <div className="mb-3 flex items-center gap-2">
-            <Wallet className="size-4 text-[#2563EB]" strokeWidth={2} />
-            <h3 className="text-base font-bold text-[#0F172A]">내지갑</h3>
+          {/* 헤더 — v0 아이콘칩 + "내 지갑". */}
+          <div className="mb-3.5 flex items-center gap-2">
+            <span className="flex size-7 items-center justify-center rounded-lg bg-[#EEF3FE]">
+              <Wallet className="size-4 text-[#2563EB]" strokeWidth={2} />
+            </span>
+            <h3 className="text-[14px] font-bold tracking-[-0.01em] text-[#0F172A]">내 지갑</h3>
           </div>
 
-          {/* 상위 탭 — 캐시 / 쿠폰 / 드로피. V4 흰칩 세그먼트(선택=흰 bg+섀도). */}
+          {/* 세그먼트(v0) — 캐시 / 드로피 / 쿠폰(사용가능 수 뱃지). 흰칩 선택. */}
           <div className="mb-4 flex rounded-xl bg-[#F1F5F9] p-1">
             {(
               [
-                { key: "cash", label: "캐시" },
-                { key: "coupon", label: "쿠폰" },
-                { key: "dropy", label: "드로피" },
+                { key: "cash", label: "캐시", n: undefined },
+                { key: "dropy", label: "드로피", n: undefined },
+                { key: "coupon", label: "쿠폰", n: usableCount },
               ] as const
             ).map((tab) => {
               const selected = walletTab === tab.key;
@@ -721,13 +867,22 @@ function MePage() {
                   key={tab.key}
                   type="button"
                   onClick={() => setWalletTab(tab.key)}
-                  className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all ${
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[13px] font-semibold transition-all ${
                     selected
                       ? "bg-white text-[#0F172A] shadow-[0_1px_3px_rgba(15,23,42,0.1)]"
                       : "text-[#64748B] hover:text-[#475569]"
                   }`}
                 >
                   {tab.label}
+                  {tab.n !== undefined && tab.n > 0 ? (
+                    <span
+                      className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums ${
+                        selected ? "bg-[#2563EB] text-white" : "bg-[#E2E8F0] text-[#64748B]"
+                      }`}
+                    >
+                      {tab.n}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -762,10 +917,10 @@ function MePage() {
                     key={chip.key}
                     type="button"
                     onClick={() => setCouponFilter(chip.key)}
-                    className={`inline-flex min-h-[32px] items-center rounded-full px-3 text-xs font-bold transition-colors ${
+                    className={`inline-flex min-h-[32px] items-center rounded-lg px-3 text-[11.5px] font-semibold transition-all ${
                       selected
-                        ? "bg-[#0F172A] text-white"
-                        : "border border-[#E2E8F0] bg-white text-[#64748B] hover:bg-[#F8FAFC]"
+                        ? "bg-[#0F172A] text-white shadow-[0_2px_6px_rgba(15,23,42,0.18)]"
+                        : "bg-[#F1F5F9] text-[#64748B] hover:bg-[#E8EDF3]"
                     }`}
                   >
                     {chip.label} {chip.count}
@@ -813,58 +968,8 @@ function MePage() {
           )}
         </section>
 
-        {/* ③-A 받은 쿠폰 메이커 — 쿠폰을 발행한 메이커(중복 제거) + 구독 버튼.
-            쿠폰 지갑과 동일 톤: hairline divide-y, 박스 중첩 금지, 이니셜 아바타. */}
-        <SectionCard Icon={Send} title="받은 쿠폰 메이커">
-          <p className="mb-3 text-xs font-medium text-[#64748B]">
-            구독을 하면 해당 메이커의 혜택을 지속적으로 받아볼 수 있어요.
-          </p>
-          {data.receivedMakers.length === 0 ? (
-            <EmptyText text="받은 쿠폰이 없어요." />
-          ) : (
-            <ul className="divide-y divide-[#F1F5F9]">
-              {data.receivedMakers.map((m) => (
-                <MakerRow
-                  key={m.id}
-                  maker={m}
-                  right={
-                    subscribedIds.has(m.id) ? (
-                      <span className="shrink-0 text-sm font-semibold text-[#94A3B8]">구독 중</span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleSubscribe(m)}
-                        disabled={busyMakerId === m.id}
-                        className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg bg-[#2563EB] px-3 text-sm font-bold text-white hover:bg-[#1D4ED8] disabled:opacity-50"
-                      >
-                        구독
-                      </button>
-                    )
-                  }
-                  below={
-                    m.repDrop ? (
-                      <DropFeedCard
-                        {...m.repDrop}
-                        onClick={() =>
-                          navigate({
-                            to: "/d/$shareUuid",
-                            params: { shareUuid: m.repDrop!.shareUuid },
-                          })
-                        }
-                        onCtaClick={() =>
-                          navigate({
-                            to: "/d/$shareUuid",
-                            params: { shareUuid: m.repDrop!.shareUuid },
-                          })
-                        }
-                      />
-                    ) : undefined
-                  }
-                />
-              ))}
-            </ul>
-          )}
-        </SectionCard>
+        {/* ③-A 받은 쿠폰 메이커 섹션 제거 — 받은 쿠폰은 지갑 쿠폰 탭, 메이커 구독은 드롭 페이지(info-drop-page)
+            handleSubscribeConfirm(maker_follows)에서 처리(중복 해소). ③-B 구독한 메이커는 유지. */}
 
         {/* ③-B 구독한 메이커 — maker_follows(본인, active). 구독 취소 = status='unfollowed'. */}
         <SectionCard Icon={Heart} title="구독한 메이커">
@@ -877,13 +982,17 @@ function MePage() {
                   key={m.id}
                   maker={m}
                   right={
+                    // v0 Heart 알약 톤 — 탭 시 구독 취소(handleUnsubscribe 실함수 유지, 축소 아님).
                     <button
                       type="button"
                       onClick={() => handleUnsubscribe(m.id)}
                       disabled={busyMakerId === m.id}
-                      className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm font-semibold text-[#64748B] hover:bg-[#F8FAFC] disabled:opacity-50"
+                      aria-label="구독 취소"
+                      className="group inline-flex min-h-[36px] shrink-0 items-center gap-1 rounded-full bg-[#EEF3FE] px-3 text-[11px] font-bold text-[#2563EB] transition-colors hover:bg-[#FEE2E2] hover:text-[#DC2626] active:scale-95 disabled:opacity-50"
                     >
-                      구독 취소
+                      <Heart className="size-3 fill-current group-hover:fill-none" strokeWidth={2} />
+                      <span className="group-hover:hidden">구독중</span>
+                      <span className="hidden group-hover:inline">구독 취소</span>
                     </button>
                   }
                 />
@@ -900,19 +1009,19 @@ function MePage() {
             <EmptyText text="아직 만든 카드가 없어요." />
           ) : (
             <>
-              <ul className="space-y-2.5">
+              <ul className="space-y-3">
                 {data.myDrops.slice(0, dropsExpanded ? data.myDrops.length : 2).map((d) => (
                   <li
                     key={d.id}
-                    className="overflow-hidden rounded-2xl border border-[#E8EDF3] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                    className="overflow-hidden rounded-2xl border border-[#E8EDF3] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-[#CBD5E1] hover:shadow-[0_4px_12px_rgba(15,23,42,0.08)]"
                   >
-                    {/* 상단 — 썸네일 + 게시중 뱃지 + 제목 + stats(전환=블루 강조). 썸네일/제목 탭 = 인앱 재생. */}
-                    <div className="flex gap-3 p-3">
+                    {/* 상단(v0 톤) — 썸네일(20) + 게시중 뱃지 + 제목 + stats(전환=블루 강조). 썸네일/제목 탭 = 인앱 재생. */}
+                    <div className="flex gap-3 p-4 pb-3">
                       <button
                         type="button"
                         onClick={() => openEmbedFromDrop(d)}
                         aria-label="영상 재생"
-                        className="relative size-16 shrink-0 overflow-hidden rounded-xl bg-[#F1F5F9] transition-opacity hover:opacity-90"
+                        className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-[#F1F5F9] transition-opacity hover:opacity-90"
                       >
                         {d.source?.thumbnail_url ? (
                           <img
@@ -922,9 +1031,9 @@ function MePage() {
                           />
                         ) : null}
                       </button>
-                      <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-1 flex-col justify-center">
                         {d.share_uuid ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[10px] font-bold text-[#059669]">
+                          <span className="inline-flex w-fit items-center gap-1 rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[10px] font-bold text-[#059669]">
                             <span className="size-1.5 rounded-full bg-[#10B981]" />
                             게시중
                           </span>
@@ -932,13 +1041,13 @@ function MePage() {
                         <button
                           type="button"
                           onClick={() => openEmbedFromDrop(d)}
-                          className="mt-1 block w-full min-w-0 text-left"
+                          className="mt-1.5 block w-full min-w-0 text-left"
                         >
-                          <p className="line-clamp-1 text-[13.5px] font-semibold text-[#0F172A] hover:underline">
+                          <p className="line-clamp-2 text-[14px] font-semibold leading-tight text-[#0F172A] hover:underline">
                             {d.source?.title?.trim() || "(제목 없음)"}
                           </p>
                         </button>
-                        <div className="mt-1.5 flex items-center gap-3 text-[11px] text-[#94A3B8]">
+                        <div className="mt-2 flex items-center gap-3 text-[11px] text-[#94A3B8]">
                           <span className="inline-flex items-center gap-1">
                             <Eye className="size-3.5" strokeWidth={2} />
                             {numFmt(d.view_count)}
@@ -954,9 +1063,10 @@ function MePage() {
                         </div>
                       </div>
                     </div>
-                    {/* 하단 3분할 — 성과 보기(비즈+share_uuid)·수정·공유. 핸들러(/results·/card-edit·reshareDrop) 0변경. */}
+                    {/* 하단 액션(v0 톤) — 성과 보기(비즈+share_uuid, 잉크 필드 primary)·수정·공유(아웃라인).
+                        핸들러(/results·/card-edit·reshareDrop) 0변경. */}
                     {d.share_uuid ? (
-                      <div className="flex divide-x divide-[#F1F5F9] border-t border-[#F1F5F9]">
+                      <div className="flex items-center gap-2 border-t border-[#F1F5F9] px-4 py-3">
                         {data.isBusiness ? (
                           <button
                             type="button"
@@ -966,9 +1076,10 @@ function MePage() {
                                 params: { shareUuid: d.share_uuid! },
                               })
                             }
-                            className="flex min-h-[44px] flex-1 items-center justify-center text-[12.5px] font-bold text-[#2563EB] hover:bg-[#F8FAFC]"
+                            className="flex h-9 flex-1 items-center justify-center gap-1 rounded-xl bg-[#0F172A] text-[12.5px] font-bold text-white transition-colors hover:bg-[#1E293B] active:scale-[0.98]"
                           >
                             성과 보기
+                            <ChevronRight className="size-4" strokeWidth={2.25} />
                           </button>
                         ) : null}
                         <button
@@ -979,8 +1090,9 @@ function MePage() {
                               params: { shareUuid: d.share_uuid! },
                             })
                           }
-                          className="flex min-h-[44px] flex-1 items-center justify-center text-[12.5px] font-semibold text-[#475569] hover:bg-[#F8FAFC]"
+                          className="flex h-9 flex-1 items-center justify-center gap-1 rounded-xl border border-[#E8EDF3] bg-white text-[12.5px] font-semibold text-[#475569] transition-colors hover:bg-[#F8FAFC] active:scale-95"
                         >
+                          <Pencil className="size-3.5" strokeWidth={2.25} />
                           수정
                         </button>
                         <button
@@ -993,8 +1105,9 @@ function MePage() {
                               purpose: d.purpose ?? undefined,
                             })
                           }
-                          className="flex min-h-[44px] flex-1 items-center justify-center text-[12.5px] font-semibold text-[#475569] hover:bg-[#F8FAFC]"
+                          className="flex h-9 flex-1 items-center justify-center gap-1 rounded-xl border border-[#E8EDF3] bg-white text-[12.5px] font-semibold text-[#475569] transition-colors hover:bg-[#F8FAFC] active:scale-95"
                         >
+                          <Share2 className="size-3.5" strokeWidth={2.25} />
                           공유
                         </button>
                       </div>
@@ -1015,42 +1128,35 @@ function MePage() {
           )}
         </SectionCard>
 
-        {/* ⑥ 설정 — 하단 계정 섹션. 다른 섹션과 동일한 SectionCard 래퍼 + 무채색 로그아웃 row.
-            (기존 border-t 단독 배치 → 카드 통일. 빨강 → 진회색. row min-h 56px 풀폭 탭영역.) */}
-        <SectionCard Icon={Settings} title="설정">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <button
-                type="button"
-                className="flex w-full min-h-[56px] items-center gap-2 rounded-xl px-3 text-sm font-semibold text-[#475569] transition-colors hover:bg-[#F8FAFC]"
-              >
-                <LogOut className="size-4" strokeWidth={2} />
-                로그아웃
-              </button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>로그아웃 하시겠어요?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  다시 로그인할 때까지 이 기기에서 로그아웃돼요.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={signingOut}>취소</AlertDialogCancel>
-                <AlertDialogAction
-                  disabled={signingOut}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void handleSignOut();
-                  }}
-                  className="bg-[#0F172A] text-white hover:bg-[#1E293B]"
-                >
-                  {signingOut ? "로그아웃 중…" : "로그아웃"}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </SectionCard>
+        {/* ⑤ Dropy Mall — v0-44 jet navy 카드(디자인만). §0/법무: 준비 중 게이트.
+            실기능(상품·가격·구매·드로피 잔액) 전부 미이식 · 드로피 숫자/원화 0 · 탭 이동 없음(비인터랙티브 div).
+            근거: 자사몰 = post-pilot 선불전자지급수단·상품권 법무 게이트. 지금 실거래 열면 §0·법무 위반. */}
+        <div
+          className="relative flex w-full items-center gap-3.5 overflow-hidden rounded-2xl bg-[#0F172A] px-4 py-4 text-left shadow-[0_12px_30px_rgba(15,23,42,0.22)]"
+          aria-label="Dropy Mall — 준비 중"
+        >
+          <span className="flex size-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-inset ring-white/15">
+            <ShoppingBag className="size-[22px] text-[#60A5FA]" strokeWidth={2} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1.5">
+              <span className="text-[15px] font-extrabold tracking-[-0.01em] text-white">
+                Dropy Mall
+              </span>
+              {/* NEW → 준비 중(정직 표기, "곧 제공" 금지). */}
+              <span className="rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-bold text-[#B6C2D2]">
+                준비 중
+              </span>
+            </span>
+            <span className="mt-0.5 block text-[12px] font-medium text-[#B6C2D2]">
+              농산물·가공품·공산품을 드로피로 구매
+            </span>
+          </span>
+          {/* v0 우측 드로피 잔액 pill 제거(§0: 드로피 숫자/원화 0) → 준비 중 표기만. */}
+          <span className="flex flex-shrink-0 items-center rounded-full bg-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#94A3B8]">
+            준비 중
+          </span>
+        </div>
       </div>
       {embedState ? (
         <YouTubeEmbedModal
@@ -1221,10 +1327,24 @@ function CouponClaimCard({
           goDetail();
         }
       }}
-      className={`block cursor-pointer overflow-hidden rounded-2xl border text-left transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F172A] ${
+      className={`flex cursor-pointer overflow-hidden rounded-2xl border text-left transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0F172A] ${
         usable ? "border-[#EAE2D2] bg-[#FBF8F2]" : "border-[#E2E8F0] bg-[#F8FAFC]"
       } ${active ? "wallet-card-in ring-2 ring-[#0F172A]" : ""}`}
     >
+      {/* v0-44 좌측 티켓 스텁(TicketPercent) — 시각 톤만. 사용가능=앰버 틴트 / 완료·만료=회색. */}
+      <div
+        className={`flex w-12 shrink-0 flex-col items-center justify-center border-r border-dashed ${
+          usable ? "border-[#E0D6C2] bg-[#F3ECDD]" : "border-[#E2E8F0] bg-[#EFF1F4]"
+        }`}
+        aria-hidden
+      >
+        <TicketPercent
+          className={`size-[22px] ${usable ? "text-[#B07D2B]" : "text-[#94A3B8]"}`}
+          strokeWidth={2}
+        />
+      </div>
+      {/* 우측 본문 — 기존 리치 콘텐츠(상태·매장·혜택·조건·기간·발신자 + CTA) 전부 유지. */}
+      <div className="min-w-0 flex-1">
       <div className="px-4 pb-3 pt-4">
         {/* 상단: 상태 배지 | 받은 날짜 (기존 표기 유지: YY.MM.DD HH:mm) */}
         <div className="flex items-center justify-between gap-2">
@@ -1271,14 +1391,11 @@ function CouponClaimCard({
         </div>
       </div>
 
-      {/* CTA (사용 가능/곧 만료만) — 점선 perforation + 노치 + 검정 버튼. 사용완료/만료는 히스토리(CTA 없음). */}
+      {/* CTA (사용 가능/곧 만료만) — 점선 tear 라인 + 검정 버튼. 좌측 스텁 seam 이 티켓 노치 역할(중복 원노치 제거).
+          사용완료/만료는 히스토리(CTA 없음). */}
       {usable ? (
         <>
-          <div className="relative" aria-hidden>
-            <div className="mx-4 border-t border-dashed border-[#E2E8F0]" />
-            <span className="pointer-events-none absolute left-0 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#F1F5F9]" />
-            <span className="pointer-events-none absolute right-0 top-1/2 size-4 translate-x-1/2 -translate-y-1/2 rounded-full bg-[#F1F5F9]" />
-          </div>
+          <div className="mx-4 border-t border-dashed border-[#E2E8F0]" aria-hidden />
           <div className="flex gap-2 px-4 pb-4 pt-3">
             <button
               type="button"
@@ -1305,6 +1422,7 @@ function CouponClaimCard({
           </div>
         </>
       ) : null}
+      </div>
     </li>
   );
 }
@@ -1490,19 +1608,20 @@ function MakerRow({
   const tier = makerTier(maker);
 
   return (
-    <li className="py-3">
+    <li className="py-2.5">
       <div className="flex items-center gap-3">
-        <Avatar className="size-11 shrink-0">
-          <AvatarFallback className="bg-[#F1F5F9] text-base font-bold text-[#0F172A]">
-            {initial}
-          </AvatarFallback>
-        </Avatar>
+        {/* v0 톤 — rounded-2xl 그라데이션 이니셜 아바타(from-#1E293B to-#475569). partners 로고 컬럼 없음 유지. */}
+        <div className="relative flex size-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#1E293B] to-[#475569] text-[14px] font-bold text-white ring-1 ring-inset ring-white/10">
+          {initial}
+        </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <p className="truncate text-[13.5px] font-semibold text-[#0F172A]">{name}</p>
+            <p className="truncate text-[13.5px] font-semibold tracking-[-0.01em] text-[#0F172A]">
+              {name}
+            </p>
             <MakerTierChip tier={tier} />
           </div>
-          <p className="mt-0.5 truncate text-[11px] text-[#94A3B8]">{subtitle}</p>
+          <p className="mt-0.5 truncate text-[11.5px] text-[#94A3B8]">{subtitle}</p>
         </div>
         {right}
       </div>
