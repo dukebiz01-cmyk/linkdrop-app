@@ -85,7 +85,9 @@ const SEVERITY_LABEL: Record<GuideDiagnosis["severity"], string> = {
 function HScrollRow({ children }: { children: ReactNode }) {
   return (
     <div
-      className="flex touch-pan-x snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      // 세로 스크롤 통과 — touch-pan-x 제거(touch-action 미지정=기본 auto). 세로 제스처는 페이지
+      //   스크롤로 넘어가고, 가로는 overflow-x-auto 가 그대로 처리. overscroll-x-contain(가로 끝 페이지 튐 방지)만 유지.
+      className="flex snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       style={{ WebkitOverflowScrolling: "touch" }}
     >
       {children}
