@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Layers, BarChart3, Pencil, Play } from "lucide-react";
 import { toast } from "sonner";
@@ -46,17 +46,24 @@ export function HomeActivitySegment({
   myCreatedDrops,
   serverNow,
   isBusiness,
+  initialTab,
 }: {
   sentDrops: DropFeedItem[];
   followedDrops: DropFeedItem[];
-  /** v0 3토글 — "내가만든"(get_my_drops published → 어댑터). 내 카드엔 파생필드(드로피/타이머 등) 없음 = 정상 미렌더. */
+  /** v0 3토글 — "내가만든"(get_my_drops 전체 status → 어댑터, B' 전환). 내 카드엔 파생필드(드로피/타이머 등) 없음 = 정상 미렌더. */
   myCreatedDrops: DropFeedItem[];
   /** 1-C-2(L6) — 홈 loader 1회 공급 서버 기준시각(타일 타이머 offset 보정). */
   serverNow?: string;
   /** 내가만든 3기능 — "성과보기" 노출 게이트(me.tsx isBusiness 게이트 동일). 미주입 = 미노출. */
   isBusiness?: boolean;
+  /** B' 전환 — ?activity 딥링크 초기 탭(me NavCard 진입). 미지정 = "sent". */
+  initialTab?: ActivityTab;
 }) {
-  const [tab, setTab] = useState<ActivityTab>("sent");
+  const [tab, setTab] = useState<ActivityTab>(initialTab ?? "sent");
+  // 딥링크 재진입(다른 화면에서 ?activity 변경) 동기화 — v0 정본 패턴.
+  useEffect(() => {
+    if (initialTab) setTab(initialTab);
+  }, [initialTab]);
   const navigate = useNavigate();
 
   // 내가만든 3기능 — 인앱 임베드 재생(단일 모달 인스턴스, me.tsx embedState 이식).
@@ -130,7 +137,8 @@ export function HomeActivitySegment({
         // 가로 스와이프 행(v0). ShareCardTile 재사용. 공유=재공유, 클릭=/d 이동.
         <HScrollRow>
           {drops.map((drop) => (
-            <SwipeItem key={`${tab}:${drop.shareUuid}`}>
+            // key — draft(shareUuid="") 충돌 방지: dropId 우선(B' 전환, made 탭에만 존재).
+            <SwipeItem key={`${tab}:${drop.dropId ?? drop.shareUuid}`}>
               <ShareCardTile
                 drop={drop}
                 // Phase 0 — 홈 뱃지 주입(탐색과 동일 소스 drop.intent). 3종 락.
@@ -145,19 +153,33 @@ export function HomeActivitySegment({
                 shareCount={drop.shareCount}
                 // BADGE-ⓑ — Droppy 예상 보상. 내가만든엔 없음 = 미렌더.
                 dropyReward={drop.dropyReward}
-                onClick={() => openDrop(drop.shareUuid)}
+                // 열람 — draft(shareUuid 없음)는 /d 불가 → me 미러(열람=인앱 재생).
+                onClick={() =>
+                  drop.shareUuid ? openDrop(drop.shareUuid) : openEmbedFromDrop(drop)
+                }
+                // 공유 — draft 는 me 에선 버튼 숨김. 공용 타일은 버튼 상시라 정직 안내로 게이트.
                 onShare={() =>
-                  void reshareDrop({
-                    shareUuid: drop.shareUuid,
-                    title: drop.title,
-                    imageUrl: drop.videoThumbnailUrl,
-                    purpose: drop.intent,
-                  })
+                  drop.shareUuid
+                    ? void reshareDrop({
+                        shareUuid: drop.shareUuid,
+                        title: drop.title,
+                        imageUrl: drop.videoThumbnailUrl,
+                        purpose: drop.intent,
+                      })
+                    : toast.info("아직 게시 전 카드예요. 게시하면 공유할 수 있어요.")
                 }
               />
               {/* 내가만든 3기능 — made 탭에만 액션 행(성과보기/수정/재생). 열람(카드 탭→/d)·공유는 기존 그대로.
                   성과 = isBusiness && shareUuid(me.tsx:1070 게이트 동일) / 수정 = shareUuid / 재생 = 항상(실패 시 toast).
                   인라인 상시 버튼(Radix dropdown 금지) · Lucide 라인 아이콘 · 홈 톤(#0F172A 필드 / 아웃라인 #E8EDF3). */}
+              {tab === "made" && drop.status && drop.status !== "published" ? (
+                // B' 전환 — 상태 배지(무채색): archived=비공개(판매관리 토글 시맨틱), 그 외=임시저장.
+                <div className="mt-2">
+                  <span className="inline-flex items-center rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-bold text-[#64748B]">
+                    {drop.status === "archived" ? "비공개" : "임시저장"}
+                  </span>
+                </div>
+              ) : null}
               {tab === "made" ? (
                 <div className="mt-2 flex items-center gap-1.5">
                   {isBusiness && drop.shareUuid ? (

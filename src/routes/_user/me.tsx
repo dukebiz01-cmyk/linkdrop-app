@@ -12,8 +12,6 @@ import {
   ChevronRight,
   Wallet,
   Send,
-  Eye,
-  ArrowUpRight,
   Pencil,
   Package,
   Settings,
@@ -22,7 +20,6 @@ import {
   Bell,
   X,
   Building2,
-  Share2,
   TicketPercent,
   Sparkles,
   Globe,
@@ -35,7 +32,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
 import { shareToKakao } from "@/lib/kakao";
-import { reshareDrop } from "@/lib/reshare-drop";
 import {
   getCouponDisplayStatus,
   isCouponUsable,
@@ -43,9 +39,6 @@ import {
   getExpiryCountdown,
   type CouponDisplayStatus,
 } from "@/lib/coupon-status";
-import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
-import { parseVideoUrl } from "@/lib/video-metadata";
-import { extractYouTubeVideoIdFromThumb } from "@/lib/video-id";
 import { CashSection } from "@/components/wallet/CashSection";
 import {
   AlertDialog,
@@ -443,17 +436,9 @@ function MePage() {
   const claimedCardRef = useRef<HTMLLIElement | null>(null);
   const claimedHandledRef = useRef(false);
   // 작업 C: 내 카드 접기/펼치기 (상위 2개 + 더보기/접기 토글)
-  const [dropsExpanded, setDropsExpanded] = useState(false);
   // 명시적 구독 — subscribedMakers 를 로컬 상태로 들고 구독/취소 시 reactive 갱신.
   const [subscribedMakers, setSubscribedMakers] = useState<MakerInfo[]>(data.subscribedMakers);
   const [busyMakerId, setBusyMakerId] = useState<string | null>(null);
-  // 작업 B: 내 카드 썸네일 탭 → 인앱 임베드 재생 (단일 모달 인스턴스)
-  const [embedState, setEmbedState] = useState<{
-    open: boolean;
-    videoId: string;
-    originalUrl: string;
-    title: string;
-  } | null>(null);
 
   // 쿠폰 지갑 필터 칩 — 기본 '사용 가능'(usable). 클라이언트 로컬 state(서버 호출 없음).
   const [couponFilter, setCouponFilter] = useState<CouponFilter>("available");
@@ -508,22 +493,6 @@ function MePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function openEmbedFromDrop(d: MyDropRow) {
-    const url = d.source?.source_url ?? "";
-    const fromUrl = url ? parseVideoUrl(url) : null;
-    const videoId = fromUrl?.videoId ?? extractYouTubeVideoIdFromThumb(d.source?.thumbnail_url);
-    if (!videoId) {
-      // 안전 fallback: videoId 없으면 모달 안 띄움. 빈 모달 금지.
-      toast.info("이 영상은 인앱 재생을 지원하지 않아요.");
-      return;
-    }
-    setEmbedState({
-      open: true,
-      videoId,
-      originalUrl: url || `https://www.youtube.com/watch?v=${videoId}`,
-      title: d.source?.title?.trim() || "영상 재생",
-    });
-  }
 
 
   // 구독 취소 — status='unfollowed'. 구독한 메이커 섹션에서 사라지고, 받은쿠폰 줄은 다시 [구독].
@@ -963,132 +932,14 @@ function MePage() {
           )}
         </SectionCard>
 
-        {/* ④ 내 카드 — 성과 보기 링크는 비지니스만 (share_uuid 있는 카드만 활성, v5.5 반환).
-            작업 C: 기본 상위 2개만 노출 + 더보기/접기 토글. 개수 증가 대비.
-            작업 B: 썸네일/제목 탭 → 인앱 임베드 모달 재생. */}
-        <SectionCard Icon={FileText} title="만든 카드">
-          {data.myDrops.length === 0 ? (
-            <EmptyText text="아직 만든 카드가 없어요." />
-          ) : (
-            <>
-              <ul className="space-y-3">
-                {data.myDrops.slice(0, dropsExpanded ? data.myDrops.length : 2).map((d) => (
-                  <li
-                    key={d.id}
-                    className="overflow-hidden rounded-2xl border border-[#E8EDF3] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-[#CBD5E1] hover:shadow-[0_4px_12px_rgba(15,23,42,0.08)]"
-                  >
-                    {/* 상단(v0 톤) — 썸네일(20) + 게시중 뱃지 + 제목 + stats(전환=블루 강조). 썸네일/제목 탭 = 인앱 재생. */}
-                    <div className="flex gap-3 p-4 pb-3">
-                      <button
-                        type="button"
-                        onClick={() => openEmbedFromDrop(d)}
-                        aria-label="영상 재생"
-                        className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-[#F1F5F9] transition-opacity hover:opacity-90"
-                      >
-                        {d.source?.thumbnail_url ? (
-                          <img
-                            src={d.source.thumbnail_url}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        ) : null}
-                      </button>
-                      <div className="flex min-w-0 flex-1 flex-col justify-center">
-                        {d.share_uuid ? (
-                          <span className="inline-flex w-fit items-center gap-1 rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[10px] font-bold text-[#059669]">
-                            <span className="size-1.5 rounded-full bg-[#10B981]" />
-                            게시중
-                          </span>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => openEmbedFromDrop(d)}
-                          className="mt-1.5 block w-full min-w-0 text-left"
-                        >
-                          <p className="line-clamp-2 text-[14px] font-semibold leading-tight text-[#0F172A] hover:underline">
-                            {d.source?.title?.trim() || "(제목 없음)"}
-                          </p>
-                        </button>
-                        <div className="mt-2 flex items-center gap-3 text-[11px] text-[#94A3B8]">
-                          <span className="inline-flex items-center gap-1">
-                            <Eye className="size-3.5" strokeWidth={2} />
-                            {numFmt(d.view_count)}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <Send className="size-3.5" strokeWidth={2} />
-                            {numFmt(d.share_count)}
-                          </span>
-                          <span className="inline-flex items-center gap-1 font-bold text-[#2563EB]">
-                            <ArrowUpRight className="size-3.5" strokeWidth={2.25} />
-                            {numFmt(d.conversion_count)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {/* 하단 액션(v0 톤) — 성과 보기(비즈+share_uuid, 잉크 필드 primary)·수정·공유(아웃라인).
-                        핸들러(/results·/card-edit·reshareDrop) 0변경. */}
-                    {d.share_uuid ? (
-                      <div className="flex items-center gap-2 border-t border-[#F1F5F9] px-4 py-3">
-                        {data.isBusiness ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              navigate({
-                                to: "/results/$shareUuid",
-                                params: { shareUuid: d.share_uuid! },
-                              })
-                            }
-                            className="flex h-9 flex-1 items-center justify-center gap-1 rounded-xl bg-[#0F172A] text-[12.5px] font-bold text-white transition-colors hover:bg-[#1E293B] active:scale-[0.98]"
-                          >
-                            성과 보기
-                            <ChevronRight className="size-4" strokeWidth={2.25} />
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            navigate({
-                              to: "/card-edit/$shareUuid",
-                              params: { shareUuid: d.share_uuid! },
-                            })
-                          }
-                          className="flex h-9 flex-1 items-center justify-center gap-1 rounded-xl border border-[#E8EDF3] bg-white text-[12.5px] font-semibold text-[#475569] transition-colors hover:bg-[#F8FAFC] active:scale-95"
-                        >
-                          <Pencil className="size-3.5" strokeWidth={2.25} />
-                          수정
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void reshareDrop({
-                              shareUuid: d.share_uuid!,
-                              title: d.source?.title ?? "(제목 없음)",
-                              imageUrl: d.source?.thumbnail_url ?? undefined,
-                              purpose: d.purpose ?? undefined,
-                            })
-                          }
-                          className="flex h-9 flex-1 items-center justify-center gap-1 rounded-xl border border-[#E8EDF3] bg-white text-[12.5px] font-semibold text-[#475569] transition-colors hover:bg-[#F8FAFC] active:scale-95"
-                        >
-                          <Share2 className="size-3.5" strokeWidth={2.25} />
-                          공유
-                        </button>
-                      </div>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-              {data.myDrops.length > 2 ? (
-                <button
-                  type="button"
-                  onClick={() => setDropsExpanded((v) => !v)}
-                  className="mt-3 flex w-full min-h-[44px] items-center justify-center rounded-xl border border-[#E8EDF3] bg-white px-3 text-sm font-semibold tracking-ko text-[#475569] transition-colors hover:bg-[#F8FAFC]"
-                >
-                  {dropsExpanded ? "접기" : `더보기 (${data.myDrops.length - 2})`}
-                </button>
-              ) : null}
-            </>
-          )}
-        </SectionCard>
+        {/* ④ 만든 카드 — B' 전환: 리치 리스트(성과/수정/재생/공유)는 홈 '내가만든' 탭으로 통합.
+            여기는 딥링크 진입 카드만(/home?activity=made). */}
+        <NavCard
+          icon={FileText}
+          title="만든 카드"
+          subtitle={`성과·수정·재생 — ${data.myDrops.length}장`}
+          onClick={() => navigate({ to: "/home", search: { activity: "made" } })}
+        />
 
         {/* ⑤ Dropy Mall — v0-44 jet navy 카드(디자인만). §0/법무: 준비 중 게이트.
             실기능(상품·가격·구매·드로피 잔액) 전부 미이식 · 드로피 숫자/원화 0 · 탭 이동 없음(비인터랙티브 div).
@@ -1158,17 +1009,6 @@ function MePage() {
           <p className="mt-4 text-center text-[11px] text-[#CBD5E1]">LinkDrop v1.0.0</p>
         </div>
       </div>
-      {embedState ? (
-        <YouTubeEmbedModal
-          open={embedState.open}
-          onOpenChange={(open) => {
-            if (!open) setEmbedState(null);
-          }}
-          videoId={embedState.videoId}
-          originalUrl={embedState.originalUrl}
-          title={embedState.title}
-        />
-      ) : null}
       <Toaster richColors position="top-center" />
     </main>
   );
@@ -1657,8 +1497,4 @@ function SectionCard({
 
 function EmptyText({ text }: { text: string }) {
   return <p className="text-sm text-[#64748B]">{text}</p>;
-}
-
-function numFmt(n: number | null | undefined): string {
-  return (typeof n === "number" ? n : 0).toLocaleString();
 }

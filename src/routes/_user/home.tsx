@@ -81,6 +81,13 @@ function reservationDateLabel(r: ReservationRpcRow): string {
 
 export const Route = createFileRoute("/_user/home")({
   head: () => ({ meta: [{ title: "홈" }] }),
+  // B' 전환 — /home?activity=made 딥링크(me NavCard 진입). 그 외 값·미지정 = 무시(기본 탭).
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { activity?: "sent" | "subscribed" | "made" } => {
+    const a = search.activity;
+    return a === "sent" || a === "subscribed" || a === "made" ? { activity: a } : {};
+  },
   loader: async (): Promise<HomeLoaderData> => {
     const base: HomeLoaderData = { isBusiness: false, merchant: null, user: null };
     const supabase = await getAuthClient();
@@ -244,6 +251,8 @@ function HomeRoute() {
   const navigate = useNavigate();
   const router = useRouter();
   const { isBusiness, merchant, user, serverNow } = Route.useLoaderData();
+  // B' 전환 — 딥링크 초기 활동 탭(?activity=made 등). 미지정 = undefined(현행 기본 탭).
+  const { activity } = Route.useSearch();
 
   // PTR-1 — 당겨서 새로고침: loader 재실행(router.invalidate, 전체 리로드 아님).
   //   최소 300ms 표시 보장(인디케이터 인지) — invalidate 가 즉시 끝나도 스피너 확인 가능.
@@ -285,6 +294,7 @@ function HomeRoute() {
         merchant={merchant}
         user={user}
         serverNow={serverNow}
+        initialActivityTab={activity}
         onGoResults={() => void navigate({ to: "/partner/results" })}
         onGoReservations={() => void navigate({ to: "/partner/reservations" })}
         onGoProposals={() => void navigate({ to: "/partner" })}

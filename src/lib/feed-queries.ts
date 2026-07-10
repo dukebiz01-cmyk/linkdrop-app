@@ -526,12 +526,12 @@ type MyDropRpcRow = {
   share_uuid: string | null;
 };
 
-// MyDropRpcRow → DropFeedItem. share_uuid 없는(미게시/미공유) 행은 제외(게시된 것만).
+// MyDropRpcRow → DropFeedItem. B' 전환 — share_uuid 없는(미공유/draft) 행도 표시(me 리치
+//   리스트와 동일 범위). shareUuid="" 로 두고, shareUuid 필요 액션은 소비처(홈 made 탭)가 게이트.
 function adaptMyDropRow(row: MyDropRpcRow): DropFeedItem | null {
-  if (!row.share_uuid) return null;
   const cs = row.source;
   return {
-    shareUuid: row.share_uuid,
+    shareUuid: row.share_uuid ?? "",
     isMine: true,
     // 본인 표시 — 내 카드이므로 메이커명은 "나"(별도 프로필 조회 없이). droppedAgo = 게시/생성시각.
     maker: { ...MAKER_FALLBACK, name: "나", droppedAgo: formatDroppedAgo(row.published_at ?? row.created_at) },
@@ -550,17 +550,19 @@ function adaptMyDropRow(row: MyDropRpcRow): DropFeedItem | null {
       conversions: row.conversion_count ?? 0,
     },
     videoSourceUrl: cs?.source_url ?? undefined,
+    status: row.status ?? undefined,
   };
 }
 
-// 홈 활동 세그먼트 "내가만든" — get_my_drops(published) → 어댑터. 실패 = 빈 배열(홈 생존).
+// 홈 활동 세그먼트 "내가만든" — B' 전환: me 만든카드와 동일 범위(전체 status·20장) → 어댑터.
+//   실패 = 빈 배열(홈 생존).
 export async function getMyCreatedDrops(
   client: SupabaseClient,
   opts?: { limit?: number },
 ): Promise<DropFeedItem[]> {
   const { data, error } = (await client.rpc("get_my_drops", {
-    p_status: "published",
-    p_limit: opts?.limit ?? 12,
+    p_status: null,
+    p_limit: opts?.limit ?? 20,
     p_offset: 0,
   } as never)) as { data: unknown; error: { message?: string } | null };
   if (error || !Array.isArray(data)) {

@@ -32,6 +32,8 @@ export interface DropFeedItem {
   stats?: { views: number; shares: number; conversions: number };
   /** 홈 '내가만든' 3기능 — 원본 영상 URL(source.source_url, 인앱 재생 videoId 추출용). */
   videoSourceUrl?: string;
+  /** B' 전환 — info_drops.status(get_my_drops). published 아니면 상태 배지(임시저장/비공개). */
+  status?: string;
 }
 
 export interface HomePageProps {

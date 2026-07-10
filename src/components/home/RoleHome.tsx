@@ -215,6 +215,7 @@ export function RoleHome({
   merchant,
   user,
   serverNow,
+  initialActivityTab,
   onGoResults,
   onGoReservations,
   onGoProposals,
@@ -224,6 +225,8 @@ export function RoleHome({
   user: UserHomeData | null;
   /** 1-C-2(L6) — 홈 loader 1회 공급 서버 기준시각(타일 타이머 offset 보정). */
   serverNow?: string;
+  /** B' 전환 — ?activity 딥링크 초기 활동 탭. 미지정 = 세그먼트 기본(sent). */
+  initialActivityTab?: "sent" | "subscribed" | "made";
   onGoResults: () => void;
   onGoReservations: () => void;
   onGoProposals: () => void;
@@ -289,6 +292,7 @@ export function RoleHome({
           myCreatedDrops={myCreatedDrops}
           serverNow={serverNow}
           isBusiness={isBusiness}
+          initialTab={initialActivityTab}
         />
       </div>
     );
@@ -390,6 +394,7 @@ export function RoleHome({
         myCreatedDrops={myCreatedDrops}
         serverNow={serverNow}
         isBusiness={isBusiness}
+        initialTab={initialActivityTab}
       />
     </div>
   );
