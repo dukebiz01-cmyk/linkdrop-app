@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast, Toaster } from "sonner";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle, ChevronLeft } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -66,11 +66,11 @@ function CardEditPage() {
   }, [shareUuid]);
 
   function goBack() {
-    // 뒤로가기 — 직접 진입 등 히스토리 없을 때는 /me 로.
+    // 뒤로가기 — 히스토리 있으면 back(홈/me 어디서 왔든 원위치). 직접 진입 폴백 = /home(갇힘 해결).
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.history.back();
     } else {
-      void navigate({ to: "/me" });
+      void navigate({ to: "/home" });
     }
   }
 
@@ -100,7 +100,17 @@ function CardEditPage() {
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] tracking-ko">
-      <header className="border-b border-[#F1F5F9] bg-white px-5 py-4">
+      {/* 헤더 뒤로가기 — 40창(partner.index TopBar) 톤. goBack = history back + /home 폴백.
+          saving 은 handleSave 내부 상태라 이탈해도 저장 로직 무영향(미저장 이탈 경고는 스코프 밖). */}
+      <header className="flex items-center gap-2 border-b border-[#F1F5F9] bg-white px-4 py-3">
+        <button
+          type="button"
+          onClick={goBack}
+          aria-label="뒤로"
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[#525252] transition-colors hover:bg-[#F5F5F5]"
+        >
+          <ChevronLeft className="size-5" strokeWidth={2.25} />
+        </button>
         <h1 className="text-lg font-bold text-[#0A0A0A]">메시지 수정</h1>
       </header>
 
