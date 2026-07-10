@@ -130,7 +130,7 @@ export function HomeActivitySegment({
         // 가로 스와이프 행(v0). ShareCardTile 재사용. 공유=재공유, 클릭=/d 이동.
         <HScrollRow>
           {drops.map((drop) => (
-            <SwipeItem key={drop.shareUuid}>
+            <SwipeItem key={`${tab}:${drop.shareUuid}`}>
               <ShareCardTile
                 drop={drop}
                 // Phase 0 — 홈 뱃지 주입(탐색과 동일 소스 drop.intent). 3종 락.
