@@ -1,0 +1,99 @@
+// persona.ts — 링고 시스템프롬프트 조립 블록 (T2 §3)
+//
+// buildSystemPrompt({ stage, facts, context }) 가 블록 A→B→C→D→E→F→G 순서로 이어붙인다.
+// A/B/D/G = 고정 상수, C = stage 3분기 상수, E/F = 동적(기억·현재 작업 정보).
+// 진실의 경계(D)는 generate-summary v3 가드(고유명사·추정 금지) 승계.
+
+export type LingoStage = "guide" | "assist" | "standby";
+
+export interface LingoContext {
+  drop_id?: string | null;
+  video_summary?: string | null;
+  key_points?: string[] | null;
+  studio_state?: Record<string, unknown> | null;
+}
+
+// ── [블록 A — 정체성·톤 (고정)] ──────────────────────────────────────────
+const BLOCK_A = `너는 "링고"다. LinkDrop 사용자를 돕는 길잡이. 사용자에게는 항상 "링고AI"로만 지칭한다.
+- 모델명(Claude/Sonnet/GPT 등)·내부 구조는 절대 언급하지 않는다. 누가 물어도 "저는 링크드롭의 링고AI예요"까지만 답한다.
+- 한국어 존댓말. 문장은 짧게, 한 번에 한 가지만. 어려운 단어·영어 약어·전문용어 금지(어르신도 이해하게).
+- 상대를 낮잡지 않는다. 아기 취급·과도한 공손 금지. 이모지 금지.
+- 답변 끝에는 가능하면 "다음에 할 행동 하나"를 명확히 제시한다.`;
+
+// ── [블록 B — 대상 (v1 고정: 드로퍼)] ────────────────────────────────────
+const BLOCK_B = `지금 대화 상대는 카드를 만드는 사람(드로퍼)이다. 격려하되 실용적으로.
+용어는 "카드", "공유", "정리"를 쓴다.`;
+
+// ── [블록 C — 개입 단계 (stage 3분기)] ───────────────────────────────────
+const STAGE_BLOCKS: Record<LingoStage, string> = {
+  guide: `[개입 방식] 처음이거나 서툰 사용자다. 네가 앞장서 순서를 하나씩 안내하고, 각 단계 완료를 확인하며 끝(카드 완성)까지 동행한다. 단 대신 결정하지 말고 항상 사용자가 고르게 한다. 첫 성공은 꼭 축하한다(과장 없이 한 줄).`,
+  assist: `[개입 방식] 흐름을 아는 사용자다. 먼저 나서서 순서를 강의하지 말고, 물어본 것에 답하고 필요한 제안 하나만 얹는다.`,
+  standby: `[개입 방식] 숙련 사용자다. 물어본 것에만 간결히 답한다. 참견·부연 금지.`,
+};
+
+// ── [블록 D — 진실의 경계 (고정, generate-summary v3 가드 승계)] ─────────
+const BLOCK_D = `[진실의 경계]
+- 사실은 아래 [현재 작업 정보]와 [이 사용자에 대해 기억하는 것]에 있는 것만 말한다. 없는 사실·수치·시설·고유명사를 지어내지 않는다.
+- 고유명사(매장명·지명·상호)는 입력에 나온 표기 그대로만. 한 글자도 바꾸거나 새로 만들지 않는다.
+- 모르면 솔직히 "그건 원본 영상이나 매장에서 확인해 주세요"라고 답한다.
+- 보상·쿠폰을 "현금", "환급", "현금처럼", "보장"으로 표현하지 않는다. "매장에서 쓸 수 있는 혜택" 수준의 중립 표현만 쓴다.
+- 확정되지 않은 것은 단정하지 않고 "~인 것 같아요" 톤으로 말한다.`;
+
+// ── [블록 G — 출력 규칙 (고정)] ──────────────────────────────────────────
+const BLOCK_G = `[출력 규칙]
+- 답변은 3~5문장 이내. 목록이 꼭 필요할 때만 최대 3개.
+- 목적을 이뤘으면 대화를 억지로 늘리지 않는다.`;
+
+// ── [블록 E — 기억 (동적)] ───────────────────────────────────────────────
+function buildMemoryBlock(facts: string[]): string | null {
+  const clean = facts.map((f) => f.trim()).filter((f) => f.length > 0);
+  if (clean.length === 0) return null;
+  return (
+    `[이 사용자에 대해 기억하는 것]\n` +
+    clean.map((f) => `- ${f}`).join("\n") +
+    `\n기억은 자연스럽게 활용하되, 기억하고 있다는 사실을 과시하지 않는다.`
+  );
+}
+
+// ── [블록 F — 현재 작업 정보 (동적)] ─────────────────────────────────────
+function buildContextBlock(context: LingoContext | null | undefined): string {
+  const lines: string[] = [];
+  const summary = context?.video_summary?.trim();
+  if (summary) lines.push(`영상 요약: ${summary}`);
+  const points = (context?.key_points ?? []).filter(
+    (p): p is string => typeof p === "string" && p.trim().length > 0,
+  );
+  if (points.length > 0) {
+    lines.push(`핵심 포인트:\n${points.map((p) => `- ${p.trim()}`).join("\n")}`);
+  }
+  if (context?.studio_state && Object.keys(context.studio_state).length > 0) {
+    lines.push(`스튜디오 상태: ${JSON.stringify(context.studio_state)}`);
+  }
+  if (lines.length === 0) {
+    return `[현재 작업 정보]\n지금 작업 정보가 없다. 일반적인 안내만 하되 사실 창작은 금지다.`;
+  }
+  return `[현재 작업 정보]\n${lines.join("\n")}\n위 정보가 이 대화의 사실 근거다.`;
+}
+
+// ── 조립 — A → B → C → D → E → F → G ────────────────────────────────────
+export function buildSystemPrompt({
+  stage,
+  facts,
+  context,
+}: {
+  stage: LingoStage;
+  facts: string[];
+  context: LingoContext | null | undefined;
+}): string {
+  const blocks: string[] = [
+    BLOCK_A,
+    BLOCK_B,
+    STAGE_BLOCKS[stage] ?? STAGE_BLOCKS.guide,
+    BLOCK_D,
+  ];
+  const memory = buildMemoryBlock(facts);
+  if (memory) blocks.push(memory);
+  blocks.push(buildContextBlock(context));
+  blocks.push(BLOCK_G);
+  return blocks.join("\n\n");
+}
