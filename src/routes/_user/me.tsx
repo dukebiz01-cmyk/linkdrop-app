@@ -599,7 +599,7 @@ function MePage() {
       </header>
 
       {/* 설정 — 헤더 기어 아래 인라인 아코디언(#418: 바텀시트/포털 아님, grid 0fr→1fr).
-          로그아웃 = 기존 AlertDialog + handleSignOut 그대로 보존(이동만). */}
+          로그아웃·버전표기는 본문 최하단으로 이동(v0-44 정본 위치) — 여기엔 설정 목록만. */}
       <div
         className="grid px-4 transition-all duration-300 ease-out"
         style={{ gridTemplateRows: settingsOpen ? "1fr" : "0fr" }}
@@ -670,40 +670,6 @@ function MePage() {
                 <span className="text-[11px] font-medium text-[#94A3B8]">준비 중</span>
               </div>
             </div>
-
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <button
-                  type="button"
-                  className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl border border-[#EAEEF3] bg-white text-[#64748B] transition-colors hover:border-[#E2E8F0] hover:bg-[#F8FAFC] hover:text-[#0F172A] active:scale-[0.99]"
-                >
-                  <LogOut className="size-[17px]" strokeWidth={2.25} />
-                  <span className="text-[13px] font-bold tracking-[0.06em]">로그아웃</span>
-                </button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>로그아웃 하시겠어요?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    다시 로그인할 때까지 이 기기에서 로그아웃돼요.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={signingOut}>취소</AlertDialogCancel>
-                  <AlertDialogAction
-                    disabled={signingOut}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      void handleSignOut();
-                    }}
-                    className="bg-[#0F172A] text-white hover:bg-[#1E293B]"
-                  >
-                    {signingOut ? "로그아웃 중…" : "로그아웃"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-            <p className="mt-4 text-center text-[11px] text-[#CBD5E1]">LinkDrop v1.0.0</p>
           </div>
         </div>
       </div>
@@ -1152,6 +1118,44 @@ function MePage() {
           <span className="flex flex-shrink-0 items-center rounded-full bg-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#94A3B8]">
             준비 중
           </span>
+        </div>
+
+        {/* 로그아웃 + 버전 — 설정 아코디언에서 본문 최하단으로 이동(v0-44 정본 위치).
+            핸들러(handleSignOut)·AlertDialog 확인 플로우 무변경, 위치만. */}
+        <div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button
+                type="button"
+                className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl border border-[#EAEEF3] bg-white text-[#64748B] transition-colors hover:border-[#E2E8F0] hover:bg-[#F8FAFC] hover:text-[#0F172A] active:scale-[0.99]"
+              >
+                <LogOut className="size-[17px]" strokeWidth={2.25} />
+                <span className="text-[13px] font-bold tracking-[0.06em]">로그아웃</span>
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>로그아웃 하시겠어요?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  다시 로그인할 때까지 이 기기에서 로그아웃돼요.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={signingOut}>취소</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={signingOut}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void handleSignOut();
+                  }}
+                  className="bg-[#0F172A] text-white hover:bg-[#1E293B]"
+                >
+                  {signingOut ? "로그아웃 중…" : "로그아웃"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <p className="mt-4 text-center text-[11px] text-[#CBD5E1]">LinkDrop v1.0.0</p>
         </div>
       </div>
       {embedState ? (
