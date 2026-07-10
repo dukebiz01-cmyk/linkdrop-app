@@ -1,6 +1,6 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Sparkles, Users, ChevronRight, ArrowRight, TrendingUp, Bell } from "lucide-react";
+import { Sparkles, Users, ChevronRight, ArrowRight, TrendingUp, Bell, Gift } from "lucide-react";
 import { PerformanceBanner } from "@/components/home/PerformanceBanner";
 // P6-8(형님 확정 A안) — 홈 AI 표면 1개: 링고AI 셸(가이드 상시 + 성과 진단 접힘·lazy).
 //   P6-7 이식분(CreatorCoachCard)은 셸 내부로 수렴 — 이 파일 직접 import 제거.
@@ -98,6 +98,45 @@ function HScrollRow({ children }: { children: ReactNode }) {
 
 function SwipeItem({ children }: { children: ReactNode }) {
   return <div className="w-[46%] shrink-0 snap-start sm:w-[42%]">{children}</div>;
+}
+
+// A안 — 헤더 Gift 토글(드로피 이벤트 아코디언 진입). 준비중 점배지 = 무채색 정적(blink/pulse 금지).
+//   열림 = 연블루 활성 톤(#EFF6FF/#BFD3F9/#2563EB — 기존 토큰), 닫힘 = 헤더 버튼 기본 톤.
+function DropyGiftButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label="드로피 이벤트 (준비 중)"
+      aria-expanded={open}
+      className={`relative flex h-10 w-10 items-center justify-center rounded-full border transition-colors active:scale-95 ${
+        open
+          ? "border-[#BFD3F9] bg-[#EFF6FF] text-[#2563EB]"
+          : "border-[#EAEEF3] bg-white text-[#0F172A] hover:bg-[#F1F5F9]"
+      }`}
+    >
+      <Gift className="size-[18px]" strokeWidth={2} />
+      <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-white bg-[#94A3B8]" />
+    </button>
+  );
+}
+
+// A안 — 헤더 아래 인라인 아코디언(#418: 바텀시트/포털/Radix 아님, me 설정과 동일 grid 0fr→1fr).
+//   헤더와 한 래퍼로 묶여 닫힘 상태에선 높이 0 = space-y-6 간격 무영향. 내부 pt-6 은 열릴 때만 보임.
+function PlayZoneAccordion({ open }: { open: boolean }) {
+  return (
+    <div
+      className="grid transition-all duration-300 ease-out"
+      style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
+      aria-hidden={!open}
+    >
+      <div className="overflow-hidden">
+        <div className="pt-6">
+          <HomePlayZone />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // 링고 매장 진단 — 매출관리 자동진단(캐시 = guide_history 최신 1행)에서 가장 급한 1개 + 액션.
@@ -232,6 +271,8 @@ export function RoleHome({
   onGoProposals: () => void;
 }) {
   const navigate = useNavigate();
+  // A안 — 드로피 이벤트 아코디언 열림 상태(로컬, 양 분기 중 렌더되는 쪽에서 사용).
+  const [playOpen, setPlayOpen] = useState(false);
   // 링고 스타터 라우팅 — 제작 진입 단일화(create-wizard 폐기 → studio-build?purpose=).
   //   목적형(①②③) → studio-build 목적 프리셋 / ④ → 내 지갑(/me) / ⑤ → 탐색(/explore).
   const onStartPurpose = (purpose: StarterPurpose) =>
@@ -251,20 +292,25 @@ export function RoleHome({
     const recommendedDrops = user?.recommendedDrops ?? [];
     return (
       <div className="mx-auto max-w-md space-y-6 bg-white px-4 pt-6 pb-24">
-        {/* 헤더 — V4 로고마크 + 워드마크(+ 태그라인). 유저홈은 🔔 없음. */}
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="flex size-9 items-center justify-center rounded-[11px] bg-[#0F172A] shadow-[0_4px_12px_rgba(15,23,42,0.18)]">
-              <span className="text-[17px] font-bold text-white">L</span>
-            </span>
-            <div>
-              <p className="text-[18px] font-bold leading-tight text-[#0F172A]">
-                Link<span className="text-[#2563EB]">Drop</span>
-              </p>
-              <p className="text-[11.5px] text-[#64748B]">링크는 목적을 만나 행동이 된다</p>
+        {/* 헤더 — V4 로고마크 + 워드마크(+ 태그라인) + Gift(드로피 이벤트 A안). 유저홈은 🔔 없음.
+            헤더+아코디언을 한 래퍼로 묶어 닫힘 시 space-y-6 간격 무영향. */}
+        <div>
+          <header className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 items-center justify-center rounded-[11px] bg-[#0F172A] shadow-[0_4px_12px_rgba(15,23,42,0.18)]">
+                <span className="text-[17px] font-bold text-white">L</span>
+              </span>
+              <div>
+                <p className="text-[18px] font-bold leading-tight text-[#0F172A]">
+                  Link<span className="text-[#2563EB]">Drop</span>
+                </p>
+                <p className="text-[11.5px] text-[#64748B]">링크는 목적을 만나 행동이 된다</p>
+              </div>
             </div>
-          </div>
-        </header>
+            <DropyGiftButton open={playOpen} onToggle={() => setPlayOpen((v) => !v)} />
+          </header>
+          <PlayZoneAccordion open={playOpen} />
+        </div>
 
         {/* 🆕 링고 스타터 — 모핑 히어로 + 4목적 아코디언 + 정적 CTA. 모두에게. */}
         <LingoStarter
@@ -276,9 +322,6 @@ export function RoleHome({
 
         {/* 성과 2셀 — 전환·적립(placeholder 0, 데이터 배선 추후). v0 룩. */}
         <PerformanceBanner conversionCount={0} dropyAmount={0} />
-
-        {/* DROPY 이벤트존(출석·미션·룰렛) — v0 순서(성과 스트립 직후). 적립 전면 오픈 준비중 게이트. */}
-        <HomePlayZone />
 
         {/* 오늘 공유하기 좋은 — 추천 영상(있을 때만) 가로 스와이프. 빈 박스 방지(L12) — 없으면 숨김. */}
         {recommendedDrops.length > 0 ? (
@@ -306,7 +349,10 @@ export function RoleHome({
 
   return (
     <div className="mx-auto max-w-md space-y-6 bg-white px-4 pt-6 pb-24">
-      {/* 헤더 — 로고 + 워드마크 + 매장명(파란 도트) + 🔔(pending 새예약 빨강 배지, 0이면 숨김, 클릭→/partner/reservations). */}
+      {/* 헤더 — 로고 + 워드마크 + 매장명(파란 도트) + Gift(드로피 이벤트 A안, 벨 왼쪽)
+          + 🔔(pending 새예약 빨강 배지, 0이면 숨김, 클릭→/partner/reservations).
+          헤더+아코디언을 한 래퍼로 묶어 닫힘 시 space-y-6 간격 무영향. */}
+      <div>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <span className="flex size-9 items-center justify-center rounded-[11px] bg-[#0F172A] shadow-[0_4px_12px_rgba(15,23,42,0.18)]">
@@ -322,20 +368,25 @@ export function RoleHome({
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onGoReservations}
-          aria-label="새 예약"
-          className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[#EAEEF3] bg-white text-[#0F172A] transition-colors hover:bg-[#F1F5F9] active:scale-95"
-        >
-          <Bell className="size-[18px]" strokeWidth={2} />
-          {merchant.newReservationsCount > 0 ? (
-            <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-[#EF4444] px-1 text-[10px] font-bold text-white">
-              {merchant.newReservationsCount}
-            </span>
-          ) : null}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <DropyGiftButton open={playOpen} onToggle={() => setPlayOpen((v) => !v)} />
+          <button
+            type="button"
+            onClick={onGoReservations}
+            aria-label="새 예약"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[#EAEEF3] bg-white text-[#0F172A] transition-colors hover:bg-[#F1F5F9] active:scale-95"
+          >
+            <Bell className="size-[18px]" strokeWidth={2} />
+            {merchant.newReservationsCount > 0 ? (
+              <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-[#EF4444] px-1 text-[10px] font-bold text-white">
+                {merchant.newReservationsCount}
+              </span>
+            ) : null}
+          </button>
+        </div>
       </header>
+      <PlayZoneAccordion open={playOpen} />
+      </div>
 
       {/* 🆕 링고 스타터 — 유저홈과 동일(+CTA 알약). */}
       <LingoStarter
@@ -347,9 +398,6 @@ export function RoleHome({
 
       {/* 성과 3셀 — 전환·적립·구독자. */}
       <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />
-
-      {/* DROPY 이벤트존(출석·미션·룰렛) — v0 순서(성과 스트립 직후). 적립 전면 오픈 준비중 게이트. */}
-      <HomePlayZone />
 
       {/* ✅ 성과진단 보존 — 링고AI 셸: 즉석 진단(TodayAiCard) 제거, "성과 진단 보기" 진입만 유지.
           guideSlot 미주입 → 상단 슬롯·디바이더 미렌더(헤더 + 성과 진단 아코디언만). */}
