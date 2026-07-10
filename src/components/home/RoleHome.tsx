@@ -5,6 +5,7 @@ import { PerformanceBanner } from "@/components/home/PerformanceBanner";
 // P6-8(형님 확정 A안) — 홈 AI 표면 1개: 링고AI 셸(가이드 상시 + 성과 진단 접힘·lazy).
 //   P6-7 이식분(CreatorCoachCard)은 셸 내부로 수렴 — 이 파일 직접 import 제거.
 import { LingoAiHomeCard } from "@/components/home/LingoAiHomeCard";
+import { HomePlayZone } from "@/components/home/HomePlayZone";
 import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
 // STEP 3 — v0(home-v5) 링고 스타터(모핑 히어로 + 4목적 아코디언 + 정적 CTA). 양 분기 최상단.
@@ -273,6 +274,9 @@ export function RoleHome({
         {/* 성과 2셀 — 전환·적립(placeholder 0, 데이터 배선 추후). v0 룩. */}
         <PerformanceBanner conversionCount={0} dropyAmount={0} />
 
+        {/* DROPY 이벤트존(출석·미션·룰렛) — v0 순서(성과 스트립 직후). 적립 전면 오픈 준비중 게이트. */}
+        <HomePlayZone />
+
         {/* 오늘 공유하기 좋은 — 추천 영상(있을 때만) 가로 스와이프. 빈 박스 방지(L12) — 없으면 숨김. */}
         {recommendedDrops.length > 0 ? (
           <RecommendedSwipe drops={recommendedDrops} serverNow={serverNow} onOpen={openDrop} />
@@ -339,6 +343,9 @@ export function RoleHome({
 
       {/* 성과 3셀 — 전환·적립·구독자. */}
       <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />
+
+      {/* DROPY 이벤트존(출석·미션·룰렛) — v0 순서(성과 스트립 직후). 적립 전면 오픈 준비중 게이트. */}
+      <HomePlayZone />
 
       {/* ✅ 성과진단 보존 — 링고AI 셸: 즉석 진단(TodayAiCard) 제거, "성과 진단 보기" 진입만 유지.
           guideSlot 미주입 → 상단 슬롯·디바이더 미렌더(헤더 + 성과 진단 아코디언만). */}
