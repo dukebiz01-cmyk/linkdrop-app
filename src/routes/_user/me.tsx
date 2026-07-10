@@ -796,8 +796,8 @@ function MePage() {
         </section>
 
         {/* v0-44 정본 L815~823 구조: 비즈=[내 매장 + 판매관리] 2-col / 비즈아님=[내 주문].
-            ★ 진입 카드만(대상 페이지 무접촉). 내매장=/partner(임시, 트랙2 store-hub 재배선).
-            판매관리=/partner/products(임시, 트랙2 store-hub SalesManagementPage 재배선). */}
+            ★ 진입 카드만(대상 페이지 무접촉). 내매장=/partner (트랙2 store-hub 정식, 6d72fa7).
+            판매관리=/partner/products (판매관리 3탭 정식, 6d72fa7). */}
         <div className={`grid gap-3 ${data.isBusiness ? "grid-cols-2" : "grid-cols-1"}`}>
           {data.isBusiness ? (
             <>
