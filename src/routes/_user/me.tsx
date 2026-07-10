@@ -345,10 +345,12 @@ export const Route = createFileRoute("/_user/me")({
       ((cashRow as { paid_balance?: number; bonus_balance?: number } | null)?.bonus_balance ?? 0);
 
     // v0 히어로 보조스탯 — 내가 보낸(공유한) 카드 수(share_events sender=본인 count).
-    const { count: sentCountRaw } = await supabase
+    //   select('id') — '*' 는 v2.4 컬럼레벨 grant(service_role 전용 PII/fraud 컬럼)에 걸려 403.
+    const { count: sentCountRaw, error: sentCountErr } = await supabase
       .from("share_events")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("sender_user_id", userId);
+    if (sentCountErr) console.warn("[me] sentCount query failed:", sentCountErr.message);
     const sentCount = sentCountRaw ?? 0;
 
     return {
