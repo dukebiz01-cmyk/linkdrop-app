@@ -50,6 +50,7 @@ import { Route as ApiDiscoverIndexRouteImport } from './routes/api/discover/inde
 import { Route as PartnerPartnerIndexRouteImport } from './routes/_partner/partner.index'
 import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index'
 import { Route as ApiProductsCopyRouteImport } from './routes/api/products/copy'
+import { Route as ApiLingoChatRouteImport } from './routes/api/lingo/chat'
 import { Route as ApiHectoOrderRouteImport } from './routes/api/hecto/order'
 import { Route as ApiHectoNotiRouteImport } from './routes/api/hecto/noti'
 import { Route as ApiHectoNextRouteImport } from './routes/api/hecto/next'
@@ -285,6 +286,11 @@ const ApiProductsCopyRoute = ApiProductsCopyRouteImport.update({
   path: '/api/products/copy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLingoChatRoute = ApiLingoChatRouteImport.update({
+  id: '/api/lingo/chat',
+  path: '/api/lingo/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHectoOrderRoute = ApiHectoOrderRouteImport.update({
   id: '/api/hecto/order',
   path: '/api/hecto/order',
@@ -514,6 +520,7 @@ export interface FileRoutesByFullPath {
   '/api/hecto/next': typeof ApiHectoNextRoute
   '/api/hecto/noti': typeof ApiHectoNotiRoute
   '/api/hecto/order': typeof ApiHectoOrderRoute
+  '/api/lingo/chat': typeof ApiLingoChatRoute
   '/api/products/copy': typeof ApiProductsCopyRoute
   '/admin/': typeof AdminAdminIndexRoute
   '/partner/': typeof PartnerPartnerIndexRoute
@@ -586,6 +593,7 @@ export interface FileRoutesByTo {
   '/api/hecto/next': typeof ApiHectoNextRoute
   '/api/hecto/noti': typeof ApiHectoNotiRoute
   '/api/hecto/order': typeof ApiHectoOrderRoute
+  '/api/lingo/chat': typeof ApiLingoChatRoute
   '/api/products/copy': typeof ApiProductsCopyRoute
   '/admin': typeof AdminAdminIndexRoute
   '/partner': typeof PartnerPartnerIndexRoute
@@ -662,6 +670,7 @@ export interface FileRoutesById {
   '/api/hecto/next': typeof ApiHectoNextRoute
   '/api/hecto/noti': typeof ApiHectoNotiRoute
   '/api/hecto/order': typeof ApiHectoOrderRoute
+  '/api/lingo/chat': typeof ApiLingoChatRoute
   '/api/products/copy': typeof ApiProductsCopyRoute
   '/_admin/admin/': typeof AdminAdminIndexRoute
   '/_partner/partner/': typeof PartnerPartnerIndexRoute
@@ -736,6 +745,7 @@ export interface FileRouteTypes {
     | '/api/hecto/next'
     | '/api/hecto/noti'
     | '/api/hecto/order'
+    | '/api/lingo/chat'
     | '/api/products/copy'
     | '/admin/'
     | '/partner/'
@@ -808,6 +818,7 @@ export interface FileRouteTypes {
     | '/api/hecto/next'
     | '/api/hecto/noti'
     | '/api/hecto/order'
+    | '/api/lingo/chat'
     | '/api/products/copy'
     | '/admin'
     | '/partner'
@@ -883,6 +894,7 @@ export interface FileRouteTypes {
     | '/api/hecto/next'
     | '/api/hecto/noti'
     | '/api/hecto/order'
+    | '/api/lingo/chat'
     | '/api/products/copy'
     | '/_admin/admin/'
     | '/_partner/partner/'
@@ -925,6 +937,7 @@ export interface RootRouteChildren {
   ApiHectoNextRoute: typeof ApiHectoNextRoute
   ApiHectoNotiRoute: typeof ApiHectoNotiRoute
   ApiHectoOrderRoute: typeof ApiHectoOrderRoute
+  ApiLingoChatRoute: typeof ApiLingoChatRoute
   ApiProductsCopyRoute: typeof ApiProductsCopyRoute
   ApiDiscoverIndexRoute: typeof ApiDiscoverIndexRoute
   ApiDropsIndexRoute: typeof ApiDropsIndexRoute
@@ -1217,6 +1230,13 @@ declare module '@tanstack/react-router' {
       path: '/api/products/copy'
       fullPath: '/api/products/copy'
       preLoaderRoute: typeof ApiProductsCopyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/lingo/chat': {
+      id: '/api/lingo/chat'
+      path: '/api/lingo/chat'
+      fullPath: '/api/lingo/chat'
+      preLoaderRoute: typeof ApiLingoChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/hecto/order': {
@@ -1594,6 +1614,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHectoNextRoute: ApiHectoNextRoute,
   ApiHectoNotiRoute: ApiHectoNotiRoute,
   ApiHectoOrderRoute: ApiHectoOrderRoute,
+  ApiLingoChatRoute: ApiLingoChatRoute,
   ApiProductsCopyRoute: ApiProductsCopyRoute,
   ApiDiscoverIndexRoute: ApiDiscoverIndexRoute,
   ApiDropsIndexRoute: ApiDropsIndexRoute,
