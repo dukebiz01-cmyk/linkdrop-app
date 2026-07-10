@@ -26,6 +26,12 @@ export interface DropFeedItem {
   receivedByCount?: number;
   remainingCoupons?: number;
   creator?: { channelName: string; channelUrl: string };
+  /** 홈 '내가만든' 3기능 — info_drops.id(get_my_drops 반환 id). 내 카드 탭에만 주입. */
+  dropId?: string;
+  /** 홈 '내가만든' 3기능 — 실측 스탯(get_my_drops view/share/conversion_count). 내 카드 탭에만 주입. */
+  stats?: { views: number; shares: number; conversions: number };
+  /** 홈 '내가만든' 3기능 — 원본 영상 URL(source.source_url, 인앱 재생 videoId 추출용). */
+  videoSourceUrl?: string;
 }
 
 export interface HomePageProps {

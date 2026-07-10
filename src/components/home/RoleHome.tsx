@@ -284,6 +284,7 @@ export function RoleHome({
           followedDrops={followedDrops}
           myCreatedDrops={myCreatedDrops}
           serverNow={serverNow}
+          isBusiness={isBusiness}
         />
       </div>
     );
@@ -381,6 +382,7 @@ export function RoleHome({
         followedDrops={followedDrops}
         myCreatedDrops={myCreatedDrops}
         serverNow={serverNow}
+        isBusiness={isBusiness}
       />
     </div>
   );

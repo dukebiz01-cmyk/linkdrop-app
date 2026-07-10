@@ -1,10 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Layers } from "lucide-react";
+import { Layers, BarChart3, Pencil, Play } from "lucide-react";
+import { toast } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
 import { SectionHeader, EmptyState } from "@/components/home/v4-bits";
 import type { DropFeedItem } from "@/components/home-page";
 import { reshareDrop } from "@/lib/reshare-drop";
+import { parseVideoUrl } from "@/lib/video-metadata";
+import { extractYouTubeVideoIdFromThumb } from "@/lib/video-id";
+import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 
 /**
  * HomeActivitySegment — 유저홈 활동 세그먼트(내 공유 | 구독). V4: SectionHeader + iOS 흰칩 SegmentToggle.
@@ -40,6 +45,7 @@ export function HomeActivitySegment({
   followedDrops,
   myCreatedDrops,
   serverNow,
+  isBusiness,
 }: {
   sentDrops: DropFeedItem[];
   followedDrops: DropFeedItem[];
@@ -47,12 +53,40 @@ export function HomeActivitySegment({
   myCreatedDrops: DropFeedItem[];
   /** 1-C-2(L6) — 홈 loader 1회 공급 서버 기준시각(타일 타이머 offset 보정). */
   serverNow?: string;
+  /** 내가만든 3기능 — "성과보기" 노출 게이트(me.tsx isBusiness 게이트 동일). 미주입 = 미노출. */
+  isBusiness?: boolean;
 }) {
   const [tab, setTab] = useState<ActivityTab>("sent");
   const navigate = useNavigate();
 
+  // 내가만든 3기능 — 인앱 임베드 재생(단일 모달 인스턴스, me.tsx embedState 이식).
+  const [embedState, setEmbedState] = useState<{
+    open: boolean;
+    videoId: string;
+    originalUrl: string;
+    title: string;
+  } | null>(null);
+
   const openDrop = (shareUuid: string) =>
     void navigate({ to: "/d/$shareUuid", params: { shareUuid } });
+
+  // 내가만든 3기능 — me.tsx openEmbedFromDrop 로직 동일 이식(소스: DropFeedItem 필드).
+  //   videoSourceUrl(parseVideoUrl) 우선 → 썸네일 정규식 폴백 → 둘 다 실패 = toast 후 미표시(빈 모달 금지).
+  function openEmbedFromDrop(drop: DropFeedItem) {
+    const url = drop.videoSourceUrl ?? "";
+    const fromUrl = url ? parseVideoUrl(url) : null;
+    const videoId = fromUrl?.videoId ?? extractYouTubeVideoIdFromThumb(drop.videoThumbnailUrl);
+    if (!videoId) {
+      toast.info("이 영상은 인앱 재생을 지원하지 않아요.");
+      return;
+    }
+    setEmbedState({
+      open: true,
+      videoId,
+      originalUrl: url || `https://www.youtube.com/watch?v=${videoId}`,
+      title: drop.title.trim() || "영상 재생",
+    });
+  }
 
   // v0(home-v5) 3토글 — 공유한 | 구독한 | 내가만든. 세 탭 모두 동일 HScrollRow + ShareCardTile(일관).
   const drops = tab === "sent" ? sentDrops : tab === "subscribed" ? followedDrops : myCreatedDrops;
@@ -121,12 +155,71 @@ export function HomeActivitySegment({
                   })
                 }
               />
+              {/* 내가만든 3기능 — made 탭에만 액션 행(성과보기/수정/재생). 열람(카드 탭→/d)·공유는 기존 그대로.
+                  성과 = isBusiness && shareUuid(me.tsx:1070 게이트 동일) / 수정 = shareUuid / 재생 = 항상(실패 시 toast).
+                  인라인 상시 버튼(Radix dropdown 금지) · Lucide 라인 아이콘 · 홈 톤(#0F172A 필드 / 아웃라인 #E8EDF3). */}
+              {tab === "made" ? (
+                <div className="mt-2 flex items-center gap-1.5">
+                  {isBusiness && drop.shareUuid ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate({
+                          to: "/results/$shareUuid",
+                          params: { shareUuid: drop.shareUuid },
+                        })
+                      }
+                      className="flex h-8 flex-1 items-center justify-center gap-1 rounded-lg bg-[#0F172A] text-[11px] font-bold text-white transition-colors hover:bg-[#1E293B] active:scale-[0.98]"
+                    >
+                      <BarChart3 className="size-3.5" strokeWidth={2.25} />
+                      성과
+                    </button>
+                  ) : null}
+                  {drop.shareUuid ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate({
+                          to: "/card-edit/$shareUuid",
+                          params: { shareUuid: drop.shareUuid },
+                        })
+                      }
+                      className="flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-[#E8EDF3] bg-white text-[11px] font-semibold text-[#475569] transition-colors hover:bg-[#F8FAFC] active:scale-95"
+                    >
+                      <Pencil className="size-3" strokeWidth={2.25} />
+                      수정
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => openEmbedFromDrop(drop)}
+                    className="flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-[#E8EDF3] bg-white text-[11px] font-semibold text-[#475569] transition-colors hover:bg-[#F8FAFC] active:scale-95"
+                  >
+                    <Play className="size-3" strokeWidth={2.25} />
+                    재생
+                  </button>
+                </div>
+              ) : null}
             </SwipeItem>
           ))}
         </HScrollRow>
       ) : (
         <EmptyState title={EMPTY[tab].title} subtitle={EMPTY[tab].subtitle} />
       )}
+      {/* 내가만든 3기능 — 인앱 임베드 모달(단일 인스턴스, me.tsx:1162 props 5개 동일). */}
+      {embedState ? (
+        <YouTubeEmbedModal
+          open={embedState.open}
+          onOpenChange={(open) => {
+            if (!open) setEmbedState(null);
+          }}
+          videoId={embedState.videoId}
+          originalUrl={embedState.originalUrl}
+          title={embedState.title}
+        />
+      ) : null}
+      {/* 재생 불가 toast 표시용 — 홈 라우트에 Toaster 부재라 여기 마운트(me.tsx 라우트 패턴 준용). */}
+      <Toaster richColors position="top-center" />
     </section>
   );
 }

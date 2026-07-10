@@ -507,11 +507,21 @@ export async function getSentDrops(
 
 // get_my_drops jsonb 행 중 어댑터가 쓰는 필드만(me.tsx MyDropRow 부분집합).
 type MyDropRpcRow = {
+  // 홈 '내가만든' 3기능(성과보기/수정/재생) — me.tsx MyDropRow 와 동일 필드명(RPC 기반환분).
+  id: string;
+  view_count: number | null;
+  share_count: number | null;
+  conversion_count: number | null;
   purpose: string | null;
   status: string | null;
   created_at: string | null;
   published_at: string | null;
-  source: { title: string | null; thumbnail_url: string | null; provider: string | null } | null;
+  source: {
+    title: string | null;
+    thumbnail_url: string | null;
+    provider: string | null;
+    source_url?: string | null;
+  } | null;
   // v5.5: 첫 share_event 의 share_uuid. 없으면 null(공유 안 된 카드) → 타일 링크 불가라 제외.
   share_uuid: string | null;
 };
@@ -532,6 +542,14 @@ function adaptMyDropRow(row: MyDropRpcRow): DropFeedItem | null {
     intent: safeIntent(row.purpose),
     title: cs?.title ?? "(제목 없음)",
     // 파생필드(shareCount/dropyReward/expiresAt/remainingStock)는 의도적 미주입(내 카드엔 자연히 없음).
+    // 홈 '내가만든' 3기능 — 성과보기/수정/재생용(me.tsx 리치 리스트와 동일 소스 필드).
+    dropId: row.id,
+    stats: {
+      views: row.view_count ?? 0,
+      shares: row.share_count ?? 0,
+      conversions: row.conversion_count ?? 0,
+    },
+    videoSourceUrl: cs?.source_url ?? undefined,
   };
 }
 

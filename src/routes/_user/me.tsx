@@ -45,6 +45,7 @@ import {
 } from "@/lib/coupon-status";
 import { YouTubeEmbedModal } from "@/components/receiver/YouTubeEmbedModal";
 import { parseVideoUrl } from "@/lib/video-metadata";
+import { extractYouTubeVideoIdFromThumb } from "@/lib/video-id";
 import { CashSection } from "@/components/wallet/CashSection";
 import {
   AlertDialog,
@@ -139,14 +140,7 @@ type MyDropRow = {
   share_uuid: string | null;
 };
 
-// 유튜브 썸네일 URL 또는 source_url 에서 videoId 추출.
-// thumbnail 패턴: https://i.ytimg.com/vi/{id}/... · https://img.youtube.com/vi/{id}/...
-// source_url 은 parseVideoUrl 헬퍼 사용.
-function extractYouTubeVideoIdFromThumb(thumb: string | null | undefined): string | null {
-  if (!thumb) return null;
-  const m = thumb.match(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi\/([A-Za-z0-9_-]+)/);
-  return m?.[1] ?? null;
-}
+// 유튜브 썸네일 URL 에서 videoId 추출 — src/lib/video-id.ts 로 공용화 이동(import 로 대체).
 
 // 메이커(=사업체 partners 한 행) 표시 정보. partners 엔 로고 컬럼이 없어
 // display_name 첫 글자 이니셜 아바타로 표시. metadata.description 우선 부제.
