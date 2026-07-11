@@ -110,13 +110,14 @@ export function ShortLinkDisplayCompact({
   return (
     <button
       onClick={handleCopy}
-      className="flex items-center gap-2 rounded-lg bg-[#FAFAFA] px-3 py-2 transition-colors hover:bg-[#F5F5F5]"
+      className="flex max-w-full items-center gap-2 rounded-lg bg-[#FAFAFA] px-3 py-2 transition-colors hover:bg-[#F5F5F5]"
     >
-      <span className="text-sm text-[#525252]">{shortUrl}</span>
+      {/* {slug}-{code} 신형식(최대 slug40+1+6자) — 줄바꿈 없이 말줄임(truncate). */}
+      <span className="min-w-0 truncate text-sm text-[#525252]">{shortUrl}</span>
       {copied ? (
-        <Check className="h-4 w-4 text-[#10B981]" strokeWidth={2.5} />
+        <Check className="h-4 w-4 shrink-0 text-[#10B981]" strokeWidth={2.5} />
       ) : (
-        <Copy className="h-4 w-4 text-[#A3A3A3]" />
+        <Copy className="h-4 w-4 shrink-0 text-[#A3A3A3]" />
       )}
     </button>
   );

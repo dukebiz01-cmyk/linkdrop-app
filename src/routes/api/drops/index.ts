@@ -293,6 +293,24 @@ export const Route = createFileRoute("/api/drops/")({
               share_uuid: string;
             };
 
+            // {slug}-{code} Phase 1 — 자기 매장 slug 로 단축링크 장식(해석은 코드로만 — Worker).
+            //   self_upload 는 RPC 가 owner→partner 자동 매핑이므로 owner 의 매장 slug 사용.
+            //   조회 실패·slug 없음(일반 유저·NULL) = 기존 {code} 폴백 — 발행 흐름 차단 금지.
+            let selfSlug: string | null = null;
+            if (selfShareCode) {
+              try {
+                const { data: selfPartner } = await supabase
+                  .from("partners")
+                  .select("slug")
+                  .eq("owner_user_id", user.id)
+                  .maybeSingle();
+                const s = (selfPartner as { slug?: string | null } | null)?.slug;
+                selfSlug = typeof s === "string" && s.trim().length > 0 ? s.trim() : null;
+              } catch {
+                selfSlug = null;
+              }
+            }
+
             return Response.json({
               drop: {
                 id: selfDropId,
@@ -308,7 +326,7 @@ export const Route = createFileRoute("/api/drops/")({
                 author_name: null,
               },
               shareable_url: selfShareCode
-                ? `https://drop.how/${selfShareCode}`
+                ? `https://drop.how/${selfSlug ? `${selfSlug}-` : ""}${selfShareCode}`
                 : `${PROD_BASE}/d/${selfShareUuid}`,
             });
           }
@@ -459,14 +477,18 @@ export const Route = createFileRoute("/api/drops/")({
 
           // chunk1 1d — partner_id 연결 (탐색 진입 시). owner 본인 매장만 허용,
           //   다른 매장 id 무시. RLS info_drops UPDATE policy = owner_user_id=auth.uid().
+          // {slug}-{code} Phase 1 — owner 검증 조회에 slug 동승(추가 쿼리 0). slug 없으면 {code} 폴백.
+          let partnerSlug: string | null = null;
           if (body.partner_id) {
             const { data: partnerOwn } = await supabase
               .from("partners")
-              .select("id")
+              .select("id, slug")
               .eq("id", body.partner_id)
               .eq("owner_user_id", user.id)
               .maybeSingle();
             if (partnerOwn) {
+              const s = (partnerOwn as { slug?: string | null }).slug;
+              partnerSlug = typeof s === "string" && s.trim().length > 0 ? s.trim() : null;
               await supabase
                 .from("info_drops")
                 .update({ partner_id: body.partner_id })
@@ -507,7 +529,7 @@ export const Route = createFileRoute("/api/drops/")({
               product_detection_id: productDetectionId,
             },
             shareable_url: shareCode
-              ? `https://drop.how/${shareCode}`
+              ? `https://drop.how/${partnerSlug ? `${partnerSlug}-` : ""}${shareCode}`
               : `${PROD_BASE}/d/${share_uuid}`,
           });
         } catch (e) {

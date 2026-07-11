@@ -9,6 +9,10 @@
  */
 
 const SHORT_CODE_RE = /^[0-9A-Za-z]{6}$/;
+// {slug}-{code} 신형식(Phase 1) — slug 는 하이픈 허용이므로 "마지막 하이픈 뒤 6자 = 코드".
+//   코드 문자셋(base62)에 하이픈이 없어 분리가 항상 유일. slug부는 해석에 미사용
+//   (장식·신뢰 목적 — 검증 생략, resolve 는 코드로만).
+const SLUG_CODE_RE = /^[a-z0-9-]+-[0-9A-Za-z]{6}$/;
 const APP_HOST = "app.drop.how";
 
 type WaitUntilCtx = { waitUntil?: (p: Promise<unknown>) => void } | unknown;
@@ -63,13 +67,22 @@ export async function handleShortLink(request: Request, ctx: WaitUntilCtx): Prom
     return fallbackToApp();
   }
 
-  // 첫 segment 만 단축 코드로 처리 — drop.how/abc123 또는 drop.how/abc123/anything
-  const shareCode = url.pathname.slice(1).split("/")[0];
+  // 첫 segment 만 처리 — drop.how/abc123 · drop.how/{slug}-abc123 · drop.how/{slug}
+  const firstSeg = url.pathname.slice(1).split("/")[0];
 
-  // 6자 base62 패턴 검증 — 형식 오류는 매장 slug 시도 후 홈으로.
-  // S2c — 하이픈 포함·2~5자·7~40자 slug 는 전부 이 지점(실패 A)으로 온다.
-  if (!SHORT_CODE_RE.test(shareCode)) {
-    const slug = await resolvePartnerSlug(shareCode);
+  // 파싱 순서(Phase 1): ① 6자 단독 코드(기존) → ② {slug}-{code} 신형식(마지막 하이픈
+  //   뒤 6자 추출) → ③ 매장 slug 폴백(기존 S2c) → ④ 홈. 기존 두 경로 동작 불변.
+  let shareCode: string | null = null;
+  if (SHORT_CODE_RE.test(firstSeg)) {
+    shareCode = firstSeg; // ① 기존 6자 단독 코드.
+  } else if (SLUG_CODE_RE.test(firstSeg)) {
+    shareCode = firstSeg.slice(-6); // ② 신형식 — 코드에 하이픈 없음이 보장돼 뒤 6자가 곧 코드.
+  }
+
+  // ③ 코드 형식 전무 — 매장 slug 시도 후 ④ 홈으로.
+  // S2c — 하이픈 포함(신형식 불일치)·2~5자·7~40자 slug 는 전부 이 지점(실패 A)으로 온다.
+  if (!shareCode) {
+    const slug = await resolvePartnerSlug(firstSeg);
     if (slug) {
       // click 추적 없음 — 매장 페이지 방문은 공유 체인 아님(추적은 공유 코드 전용).
       return Response.redirect(`https://${APP_HOST}/alliance/${slug}`, 302);
@@ -108,8 +121,10 @@ export async function handleShortLink(request: Request, ctx: WaitUntilCtx): Prom
   }
 
   if (!Array.isArray(resolveRows) || resolveRows.length === 0) {
-    // 미존재 또는 만료된 코드 → S2c: 6자 순수 영숫자 slug 폴백(실패 B — 코드 우선 순서 유지) → 홈.
-    const slug = await resolvePartnerSlug(shareCode);
+    // 미존재 또는 만료된 코드 → S2c: 전체 세그먼트로 slug 폴백(실패 B — 코드 우선 순서 유지) → 홈.
+    //   전체 세그먼트 기준인 이유: 6자 순수 영숫자 slug(기존)뿐 아니라, 신형식처럼 보이는
+    //   기존 매장 slug(예: noeul-coffee — 끝 6자가 영숫자)도 여기서 복구돼야 함(하위호환).
+    const slug = await resolvePartnerSlug(firstSeg);
     if (slug) {
       return Response.redirect(`https://${APP_HOST}/alliance/${slug}`, 302);
     }
