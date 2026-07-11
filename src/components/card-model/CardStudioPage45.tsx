@@ -5,6 +5,7 @@ import {
   ArrowUp,
   Calendar,
   Check,
+  ChevronDown,
   ChevronRight,
   Clapperboard,
   Copy,
@@ -52,6 +53,7 @@ import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import type { AttachedProduct } from "@/components/create/types";
 import { getSupabase } from "@/lib/supabase";
 import { resizeToJpegBlob } from "@/lib/image-upload";
+import { shareToKakao } from "@/lib/kakao";
 import { CardModelBody } from "./CardModelBody";
 import { CARD_MODEL_ACCENTS, fromStudioState } from "./card-model-adapters";
 import { SHIP_STAGES, type CardModel } from "./card-model.types";
@@ -252,6 +254,28 @@ const SL_KEYFRAMES = `
 
 type ProductCopy45 = { headline: string; sellingPoints: string[] };
 
+// FIX-4 — 적용 확정 후 접힘 행: "적용됨 · 요약" + [변경]으로 재펼침.
+function AppliedRow({ accent, label, onEdit }: { accent: string; label: string; onEdit: () => void }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-2 rounded-xl px-3 py-2.5"
+      style={{ backgroundColor: `${accent}0A`, boxShadow: `inset 0 0 0 1px ${accent}33` }}
+    >
+      <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-[#0A0A0A]">
+        <Check className="h-4 w-4 shrink-0" style={{ color: accent }} strokeWidth={2.75} />
+        <span className="truncate">{label}</span>
+      </span>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5]"
+      >
+        변경
+      </button>
+    </div>
+  );
+}
+
 export function CardStudioPage45({
   isBusiness,
   store,
@@ -360,8 +384,19 @@ export function CardStudioPage45({
 
   const [pressedId, setPressedId] = useState<string | null>(null);
   const [burstKey, setBurstKey] = useState(0);
-  // 링고AI 플로팅 — UI·액션 헬퍼만(대화 LLM 배선 금지 — T5 트랙 예약석).
-  const [lingoOpen, setLingoOpen] = useState(false);
+  // FIX-1/4 — 선택=미확정(candidate) → [확정/적용]=확정 패턴. 모든 선택형 패널 일관.
+  const [videoCandidate, setVideoCandidate] = useState<DiscoverCandidate | null>(null);
+  const [couponCandidate, setCouponCandidate] = useState<string | null>(null);
+  const [colorCandidate, setColorCandidate] = useState<string | null>(null);
+  // 적용 후 접힘(적용됨 · 변경) 패널 — coupon/calendar/seasonal/dock.
+  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
+  // FIX-3 — 링고 상주: strip(하단 진행 스트립, 기본) ↔ panel(풀 패널) ↔ closed(X — FAB만 남음).
+  //   액션 수행 후 닫힘 금지 — strip 으로 축소되며 다음 안내로 내용 갱신.
+  const [lingoView, setLingoView] = useState<"strip" | "panel" | "closed">("strip");
+  const [stripFlash, setStripFlash] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // FIX-6 — 발행 후 카톡 전송 진행 상태(studio-build sending 동형).
+  const [sending, setSending] = useState(false);
   const [lastEquipped, setLastEquipped] = useState<string | null>(null);
   const deckRef = useRef<HTMLElement>(null);
   const FAB_SIZE = 56;
@@ -450,6 +485,61 @@ export function CardStudioPage45({
   const stage = getStage(score);
   const appliedCount = STUDIO_BLOCKS.filter((b) => applied[b.id] && !b.isPaid).length;
 
+  // FIX-3 — 스트립 플래시: 확정 액션·비동기 완료 시에만 호출(실상태 결합, 가짜 진행 금지).
+  //   burstKey +1 = 미리보기 카드 1회 하이라이트(기존 장착 버스트 연출 재사용).
+  function flashStrip(msg: string) {
+    setStripFlash(msg);
+    setBurstKey((k) => k + 1);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setStripFlash(null), 2600);
+  }
+  useEffect(() => () => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
+
+  // FIX-3 — 모드별 진행 단계(실상태 파생 — 가짜 진행 없음).
+  const steps = useMemo(() => {
+    const productDone =
+      !!attachedProducts[0] || (!!productImageUrl && !!productName.trim() && (productPrice ?? 0) > 0);
+    const styleDone = !!applied["bgcolor"] || !!cfgSubtitle.trim() || score >= 40;
+    if (mode === "commerce") {
+      return [
+        { label: "상품", block: "product", done: productDone },
+        { label: "혜택", block: "coupon", done: !!(applied["coupon"] && selectedCouponId) || !!applied["seasonal"] },
+        { label: "꾸미기", block: "bgcolor", done: styleDone },
+        { label: "전송", block: null, done: dropped },
+      ];
+    }
+    if (mode === "reserve") {
+      return [
+        { label: "영상", block: "content", done: !!selectedVideo },
+        { label: "예약·혜택", block: "calendar", done: !!applied["calendar"] || !!(applied["coupon"] && selectedCouponId) },
+        { label: "꾸미기", block: "bgcolor", done: styleDone },
+        { label: "전송", block: null, done: dropped },
+      ];
+    }
+    return [
+      { label: "영상", block: "content", done: !!selectedVideo },
+      { label: "꾸미기", block: "bgcolor", done: styleDone },
+      { label: "전송", block: null, done: dropped },
+    ];
+  }, [mode, applied, selectedCouponId, selectedVideo, attachedProducts, productImageUrl, productName, productPrice, cfgSubtitle, score, dropped]);
+  const currentStepIdx = steps.findIndex((s) => !s.done);
+  const nextStepLabel = currentStepIdx >= 0 ? steps[currentStepIdx].label : null;
+
+  // FIX-3 — 비동기 작업 진행 표시(실제 상태와 결합 — 스피너는 진행 중일 때만).
+  const stripBusy = saving
+    ? "카드를 발행하는 중…"
+    : sending
+      ? "카톡으로 전송하는 중…"
+      : heroUploading
+        ? "사진을 올리는 중…"
+        : aiLoading
+          ? "AI가 영상 요약을 읽는 중…"
+          : videoSearching
+            ? "영상을 찾는 중…"
+            : null;
+
   // 링고 코칭 — 정적 규칙 기반(정본 그대로 · LLM 아님). 게이트 블록은 추천에서 제외.
   const lingo = useMemo(() => {
     const deckBlocks = DECK_IDS[mode].map(blockById).filter((b) => !GATED_BLOCK_IDS.has(b.id));
@@ -535,30 +625,31 @@ export function CardStudioPage45({
     setTimeout(scrollToDeck, 60);
     return true;
   }
+  // FIX-3 — 액션 수행 후 닫힘 금지: 패널 → 스트립으로 축소(다음 안내로 갱신), 완전 닫기는 X 만.
   function lingoEquipSuggestion() {
     if (!lingo.action) {
       scrollToDeck();
-      setLingoOpen(false);
+      setLingoView("strip");
       return;
     }
     const idx = DECK.findIndex((b) => b.id === lingo.action);
     if (idx < 0) {
       scrollToDeck();
-      setLingoOpen(false);
+      setLingoView("strip");
       return;
     }
     setDeckIndex(idx);
     const block = DECK[idx];
     if (!applied[block.id] && !(block.isPaid && score < ENHANCE_UNLOCK)) equip(block);
     setTimeout(scrollToDeck, 60);
-    setLingoOpen(false);
+    setLingoView("strip");
   }
   function lingoUndo() {
     if (!lastEquipped) return;
     setApplied((p) => ({ ...p, [lastEquipped]: false }));
     jumpToBlock(lastEquipped);
     setLastEquipped(null);
-    setLingoOpen(false);
+    setLingoView("strip");
   }
   function lingoEdit() {
     const priority = ["content", "product", "productimage", "image", "calendar", "seasonal", "coupon", "dock", "link"];
@@ -571,7 +662,17 @@ export function CardStudioPage45({
     } else {
       scrollToDeck();
     }
-    setLingoOpen(false);
+    setLingoView("strip");
+  }
+
+  // FIX-3 — [계속하기]: 현재 단계의 블록으로 흐름 복귀(전송 단계면 거울 시트).
+  function continueFlow() {
+    const step = steps[currentStepIdx >= 0 ? currentStepIdx : steps.length - 1];
+    if (!step.block) {
+      setMirrorOpen(true);
+      return;
+    }
+    if (!jumpToBlock(step.block)) scrollToDeck();
   }
   const canEdit = DECK.some((b) => CONFIGURABLE.includes(b.id) && !GATED_BLOCK_IDS.has(b.id));
 
@@ -616,7 +717,7 @@ export function CardStudioPage45({
       });
     } else {
       setPanelOffset({ x: 0, y: 0 });
-      setLingoOpen(true);
+      setLingoView("panel");
     }
   }
   // 링고AI 패널 드래그 (정본).
@@ -691,11 +792,12 @@ export function CardStudioPage45({
       const sumJson = (await sumRes.json()) as { ai_key_points?: unknown };
       if (!sumRes.ok) throw new Error("summary failed");
       if (aiVideoRef.current !== slot.videoId) return;
-      setAiKeyPoints(
-        Array.isArray(sumJson?.ai_key_points)
-          ? (sumJson.ai_key_points as unknown[]).filter((s): s is string => typeof s === "string" && s.trim().length > 0)
-          : [],
-      );
+      const points = Array.isArray(sumJson?.ai_key_points)
+        ? (sumJson.ai_key_points as unknown[]).filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        : [];
+      setAiKeyPoints(points);
+      // FIX-3 — 비동기 완료 전환(실제 완료 시에만): 스트립 안내 + 미리보기 하이라이트.
+      if (points.length > 0) flashStrip("AI 요약 완료! 셀링포인트를 골라보세요");
     } catch (e) {
       console.warn("[studio-lab] 카피 AI 리드 실패:", e);
       if (aiVideoRef.current === slot.videoId) setAiKeyPoints([]);
@@ -738,6 +840,7 @@ export function CardStudioPage45({
       setHeroImageUrl(pub.publicUrl);
       setHeroImagePreview(pub.publicUrl);
       setApplied((p) => ({ ...p, image: true }));
+      flashStrip("완료! 사진이 카드에 반영됐어요"); // FIX-3 — 실업로드 완료 시에만.
     } catch (err) {
       console.error("[studio-lab] hero unexpected:", err);
       setHeroUploadError(err instanceof Error ? err.message : "사진 처리 중 문제가 생겼어요.");
@@ -785,6 +888,7 @@ export function CardStudioPage45({
       ]);
     }
     setApplied((p) => ({ ...p, product: true }));
+    flashStrip("완료! 상품이 카드에 반영됐어요"); // FIX-3 — 실등록 완료 시에만.
     return { shareUuid, shareUrl: json.shareable_url ?? `https://app.drop.how/d/${shareUuid}` };
   }
 
@@ -929,6 +1033,7 @@ export function CardStudioPage45({
       const origin = typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
       setSavedUrl(shareableUrl ?? `${origin}/d/${publishedShareUuid}`);
       setDropped(true);
+      flashStrip("발행 완료! 카톡으로 바로 전송해 보세요"); // FIX-3/6 — 실발행 성공 시에만.
       return true;
     } catch (e) {
       console.error("[studio-lab] handlePublish", e);
@@ -936,6 +1041,45 @@ export function CardStudioPage45({
       return false;
     } finally {
       setSaving(false);
+    }
+  }
+
+  // FIX-6 — 발행 후 카톡 전송: 기존 플로우 미러(버튼식 · 게시 완료 후에만 · 클릭 즉시 shareToKakao
+  //   = 제스처 유효로 팝업차단 회피). ST2b 스위치 시 원본 제거(studio-build :896-936 발췌).
+  async function handleSendKakao() {
+    if (sending || saving) return;
+    if (!dropped || !savedUrl) return;
+    setSending(true);
+    try {
+      const linkUrl = savedUrl;
+      const purposeLabel =
+        mode === "commerce"
+          ? "구매"
+          : applied["calendar"]
+            ? "예약"
+            : applied["coupon"] && selectedCouponId
+              ? "쿠폰"
+              : "정보";
+      const title = (mode === "commerce" ? productName.trim() : selectedVideo?.title) || "LinkDrop";
+      const imageUrl = (mode === "commerce" ? productImageUrl : selectedVideo?.thumbnailUrl) ?? "";
+      const ctaTitle =
+        purposeLabel === "구매"
+          ? "상품 보러 가기"
+          : purposeLabel === "예약" || purposeLabel === "쿠폰"
+            ? "예약하고 혜택 받기"
+            : "보러 가기";
+      const res = await shareToKakao({
+        title,
+        description: [purposeLabel, cfgSubtitle.trim()].filter(Boolean).join(" · "),
+        imageUrl,
+        linkUrl,
+        buttons: [{ title: ctaTitle, link: linkUrl }],
+      });
+      if (!res?.ok) {
+        setSaveError("전송에 실패했어요. 링크가 복사됐으니 붙여넣어 보내주세요.");
+      }
+    } finally {
+      setSending(false);
     }
   }
 
@@ -1071,10 +1215,12 @@ export function CardStudioPage45({
         </div>
       </header>
 
-      {/* 스티키 조립 미니 미리보기 (히어로 카드가 화면 밖일 때 등장) */}
+      {/* 스티키 조립 미니 미리보기 (히어로 카드가 화면 밖일 때 등장)
+          FIX-2 — 모드 토글이 스티키 스택(헤더 아래)에 통합돼 미니 미리보기는 그 아래(top-[134px])
+          에서 시작 — 스크롤 전 구간에서 두 요소 비겹침. */}
       <div
         aria-hidden={heroVisible}
-        className={`pointer-events-none fixed inset-x-0 top-[57px] z-30 transition-all duration-300 ease-out ${
+        className={`pointer-events-none fixed inset-x-0 top-[134px] z-30 transition-all duration-300 ease-out ${
           heroVisible ? "-translate-y-2 opacity-0" : "translate-y-0 opacity-100"
         }`}
       >
@@ -1116,8 +1262,10 @@ export function CardStudioPage45({
       </div>
 
       <div className="mx-auto max-w-md px-5">
-        {/* 모드 전환 (퍼블릭 / 예약·쿠폰 / 상품판매) — 비사업자는 사업자 모드 잠금(studio-build P6-3 동등) */}
-        <div className="mt-5 flex rounded-2xl bg-white p-1 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
+        {/* 모드 전환 (퍼블릭 / 예약·쿠폰 / 상품판매) — 비사업자는 사업자 모드 잠금(studio-build P6-3 동등)
+            FIX-2 — 스티키 스택 상단 통합: 헤더(57px) 바로 아래 고정 + 페이지 배경으로 아래 콘텐츠 가림. */}
+        <div className="sticky top-[57px] z-[35] -mx-5 px-5 pb-2 pt-4" style={{ backgroundColor: pageBg }}>
+        <div className="flex rounded-2xl bg-white p-1 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
           {(
             [
               { key: "general", label: "퍼블릭", Icon: Globe },
@@ -1143,6 +1291,7 @@ export function CardStudioPage45({
               </button>
             );
           })}
+        </div>
         </div>
 
         {/* AI 빌더 — 정본 UI 유지 + T5 게이트(LLM 배선 금지): 입력·예시 비활성 + 준비 중 칩.
@@ -1220,7 +1369,7 @@ export function CardStudioPage45({
         {/* 링고AI 코칭 (탭하면 어시스턴트 열림) — 정적 규칙 기반 */}
         <button
           type="button"
-          onClick={() => setLingoOpen(true)}
+          onClick={() => setLingoView("panel")}
           className="sl-fade-in mt-3 flex w-full items-start gap-3 rounded-2xl bg-white p-4 text-left transition-transform duration-150 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)] active:scale-[0.99]"
         >
           <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
@@ -1404,30 +1553,48 @@ export function CardStudioPage45({
 
         {/* 장착 액션 (가운데 카드 대상) */}
         <div className="mx-auto mt-4 max-w-md px-5">
-          {/* 배경색 팔레트 — 정본 6색 */}
+          {/* 배경색 팔레트 — 정본 6색. FIX-4 일관 패턴: 스와치 탭=후보 → [적용]=확정(카드 반영). */}
           {activeBlock.id === "bgcolor" && showColorPicker && (
-            <div className="sl-fade-in mb-3 flex flex-wrap items-center justify-center gap-2">
-              {CARD_COLORS.map((c) => (
+            <div className="sl-fade-in mb-3 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {[...CARD_COLORS, { id: "base", value: CARD_BASE, label: "기본" }].map((c) => {
+                  const pick = colorCandidate ?? cardColor;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setColorCandidate(c.value)}
+                      className="h-8 w-8 rounded-full transition-transform hover:scale-110"
+                      style={{
+                        backgroundColor: c.value,
+                        boxShadow:
+                          pick === c.value
+                            ? `0 0 0 2px #fff, 0 0 0 4px ${accent}`
+                            : cardColor === c.value
+                              ? `0 0 0 2px #fff, 0 0 0 3px ${accent}66`
+                              : "0 0 0 1px #E5E5E5",
+                      }}
+                      aria-label={c.label}
+                    />
+                  );
+                })}
+              </div>
+              {colorCandidate && colorCandidate !== cardColor && (
                 <button
-                  key={c.id}
                   type="button"
-                  onClick={() => setCardColor(c.value)}
-                  className="h-8 w-8 rounded-full transition-transform hover:scale-110"
-                  style={{
-                    backgroundColor: c.value,
-                    boxShadow: cardColor === c.value ? `0 0 0 2px #fff, 0 0 0 4px ${accent}` : "0 0 0 1px #E5E5E5",
+                  onClick={() => {
+                    setCardColor(colorCandidate);
+                    setColorCandidate(null);
+                    setShowColorPicker(false);
+                    flashStrip(`배경색이 적용됐어요${nextStepLabel ? ` — 다음은 ${nextStepLabel}` : ""}`);
                   }}
-                  aria-label={c.label}
-                />
-              ))}
-              {/* 기본(화이트) 복귀 */}
-              <button
-                type="button"
-                onClick={() => setCardColor(CARD_BASE)}
-                className="h-8 w-8 rounded-full bg-white transition-transform hover:scale-110"
-                style={{ boxShadow: cardColor === CARD_BASE ? `0 0 0 2px #fff, 0 0 0 4px ${accent}` : "0 0 0 1px #E5E5E5" }}
-                aria-label="기본"
-              />
+                  className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold text-white transition-transform active:translate-y-px"
+                  style={{ backgroundColor: accent, boxShadow: `0 6px 18px -8px ${accent}80` }}
+                >
+                  <Check className="h-4 w-4" strokeWidth={2.5} />
+                  이 색으로 적용
+                </button>
+              )}
             </div>
           )}
 
@@ -1443,8 +1610,21 @@ export function CardStudioPage45({
               </p>
 
               <div className={activeGated ? "pointer-events-none opacity-55" : undefined}>
-                {/* 예약 캘린더 / 판매 캘린더 */}
-                {(activeBlock.id === "calendar" || activeBlock.id === "seasonal") && (
+                {/* 예약 캘린더 / 판매 캘린더 — FIX-4: 하단 [적용] 확정 → 접힘(적용됨 · 변경). */}
+                {(activeBlock.id === "calendar" || activeBlock.id === "seasonal") &&
+                collapsedPanels[activeBlock.id] ? (
+                  <AppliedRow
+                    accent={accent}
+                    label={
+                      activeBlock.id === "calendar"
+                        ? `적용됨 · ${cfgDates.length}일 · ${cfgTimes.length === 0 ? "시간 미지정" : `${cfgTimes.length}개 시간대`}`
+                        : `적용됨 · ${DATE_OPTIONS[saleStartIdx] ?? ""}${saleEndIdx !== saleStartIdx ? ` ~ ${DATE_OPTIONS[saleEndIdx] ?? ""}` : ""}`
+                    }
+                    onEdit={() => setCollapsedPanels((p) => ({ ...p, [activeBlock.id]: false }))}
+                  />
+                ) : null}
+                {(activeBlock.id === "calendar" || activeBlock.id === "seasonal") &&
+                !collapsedPanels[activeBlock.id] && (
                   <div className="space-y-2.5">
                     {activeBlock.id === "seasonal" ? (
                       <div className="space-y-3">
@@ -1674,36 +1854,84 @@ export function CardStudioPage45({
                         </div>
                       </div>
                     )}
+                    {/* FIX-4 — 적용 확정: 패널 접힘 + 스트립 안내 + 미리보기 하이라이트. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCollapsedPanels((p) => ({ ...p, [activeBlock.id]: true }));
+                        flashStrip(
+                          `${activeBlock.id === "calendar" ? "예약 가능일" : "판매 기간"}이 적용됐어요${
+                            nextStepLabel ? ` — 다음은 ${nextStepLabel}` : ""
+                          }`,
+                        );
+                      }}
+                      disabled={activeBlock.id === "calendar" && cfgDates.length === 0}
+                      className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold text-white transition-transform active:translate-y-px disabled:opacity-40"
+                      style={{ backgroundColor: accent, boxShadow: `0 6px 18px -8px ${accent}80` }}
+                    >
+                      <Check className="h-4 w-4" strokeWidth={2.5} />
+                      적용
+                    </button>
                   </div>
                 )}
 
-                {/* 쿠폰 — 실 loader 쿠폰 목록 */}
-                {activeBlock.id === "coupon" && (
-                  <div className="space-y-1.5">
-                    {coupons.length === 0 && (
-                      <p className="rounded-xl bg-[#F4F4F5] px-3 py-3 text-center text-[12px] font-medium text-[#8A8A8A]">
-                        활성 쿠폰이 없어요. 파트너 센터에서 쿠폰을 먼저 만들어 주세요.
-                      </p>
-                    )}
-                    {coupons.map((c) => {
-                      const on = (selectedCouponId ?? coupons[0]?.id) === c.id;
-                      const label = c.title ?? `${c.discount_value ?? ""}${c.discount_unit ?? ""} 할인`;
-                      return (
+                {/* 쿠폰 — 실 loader 쿠폰 목록. FIX-4: 선택(후보) → [적용] 확정 → 접힘. */}
+                {activeBlock.id === "coupon" &&
+                  (collapsedPanels["coupon"] && selectedCoupon ? (
+                    <AppliedRow
+                      accent={accent}
+                      label={`적용됨 · ${selectedCoupon.title ?? "쿠폰"}`}
+                      onEdit={() => setCollapsedPanels((p) => ({ ...p, coupon: false }))}
+                    />
+                  ) : (
+                    <div className="space-y-1.5">
+                      {coupons.length === 0 && (
+                        <p className="rounded-xl bg-[#F4F4F5] px-3 py-3 text-center text-[12px] font-medium text-[#8A8A8A]">
+                          활성 쿠폰이 없어요. 파트너 센터에서 쿠폰을 먼저 만들어 주세요.
+                        </p>
+                      )}
+                      {coupons.map((c) => {
+                        const isCandidate = (couponCandidate ?? selectedCouponId) === c.id;
+                        const isConfirmed = selectedCouponId === c.id;
+                        const label = c.title ?? `${c.discount_value ?? ""}${c.discount_unit ?? ""} 할인`;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => setCouponCandidate(c.id)}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition-colors"
+                            style={isCandidate ? { backgroundColor: `${accent}12`, boxShadow: `inset 0 0 0 1.5px ${accent}` } : { backgroundColor: "#F4F4F5" }}
+                          >
+                            <Ticket className="h-4 w-4 shrink-0" style={{ color: isCandidate ? accent : "#A3A3A3" }} strokeWidth={2.25} />
+                            <span className="flex-1 text-[13px] font-semibold text-[#0A0A0A]">{label}</span>
+                            {isConfirmed ? (
+                              <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white" style={{ backgroundColor: accent }}>
+                                적용됨
+                              </span>
+                            ) : isCandidate ? (
+                              <Check className="h-4 w-4" style={{ color: accent }} strokeWidth={2.5} />
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                      {couponCandidate && couponCandidate !== selectedCouponId && (
                         <button
-                          key={c.id}
                           type="button"
-                          onClick={() => setSelectedCouponId(c.id)}
-                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition-colors"
-                          style={on ? { backgroundColor: `${accent}12`, boxShadow: `inset 0 0 0 1.5px ${accent}` } : { backgroundColor: "#F4F4F5" }}
+                          onClick={() => {
+                            setSelectedCouponId(couponCandidate);
+                            setCouponCandidate(null);
+                            setCollapsedPanels((p) => ({ ...p, coupon: true }));
+                            flashStrip(`쿠폰이 적용됐어요${nextStepLabel ? ` — 다음은 ${nextStepLabel}` : ""}`);
+                          }}
+                          className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold text-white transition-transform active:translate-y-px"
+                          style={{ backgroundColor: accent, boxShadow: `0 6px 18px -8px ${accent}80` }}
                         >
-                          <Ticket className="h-4 w-4 shrink-0" style={{ color: on ? accent : "#A3A3A3" }} strokeWidth={2.25} />
-                          <span className="flex-1 text-[13px] font-semibold text-[#0A0A0A]">{label}</span>
-                          {on && <Check className="h-4 w-4" style={{ color: accent }} strokeWidth={2.5} />}
+                          <Check className="h-4 w-4" strokeWidth={2.5} />
+                          이 쿠폰 적용
                         </button>
-                      );
-                    })}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  ))}
 
                 {/* 상품 등록 — 실 ProductRegisterForm 임베드(studio-build P2 동일) */}
                 {activeBlock.id === "product" && (
@@ -1711,13 +1939,55 @@ export function CardStudioPage45({
                 )}
 
                 {/* 카드 도킹 — 실 CardDockingPicker */}
-                {activeBlock.id === "dock" && (
-                  <CardDockingPicker value={dockedProducts} onChange={setDockedProducts} onDone={() => setPressedId(null)} />
-                )}
+                {activeBlock.id === "dock" &&
+                  (collapsedPanels["dock"] && dockedProducts.length > 0 ? (
+                    <AppliedRow
+                      accent={accent}
+                      label={`적용됨 · 카드 ${dockedProducts.length}장 연결`}
+                      onEdit={() => setCollapsedPanels((p) => ({ ...p, dock: false }))}
+                    />
+                  ) : (
+                    <CardDockingPicker
+                      value={dockedProducts}
+                      onChange={setDockedProducts}
+                      // FIX-4 — 완료(확정) = 접힘 + 스트립 안내(선택형 패널 일관 패턴).
+                      onDone={() => {
+                        if (dockedProducts.length > 0) {
+                          setCollapsedPanels((p) => ({ ...p, dock: true }));
+                          flashStrip(`도킹 카드가 연결됐어요${nextStepLabel ? ` — 다음은 ${nextStepLabel}` : ""}`);
+                        }
+                      }}
+                    />
+                  ))}
 
                 {/* 콘텐츠 — 실 영상 검색 + 제목/부제/핵심구간 */}
                 {activeBlock.id === "content" && (
                   <div className="space-y-2">
+                    {/* FIX-1 — 확정된 영상: 패널 상단 '선택됨' 행 고정 표시 */}
+                    {selectedVideo && (
+                      <div
+                        className="flex items-center gap-2.5 rounded-xl p-2"
+                        style={{ backgroundColor: `${accent}0A`, boxShadow: `inset 0 0 0 1px ${accent}33` }}
+                      >
+                        <span className="relative h-12 w-20 shrink-0 overflow-hidden rounded-lg bg-[#E5E5E5]">
+                          <img src={selectedVideo.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[12px] font-bold text-[#0A0A0A]">{selectedVideo.title}</span>
+                          <span className="block text-[10px] text-[#8A8A8A]">
+                            {selectedVideo.sourceLabel ?? "YouTube"}
+                            {selectedVideo.durationLabel ? ` · ${selectedVideo.durationLabel}` : ""}
+                          </span>
+                        </span>
+                        <span
+                          className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+                          style={{ backgroundColor: accent }}
+                        >
+                          <Check className="h-3 w-3" strokeWidth={3} />
+                          선택됨
+                        </span>
+                      </div>
+                    )}
                     {/* 영상 검색 (실배선 /api/discover) */}
                     <div className="flex items-center gap-1.5 rounded-xl bg-[#F4F4F5] py-1.5 pl-3 pr-1.5">
                       <Search className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
@@ -1745,17 +2015,23 @@ export function CardStudioPage45({
                       </button>
                     </div>
                     {videoError && <p className="text-[11px] font-medium text-[#DC2626]">{videoError}</p>}
+                    {/* FIX-1 — 결과 탭 = '후보 선택'(미확정), 아래 [이 영상으로 확정]에서 확정. */}
                     {videoResults.length > 0 && (
                       <div className="max-h-56 space-y-1.5 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
                         {videoResults.map((c) => {
-                          const on = selectedVideo?.videoId === c.source_id;
+                          const isCandidate = videoCandidate?.source_id === c.source_id;
+                          const isConfirmed = selectedVideo?.videoId === c.source_id;
                           return (
                             <button
                               key={`${c.provider}-${c.source_id}`}
                               type="button"
-                              onClick={() => void handleSelectVideo(c)}
+                              onClick={() => setVideoCandidate(c)}
                               className="flex w-full items-center gap-2.5 rounded-xl p-2 text-left transition-colors"
-                              style={on ? { backgroundColor: `${accent}12`, boxShadow: `inset 0 0 0 1.5px ${accent}` } : { backgroundColor: "#F4F4F5" }}
+                              style={
+                                isCandidate
+                                  ? { backgroundColor: `${accent}12`, boxShadow: `inset 0 0 0 1.5px ${accent}` }
+                                  : { backgroundColor: "#F4F4F5" }
+                              }
                             >
                               <span className="relative h-12 w-20 shrink-0 overflow-hidden rounded-lg bg-[#E5E5E5]">
                                 {c.source_id && (
@@ -1769,11 +2045,33 @@ export function CardStudioPage45({
                                   {c.duration_sec ? ` · ${formatDuration(c.duration_sec)}` : ""}
                                 </span>
                               </span>
-                              {on && <Check className="h-4 w-4 shrink-0" style={{ color: accent }} strokeWidth={2.5} />}
+                              {isConfirmed ? (
+                                <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white" style={{ backgroundColor: accent }}>
+                                  선택됨
+                                </span>
+                              ) : isCandidate ? (
+                                <Check className="h-4 w-4 shrink-0" style={{ color: accent }} strokeWidth={2.5} />
+                              ) : null}
                             </button>
                           );
                         })}
                       </div>
+                    )}
+                    {videoCandidate && videoCandidate.source_id !== selectedVideo?.videoId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const c = videoCandidate;
+                          setVideoCandidate(null);
+                          void handleSelectVideo(c); // 확정 — 카드 반영 + oembed→요약 리드 시작.
+                          flashStrip("영상이 카드에 반영됐어요");
+                        }}
+                        className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold text-white transition-transform active:translate-y-px"
+                        style={{ backgroundColor: accent, boxShadow: `0 6px 18px -8px ${accent}80` }}
+                      >
+                        <Check className="h-4 w-4" strokeWidth={2.5} />
+                        이 영상으로 확정
+                      </button>
                     )}
                     {videoSearched && !videoSearching && videoResults.length === 0 && !videoError && (
                       <p className="rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-center text-[12px] font-medium text-[#8A8A8A]">검색 결과가 없어요.</p>
@@ -2308,26 +2606,46 @@ export function CardStudioPage45({
       {/* 카드 드롭하기 (고정 CTA) */}
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#EDEDED] pb-[env(safe-area-inset-bottom)]" style={{ backgroundColor: pageBg }}>
         <div style={{ backgroundColor: pageBg }}>
-          <div className="mx-auto flex max-w-md flex-col gap-3 px-5 pb-5 pt-4">
-            <button
-              type="button"
-              onClick={() => (dropped ? undefined : setMirrorOpen(true))}
-              className="group relative flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-xl text-[14px] font-bold tracking-[-0.01em] text-white transition-all duration-300 active:scale-[0.98]"
-              style={{ backgroundColor: accent, boxShadow: `0 6px 18px -8px ${accent}80` }}
-            >
-              <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-              {dropped ? (
-                <>
-                  <Check className="h-[18px] w-[18px]" strokeWidth={2.5} />
-                  전송 완료
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" strokeWidth={2.25} />
-                  전송
-                </>
-              )}
-            </button>
+          <div className="mx-auto flex max-w-md flex-col gap-2 px-5 pb-5 pt-4">
+            {/* FIX-6 — 발행 성공 후: 기존 studio-build 미러(버튼식) — 카톡 전송(주) + 링크 복사(보조). */}
+            {dropped && savedUrl ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.clipboard) {
+                      void navigator.clipboard.writeText(savedUrl);
+                      flashStrip("링크를 복사했어요");
+                    }
+                  }}
+                  className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#D4D4D4] bg-white text-[14px] font-bold text-[#0A0A0A] transition-transform active:scale-[0.98]"
+                >
+                  <Copy className="h-4 w-4" strokeWidth={2.25} />
+                  링크 복사
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSendKakao()}
+                  disabled={sending || saving}
+                  className="flex h-12 flex-[1.4] items-center justify-center gap-2 rounded-xl text-[14px] font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
+                  style={{ backgroundColor: accent, boxShadow: `0 6px 18px -8px ${accent}80` }}
+                >
+                  <Send className="h-4 w-4" strokeWidth={2.25} />
+                  {sending ? "전송 중…" : "카톡으로 전송"}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setMirrorOpen(true)}
+                className="group relative flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-xl text-[14px] font-bold tracking-[-0.01em] text-white transition-all duration-300 active:scale-[0.98]"
+                style={{ backgroundColor: accent, boxShadow: `0 6px 18px -8px ${accent}80` }}
+              >
+                <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+                <Send className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" strokeWidth={2.25} />
+                전송
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -2362,6 +2680,11 @@ export function CardStudioPage45({
                 <Lock className="h-3.5 w-3.5" strokeWidth={2.25} />
                 {visibility === "public" ? "공개 드롭 · 누구나 열람 가능" : "비공개 드롭 · 링크 받은 사람만"}
               </div>
+              {/* FIX-5 — READ c) 판정: share variant = 시각 stub(콜백 미주입) → 정직 안내 1줄. */}
+              <div className="mb-3 flex items-center gap-1.5 rounded-xl bg-[#EFF6FF] px-3 py-2 text-[11px] font-medium text-[#1D4ED8]">
+                <Eye className="h-3.5 w-3.5" strokeWidth={2.25} />
+                미리보기예요 — 쿠폰 받기 등 버튼은 실제 카드에서 작동해요
+              </div>
               <CardModelBody model={cardModel} variant="share" />
             </div>
 
@@ -2386,12 +2709,13 @@ export function CardStudioPage45({
         </div>
       )}
 
-      {/* 링고AI 플로팅 어시스턴트 — UI·액션 헬퍼만. 대화(LLM)·음성 = T5 트랙 예약석(배선 0). */}
-      {!dropped && (
+      {/* 링고AI 상주 어시스턴트 — FIX-3: strip(기본) ↔ panel ↔ closed(FAB). 자동으로 사라지지
+          않는다 — 액션 후 strip 으로 축소·내용 갱신. 대화(LLM)·음성 = T5 트랙 예약석(배선 0). */}
+      {(
         <>
-          {lingoOpen && (
+          {lingoView === "panel" && (
             <>
-              <div className="sl-fade-in fixed inset-0 z-40 bg-black/25" onClick={() => setLingoOpen(false)} />
+              <div className="sl-fade-in fixed inset-0 z-40 bg-black/25" onClick={() => setLingoView("strip")} />
               <div className="sl-slide-up fixed inset-x-0 bottom-[188px] z-40 px-5">
                 <div
                   className={`mx-auto max-w-md rounded-3xl bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.4),0_0_0_1px_#EDEDED] ${
@@ -2422,10 +2746,19 @@ export function CardStudioPage45({
                         전환 코칭 — 대화는 오픈 준비 중이에요
                       </p>
                     </div>
+                    {/* FIX-3 — 접기(→스트립) / X(완전 닫기, FAB 은 남음) 분리. */}
+                    <button
+                      type="button"
+                      aria-label="스트립으로 접기"
+                      onClick={() => setLingoView("strip")}
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] transition-transform active:scale-90"
+                    >
+                      <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
+                    </button>
                     <button
                       type="button"
                       aria-label="닫기"
-                      onClick={() => setLingoOpen(false)}
+                      onClick={() => setLingoView("closed")}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] transition-transform active:scale-90"
                     >
                       <X className="h-4 w-4" strokeWidth={2.5} />
@@ -2472,7 +2805,7 @@ export function CardStudioPage45({
                   {/* 보조 도구 — 담기·편집·되돌리기 (규칙 기반 액션 헬퍼) */}
                   <div className="mt-2.5 grid grid-cols-3 gap-1.5">
                     {[
-                      { key: "add", icon: Plus, label: "블록 담기", onClick: () => { scrollToDeck(); setLingoOpen(false); }, disabled: false },
+                      { key: "add", icon: Plus, label: "블록 담기", onClick: () => { scrollToDeck(); setLingoView("strip"); }, disabled: false },
                       { key: "edit", icon: Pencil, label: "내용 편집", onClick: lingoEdit, disabled: !canEdit },
                       { key: "undo", icon: Undo2, label: "되돌리기", onClick: lingoUndo, disabled: !lastEquipped },
                     ].map((tool) => {
@@ -2501,7 +2834,77 @@ export function CardStudioPage45({
             </>
           )}
 
-          {!lingoOpen && (
+          {/* FIX-3 — 하단 상주 진행 스트립(≈48px): 아바타 + 한줄 안내(비동기 "…중" 스피너 포함)
+              + 모드별 단계 점 + [계속하기]. 전송 CTA 위 스택(bottom 오프셋)으로 비겹침. */}
+          {lingoView === "strip" && !mirrorOpen && (
+            <div
+              className="fixed inset-x-0 z-40 px-5"
+              style={{ bottom: "calc(96px + env(safe-area-inset-bottom))" }}
+            >
+              <div className="mx-auto flex h-12 max-w-md items-center gap-2 rounded-2xl bg-white pl-1.5 pr-1.5 [box-shadow:0_10px_28px_-10px_rgba(15,23,42,0.28),0_0_0_1px_#EDEDED]">
+                {/* 스트립 탭 = 풀 패널 확장 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPanelOffset({ x: 0, y: 0 });
+                    setLingoView("panel");
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1 text-left active:bg-[#F7F7F8]"
+                  aria-label="링고AI 패널 열기"
+                >
+                  <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
+                    {stripBusy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
+                    ) : (
+                      <>
+                        <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
+                        <Sparkles className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px]" strokeWidth={2.5} fill="currentColor" />
+                      </>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[11.5px] font-semibold leading-tight text-[#0A0A0A]">
+                      {stripBusy ?? stripFlash ?? (dropped ? "전송 완료! 링크를 공유해 보세요" : lingo.text)}
+                    </span>
+                    {/* 단계 점 — 실상태 파생. done=accent · current=링 · 대기=회색 */}
+                    <span className="mt-0.5 flex items-center gap-1">
+                      {steps.map((s, i) => (
+                        <span key={s.label} className="flex items-center gap-1">
+                          <span
+                            className="h-1.5 w-1.5 rounded-full"
+                            style={
+                              s.done
+                                ? { backgroundColor: accent }
+                                : i === currentStepIdx
+                                  ? { backgroundColor: "#fff", boxShadow: `0 0 0 1.5px ${accent}` }
+                                  : { backgroundColor: "#D4D4D4" }
+                            }
+                          />
+                          <span
+                            className="text-[9px] font-bold"
+                            style={{ color: s.done ? accent : i === currentStepIdx ? "#0A0A0A" : "#A3A3A3" }}
+                          >
+                            {s.label}
+                          </span>
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={continueFlow}
+                  className="flex h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-[12px] font-bold text-white transition-transform active:scale-95"
+                  style={{ backgroundColor: accent }}
+                >
+                  계속하기
+                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {lingoView === "closed" && (
             <button
               ref={fabRef}
               type="button"
