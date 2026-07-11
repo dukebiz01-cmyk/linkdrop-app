@@ -284,6 +284,14 @@ function formatDuration(sec: number): string {
   const s = Math.round(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+// FIX-27 — "42" / "m:ss" / "h:mm:ss" 시각 문자열 → 초. 형식 오류 = null.
+function parseClock(v: string): number | null {
+  const t = v.trim();
+  if (!t || !/^\d+(:\d{1,2}){0,2}$/.test(t)) return null;
+  const parts = t.split(":").map(Number);
+  if (parts.slice(1).some((p) => p >= 60)) return null;
+  return parts.reduce((acc, p) => acc * 60 + p, 0);
+}
 function toVideoSlot(c: DiscoverCandidate): VideoSlot45 {
   return {
     videoId: c.source_id,
@@ -448,6 +456,18 @@ export function CardStudioPage45({
   const [cfgTitle, setCfgTitle] = useState("");
   const [cfgSubtitle, setCfgSubtitle] = useState(""); // = 한마디(curator_message)
   const [cfgClip, setCfgClip] = useState("");
+  // FIX-27 — 핵심구간 표준 선택확정(FIX-1/4 동형): 초안(시작·끝·문구) → [적용] → 확정 스냅샷.
+  //   cfgClip 은 확정 라벨 미러(미리보기 model.clip 기존 경로 재사용)로만 세팅.
+  const [clipDraftStart, setClipDraftStart] = useState("");
+  const [clipDraftEnd, setClipDraftEnd] = useState("");
+  const [clipDraftNote, setClipDraftNote] = useState("");
+  const [clipError, setClipError] = useState<string | null>(null);
+  const [confirmedClip, setConfirmedClip] = useState<{
+    startSec: number;
+    endSec: number | null;
+    note: string;
+    label: string;
+  } | null>(null);
   // 추가 카드 편집값 (정본 — party/brand 는 프리뷰 반영, review/delivery 는 게이트).
   const [cfgParty, setCfgParty] = useState(2);
   const [cfgRating, setCfgRating] = useState(5);
@@ -831,6 +851,37 @@ export function CardStudioPage45({
   //   실사용(suggestLitId)과 동일한 block.id 판정 규칙 — 스와이프해도 그 카드에만 불이 붙는다.
   const debugLitId = ledDebug ? (DECK[0]?.id ?? null) : null;
 
+  // FIX-27 — 핵심구간 [적용] 확정: 검증(형식·끝>시작·영상 길이 초과 차단) 통과 시에만
+  //   confirmedClip 확정 + 미리보기 라벨(cfgClip) + 패널 접힘 + 링고 안내 갱신.
+  function applyClip() {
+    const startSec = parseClock(clipDraftStart);
+    if (startSec == null) {
+      setClipError("시작 시점을 0:42 형식으로 입력해 주세요.");
+      return;
+    }
+    const endRaw = clipDraftEnd.trim();
+    const endSec = endRaw ? parseClock(endRaw) : null;
+    if (endRaw && endSec == null) {
+      setClipError("끝 시점을 1:05 형식으로 입력해 주세요.");
+      return;
+    }
+    if (endSec != null && endSec <= startSec) {
+      setClipError("끝 시점은 시작보다 뒤여야 해요.");
+      return;
+    }
+    const durSec = selectedVideo?.durationLabel ? parseClock(selectedVideo.durationLabel) : null;
+    if (durSec != null && (startSec > durSec || (endSec != null && endSec > durSec))) {
+      setClipError(`영상 길이(${selectedVideo!.durationLabel}) 안에서 골라 주세요.`);
+      return;
+    }
+    setClipError(null);
+    const label = endSec != null ? `${formatDuration(startSec)}~${formatDuration(endSec)}` : formatDuration(startSec);
+    setConfirmedClip({ startSec, endSec, note: clipDraftNote.trim(), label });
+    setCfgClip(label); // 미리보기(model.clip) 기존 주입 경로 재사용.
+    setCollapsedPanels((p) => ({ ...p, clip: true }));
+    flashStrip(`핵심구간이 적용됐어요${nextStepLabel ? ` — 다음은 ${nextStepLabel}` : ""}`);
+  }
+
   // FIX-10 — 매장정보 저장(주소 + 시설 → partners UPDATE, RLS partners_owner_all).
   //   facilities 컬럼은 types.ts 미반영(마스터 신설)이라 as never 캐스트(기존 rpc 관례).
   async function handleStoreInfoSave() {
@@ -888,10 +939,10 @@ export function CardStudioPage45({
     if (savedStoreInfo.hasAddress && savedStoreInfo.facilities > 0) done.push({ key: "store", label: "매장·시설" });
     if (dockedProducts.length > 0) done.push({ key: "dock", label: "카드 도킹" });
     if (selectedVideo) done.push({ key: "content", label: "영상" });
-    if (selectedVideo && cfgClip.trim()) done.push({ key: "keymoment", label: "핵심구간" });
+    if (selectedVideo && confirmedClip) done.push({ key: "keymoment", label: "핵심구간" }); // FIX-27 — 실확정 기준.
     if (cfgSubtitle.trim()) done.push({ key: "tagline", label: "한마디" });
     return done.slice(0, 3);
-  }, [dropped, applied, selectedCouponId, cfgDates, attachedProducts, productImageUrl, productName, productShipDateSet, savedStoreInfo, dockedProducts, selectedVideo, cfgClip, cfgSubtitle]);
+  }, [dropped, applied, selectedCouponId, cfgDates, attachedProducts, productImageUrl, productName, productShipDateSet, savedStoreInfo, dockedProducts, selectedVideo, confirmedClip, cfgSubtitle]);
 
   // 링고 코칭 — FIX-28: 필수 구간은 step.teach(필수패키지 정본의 티칭 — 문구·버튼·불 단일
   //   기준), 권장 구간은 항목별 권장 문구. 타깃 없음 = 수렴("이제 게시할 수 있어요").
@@ -1131,7 +1182,14 @@ export function CardStudioPage45({
   const handleSelectVideo = async (c: DiscoverCandidate) => {
     const slot = toVideoSlot(c);
     setSelectedVideo(slot);
-    if (slot.durationLabel && !cfgClip) setCfgClip(slot.durationLabel);
+    // FIX-27 — 기존 durationLabel 자동 주입 제거(영상 "전체 길이"가 핵심구간 기본값으로
+    //   박히던 오류 — 실확정 아님). 영상이 바뀌면 구간 확정도 리셋(구영상 구간 잔존 방지).
+    setConfirmedClip(null);
+    setClipDraftStart("");
+    setClipDraftEnd("");
+    setClipDraftNote("");
+    setClipError(null);
+    setCfgClip("");
     aiVideoRef.current = slot.videoId;
     setAiKeyPoints([]);
     setPickedPoints([]);
@@ -1303,7 +1361,26 @@ export function CardStudioPage45({
               },
             }))
           : [];
+      // FIX-27 — 핵심구간 확정값을 발행 payload 에 결합: create_drop_v2 계약(v5.1)대로
+      //   blocks[] 최상위 video_start_seconds/video_end_seconds → component_blocks 컬럼.
+      //   문구는 기존 키 부재 → block_data 신규 키 clip_note(미주입=미렌더).
+      const clipBlocks =
+        selectedVideo && confirmedClip
+          ? [
+              {
+                block_kind: "video",
+                block_data: {
+                  video_id: selectedVideo.videoId,
+                  title: selectedVideo.title,
+                  ...(confirmedClip.note ? { clip_note: confirmedClip.note } : {}),
+                },
+                video_start_seconds: confirmedClip.startSec,
+                ...(confirmedClip.endSec != null ? { video_end_seconds: confirmedClip.endSec } : {}),
+              },
+            ]
+          : [];
       const extraBlocks = [
+        ...clipBlocks,
         ...(applied["image"] && heroImageUrl ? [{ block_kind: "image", block_data: { image_url: heroImageUrl } }] : []),
         ...dockBlocks,
       ].map((b, i) => ({ ...b, position: i }));
@@ -2556,18 +2633,57 @@ export function CardStudioPage45({
                       onFocus={(e) => (e.currentTarget.style.boxShadow = `inset 0 0 0 1.5px ${accent}`)}
                       onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
                     />
-                    <div className="flex items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5">
-                      <Video className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
-                      <span className="text-[12px] font-semibold text-[#525252]">핵심 구간 시작</span>
-                      <input
-                        value={cfgClip}
-                        onChange={(e) => setCfgClip(e.target.value.replace(/[^0-9:]/g, ""))}
-                        inputMode="numeric"
-                        placeholder="0:42"
-                        className="ml-auto w-16 rounded-lg bg-white px-2 py-1 text-center text-[12px] font-bold tabular-nums text-[#0A0A0A] outline-none"
-                        style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                    {/* FIX-27 — 핵심구간 표준 선택확정(FIX-1/4 동형): 초안(시작·끝·문구) →
+                        [구간 적용] → 요약행 + [변경]. 확정값만 미리보기·발행 payload 에 결합. */}
+                    {confirmedClip && collapsedPanels["clip"] ? (
+                      <AppliedRow
+                        accent={accent}
+                        label={`적용됨 · 핵심구간 ${confirmedClip.label}${confirmedClip.note ? ` · '${confirmedClip.note}'` : ""}`}
+                        onEdit={() => setCollapsedPanels((p) => ({ ...p, clip: false }))}
                       />
-                    </div>
+                    ) : (
+                      <div className="space-y-2 rounded-xl bg-[#F4F4F5] p-3">
+                        <p className="flex items-center gap-1.5 text-[12px] font-semibold text-[#525252]">
+                          <Video className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
+                          핵심 구간 (시작~끝)
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            value={clipDraftStart}
+                            onChange={(e) => setClipDraftStart(e.target.value.replace(/[^0-9:]/g, ""))}
+                            inputMode="numeric"
+                            placeholder="0:42"
+                            className="w-20 rounded-lg bg-white px-2 py-1.5 text-center text-[12px] font-bold tabular-nums text-[#0A0A0A] outline-none"
+                            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                          />
+                          <span className="text-[12px] font-bold text-[#A3A3A3]">~</span>
+                          <input
+                            value={clipDraftEnd}
+                            onChange={(e) => setClipDraftEnd(e.target.value.replace(/[^0-9:]/g, ""))}
+                            inputMode="numeric"
+                            placeholder="1:05 (선택)"
+                            className="w-24 rounded-lg bg-white px-2 py-1.5 text-center text-[12px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#B4B4B4]"
+                            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                          />
+                        </div>
+                        <input
+                          value={clipDraftNote}
+                          onChange={(e) => setClipDraftNote(e.target.value)}
+                          placeholder="구간 문구 (선택) — 예: 여기가 하이라이트"
+                          className="w-full rounded-lg bg-white px-3 py-2 text-[12px] font-medium text-[#0A0A0A] outline-none placeholder:text-[#B4B4B4]"
+                          style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                        />
+                        {clipError && <p className="text-[11px] font-medium text-[#DC2626]">{clipError}</p>}
+                        <button
+                          type="button"
+                          onClick={applyClip}
+                          className="flex h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-white text-[12px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:translate-y-px"
+                        >
+                          <Check className="h-4 w-4" strokeWidth={2.5} style={{ color: accent }} />
+                          구간 적용
+                        </button>
+                      </div>
+                    )}
 
                     {/* 카피 AI 키포인트 → 셀링포인트 픽 (실배선 generate-summary 리드) */}
                     {(aiLoading || aiKeyPoints.length > 0) && (
