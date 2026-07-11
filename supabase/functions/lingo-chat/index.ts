@@ -65,6 +65,12 @@ const MAX_TOKENS_STUDIO = 1500;
 const MAX_MESSAGE_CHARS = 2000;
 // T-B — surface 는 요청 필드('studio' 기본 | 'home'). lingo_sessions/lingo_user_state 에 그대로 기록.
 const DEFAULT_SURFACE: LingoSurface = "studio";
+
+// T6 — 개입곡선 자동승급 파라미터. ⚠️ 측정 기반 튜닝 대상 — 초기값은 가설이며,
+//   세션 수·복귀 간격 실측(대시보드) 후 조정한다.
+const PROMOTE_TO_ASSIST_SESSIONS = 4; // guide → assist: 누적 세션 수(이번 세션 포함).
+const PROMOTE_TO_STANDBY_SESSIONS = 10; // assist → standby: 누적 세션 수.
+const RETURNING_DAYS = 30; // 이 일수 초과 공백 후 복귀 = 한 단계 강하("언제든 다시 손잡는다").
 const USD_TO_KRW = 1400;
 // generation_type CHECK 기존 값 재사용(DDL 0, promo-copy 선례). response.kind 로 식별.
 const GENERATION_TYPE = "share_message";
@@ -380,18 +386,25 @@ Deno.serve(async (req) => {
   let stage: LingoStage = "guide";
   let sessionsCount = 0;
   let completionsCount = 0;
+  let lastSeenAt: string | null = null;
   {
     const { data: stateRow } = await admin
       .from("lingo_user_state")
-      .select("stage, sessions_count, completions_count")
+      .select("stage, sessions_count, completions_count, last_seen_at")
       .eq("user_id", uid)
       .eq("surface", surface)
       .maybeSingle();
     if (stateRow) {
-      const s = stateRow as { stage?: string; sessions_count?: number; completions_count?: number };
+      const s = stateRow as {
+        stage?: string;
+        sessions_count?: number;
+        completions_count?: number;
+        last_seen_at?: string | null;
+      };
       if (s.stage === "guide" || s.stage === "assist" || s.stage === "standby") stage = s.stage;
       sessionsCount = s.sessions_count ?? 0;
       completionsCount = s.completions_count ?? 0;
+      lastSeenAt = s.last_seen_at ?? null;
     } else {
       await admin
         .from("lingo_user_state")
@@ -400,6 +413,30 @@ Deno.serve(async (req) => {
           { onConflict: "user_id,surface" },
         );
     }
+  }
+
+  // T6 — 개입곡선 자동 평가: "새 세션 시작" 시점에만(세션 이어가기는 평가 안 함 — 세션 도중
+  //   인격 불변). surface 별 독립(user_state 가 user_id+surface 로 분리 — T-B 구조 그대로).
+  //   변경된 stage 는 이번 응답의 프롬프트(블록 C)·meta·최종 upsert 에 모두 반영된다.
+  let stageChanged: string | null = null;
+  if (sessionCreated) {
+    const prevStage = stage;
+    const lastSeenMs = lastSeenAt ? Date.parse(lastSeenAt) : NaN;
+    const returning =
+      Number.isFinite(lastSeenMs) && Date.now() - lastSeenMs > RETURNING_DAYS * 24 * 60 * 60 * 1000;
+    if (returning) {
+      // a) 복귀 강하 먼저 — 한 단계만 내림(guide 는 그대로). 강하한 세션에는 승급을 재평가하지
+      //    않는다(누적 세션 수가 임계 이상이면 즉시 재승급돼 강하가 무효가 되므로 — 다음
+      //    새 세션부터 b) 규칙으로 자연 복귀). "언제든 다시 손잡는다" 원칙.
+      if (stage === "standby") stage = "assist";
+      else if (stage === "assist") stage = "guide";
+    } else {
+      // b) 승급 — sessions_count +1(이번 세션 포함) 기준, 한 번에 한 단계만.
+      const newCount = sessionsCount + 1;
+      if (stage === "guide" && newCount >= PROMOTE_TO_ASSIST_SESSIONS) stage = "assist";
+      else if (stage === "assist" && newCount >= PROMOTE_TO_STANDBY_SESSIONS) stage = "standby";
+    }
+    if (stage !== prevStage) stageChanged = `${prevStage}→${stage}`;
   }
 
   // 5) 기억(최근 10건) + 대화 이력(해당 세션 최근 10턴 = 20행) 로드.
@@ -437,7 +474,15 @@ Deno.serve(async (req) => {
   // 7~10) SSE 스트림 — meta → delta* → done / error. 예외를 밖으로 던지지 않는다(원칙 4·9).
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      controller.enqueue(sseFrame("meta", { session_id: sessionId, stage, surface }));
+      controller.enqueue(
+        sseFrame("meta", {
+          session_id: sessionId,
+          stage,
+          surface,
+          // T6 — 승급/강하가 있었을 때만 필드 동봉(없으면 생략 — 기존 클라이언트 무영향).
+          ...(stageChanged ? { stage_changed: stageChanged } : {}),
+        }),
+      );
 
       let fullText = "";
       let inTok = 0;
@@ -604,7 +649,8 @@ Deno.serve(async (req) => {
         console.error("[lingo-chat] record_ai_generation failed:", e);
       }
 
-      // lingo_user_state UPDATE — sessions_count 는 세션 신규 생성 시에만 +1. stage 는 유지.
+      // lingo_user_state UPDATE — sessions_count 는 세션 신규 생성 시에만 +1.
+      //   stage 는 T6 평가 결과(승급/강하 반영값, 변경 없으면 기존값 그대로).
       try {
         await admin.from("lingo_user_state").upsert(
           {
