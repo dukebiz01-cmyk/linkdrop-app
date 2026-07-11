@@ -163,6 +163,10 @@ const CARD_BASE = "#FFFFFF";
 //   도달 강화 상품 미출시. UI(덱 카드·설정 폼)는 정본 그대로 유지.
 const GATED_BLOCK_IDS = new Set(["delivery", "review", "top", "boost", "marketing"]);
 const GATE_NOTICE = "이 기능은 오픈 준비 중이에요. 곧 열려요.";
+// FIX-28 — 카드 배경색 UI 스위치(재도입 스위치 1개). false = 덱 카드·팔레트 숨김 +
+//   cardColor 기본값 고정 + 게시 시 색 저장 스킵. set_drop_card_color RPC·cardColor
+//   상태·팔레트 코드는 삭제 금지(보존) — true 로 되돌리면 그대로 재활성.
+const ENABLE_CARD_COLORS = false;
 
 // 매장정보 시설 태그 — 빠른 추가용 추천 목록(정본 8종).
 const FACILITY_PRESETS = ["주차 가능", "무료 와이파이", "반려동물 동반", "단체석", "예약 가능", "포장·배달", "유아 의자", "휠체어 접근"];
@@ -418,6 +422,17 @@ export function CardStudioPage45({
   //   (store-hub 명함 편집과 동일 RLS partners_owner_all 경로).
   const [cfgAddress, setCfgAddress] = useState(store?.address ?? "");
   const [storeSaving, setStoreSaving] = useState(false);
+  // FIX-28 — 매장·시설 실확정 스냅샷(저장 성공 값 기준 — 편집 중 값과 분리).
+  //   초기값 = loader partners 실값(이미 저장돼 있으면 필수 충족으로 인정).
+  const [savedStoreInfo, setSavedStoreInfo] = useState(() => ({
+    hasAddress: !!store?.address?.trim(),
+    facilities: Array.isArray(store?.facilities)
+      ? (store!.facilities as unknown[]).filter((f) => typeof f === "string" && f.trim().length > 0).length
+      : 0,
+  }));
+  // FIX-28 — 상품 발송기준 실확정: 등록 폼에서 수확·발송일(harvest_date/ship_date)이 담겨
+  //   저장됐는지(FIX-24 기간 포함). 판매 캘린더(seasonal)와 둘 중 1 = 발송기준 충족.
+  const [productShipDateSet, setProductShipDateSet] = useState(false);
   const [cfgFacilities, setCfgFacilities] = useState<FacilityItem[]>(() =>
     Array.isArray(store?.facilities)
       ? (store!.facilities as unknown[])
@@ -500,7 +515,11 @@ export function CardStudioPage45({
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasHold = useRef(false);
 
-  const DECK = useMemo(() => DECK_IDS[mode].map(blockById), [mode]);
+  // FIX-28 — 배경색 카드 숨김(ENABLE_CARD_COLORS 스위치 — 로직 보존).
+  const DECK = useMemo(
+    () => DECK_IDS[mode].map(blockById).filter((b) => ENABLE_CARD_COLORS || b.id !== "bgcolor"),
+    [mode],
+  );
   const isMainBlock = (id: string) => MODE_MAIN_IDS[mode].includes(id);
   const accent = CARD_MODEL_ACCENTS[mode];
   const pageBg = PAGE_BG;
@@ -565,38 +584,72 @@ export function CardStudioPage45({
     if (flashTimer.current) clearTimeout(flashTimer.current);
   }, []);
 
-  // FIX-3 — 모드별 진행 단계(실상태 파생 — 가짜 진행 없음).
-  // FIX-23 — candidates: 단계 완료(done)에 기여하는 후보 블록 집합 — 단일 타깃(currentTarget)의
-  //   단계 내 선택 풀. block 은 단계 대표(점 표시용) 그대로 유지.
+  // FIX-28 — 목적별 필수패키지(Duke 확정본 — 이 표가 정본). 게시 게이트·방향등·단계 점이
+  //   전부 이 steps 하나를 읽는다(단일 기준). done = 실확정 state 결합(FIX-25 원칙).
+  //   candidates = 방향등·점프 대상 덱 블록 / gate = 게시 비활성 사유 1줄 / teach = 링고 티칭.
+  //   마지막 "게시" 단계(candidates 없음)만 비필수 표기 — 그 앞은 전부 필수.
   const steps = useMemo(() => {
     const productDone =
       !!attachedProducts[0] || (!!productImageUrl && !!productName.trim() && (productPrice ?? 0) > 0);
-    // FIX-25 — 꾸미기 done 을 실제 확정 state 에 결합: 색 [적용] 확정(cardColor 변경) 또는
-    //   한마디 입력. 기존 score>=40 프록시(상품30+쿠폰18=48로 자동 done)와 applied.bgcolor
-    //   (피커만 열어도 true — equip 토글)는 실확정이 아니라 제거.
-    const styleDone = cardColor !== CARD_BASE || !!cfgSubtitle.trim();
     if (mode === "commerce") {
       return [
-        { label: "상품", block: "product", candidates: ["product", "productimage"], done: productDone },
-        { label: "혜택", block: "coupon", candidates: ["coupon", "seasonal"], done: !!(applied["coupon"] && selectedCouponId) || !!applied["seasonal"] },
-        { label: "꾸미기", block: "bgcolor", candidates: ["bgcolor"], done: styleDone },
-        { label: "전송", block: null, candidates: [], done: dropped },
+        {
+          label: "상품", block: "product", candidates: ["product", "productimage"], done: productDone,
+          gate: "상품(사진·이름·가격)을 먼저 등록해 주세요",
+          teach: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
+        },
+        {
+          // 판매기간(seasonal) 또는 수확·발송일(등록 폼 날짜) 중 1 확정.
+          label: "발송기준", block: "seasonal", candidates: ["seasonal"], done: !!applied["seasonal"] || productShipDateSet,
+          gate: "판매기간 또는 수확·발송일을 먼저 확정해 주세요",
+          teach: "언제 받을 수 있는지 알려줘요 — 판매 캘린더나 수확·발송일 중 하나면 돼요.",
+        },
+        { label: "게시", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
       ];
     }
     if (mode === "reserve") {
       return [
-        { label: "영상", block: "content", candidates: ["content"], done: !!selectedVideo },
-        { label: "예약·혜택", block: "calendar", candidates: ["calendar", "coupon"], done: !!applied["calendar"] || !!(applied["coupon"] && selectedCouponId) },
-        { label: "꾸미기", block: "bgcolor", candidates: ["bgcolor"], done: styleDone },
-        { label: "전송", block: null, candidates: [], done: dropped },
+        {
+          // 영상 또는 대표 이미지 중 1(실확정 — 확정 버튼/업로드 완료).
+          label: "콘텐츠", block: "content", candidates: ["content", "image"], done: !!selectedVideo || !!heroImageUrl,
+          gate: "영상 또는 대표 이미지를 먼저 담아 주세요",
+          teach: "영상이나 대표 이미지 한 장이 카드의 얼굴이에요. 둘 중 하나만 담으면 돼요.",
+        },
+        {
+          // Duke: 쿠폰이 우선순위 필수 — 콘텐츠 다음 최우선 배치.
+          label: "쿠폰", block: "coupon", candidates: ["coupon"], done: !!(applied["coupon"] && selectedCouponId),
+          gate: "쿠폰을 먼저 연결해 주세요",
+          teach: "왜 지금 예약해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요.",
+        },
+        {
+          label: "캘린더", block: "calendar", candidates: ["calendar"], done: !!applied["calendar"] && cfgDates.length > 0,
+          gate: "예약 캘린더를 먼저 설정해 주세요",
+          teach: "예약 카드의 심장이에요. 받을 수 있는 날짜를 골라 캘린더를 확정해요.",
+        },
+        {
+          // store+facilities — 동일 설정 패널(매장정보)에서 함께 충족: 1묶음 표기.
+          label: "매장·시설", block: "link", candidates: ["link"], done: savedStoreInfo.hasAddress && savedStoreInfo.facilities > 0,
+          gate: "매장 정보(주소·시설)를 먼저 저장해 주세요",
+          teach: "주소와 시설 태그를 저장하면 손님이 안심하고 예약해요. 매장정보에서 한 번에 저장돼요.",
+        },
+        { label: "게시", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
       ];
     }
     return [
-      { label: "영상", block: "content", candidates: ["content"], done: !!selectedVideo },
-      { label: "꾸미기", block: "bgcolor", candidates: ["bgcolor"], done: styleDone },
-      { label: "전송", block: null, candidates: [], done: dropped },
+      {
+        label: "영상", block: "content", candidates: ["content"], done: !!selectedVideo,
+        gate: "영상을 먼저 담아 주세요",
+        teach: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
+      },
+      {
+        // 한마디(tagline) — 정보 모드 필수 승격(꾸미기 단계·색은 제거, FIX-28).
+        label: "한마디", block: "content", candidates: ["content"], done: !!cfgSubtitle.trim(),
+        gate: "내 한마디를 먼저 적어 주세요",
+        teach: "왜 이 영상을 보내는지 한 줄만 적어요. 그 한마디가 카드의 목소리예요.",
+      },
+      { label: "게시", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
     ];
-  }, [mode, applied, selectedCouponId, selectedVideo, attachedProducts, productImageUrl, productName, productPrice, cfgSubtitle, cardColor, dropped]);
+  }, [mode, applied, selectedCouponId, selectedVideo, heroImageUrl, attachedProducts, productImageUrl, productName, productPrice, productShipDateSet, cfgSubtitle, cfgDates, savedStoreInfo, dropped]);
   const currentStepIdx = steps.findIndex((s) => !s.done);
   const nextStepLabel = currentStepIdx >= 0 ? steps[currentStepIdx].label : null;
 
@@ -665,33 +718,43 @@ export function CardStudioPage45({
   const [suggestVisible, setSuggestVisible] = useState(false);
   const readyToSend = !dropped && currentStepIdx >= 0 && steps[currentStepIdx].block === null;
 
-  // FIX-23 — 단일 타깃: 첫 미완료 단계의 후보(candidates) 중 장착 가능(미장착·비게이트·
-  //   비유료·비쿨다운) 블록을 power 최대로 선택 — FIX-9 점수 휴리스틱은 단계 내부
-  //   타이브레이커로 강등. 후보가 장착됐는데 단계 미완이면(예: 쿠폰 미선택) 그 블록을
-  //   유지해 마무리를 안내. 단계 후보 전멸(쿨다운)이면 다음 단계로. 전 단계 완료·발행
-  //   후 = null(수렴 "보낼 준비 됐어요" + 전체 소등 — 기존 계약).
+  // FIX-28 — 첫 미완료 필수 단계(게시 게이트·방향등·안내가 전부 이걸 읽음 — 단일 기준).
+  const firstRequiredStep = useMemo(
+    () => steps.find((s) => !s.done && s.candidates.length > 0) ?? null,
+    [steps],
+  );
+  // 게시 게이트 — 필수 전부 충족 시에만 활성. 사유 1줄 = 첫 미완 항목의 gate 문구.
+  const canPublish = !firstRequiredStep;
+  const gateMsg = firstRequiredStep?.gate ?? null;
+
+  // FIX-23/25/28 — 단일 타깃: ① 필수 미완이면 그 단계 후보를 정의 순서로(진행 중 블록은
+  //   마무리 안내 유지 — FIX-25 규칙). 필수는 거절(X) 쿨다운 대상에서 제외(계속 안내).
+  //   ② 필수 완료 후에만 권장 제안 모드 — 1순위 도킹(가용 N>0·미연결일 때만, N=0 이면
+  //   생략 — 가짜 유도 금지), 2순위 쿠폰(덱에 있고 미적용 — 커머스 등 비예약 모드).
+  //   권장은 기존 쿨다운·1개 리듬·수렴 계약 적용. 전부 소진 = null(수렴·전체 소등).
   const currentTarget = useMemo(() => {
     if (dropped) return null;
-    for (const s of steps) {
-      if (s.done) continue;
-      if (s.candidates.length === 0) return null; // 전송 단계 도달 = 수렴.
-      const cands = s.candidates
-        .map((id) => DECK.find((b) => b.id === id))
-        .filter((b): b is (typeof DECK)[number] => !!b && !GATED_BLOCK_IDS.has(b.id));
-      // FIX-25 — 단계 내 선택 규칙 교정: candidates 정의 순서 = 단계 대표 우선(혜택에서
-      //   power 규칙이 쿠폰(18) 대신 판매 캘린더(30)를 먼저 켜던 문제). 후보가 장착돼
-      //   있으면(단계는 미완 = 입력/등록 미마무리) 그 블록을 유지해 마무리를 안내 —
-      //   상품 폼을 여는 순간(장착) 타깃이 이미지 등록으로 튀던 문제도 함께 해소.
-      //   power 는 candidates 배열 구성에 반영된 보조 기준으로 강등(FIX-23 취지 유지).
-      for (const b of cands) {
-        if (dismissedSuggests.includes(b.id)) continue; // 거절 쿨다운 — 차순위로.
-        if (applied[b.id]) return b; // 진행 중 — 마무리 안내(등록·선택 완료까지 유지).
-        if (!b.isPaid) return b; // 미장착 — 장착 제안.
+    if (firstRequiredStep) {
+      for (const id of firstRequiredStep.candidates) {
+        const b = DECK.find((x) => x.id === id);
+        if (!b || GATED_BLOCK_IDS.has(b.id)) continue;
+        if (applied[b.id]) return b; // 진행 중 — 마무리 안내(등록·선택·저장 완료까지 유지).
+        if (!b.isPaid) return b; // 미장착 — 장착 안내.
       }
-      // 전 후보 거절(쿨다운) — 다음 단계로 이동.
+      return null; // 이론상 도달 없음(필수 후보는 비게이트).
+    }
+    // 권장 ① 도킹 — FIX-28 STEP 5.
+    if (dockCount > 0 && dockedProducts.length === 0 && !applied["dock"] && !dismissedSuggests.includes("dock")) {
+      const dock = DECK.find((b) => b.id === "dock");
+      if (dock) return dock;
+    }
+    // 권장 ② 쿠폰 — 예약 모드는 필수라 여기 도달 시 이미 적용됨(자연 제외).
+    if (!applied["coupon"] && !dismissedSuggests.includes("coupon")) {
+      const c = DECK.find((b) => b.id === "coupon" && !GATED_BLOCK_IDS.has(b.id));
+      if (c) return c;
     }
     return null;
-  }, [steps, DECK, applied, dismissedSuggests, dropped]);
+  }, [dropped, firstRequiredStep, DECK, applied, dismissedSuggests, dockCount, dockedProducts]);
 
   // 제안 칩([장착]+X) 대상 = 단일 타깃이 "장착 가능"일 때만(마무리 안내 대상엔 칩 없음).
   const suggestion = useMemo(() => {
@@ -743,6 +806,8 @@ export function CardStudioPage45({
         return;
       }
       toast.success("매장 정보를 저장했어요.");
+      // FIX-28 — 실확정 스냅샷 갱신(필수패키지 '매장·시설' done 판정 소스).
+      setSavedStoreInfo({ hasAddress: !!cfgAddress.trim(), facilities: facilities.length });
       flashStrip("매장정보가 저장됐어요");
     } catch (err) {
       console.error("[studio-lab] store info save unexpected:", err);
@@ -752,24 +817,24 @@ export function CardStudioPage45({
     }
   }
 
-  // 링고 코칭 — FIX-23: 단일 타깃(currentTarget)에서 파생(문구는 기존 HINTS 유지 + 보강).
-  //   타깃 없음 = 수렴 문구(기존 그대로). 마무리 대상(장착됐지만 입력 미완)도 같은 HINTS 톤.
+  // 링고 코칭 — FIX-28: 필수 구간은 step.teach(필수패키지 정본의 티칭 — 문구·버튼·불 단일
+  //   기준), 권장 구간은 항목별 권장 문구. 타깃 없음 = 수렴("이제 게시할 수 있어요").
   const lingo = useMemo(() => {
-    if (!currentTarget) {
-      return { text: "전환 레버가 충분해요. 강화(부스트)는 오픈 준비 중 — 지금은 전송으로 마무리해요.", action: null };
+    if (firstRequiredStep && currentTarget) {
+      return { text: firstRequiredStep.teach, action: currentTarget.id };
     }
-    const HINTS: Record<string, string> = {
-      content: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
-      image: "본체 이미지 한 장이면 카드가 확 살아나요. 가장 잘 나온 컷부터 올려보세요.",
-      calendar: "예약 카드인데 누를 곳이 없어요. 예약 캘린더를 장착해야 친구가 바로 행동해요.",
-      product: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
-      productimage: "상품 사진이 본체가 돼요. 신선도와 품질이 드러난 한 장이 주문을 부릅니다.",
-      seasonal: "지금이 구매 적기라는 걸 판매 캘린더로 보여주면 주문이 앞당겨져요.",
-      coupon: "왜 지금 행동해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요.",
-      bgcolor: "배경색 하나로 카드 인상이 확 달라져요. 꾸미기로 마무리해 볼까요?",
-    };
-    return { text: HINTS[currentTarget.id] ?? `${currentTarget.label}부터 장착해보세요.`, action: currentTarget.id };
-  }, [currentTarget]);
+    if (currentTarget) {
+      // 권장 모드 — 도킹은 실카운트 동봉(가짜 숫자 금지: dockCount>0 일 때만 타깃이 됨).
+      const text =
+        currentTarget.id === "dock"
+          ? `다른 카드를 함께 보내면 드로피를 더 받을 수 있어요 — ${dockCount}장 연결 가능`
+          : currentTarget.id === "coupon"
+            ? "왜 지금 행동해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요."
+            : `${currentTarget.label}를 더해보세요.`;
+      return { text, action: currentTarget.id };
+    }
+    return { text: "필수는 다 챙겼어요 — 이제 게시할 수 있어요.", action: null };
+  }, [firstRequiredStep, currentTarget, dockCount]);
 
   function equip(block: StudioBlock) {
     // ★ 정직 게이트 — 백엔드 부재 블록은 장착 자체를 막는다(카드에 가짜 데이터 표시 금지).
@@ -1112,6 +1177,9 @@ export function CardStudioPage45({
     // FIX-24 — 수확·발송 기간 스냅샷(date_range_label) 미러 → 미리보기 칩(단일일 = null = 미렌더).
     const rangeLabel = (payload.blocks?.[0]?.block_data as { date_range_label?: unknown } | undefined)?.date_range_label;
     setProductDateRangeLabel(typeof rangeLabel === "string" && rangeLabel ? rangeLabel : null);
+    // FIX-28 — 발송기준 실확정: 수확·발송일이 등록에 포함됐는지(fresh=harvest_date/goods=ship_date).
+    const bd = payload.blocks?.[0]?.block_data as { harvest_date?: unknown; ship_date?: unknown } | undefined;
+    setProductShipDateSet(!!(bd?.harvest_date || bd?.ship_date));
     flashStrip("완료! 상품이 카드에 반영됐어요"); // FIX-3 — 실등록 완료 시에만.
     return { shareUuid, shareUrl: json.shareable_url ?? `https://app.drop.how/d/${shareUuid}` };
   }
@@ -1241,8 +1309,9 @@ export function CardStudioPage45({
           console.warn("[studio-lab] update_drop_key_points exception:", e);
         }
       }
-      // ③ 카드색 영속화 — 6색 팔레트 값(또는 기본 화이트) 저장. best-effort.
-      if (dropId && cardColor && supabase) {
+      // ③ 카드색 영속화 — 6색 팔레트 값 저장. best-effort.
+      //    FIX-28 — 기본값(CARD_BASE)이면 스킵(색 UI 숨김 중 불필요 호출 0 — RPC 는 보존).
+      if (dropId && supabase && cardColor && cardColor !== CARD_BASE) {
         try {
           const { error: colorErr } = await supabase.rpc("set_drop_card_color", {
             p_drop_id: dropId,
@@ -1835,7 +1904,8 @@ export function CardStudioPage45({
         {/* 장착 액션 (가운데 카드 대상) */}
         <div className="mx-auto mt-4 max-w-md px-5">
           {/* 배경색 팔레트 — 정본 6색. FIX-4 일관 패턴: 스와치 탭=후보 → [적용]=확정(카드 반영). */}
-          {activeBlock.id === "bgcolor" && showColorPicker && (
+          {/* FIX-28 — 팔레트 패널: ENABLE_CARD_COLORS 스위치로 숨김(코드 보존 — 재도입 스위치). */}
+          {ENABLE_CARD_COLORS && activeBlock.id === "bgcolor" && showColorPicker && (
             <div className="sl-fade-in mb-3 space-y-2.5">
               <div className="flex flex-wrap items-center justify-center gap-2">
                 {[...CARD_COLORS, { id: "base", value: CARD_BASE, label: "기본" }].map((c) => {
@@ -2973,16 +3043,24 @@ export function CardStudioPage45({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setMirrorOpen(true)}
-                className="group relative flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-xl text-[14px] font-bold tracking-[-0.01em] text-white transition-all duration-300 active:scale-[0.98]"
-                style={{ backgroundColor: accent, boxShadow: `0 6px 18px -8px ${accent}80` }}
-              >
-                <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-                <Send className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" strokeWidth={2.25} />
-                전송
-              </button>
+              <>
+                {/* FIX-28 — 게시 게이트: 필수패키지 미완이면 비활성 + 사유 1줄(첫 미완 항목).
+                    방향등은 currentTarget 이 같은 항목을 이미 가리킴(단일 기준). */}
+                <button
+                  type="button"
+                  disabled={!canPublish}
+                  onClick={() => setMirrorOpen(true)}
+                  className="group relative flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-xl text-[14px] font-bold tracking-[-0.01em] text-white transition-all duration-300 active:scale-[0.98] disabled:opacity-45 disabled:active:scale-100"
+                  style={{ backgroundColor: accent, boxShadow: canPublish ? `0 6px 18px -8px ${accent}80` : "none" }}
+                >
+                  <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+                  <Send className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" strokeWidth={2.25} />
+                  게시하기
+                </button>
+                {!canPublish && gateMsg && (
+                  <p className="text-center text-[11px] font-medium text-[#8A8A8A]">{gateMsg}</p>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -3028,9 +3106,13 @@ export function CardStudioPage45({
 
             <div className="border-t border-[#EAEAEA] bg-white px-5 py-3.5">
               {saveError && <p className="mb-2 text-center text-[12px] font-medium text-[#DC2626]">{saveError}</p>}
+              {/* FIX-28 — 거울 시트 게시 CTA 도 동일 게이트(미리보기는 허용, 게시만 잠금). */}
+              {!canPublish && gateMsg && (
+                <p className="mb-2 text-center text-[11px] font-medium text-[#8A8A8A]">{gateMsg}</p>
+              )}
               <button
                 type="button"
-                disabled={saving}
+                disabled={saving || !canPublish}
                 onClick={() => {
                   void handlePublish().then((ok) => {
                     if (ok) setMirrorOpen(false);
@@ -3337,11 +3419,17 @@ export function CardStudioPage45({
               </span>
               <span className="relative min-w-0 flex-1">
                 <span className="block truncate text-[11px] font-semibold leading-tight text-[#0A0A0A]">
-                  {/* FIX-18→23 — 제안·티칭 모두 단일 타깃(lingo.text)에서 파생: 분기 단순화.
-                      단계 진입 시 타깃 재계산 → 캡슐 안내가 해당 단계 티칭으로 갱신. */}
+                  {/* FIX-18→23→28 — 필수 구간 = step.teach / 권장 구간 = 제안 문구(칩 노출 시) /
+                      필수 전부 충족 = "이제 게시할 수 있어요" 전환(STEP 2). */}
                   {stripBusy ??
                     stripFlash ??
-                    (dropped ? "전송 완료!" : readyToSend ? "보낼 준비 됐어요" : lingo.text)}
+                    (dropped
+                      ? "전송 완료!"
+                      : showSuggest && suggestion
+                        ? lingo.text
+                        : readyToSend
+                          ? "이제 게시할 수 있어요"
+                          : lingo.text)}
                 </span>
                 {/* 단계 점 축약 — 점만(라벨 없음). done=accent · current=링 · 대기=회색 */}
                 <span className="mt-1 flex items-center gap-1">
@@ -3372,25 +3460,32 @@ export function CardStudioPage45({
                       equip(suggestion);
                       // FIX-19 — 장착 즉시 소등(flash 가 showSuggest 를 끔) → flash 종료 후
                       //   재계산된 다음 제안으로 점등 이동(suggestVisible 유지). 없으면 그대로 소등.
-                      flashStrip(`+${suggestion.power}점! ${suggestion.label} 장착됐어요`);
+                      flashStrip(
+                        suggestion.id === "dock"
+                          ? "함께 보낼 카드를 골라 연결해요"
+                          : `+${suggestion.power}점! ${suggestion.label} 장착됐어요`,
+                      );
                     }}
                     className="relative flex h-8 shrink-0 items-center rounded-full px-2.5 text-[11px] font-bold text-white active:scale-95"
                     style={{ backgroundColor: accent }}
                   >
-                    장착
+                    {suggestion.id === "dock" ? "연결하기" : "장착"}
                   </button>
-                  <button
-                    type="button"
-                    aria-label="제안 닫기"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => {
-                      setDismissedSuggests((d) => [...d, suggestion.id]);
-                      setSuggestVisible(false);
-                    }}
-                    className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] active:scale-95"
-                  >
-                    <X className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  </button>
+                  {/* FIX-28 — 필수는 거절(쿨다운) 불가: X 는 권장 제안에서만. */}
+                  {!firstRequiredStep && (
+                    <button
+                      type="button"
+                      aria-label="제안 닫기"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => {
+                        setDismissedSuggests((d) => [...d, suggestion.id]);
+                        setSuggestVisible(false);
+                      }}
+                      className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] active:scale-95"
+                    >
+                      <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    </button>
+                  )}
                 </>
               ) : (
                 <button
