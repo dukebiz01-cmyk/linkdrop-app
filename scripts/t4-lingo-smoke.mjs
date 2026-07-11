@@ -69,8 +69,9 @@ if (!session) {
 }
 const token = session.access_token; // 출력 금지
 
-// ── lingo-chat 1회 호출 (sessionId 미전송 = 새 세션 / context 전송 = T-A 액션 모드) → SSE 파싱 ──
-async function runChat(message, sessionId = null, context = null) {
+// ── lingo-chat 1회 호출 (sessionId 미전송 = 새 세션 / context 전송 = T-A 액션 모드
+//    / surface 전송 = T-B 홈 인텐트 모드) → SSE 파싱 ──
+async function runChat(message, sessionId = null, context = null, surface = null) {
   const res = await fetch(`${url}/functions/v1/lingo-chat`, {
     method: "POST",
     headers: {
@@ -83,6 +84,7 @@ async function runChat(message, sessionId = null, context = null) {
       input_channel: "text",
       ...(sessionId ? { session_id: sessionId } : {}),
       ...(context ? { context } : {}),
+      ...(surface ? { surface } : {}),
     }),
   });
 
@@ -90,8 +92,10 @@ async function runChat(message, sessionId = null, context = null) {
     status: res.status,
     stage: null,
     sessionId: null, // meta 프레임의 session_id — close 모드가 같은 세션 이어가기에 사용.
+    surface: null, // T-B — meta 프레임의 surface 원문.
     answer: "",
     actions: null, // T-A — event: actions 의 data 원문({actions, steps}).
+    intent: null, // T-B — event: intent 의 data 원문({intent}).
     done: null,
     error: null,
     nonSse: null,
@@ -118,9 +122,11 @@ async function runChat(message, sessionId = null, context = null) {
     if (event === "meta") {
       result.stage = data.stage;
       result.sessionId = data.session_id ?? null;
+      result.surface = data.surface ?? null; // T-B — 구버전 배포면 미포함(null).
     }
     else if (event === "delta") result.answer += data.text ?? "";
     else if (event === "actions") result.actions = data;
+    else if (event === "intent") result.intent = data; // T-B
     else if (event === "done") result.done = data;
     else if (event === "error") result.error = data;
   };
@@ -155,7 +161,31 @@ const mode =
       ? "close"
       : process.argv[2] === "actions"
         ? "actions"
-        : "single";
+        : process.argv[2] === "home"
+          ? "home"
+          : "single";
+
+if (mode === "home") {
+  // ── T-B 실측 — surface:"home" 새 세션 2발(context.studio 미포함). 판정 없음(원문만). ──
+  const SHOTS = ["사과 파는 카드 만들고 싶어", "요즘 뭐가 인기야? 구경 좀 할래"];
+  for (let i = 0; i < SHOTS.length; i++) {
+    console.log(`\n════ [${i + 1}/${SHOTS.length}] "${SHOTS[i]}" (새 세션 · surface:"home") ════`);
+    const r = await runChat(SHOTS[i], null, null, "home");
+    console.log(`[http] status=${r.status} stage=${r.stage ?? "-"}`);
+    if (r.nonSse) console.log("[non-sse body]", r.nonSse);
+    console.log(`[meta.surface] ${r.surface ?? "(미포함)"}`);
+    console.log(`[event: intent] ${r.intent ? `수신 — ${JSON.stringify(r.intent)}` : "미수신"}`);
+    console.log("[answer 전문]");
+    console.log(r.answer || "(빈 응답)");
+    if (r.done) {
+      console.log(`[done] tokens_used=${r.done.tokens_used} cost_krw=${r.done.cost_krw}`);
+    }
+    if (r.error) console.log(`[error 전문] ${JSON.stringify(r.error)}`);
+  }
+  await client.auth.signOut();
+  console.log(`\n[secure] 토큰·키·비밀번호 미출력 확인 (계정: ${usedLabel})`);
+  process.exit(0);
+}
 
 if (mode === "actions") {
   // ── T-A 실측 — context.studio 포함 발사, event: actions 원문 출력(판정 없음) ──
