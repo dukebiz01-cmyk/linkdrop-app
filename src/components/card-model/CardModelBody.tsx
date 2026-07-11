@@ -704,8 +704,11 @@ export function CardModelBody({
             본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
           </p>
 
-          {/* 공유 여정 — journey 미주입 = 미렌더(카드 단건 RPC 에 여정 미포함, READ 6항) */}
-          {showJourney && journey.length > 0 && (
+          {/* 공유 여정 — FIX-46: v0 원형 복원(행은 showJourney 만으로 상시 — 정본 :596 동일).
+              진실경계: 확산 칩은 실집계(model.spreadCount) 주입 시만, 여정 미주입 = 펼침 안
+              빈 상태 정직 표기(mock 이름·경로 이식 금지). 실데이터 주입은 FIX-39 문법 —
+              journey/spreadCount optional 입력 대기(ST2b 에서 get_share_journey 실값 주입). */}
+          {showJourney && (
             <div className="mt-3.5 border-t border-[#F0F0F0] pt-1">
               <button
                 type="button"
@@ -718,12 +721,15 @@ export function CardModelBody({
                   공유 여정 보기
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums"
-                    style={{ backgroundColor: `${accent}14`, color: accent }}
-                  >
-                    {spreadCount}명 확산
-                  </span>
+                  {/* FIX-46 — 확산 칩 = 실집계 주입 시만(미주입 = 숫자 없이 행만 · 부풀림 0). */}
+                  {model.spreadCount != null && (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums"
+                      style={{ backgroundColor: `${accent}14`, color: accent }}
+                    >
+                      {spreadCount}명 확산
+                    </span>
+                  )}
                   <ChevronDown
                     className="h-4 w-4 text-[#A3A3A3] transition-transform duration-300"
                     strokeWidth={2.5}
@@ -736,6 +742,12 @@ export function CardModelBody({
                 style={{ gridTemplateRows: journeyOpen ? "1fr" : "0fr" }}
               >
                 <div className="overflow-hidden">
+                  {/* FIX-46 — 여정 미주입 = 빈 상태 정직 표기(가짜 명단 0). */}
+                  {journey.length === 0 && (
+                    <p className="mt-1 rounded-xl bg-[#F7F7F8] px-3 py-2.5 text-center text-[12px] font-medium text-[#8A8A8A] [word-break:keep-all]">
+                      발행 후 공유가 시작되면 여기서 볼 수 있어요
+                    </p>
+                  )}
                   <div className="mt-1 space-y-1 px-0.5 pb-0.5">
                     {journey.map((node, i) => {
                       const isLast = i === journey.length - 1;
@@ -800,31 +812,39 @@ export function CardModelBody({
                       );
                     })}
                   </div>
-                  <div
-                    className="relative mt-2 overflow-hidden rounded-xl px-3 py-3"
-                    style={{ backgroundColor: "#0F172A" }}
-                  >
-                    {/* 선명한 상단 액센트 라인 (번짐 없음) */}
-                    <span
-                      className="pointer-events-none absolute inset-x-0 top-0 h-0.5"
-                      style={{ backgroundColor: accent }}
-                    />
-                    <p className="relative flex items-center gap-1.5 text-[11px] font-semibold text-white/65">
-                      <TrendingUp className="h-3.5 w-3.5 flex-none" strokeWidth={2.5} style={{ color: accent }} />
-                      지금까지 퍼진 사람
-                    </p>
-                    <p className="relative mt-1 text-[22px] font-extrabold leading-none tabular-nums text-white">
-                      {spreadCount}
-                      <span className="ml-1 text-[13px] font-semibold text-white/70">명</span>
-                    </p>
-                    <p className="relative mt-2 border-t border-white/10 pt-2 text-[11px] font-medium leading-snug text-white/75">
-                      내가 이어준 카드가 <b className="font-bold text-white">{spreadCount}명</b>에게 닿았어요
-                    </p>
-                    <p className="relative mt-1.5 flex items-start gap-1.5 text-[10px] leading-relaxed text-white/45">
-                      <Lock className="mt-0.5 h-3 w-3 flex-none" strokeWidth={2} />
-                      타인 익명 · 구매·수령은 익명 유지 · 기여도만 집계(모집 없음)
-                    </p>
-                  </div>
+                  {/* FIX-46 — 확산 통계 박스도 실집계 주입 시만(미주입 = 빈 상태 문구가 대신). */}
+                  {model.spreadCount != null && (
+                    <div
+                      className="relative mt-2 overflow-hidden rounded-xl px-3 py-3"
+                      style={{ backgroundColor: "#0F172A" }}
+                    >
+                      {/* 선명한 상단 액센트 라인 (번짐 없음) */}
+                      <span
+                        className="pointer-events-none absolute inset-x-0 top-0 h-0.5"
+                        style={{ backgroundColor: accent }}
+                      />
+                      <p className="relative flex items-center gap-1.5 text-[11px] font-semibold text-white/65">
+                        <TrendingUp
+                          className="h-3.5 w-3.5 flex-none"
+                          strokeWidth={2.5}
+                          style={{ color: accent }}
+                        />
+                        지금까지 퍼진 사람
+                      </p>
+                      <p className="relative mt-1 text-[22px] font-extrabold leading-none tabular-nums text-white">
+                        {spreadCount}
+                        <span className="ml-1 text-[13px] font-semibold text-white/70">명</span>
+                      </p>
+                      <p className="relative mt-2 border-t border-white/10 pt-2 text-[11px] font-medium leading-snug text-white/75">
+                        내가 이어준 카드가 <b className="font-bold text-white">{spreadCount}명</b>에게
+                        닿았어요
+                      </p>
+                      <p className="relative mt-1.5 flex items-start gap-1.5 text-[10px] leading-relaxed text-white/45">
+                        <Lock className="mt-0.5 h-3 w-3 flex-none" strokeWidth={2} />
+                        타인 익명 · 구매·수령은 익명 유지 · 기여도만 집계(모집 없음)
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
