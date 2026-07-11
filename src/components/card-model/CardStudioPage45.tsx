@@ -252,15 +252,15 @@ const SL_KEYFRAMES = `
 .sl-slide-up { animation: sl-slide-up 0.3s ease-out both; }
 @keyframes sl-pop { 0% { transform: scale(0.4); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
 .sl-pop { animation: sl-pop 0.25s ease-out both; }
-@property --sl-led-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-@keyframes sl-led-spin { to { --sl-led-angle: 360deg; } }
-.sl-led { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; padding: 2px;
-  background: conic-gradient(from var(--sl-led-angle), transparent 0deg 280deg, rgba(255,233,196,0.18) 300deg, rgba(255,233,196,0.65) 332deg, rgba(255,255,255,0.95) 352deg, transparent 360deg);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  animation: sl-led-spin 2s linear infinite; }
+/* FIX-14 폴백 재구현 — @property/mask 불요, 전 브라우저 동작:
+   프레임(inset -2px, overflow hidden) 안에서 conic-gradient 정사각 레이어를 transform
+   rotate(2초/바퀴)로 돌리고, 안쪽을 흰 덮개로 가려 테두리 띠만 보이게. */
+@keyframes sl-led-rotate { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+.sl-led-frame { position: absolute; inset: -2px; border-radius: inherit; overflow: hidden; pointer-events: none; }
+.sl-led-spin { position: absolute; left: 50%; top: 50%; width: 1200px; height: 1200px;
+  background: conic-gradient(transparent 0deg 295deg, rgba(255,233,196,0.20) 312deg, rgba(255,233,196,0.70) 340deg, rgba(255,255,255,0.95) 354deg, transparent 360deg);
+  animation: sl-led-rotate 2s linear infinite; }
+.sl-led-cover { position: absolute; inset: 2px; border-radius: inherit; background: #FFFFFF; }
 `;
 
 type ProductCopy45 = { headline: string; sellingPoints: string[] };
@@ -421,6 +421,10 @@ export function CardStudioPage45({
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // FIX-6 — 발행 후 카톡 전송 진행 상태(studio-build sending 동형).
   const [sending, setSending] = useState(false);
+  // FIX-14 — 상품 폼(45) 내부 비동기(등록/사진/AI카피)를 스트립 busy 에 결합(원인① 수정).
+  const [formBusy, setFormBusy] = useState<string | null>(null);
+  // FIX-15 — 상품 구성 메타(unit_label) → 미리보기 칩(미주입=미렌더).
+  const [productUnitLabel, setProductUnitLabel] = useState<string | null>(null);
   const [lastEquipped, setLastEquipped] = useState<string | null>(null);
   const deckRef = useRef<HTMLElement>(null);
   const FAB_SIZE = 56;
@@ -556,13 +560,15 @@ export function CardStudioPage45({
     ? "카드를 발행하는 중…"
     : sending
       ? "카톡으로 전송하는 중…"
-      : heroUploading
-        ? "사진을 올리는 중…"
-        : aiLoading
-          ? "AI가 영상 요약을 읽는 중…"
-          : videoSearching
-            ? "영상을 찾는 중…"
-            : null;
+      : formBusy // FIX-14 — 상품 폼 내부 비동기(등록·사진·AI카피) 결합.
+        ? formBusy
+        : heroUploading
+          ? "사진을 올리는 중…"
+          : aiLoading
+            ? "AI가 영상 요약을 읽는 중…"
+            : videoSearching
+              ? "영상을 찾는 중…"
+              : null;
 
   // FIX-11 — LED 러닝 라이트: 실작업 중에만 점등, 완료 시 한 바퀴(2초) 마무리 후 정지.
   const [ledFinish, setLedFinish] = useState(false);
@@ -987,6 +993,9 @@ export function CardStudioPage45({
       ]);
     }
     setApplied((p) => ({ ...p, product: true }));
+    // FIX-15 — 구성 메타(unit_label) 미러 → 미리보기 상품 메타 칩("구성: 1박스 · 20개입").
+    const unitLabel = (payload.blocks?.[0]?.block_data as { unit_label?: unknown } | undefined)?.unit_label;
+    setProductUnitLabel(typeof unitLabel === "string" && unitLabel ? `구성: ${unitLabel}` : null);
     flashStrip("완료! 상품이 카드에 반영됐어요"); // FIX-3 — 실등록 완료 시에만.
     return { shareUuid, shareUrl: json.shareable_url ?? `https://app.drop.how/d/${shareUuid}` };
   }
@@ -1261,6 +1270,8 @@ export function CardStudioPage45({
         ? { saleStart: DATE_OPTIONS[saleStartIdx], saleEnd: DATE_OPTIONS[saleEndIdx] }
         : {}),
       ...(applied["link"] ? { facilities: cfgFacilities.map((f) => f.text.trim()).filter(Boolean) } : {}),
+      // FIX-15 — 상품 구성 메타 칩(등록 폼 unit_label 미러, 미주입=미렌더).
+      ...(mode === "commerce" && productUnitLabel ? { productUnitLabel } : {}),
       // 여정·확산 — 정본 데모(SHARE_JOURNEY·12명) 제거: 실 여정은 수신 후 생기는 것. 미주입=미렌더.
     },
   );
@@ -2053,6 +2064,7 @@ export function CardStudioPage45({
                     accent={accent}
                     onSubmit={submitStudioProduct}
                     onImageChange={(url) => setProductImageUrl(url)}
+                    onBusyChange={setFormBusy}
                   />
                 )}
 
@@ -2886,8 +2898,15 @@ export function CardStudioPage45({
                   }`}
                   style={{ transform: `translate(${panelOffset.x}px, ${panelOffset.y}px)` }}
                 >
-                  {/* FIX-11 — LED 러닝 라이트(패널에도 동일, 실작업 중에만). */}
-                  {ledOn && <span className="sl-led" aria-hidden="true" />}
+                  {/* FIX-11/14 — LED 러닝 라이트(패널에도 동일, 실작업 중에만 — 폴백 구현).
+                      콘텐츠는 아래 relative 레이어 — 흰 덮개 위에 그려지도록(페인트 순서). */}
+                  {ledOn && (
+                    <span className="sl-led-frame" aria-hidden="true">
+                      <span className="sl-led-spin" />
+                      <span className="sl-led-cover" />
+                    </span>
+                  )}
+                  <div className="relative">
                   {/* 드래그 핸들 */}
                   <div
                     onPointerDown={onPanelPointerDown}
@@ -2994,6 +3013,7 @@ export function CardStudioPage45({
                       );
                     })}
                   </div>
+                  </div>
                 </div>
               </div>
             </>
@@ -3009,8 +3029,13 @@ export function CardStudioPage45({
               {/* FIX-8 — 불투명 흰 배경 + 상단 보더 + 단차 그림자(본문과 물리적 분리).
                   FIX-11 — LED 러닝 라이트(전구 웜화이트): 실작업 중에만 점등. */}
               <div className="relative border-t border-[#E5E5E5] bg-white shadow-[0_-12px_28px_-16px_rgba(15,23,42,0.35)]">
-                {ledOn && <span className="sl-led" aria-hidden="true" />}
-              <div className="mx-auto flex h-12 max-w-md items-center gap-2 pl-1.5 pr-1.5">
+                {ledOn && (
+                  <span className="sl-led-frame" aria-hidden="true">
+                    <span className="sl-led-spin" />
+                    <span className="sl-led-cover" />
+                  </span>
+                )}
+              <div className="relative mx-auto flex h-12 max-w-md items-center gap-2 pl-1.5 pr-1.5">
                 {/* 스트립 탭 = 풀 패널 확장 */}
                 <button
                   type="button"

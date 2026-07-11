@@ -35,7 +35,18 @@ import { resizeToJpegBlob } from "@/lib/image-upload";
  */
 
 export type ProductType45 = "fresh" | "processed" | "goods";
-export type SaleUnit45 = "unit" | "box" | "weight";
+// FIX-15 — 타사 등록 체계 기준 판매단위 확장: 가공품 = 낱개·팩·병·봉지·캔·박스·포대·세트 /
+//   공산품 = 낱개·세트·박스 / 신선 = 낱개·박스·무게(기존). sale_unit 키에 그대로 저장.
+export type SaleUnit45 =
+  | "unit"
+  | "pack"
+  | "bottle"
+  | "bag"
+  | "can"
+  | "box"
+  | "sack"
+  | "set"
+  | "weight";
 export type StorageType45 = "room" | "cold" | "frozen";
 
 export type ProductRegisterPayload45 = {
@@ -60,10 +71,54 @@ const TYPE_OPTIONS: { id: ProductType45; label: string }[] = [
   { id: "processed", label: "가공식품" },
   { id: "goods", label: "공산품·잡화" },
 ];
-const UNIT_OPTIONS: { id: SaleUnit45; label: string }[] = [
-  { id: "unit", label: "낱개로" },
-  { id: "box", label: "박스·묶음으로" },
-  { id: "weight", label: "무게 단위로" },
+// FIX-15 — 유형별 판매단위 세트.
+const UNIT_LABELS: Record<SaleUnit45, string> = {
+  unit: "낱개",
+  pack: "팩",
+  bottle: "병",
+  bag: "봉지",
+  can: "캔",
+  box: "박스",
+  sack: "포대",
+  set: "세트",
+  weight: "무게",
+};
+const UNIT_OPTIONS_BY_TYPE: Record<ProductType45, { id: SaleUnit45; label: string }[]> = {
+  fresh: [
+    { id: "unit", label: "낱개로" },
+    { id: "box", label: "박스·묶음으로" },
+    { id: "weight", label: "무게 단위로" },
+  ],
+  processed: [
+    { id: "unit", label: "낱개" },
+    { id: "pack", label: "팩" },
+    { id: "bottle", label: "병" },
+    { id: "bag", label: "봉지" },
+    { id: "can", label: "캔" },
+    { id: "box", label: "박스" },
+    { id: "sack", label: "포대" },
+    { id: "set", label: "세트" },
+  ],
+  goods: [
+    { id: "unit", label: "낱개" },
+    { id: "set", label: "세트" },
+    { id: "box", label: "박스" },
+  ],
+};
+// 묶음형 단위 — "1{단위} = N개 / N kg" 구성 입력 대상(신선 box 는 기존 boxCount UI 유지).
+const BUNDLE_UNITS = new Set<SaleUnit45>(["pack", "box", "sack", "set"]);
+// FIX-15 b) — 공산품 카테고리 프리셋 1뎁스("기타" 선택 시 직접입력 노출).
+const GOODS_CATEGORY_PRESETS = [
+  "생활용품",
+  "주방용품",
+  "캠핑·레저",
+  "굿즈·기념품",
+  "패션잡화",
+  "문구",
+  "반려용품",
+  "유아·완구",
+  "디지털 소품",
+  "기타",
 ];
 const STORAGE_OPTIONS: { id: StorageType45; label: string }[] = [
   { id: "room", label: "실온" },
@@ -155,11 +210,14 @@ export function ProductRegisterForm45({
   accent,
   onSubmit,
   onImageChange,
+  onBusyChange,
 }: {
   accent: string;
   onSubmit: (payload: ProductRegisterPayload45) => Promise<ProductRegisterResult45>;
   /** 사진 업로드 즉시 미러(제출 전 미리보기·발행 가드 충족 — 기존 임베드 계약 동일). */
   onImageChange?: (url: string) => void;
+  /** FIX-14 — 폼 내부 비동기(등록/사진/AI카피)를 호스트 스트립 busy 로 결합. null = 유휴. */
+  onBusyChange?: (busy: string | null) => void;
 }) {
   // ── 폼 상태 (정본 ProductForm 동형) ──
   const [name, setName] = useState("");
@@ -175,6 +233,11 @@ export function ProductRegisterForm45({
   const [boxCount, setBoxCount] = useState("");
   const [totalWeight, setTotalWeight] = useState("");
   const [weightUnknown, setWeightUnknown] = useState(false);
+  // FIX-15 — 묶음형 구성: "1{단위} = N개"(unitQty) 또는 "1{단위} = N kg"(unitWeight).
+  const [unitQty, setUnitQty] = useState("");
+  const [unitWeight, setUnitWeight] = useState("");
+  // FIX-15 b) — 공산품 카테고리 프리셋 선택값("기타"면 직접입력 itemCategory 사용).
+  const [goodsPreset, setGoodsPreset] = useState<string | null>(null);
   const [cost, setCost] = useState("");
   const [freeShip, setFreeShip] = useState(true);
   const [shipFee, setShipFee] = useState("");
@@ -221,13 +284,21 @@ export function ProductRegisterForm45({
   }, [type, kamisAll.length]);
 
   const copy = TYPE_COPY[type];
-  const unitOptions = copy.allowWeight ? UNIT_OPTIONS : UNIT_OPTIONS.filter((o) => o.id !== "weight");
+  const unitOptions = UNIT_OPTIONS_BY_TYPE[type];
   const profit = profitOf(price, cost);
   const priceNum = Number(onlyDigits(price)) || 0;
+  const isBundle = type !== "fresh" && BUNDLE_UNITS.has(saleUnit);
 
+  // FIX-15 c) — 유형 전환 시 해당 없는 단위·구성값 초기화(잔존 오염 방지).
   const selectType = (t: ProductType45) => {
     setType(t);
-    if (!TYPE_COPY[t].allowWeight && saleUnit === "weight") setSaleUnit("unit");
+    setSaleUnit("unit");
+    setBoxCount("");
+    setTotalWeight("");
+    setWeightUnknown(false);
+    setUnitQty("");
+    setUnitWeight("");
+    setGoodsPreset(null);
     if (t !== "fresh") setKamisItemCode(null);
   };
 
@@ -246,6 +317,7 @@ export function ProductRegisterForm45({
     const localUrl = URL.createObjectURL(file);
     setImagePreview(localUrl);
     setUploading(true);
+    onBusyChange?.("상품 사진을 올리는 중…"); // FIX-14 — 호스트 스트립 busy 결합.
     try {
       const supabase = getSupabase();
       const { data: sess } = await supabase.auth.getSession();
@@ -277,6 +349,7 @@ export function ProductRegisterForm45({
       setImagePreview(null);
     } finally {
       setUploading(false);
+      onBusyChange?.(null);
       URL.revokeObjectURL(localUrl);
     }
   }
@@ -289,6 +362,7 @@ export function ProductRegisterForm45({
       return;
     }
     setAiLoading(true);
+    onBusyChange?.("AI가 카피를 쓰는 중…"); // FIX-14 — 호스트 스트립 busy 결합.
     try {
       const res = await fetch("/api/generate-promo-copy", {
         method: "POST",
@@ -314,6 +388,7 @@ export function ProductRegisterForm45({
       toast.error("카피 생성 중 연결이 끊겼어요. 직접 입력해 주세요.");
     } finally {
       setAiLoading(false);
+      onBusyChange?.(null);
     }
   }
 
@@ -336,6 +411,22 @@ export function ProductRegisterForm45({
     const points = sellingPoints.map((s) => s.trim()).filter(Boolean).slice(0, 5);
     const qty = quantity && Number(quantity) >= 1 ? Math.floor(Number(quantity)) : null;
     const isFresh = type === "fresh";
+    // FIX-15 — 카테고리: 공산품은 프리셋(기타 = 직접입력) / 그 외 기존 itemCategory.
+    const categoryVal =
+      type === "goods"
+        ? goodsPreset && goodsPreset !== "기타"
+          ? goodsPreset
+          : itemCategory.trim()
+        : itemCategory.trim();
+    // FIX-15 — 묶음형 구성 라벨("1박스 · 20개입" / "1팩 · 1.5kg"). 미입력 = 미저장(미렌더).
+    const unitQtyNum = isBundle && unitQty && Number(unitQty) >= 1 ? Math.floor(Number(unitQty)) : null;
+    const unitWeightNum = isBundle && unitWeight && Number(unitWeight) > 0 ? Number(unitWeight) : null;
+    const unitLabel =
+      unitQtyNum != null
+        ? `1${UNIT_LABELS[saleUnit]} · ${unitQtyNum}개입`
+        : unitWeightNum != null
+          ? `1${UNIT_LABELS[saleUnit]} · ${unitWeightNum}kg`
+          : null;
     // 날짜 키 매핑 — fresh=harvest_date(기존 키) / processed=expiry_date / goods=ship_date(신규 키).
     const dateVal = harvestDate.trim() || null;
 
@@ -351,14 +442,20 @@ export function ProductRegisterForm45({
       price_band_enabled: false, // §0 시세 노출 영구 금지
       ...(isFresh && kamisItemCode ? { kamis_item_code: kamisItemCode } : {}),
       origin: origin.trim(),
-      ...(itemCategory.trim() ? { category: itemCategory.trim() } : {}),
+      ...(categoryVal ? { category: categoryVal } : {}),
       ...(rate != null ? { dropy_rate: rate } : {}),
       ...(fixed != null ? { dropy_fixed: fixed } : {}),
       // ── 45 신규 키 ──
       product_type: type,
       sale_unit: saleUnit,
-      ...(saleUnit === "box" && boxCount ? { box_count: Math.floor(Number(boxCount)) } : {}),
-      ...(saleUnit !== "unit" && !weightUnknown && totalWeight ? { total_weight_kg: Number(totalWeight) } : {}),
+      ...(isFresh && saleUnit === "box" && boxCount ? { box_count: Math.floor(Number(boxCount)) } : {}),
+      ...(isFresh && saleUnit !== "unit" && !weightUnknown && totalWeight
+        ? { total_weight_kg: Number(totalWeight) }
+        : {}),
+      // FIX-15 — 묶음형 구성(가공품·공산품): unit_qty / unit_weight_kg / unit_label(표시용 스냅샷).
+      ...(unitQtyNum != null ? { unit_qty: unitQtyNum } : {}),
+      ...(unitWeightNum != null ? { unit_weight_kg: unitWeightNum } : {}),
+      ...(unitLabel ? { unit_label: unitLabel } : {}),
       ...(type === "processed" ? { storage_method: storage } : {}),
       ...(type === "processed" && dateVal ? { expiry_date: dateVal } : {}),
       ...(type === "goods" && dateVal ? { ship_date: dateVal } : {}),
@@ -385,6 +482,7 @@ export function ProductRegisterForm45({
     };
 
     setSaving(true);
+    onBusyChange?.("상품을 등록하는 중…"); // FIX-14 — 호스트 스트립 busy 결합.
     try {
       const res = await onSubmit(payload);
       setSavedUuid(res.shareUuid);
@@ -394,6 +492,7 @@ export function ProductRegisterForm45({
       setFormError("상품 등록에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSaving(false);
+      onBusyChange?.(null);
     }
   }
 
@@ -452,7 +551,41 @@ export function ProductRegisterForm45({
         </Field>
       )}
 
-      {/* 분류 — fresh 는 KAMIS 실검색(기존 CAT-2 소스) */}
+      {/* FIX-15 b) — 공산품 카테고리: 프리셋 칩 1뎁스("기타" = 직접입력 노출). 저장 키 = category. */}
+      {type === "goods" && (
+        <Field label="카테고리" hint="선택">
+          <div className="flex flex-wrap gap-1.5">
+            {GOODS_CATEGORY_PRESETS.map((p) => {
+              const on = goodsPreset === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setGoodsPreset(on ? null : p)}
+                  className="rounded-full px-2.5 py-1.5 text-[12px] font-semibold transition-colors"
+                  style={on ? { backgroundColor: accent, color: "#fff" } : { backgroundColor: "#F4F4F5", color: "#525252" }}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+          {goodsPreset === "기타" && (
+            <input
+              value={itemCategory}
+              onChange={(e) => setItemCategory(e.target.value)}
+              placeholder="카테고리를 직접 입력하세요"
+              className={`mt-1.5 ${inputCls}`}
+              style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+              onFocus={focusRing}
+              onBlur={blurRing}
+            />
+          )}
+        </Field>
+      )}
+
+      {/* 분류 — fresh 는 KAMIS 실검색(기존 CAT-2 소스) / processed 식품 유형. goods 는 위 칩으로 대체. */}
+      {type !== "goods" && (
       <Field label={copy.categoryLabel} hint={copy.categoryHint}>
         <input
           value={itemCategory}
@@ -496,6 +629,7 @@ export function ProductRegisterForm45({
           <p className="mt-1 text-[10.5px] text-[#A3A3A3]">품목 이름을 입력하면 후보를 찾아드려요.</p>
         )}
       </Field>
+      )}
 
       <Field label={copy.originLabel} required hint="상품정보제공고시">
         <input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder={copy.originPh} className={inputCls} style={{ boxShadow: "inset 0 0 0 1px transparent" }} onFocus={focusRing} onBlur={blurRing} />
@@ -510,7 +644,31 @@ export function ProductRegisterForm45({
       {/* 판매 단위 */}
       <Field label="어떻게 판매하시겠어요?">
         <Segmented options={unitOptions} value={saleUnit} onSelect={setSaleUnit} />
-        {saleUnit === "box" && (
+        {/* FIX-15 — 묶음형(팩·박스·포대·세트, 가공품·공산품) 구성: 1{단위} = N개 또는 N kg. */}
+        {isBundle && (
+          <div className="mt-2 space-y-2 rounded-xl bg-[#F7F7F8] p-2.5">
+            <SubInput
+              label={`1${UNIT_LABELS[saleUnit]} 구성 — 개수`}
+              value={unitQty}
+              onChange={(v) => setUnitQty(onlyDigits(v))}
+              placeholder={`1${UNIT_LABELS[saleUnit]} = N개`}
+              suffix="개"
+              accent={accent}
+            />
+            <SubInput
+              label={`1${UNIT_LABELS[saleUnit]} 구성 — 무게(kg)`}
+              value={unitWeight}
+              onChange={(v) => setUnitWeight(v.replace(/[^0-9.]/g, ""))}
+              placeholder={`1${UNIT_LABELS[saleUnit]} = N kg`}
+              suffix="kg"
+              accent={accent}
+            />
+            <p className="text-[10.5px] font-medium text-[#A3A3A3]">
+              둘 중 하나만 적어도 돼요 — 카드에 "구성: 1{UNIT_LABELS[saleUnit]} · N개입"으로 보여요.
+            </p>
+          </div>
+        )}
+        {type === "fresh" && saleUnit === "box" && (
           <div className="mt-2 space-y-2 rounded-xl bg-[#F7F7F8] p-2.5">
             <SubInput label="한 박스 개수" value={boxCount} onChange={(v) => setBoxCount(onlyDigits(v))} placeholder="한 박스 N개" suffix="개" accent={accent} />
             {!weightUnknown && (
