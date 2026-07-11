@@ -463,6 +463,8 @@ export function CardStudioPage45({
   const [formBusy, setFormBusy] = useState<string | null>(null);
   // FIX-15 — 상품 구성 메타(unit_label) → 미리보기 칩(미주입=미렌더).
   const [productUnitLabel, setProductUnitLabel] = useState<string | null>(null);
+  // FIX-24 — 수확·발송 기간 스냅샷(date_range_label) 미러 — 동일 패턴.
+  const [productDateRangeLabel, setProductDateRangeLabel] = useState<string | null>(null);
   const [lastEquipped, setLastEquipped] = useState<string | null>(null);
   const deckRef = useRef<HTMLElement>(null);
   const FAB_SIZE = 56;
@@ -1107,6 +1109,9 @@ export function CardStudioPage45({
     // FIX-15 — 구성 메타(unit_label) 미러 → 미리보기 상품 메타 칩("구성: 1박스 · 20개입").
     const unitLabel = (payload.blocks?.[0]?.block_data as { unit_label?: unknown } | undefined)?.unit_label;
     setProductUnitLabel(typeof unitLabel === "string" && unitLabel ? `구성: ${unitLabel}` : null);
+    // FIX-24 — 수확·발송 기간 스냅샷(date_range_label) 미러 → 미리보기 칩(단일일 = null = 미렌더).
+    const rangeLabel = (payload.blocks?.[0]?.block_data as { date_range_label?: unknown } | undefined)?.date_range_label;
+    setProductDateRangeLabel(typeof rangeLabel === "string" && rangeLabel ? rangeLabel : null);
     flashStrip("완료! 상품이 카드에 반영됐어요"); // FIX-3 — 실등록 완료 시에만.
     return { shareUuid, shareUrl: json.shareable_url ?? `https://app.drop.how/d/${shareUuid}` };
   }
@@ -1383,6 +1388,8 @@ export function CardStudioPage45({
       ...(applied["link"] ? { facilities: cfgFacilities.map((f) => f.text.trim()).filter(Boolean) } : {}),
       // FIX-15 — 상품 구성 메타 칩(등록 폼 unit_label 미러, 미주입=미렌더).
       ...(mode === "commerce" && productUnitLabel ? { productUnitLabel } : {}),
+      // FIX-24 — 수확·발송 기간 칩(date_range_label 미러, 단일일=미주입=미렌더).
+      ...(mode === "commerce" && productDateRangeLabel ? { productDateRangeLabel } : {}),
       // 여정·확산 — 정본 데모(SHARE_JOURNEY·12명) 제거: 실 여정은 수신 후 생기는 것. 미주입=미렌더.
     },
   );

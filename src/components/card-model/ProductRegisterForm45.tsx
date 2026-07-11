@@ -224,6 +224,9 @@ export function ProductRegisterForm45({
   const [price, setPrice] = useState("");
   const [type, setType] = useState<ProductType45>("fresh");
   const [harvestDate, setHarvestDate] = useState("");
+  // FIX-24 — 수확·발송 예정일 기간화(순차배송): 종료일. fresh/goods 만 사용,
+  //   시작일과 같으면 단일일 취급(_end 미저장). processed(소비기한)는 단일 유지.
+  const [harvestDateEnd, setHarvestDateEnd] = useState("");
   const [itemCategory, setItemCategory] = useState("");
   const [origin, setOrigin] = useState("");
   const [storage, setStorage] = useState<StorageType45>("room");
@@ -300,6 +303,7 @@ export function ProductRegisterForm45({
     setUnitWeight("");
     setGoodsPreset(null);
     if (t !== "fresh") setKamisItemCode(null);
+    if (t === "processed") setHarvestDateEnd(""); // FIX-24 — 소비기한은 단일(범위 잔존 방지).
   };
 
   // KAMIS 후보 — 입력 부분일치 상위 6(확정은 탭만 — 정확 item_code).
@@ -429,6 +433,19 @@ export function ProductRegisterForm45({
           : null;
     // 날짜 키 매핑 — fresh=harvest_date(기존 키) / processed=expiry_date / goods=ship_date(신규 키).
     const dateVal = harvestDate.trim() || null;
+    // FIX-24 — 기간(순차배송): 종료일. 시작일과 같거나 processed 면 단일(_end 미저장).
+    //   ISO(yyyy-mm-dd) 문자열이라 사전순 비교 = 날짜 비교.
+    const dateEndRaw = type !== "processed" ? harvestDateEnd.trim() : "";
+    if (dateVal && dateEndRaw && dateEndRaw < dateVal) {
+      return setFormError("종료일은 시작일보다 빠를 수 없어요.");
+    }
+    const dateEndVal = dateVal && dateEndRaw && dateEndRaw > dateVal ? dateEndRaw : null;
+    // 표시 스냅샷(unit_label 방식) — 빌더에서 문자열 확정(거울 철학). 예: "7/15~7/22 순차 발송".
+    const md = (iso: string) => {
+      const [, m, d] = iso.split("-");
+      return `${Number(m)}/${Number(d)}`;
+    };
+    const dateRangeLabel = dateVal && dateEndVal ? `${md(dateVal)}~${md(dateEndVal)} 순차 발송` : null;
 
     // block_data — 기존 키 정합 + 45 신규 키(같은 jsonb 에 추가 저장, 렌더는 미주입=미렌더).
     const blockData: Record<string, unknown> = {
@@ -459,6 +476,10 @@ export function ProductRegisterForm45({
       ...(type === "processed" ? { storage_method: storage } : {}),
       ...(type === "processed" && dateVal ? { expiry_date: dateVal } : {}),
       ...(type === "goods" && dateVal ? { ship_date: dateVal } : {}),
+      // FIX-24 — 기간 종료일(미주입 = 단일일 — 하위호환: 시작일 키는 위 기존 키 그대로).
+      ...(isFresh && dateEndVal ? { harvest_date_end: dateEndVal } : {}),
+      ...(type === "goods" && dateEndVal ? { ship_date_end: dateEndVal } : {}),
+      ...(dateRangeLabel ? { date_range_label: dateRangeLabel } : {}),
       ...(type === "goods" ? { made_in: origin.trim() } : {}),
       ...(type === "goods" && brand.trim() ? { brand: brand.trim() } : {}),
       ...(type === "goods" && spec.trim() ? { spec: spec.trim() } : {}),
@@ -536,7 +557,49 @@ export function ProductRegisterForm45({
       </Field>
 
       <Field label={copy.dateLabel} hint={copy.dateHint}>
-        <input type="date" value={harvestDate} onChange={(e) => setHarvestDate(e.target.value)} className={inputCls} style={{ boxShadow: "inset 0 0 0 1px transparent" }} onFocus={focusRing} onBlur={blurRing} />
+        {type === "processed" ? (
+          // 소비기한 — 기한은 하나(단일 유지).
+          <input type="date" value={harvestDate} onChange={(e) => setHarvestDate(e.target.value)} className={inputCls} style={{ boxShadow: "inset 0 0 0 1px transparent" }} onFocus={focusRing} onBlur={blurRing} />
+        ) : (
+          // FIX-24 — 예약판매 농산물·수제품은 "수확(준비) 후 순차배송"이 본질 — 기간이 기본.
+          //   시작일 선택 시 종료일 자동 = 시작일(단일), 종료는 min 으로 뒤로만 확장.
+          <>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={harvestDate}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setHarvestDate(v);
+                  if (!v) setHarvestDateEnd("");
+                  else if (!harvestDateEnd || harvestDateEnd < v) setHarvestDateEnd(v);
+                }}
+                className={inputCls}
+                style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+                onFocus={focusRing}
+                onBlur={blurRing}
+              />
+              <span className="shrink-0 text-[13px] font-bold text-[#A3A3A3]">~</span>
+              <input
+                type="date"
+                value={harvestDateEnd}
+                min={harvestDate || undefined}
+                onChange={(e) => setHarvestDateEnd(e.target.value)}
+                className={inputCls}
+                style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+                onFocus={focusRing}
+                onBlur={blurRing}
+              />
+            </div>
+            {!!harvestDate && !!harvestDateEnd && harvestDateEnd > harvestDate && (
+              <p className="mt-1.5 text-[11px] font-medium text-[#8A8A8A]">
+                {type === "fresh"
+                  ? "이 기간 동안 수확 순서대로 순차 발송돼요"
+                  : "이 기간 동안 준비되는 순서대로 순차 발송돼요"}
+              </p>
+            )}
+          </>
+        )}
       </Field>
 
       {type === "processed" && (

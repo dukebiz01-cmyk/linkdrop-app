@@ -330,7 +330,7 @@ export function CardModelBody({
           {applied["product"] && (
             <div className="cm-slide-up mt-4">
               {/* 유형 · 원산지 · 판매 단위 메타 */}
-              {(model.productType || model.productOrigin || model.productUnitLabel) && (
+              {(model.productType || model.productOrigin || model.productUnitLabel || model.productDateRangeLabel) && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {model.productType && (
                     <span className="rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-bold text-[#525252]">
@@ -340,6 +340,12 @@ export function CardModelBody({
                   {model.productUnitLabel && (
                     <span className="rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-bold text-[#525252]">
                       {model.productUnitLabel}
+                    </span>
+                  )}
+                  {/* FIX-24 — 수확·발송 기간(순차배송) 칩. 단일일 = 미주입 = 미렌더(기존 유지). */}
+                  {model.productDateRangeLabel && (
+                    <span className="rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-bold text-[#525252]">
+                      수확·발송 {model.productDateRangeLabel}
                     </span>
                   )}
                   {model.productOrigin && (

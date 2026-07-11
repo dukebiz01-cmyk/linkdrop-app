@@ -74,6 +74,9 @@ export type CardModel = {
   productType?: string;
   productOrigin?: string;
   productUnitLabel?: string;
+  /** FIX-24 — 수확·발송 기간 스냅샷(예: "7/15~7/22 순차 발송") ← block_data.date_range_label.
+   *  단일일이면 미주입 = 미렌더(기존 형식 유지). */
+  productDateRangeLabel?: string;
   /** 한정 수량 라벨(숫자 문자열) ← stockLimit/remaining_stock. */
   productQty?: string;
   /** 셀링포인트 ← selling_points/ai_key_points. */
