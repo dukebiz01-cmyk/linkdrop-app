@@ -1,6 +1,6 @@
 // lingo-chat — 링고 대화 엔진 v1 (T2). Claude Sonnet 4.6, SSE 스트리밍.
 //
-// POST { session_id?, message(≤2000자), context?, input_channel:'text' }
+// POST { session_id?, message(≤2000자), context?, input_channel:'text'|'voice' }
 // → SSE: event meta {session_id, stage} → event delta {text}* → event done {message_id, tokens_used, cost_krw}
 //   실패 시 event error {code, friendly}. quota 초과·검증 실패는 스트림 대신 JSON.
 //
@@ -259,11 +259,12 @@ Deno.serve(async (req) => {
       );
     }
   }
-  // v1 은 text 만 허용(voice 확장 자리 — 필드는 유지).
+  // T-B0 — text | voice 허용(음성 반이중 v1 개방). 그 외 값은 기존대로 400.
+  //   voice 도 클라이언트 전사 텍스트가 오므로 이후 경로는 동일 — 값은 세션/메시지 meta 에 기록.
   const inputChannel = body.input_channel ?? "text";
-  if (!isClose && inputChannel !== "text") {
+  if (!isClose && inputChannel !== "text" && inputChannel !== "voice") {
     return jsonResponse(
-      { code: "channel_not_supported", friendly: "지금은 글로만 대화할 수 있어요." },
+      { code: "channel_not_supported", friendly: "지금은 글이나 음성으로만 대화할 수 있어요." },
       400,
     );
   }

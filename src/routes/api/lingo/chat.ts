@@ -5,7 +5,7 @@
 // (세션 확인·JWT 승계 = generate-summary.ts 패턴. 단 invokeEdge 는 res.json() 통짜라
 //  스트림에 못 쓰므로 fetch 직결 — env 해석은 edge-invoke.server.ts 와 동일 승계.)
 //
-// 입력:  { session_id?, message(필수·2000자 이하), context?, input_channel:'text' }
+// 입력:  { session_id?, message(필수·2000자 이하), context?, input_channel:'text'|'voice' }
 // 출력:  Edge 응답이 text/event-stream 이면 body 스트림 그대로(웹표준 ReadableStream,
 //        Cloudflare Workers 호환 — Node 스트림 API 미사용). JSON(quota 429 등)이면
 //        상태코드·본문 그대로. 네트워크 실패는 502 friendly JSON(예외 던지지 않음).
@@ -68,9 +68,14 @@ export const Route = createFileRoute("/api/lingo/chat")({
               400,
             );
           }
-          if (body.input_channel !== undefined && body.input_channel !== "text") {
+          // T-B0 — text | voice 허용(음성 반이중 v1 개방). 그 외 값은 기존대로 400.
+          if (
+            body.input_channel !== undefined &&
+            body.input_channel !== "text" &&
+            body.input_channel !== "voice"
+          ) {
             return jsonResponse(
-              { code: "channel_not_supported", friendly: "지금은 글로만 대화할 수 있어요." },
+              { code: "channel_not_supported", friendly: "지금은 글이나 음성으로만 대화할 수 있어요." },
               400,
             );
           }

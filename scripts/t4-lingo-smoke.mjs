@@ -69,8 +69,8 @@ if (!session) {
 }
 const token = session.access_token; // 출력 금지
 
-// ── lingo-chat 1회 호출 (sessionId 미전송 = 새 세션 / 전송 = 같은 세션 이어가기) → SSE 파싱 ──
-async function runChat(message, sessionId = null) {
+// ── lingo-chat 1회 호출 (sessionId 미전송 = 새 세션 / context 전송 = T-A 액션 모드) → SSE 파싱 ──
+async function runChat(message, sessionId = null, context = null) {
   const res = await fetch(`${url}/functions/v1/lingo-chat`, {
     method: "POST",
     headers: {
@@ -82,6 +82,7 @@ async function runChat(message, sessionId = null) {
       message,
       input_channel: "text",
       ...(sessionId ? { session_id: sessionId } : {}),
+      ...(context ? { context } : {}),
     }),
   });
 
@@ -90,6 +91,7 @@ async function runChat(message, sessionId = null) {
     stage: null,
     sessionId: null, // meta 프레임의 session_id — close 모드가 같은 세션 이어가기에 사용.
     answer: "",
+    actions: null, // T-A — event: actions 의 data 원문({actions, steps}).
     done: null,
     error: null,
     nonSse: null,
@@ -118,6 +120,7 @@ async function runChat(message, sessionId = null) {
       result.sessionId = data.session_id ?? null;
     }
     else if (event === "delta") result.answer += data.text ?? "";
+    else if (event === "actions") result.actions = data;
     else if (event === "done") result.done = data;
     else if (event === "error") result.error = data;
   };
@@ -146,7 +149,50 @@ function printResult(r) {
 }
 
 const mode =
-  process.argv[2] === "multi" ? "multi" : process.argv[2] === "close" ? "close" : "single";
+  process.argv[2] === "multi"
+    ? "multi"
+    : process.argv[2] === "close"
+      ? "close"
+      : process.argv[2] === "actions"
+        ? "actions"
+        : "single";
+
+if (mode === "actions") {
+  // ── T-A 실측 — context.studio 포함 발사, event: actions 원문 출력(판정 없음) ──
+  const STUDIO = {
+    mode: "commerce",
+    deck: [
+      { id: "content", label: "콘텐츠", applied: false, locked: false },
+      { id: "product", label: "상품", applied: false, locked: false },
+      { id: "shipping", label: "배송 안내", applied: false, locked: false },
+      { id: "coupon", label: "쿠폰", applied: false, locked: true },
+    ],
+    fields: { title: "", productName: "", productPrice: "" },
+  };
+  const SHOTS = [
+    "우리 농장 사과 5kg 팔고 싶어, 무료배송으로",
+    "쿠폰도 넣어줘",
+    // 3발 — 값이 갖춰진 요청(이름+가격): 액션 방출 경로 실측용.
+    "괴산 사과 5kg 35,000원에 팔래, 상품 블록에 넣어줘",
+  ];
+  for (let i = 0; i < SHOTS.length; i++) {
+    console.log(`\n════ [${i + 1}/${SHOTS.length}] "${SHOTS[i]}" (새 세션 · studio 포함) ════`);
+    const r = await runChat(SHOTS[i], null, { studio: STUDIO });
+    console.log(`[http] status=${r.status} stage=${r.stage ?? "-"}`);
+    if (r.nonSse) console.log("[non-sse body]", r.nonSse);
+    console.log(`[event: actions] ${r.actions ? "수신" : "미수신"}`);
+    if (r.actions) console.log(JSON.stringify(r.actions, null, 2));
+    console.log("[answer 전문]");
+    console.log(r.answer || "(빈 응답)");
+    if (r.done) {
+      console.log(`[done] tokens_used=${r.done.tokens_used} cost_krw=${r.done.cost_krw}`);
+    }
+    if (r.error) console.log(`[error 전문] ${JSON.stringify(r.error)}`);
+  }
+  await client.auth.signOut();
+  console.log(`\n[secure] 토큰·키·비밀번호 미출력 확인 (계정: ${usedLabel})`);
+  process.exit(0);
+}
 
 if (mode === "close") {
   // ── T2.5 실측 — 2턴 대화 → close(장기기억 추출) → lingo_user_facts RLS 조회 ──
