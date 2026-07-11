@@ -252,15 +252,21 @@ const SL_KEYFRAMES = `
 .sl-slide-up { animation: sl-slide-up 0.3s ease-out both; }
 @keyframes sl-pop { 0% { transform: scale(0.4); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
 .sl-pop { animation: sl-pop 0.25s ease-out both; }
-/* FIX-14 폴백 재구현 — @property/mask 불요, 전 브라우저 동작:
-   프레임(inset -2px, overflow hidden) 안에서 conic-gradient 정사각 레이어를 transform
-   rotate(2초/바퀴)로 돌리고, 안쪽을 흰 덮개로 가려 테두리 띠만 보이게. */
-@keyframes sl-led-rotate { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-.sl-led-frame { position: absolute; inset: -2px; border-radius: inherit; overflow: hidden; pointer-events: none; }
-.sl-led-spin { position: absolute; left: 50%; top: 50%; width: 1200px; height: 1200px;
-  background: conic-gradient(transparent 0deg 295deg, rgba(255,233,196,0.20) 312deg, rgba(255,233,196,0.70) 340deg, rgba(255,255,255,0.95) 354deg, transparent 360deg);
+/* FIX-17 — LED 러닝라이트 재구현(2차). 미점등 원인(렌더): 기존 구조는 링 밴드가 캡슐
+   border-box "바깥" 2px 후광이었고(frame inset -2px + cover inset 2px = 밴드 전체가 박스 밖),
+   색도 크림~흰색(최대 white 0.95)이라 #FAFAFA 페이지 위에서 식별 불가. 게다가 radius 가
+   border-radius: inherit 로 rounded-full(calc(infinity*1px)) 계산값에 의존해 취약.
+   → 밴드를 캡슐 "안쪽" 2px(테두리 자리)로 이동 + radius 명시 + 고대비 앰버(흰 캡슐 위 상시 가시).
+   구조 단순화: span 1개 — ::before 정사각 conic 회전(순수 rotate), ::after 흰 덮개(inset 2px). */
+@keyframes sl-led-rotate { to { transform: rotate(360deg); } }
+.sl-led-ring { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.sl-led-ring::before { content: ""; position: absolute; left: 50%; top: 50%; width: 800px; height: 800px; margin: -400px 0 0 -400px;
+  background: conic-gradient(transparent 0deg 290deg, rgba(255,138,0,0.25) 308deg, rgba(255,138,0,0.9) 338deg, #FFC46B 352deg, #FFF3E0 358deg, transparent 360deg);
   animation: sl-led-rotate 2s linear infinite; }
-.sl-led-cover { position: absolute; inset: 2px; border-radius: inherit; background: #FFFFFF; }
+.sl-led-ring::after { content: ""; position: absolute; inset: 2px; background: #FFFFFF; }
+.sl-led-ring--pill, .sl-led-ring--pill::after { border-radius: 9999px; }
+.sl-led-ring--panel { border-radius: 24px; } /* rounded-3xl 실측값 — inherit 미사용 */
+.sl-led-ring--panel::after { border-radius: 22px; }
 `;
 
 type ProductCopy45 = { headline: string; sellingPoints: string[] };
@@ -293,6 +299,7 @@ export function CardStudioPage45({
   coupons,
   dockCount = 0,
   initialPurpose,
+  ledDebug = false,
 }: {
   isBusiness: boolean;
   store: StudioLabStore | null;
@@ -301,6 +308,8 @@ export function CardStudioPage45({
   dockCount?: number;
   /** ?purpose 진입 프리셋 — studio-build validateSearch 와 동등(정보|쿠폰|예약|구매). */
   initialPurpose?: "정보" | "쿠폰" | "예약" | "구매";
+  /** FIX-17 a) 디버그 스위치(?led=1) — LED 상시 점등(배선/렌더 분리 진단). ST2b 때 제거. */
+  ledDebug?: boolean;
 }) {
   const router = useRouter();
   // 목적 진입 쿼리 → 초기 모드 (studio-build 프리셋 시맨틱 동등: 초기값만, switchMode 미호출).
@@ -586,7 +595,12 @@ export function CardStudioPage45({
       return () => clearTimeout(t);
     }
   }, [stripBusy]);
-  const ledOn = !!stripBusy || ledFinish;
+  // FIX-17 a) — ?led=1 이면 상시 점등(렌더 확인용). b) 렌더는 sl-led-ring 참고. ST2b 때 제거.
+  const ledOn = ledDebug || !!stripBusy || ledFinish;
+  // FIX-17 c) 배선 점검 — 개발 전용: 등록·업로드·AI·발행 때 busy 가 실제 true 가 되는지 확인.
+  useEffect(() => {
+    if (import.meta.env.DEV) console.debug("[studio-lab] stripBusy →", stripBusy ?? "(idle)");
+  }, [stripBusy]);
 
   // FIX-9 — 링고 능동 제안(규칙 기반, LLM 아님): 미장착·비게이트·비유료 중 전환력 기여
   //   최대 1개. 거절 시 세션 쿨다운(재노출 금지). 전송 준비 완료 시 제안 대신 수렴 문구.
@@ -1496,29 +1510,8 @@ export function CardStudioPage45({
             레버 {appliedCount}개 장착 · 강화는 {ENHANCE_UNLOCK}점부터 열려요
           </p>
         </section>
-
-        {/* 링고AI 코칭 (탭하면 어시스턴트 열림) — 정적 규칙 기반 */}
-        <button
-          type="button"
-          onClick={() => setLingoView("panel")}
-          className="sl-fade-in mt-3 flex w-full items-start gap-3 rounded-2xl bg-white p-4 text-left transition-transform duration-150 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)] active:scale-[0.99]"
-        >
-          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
-            <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2.25} />
-            <Sparkles className="absolute -right-0.5 -top-0.5 h-[11px] w-[11px]" strokeWidth={2.5} fill="currentColor" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[13px] font-bold text-[#0A0A0A]">링고AI</span>
-              <span className="rounded-full border border-[#E5E5E5] px-1.5 py-0.5 text-[9px] font-bold text-[#737373]">전환 코칭</span>
-            </div>
-            <p className="mt-1 text-[13px] leading-relaxed text-[#525252]">{lingo.text}</p>
-          </div>
-          <span className="mt-0.5 flex shrink-0 items-center gap-0.5 rounded-full bg-[#F4F4F5] px-2 py-1 text-[11px] font-bold text-[#525252]">
-            도움받기
-            <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
-          </span>
-        </button>
+        {/* FIX-18 — 본문 링고 코칭 카드 폐지: 티칭(lingo.text)·패널 진입은 플로팅 캡슐이
+            단일 창구(캡슐 한줄 안내 + 탭=패널). 정보 소실 0 — 표면만 이동. */}
       </div>
 
       {/* 강화 카드 덱 (스와이프 → 탭 장착) */}
@@ -2918,14 +2911,9 @@ export function CardStudioPage45({
                   }`}
                   style={{ transform: `translate(${panelOffset.x}px, ${panelOffset.y}px)` }}
                 >
-                  {/* FIX-11/14 — LED 러닝 라이트(패널에도 동일, 실작업 중에만 — 폴백 구현).
+                  {/* FIX-17 — LED 러닝 라이트(패널 동일, 안쪽 밴드·명시 radius 재구현).
                       콘텐츠는 아래 relative 레이어 — 흰 덮개 위에 그려지도록(페인트 순서). */}
-                  {ledOn && (
-                    <span className="sl-led-frame" aria-hidden="true">
-                      <span className="sl-led-spin" />
-                      <span className="sl-led-cover" />
-                    </span>
-                  )}
+                  {ledOn && <span className="sl-led-ring sl-led-ring--panel" aria-hidden="true" />}
                   <div className="relative">
                   {/* 드래그 핸들 */}
                   <div
@@ -3094,12 +3082,7 @@ export function CardStudioPage45({
               }`}
               style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
             >
-              {ledOn && (
-                <span className="sl-led-frame" aria-hidden="true">
-                  <span className="sl-led-spin" />
-                  <span className="sl-led-cover" />
-                </span>
-              )}
+              {ledOn && <span className="sl-led-ring sl-led-ring--pill" aria-hidden="true" />}
               <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
                 {stripBusy ? (
                   <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
@@ -3112,10 +3095,14 @@ export function CardStudioPage45({
               </span>
               <span className="relative min-w-0 flex-1">
                 <span className="block truncate text-[11px] font-semibold leading-tight text-[#0A0A0A]">
+                  {/* FIX-18 — 본문 코칭 카드 흡수: 제안 블록이 코칭 대상과 같으면 티칭 문장을
+                      그대로 노출(단계 진입 시 lingo 재계산 → 캡슐 안내가 해당 단계 티칭으로 갱신). */}
                   {stripBusy ??
                     stripFlash ??
                     (showSuggest && suggestion
-                      ? `${suggestion.label} +${suggestion.power}점`
+                      ? suggestion.id === lingo.action
+                        ? lingo.text
+                        : `${suggestion.label} +${suggestion.power}점`
                       : dropped
                         ? "전송 완료!"
                         : readyToSend

@@ -32,11 +32,15 @@ type StudioLabLoaderData = {
 export const Route = createFileRoute("/_user/studio-lab")({
   head: () => ({ meta: [{ title: "카드 스튜디오 랩 — LinkDrop" }] }),
   // 목적 진입 쿼리 — studio-build validateSearch 동등(?purpose=정보|쿠폰|예약|구매).
+  // FIX-17 a) ?led=1 — LED 러닝라이트 상시 점등(배선/렌더 분리 진단용 검수 스위치. ST2b 때 제거).
   validateSearch: (
     search: Record<string, unknown>,
-  ): { purpose?: "정보" | "쿠폰" | "예약" | "구매" } => {
+  ): { purpose?: "정보" | "쿠폰" | "예약" | "구매"; led?: 1 } => {
     const p = search.purpose;
-    return p === "정보" || p === "쿠폰" || p === "예약" || p === "구매" ? { purpose: p } : {};
+    const out: { purpose?: "정보" | "쿠폰" | "예약" | "구매"; led?: 1 } =
+      p === "정보" || p === "쿠폰" || p === "예약" || p === "구매" ? { purpose: p } : {};
+    if (search.led === "1" || search.led === 1) out.led = 1;
+    return out;
   },
   loader: async (): Promise<StudioLabLoaderData> => {
     const empty: StudioLabLoaderData = { isBusiness: false, store: null, coupons: [], dockCount: 0 };
@@ -104,7 +108,7 @@ export const Route = createFileRoute("/_user/studio-lab")({
 
 function StudioLabPage() {
   const { isBusiness, store, coupons, dockCount } = Route.useLoaderData();
-  const { purpose } = Route.useSearch();
+  const { purpose, led } = Route.useSearch();
   return (
     <CardStudioPage45
       isBusiness={isBusiness}
@@ -112,6 +116,7 @@ function StudioLabPage() {
       coupons={coupons}
       dockCount={dockCount}
       initialPurpose={purpose}
+      ledDebug={led === 1}
     />
   );
 }
