@@ -19,6 +19,11 @@ import { resizeToJpegBlob } from "@/lib/image-upload";
 import { computeProfitReceipt } from "@/components/commerce/ProductRegisterForm";
 // FIX-37 — 상품 상세정보 고시표(유형별) 행 빌더 — 순수 모듈 분리(라벨 = 실제 고시 항목 명칭).
 import { buildNoticeRows45 } from "./product-notice45";
+// FIX-45 — 시세 엔진 원형 복원: 구 폼 정본 PriceBandAdvisor 무수정 재사용(공용 presentational
+//   — 구 폼(studio-build) 화면 무변경, import 만). 시세는 생산자 화면 전용(§0 — /d·미리보기 미노출).
+import { PriceBandAdvisor, type PriceBandResult } from "@/components/commerce/PriceBandAdvisor";
+// FIX-45 보완 b — 내 가격 위치 1줄(순수 모듈 · 정규화 실패 = 미렌더).
+import { buildPricePositionLines } from "./price-position45";
 
 /**
  * ProductRegisterForm45 — v0-45 정본 3유형(신선/가공/공산품) 상품 등록 폼 실배선 이식.
@@ -259,6 +264,12 @@ export function ProductRegisterForm45({
   const [boxCount, setBoxCount] = useState("");
   const [totalWeight, setTotalWeight] = useState("");
   const [weightUnknown, setWeightUnknown] = useState(false);
+  // FIX-45 — 낱개 모드 1개 무게(g): 구 폼 정본 유실분 복원(시세 개당 환산 기준).
+  const [singleWeightG, setSingleWeightG] = useState("");
+  // FIX-45 — 시세 조회 상태(구 폼 정본 이식: debounce 350ms + 수동 재조회 카운터).
+  const [priceBand, setPriceBand] = useState<PriceBandResult | null>(null);
+  const [priceBandLoading, setPriceBandLoading] = useState(false);
+  const [priceBandRefresh, setPriceBandRefresh] = useState(0);
   // FIX-15 — 묶음형 구성: "1{단위} = N개"(unitQty) 또는 "1{단위} = N kg"(unitWeight).
   const [unitQty, setUnitQty] = useState("");
   const [unitWeight, setUnitWeight] = useState("");
@@ -353,6 +364,117 @@ export function ProductRegisterForm45({
       : null;
   // FIX-36 — fresh 포장 단위 표시 라벨("기타"는 "묶음"). UI·제출 스냅샷 공용.
   const freshPackLabel = freshPackType === "기타" ? "묶음" : freshPackType;
+
+  // FIX-45 — 판매 구성 통역(구 폼 정본 계산 그대로): 모드 → 유효 구성(입수·총중량 kg).
+  //   box=개수×총kg / unit=1개×g / weight=1단위×kg. 무게 미상이면 구성 없음(kg 비교 생략).
+  const composition = (() => {
+    if (type !== "fresh" || weightUnknown) return null;
+    if (saleUnit === "box") {
+      const n = Math.floor(Number(boxCount));
+      const kg = Number(totalWeight);
+      return Number.isFinite(n) && n >= 1 && Number.isFinite(kg) && kg > 0
+        ? { unitCount: n, totalKg: kg }
+        : null;
+    }
+    if (saleUnit === "unit") {
+      const g = Number(singleWeightG);
+      return Number.isFinite(g) && g > 0 ? { unitCount: 1, totalKg: g / 1000 } : null;
+    }
+    const kg = Number(totalWeight);
+    return Number.isFinite(kg) && kg > 0 ? { unitCount: 1, totalKg: kg } : null;
+  })();
+  // 개당 중량(g) — 총중량÷입수(구 폼 P5a 공식 그대로). get-price-band per_unit_weight_g 전달.
+  const perUnitWeightG = composition
+    ? Math.round((composition.totalKg * 1000) / composition.unitCount)
+    : null;
+  // 정합성 가드 — 개당 10g 미만 / 5kg 초과면 확인 배너(차단 아닌 확인 — 구 폼 동일).
+  const compositionSuspect =
+    perUnitWeightG != null && (perUnitWeightG < 10 || perUnitWeightG > 5000);
+  const unitCountForQuery = composition != null ? composition.unitCount : null;
+  // 선언문 — 구 폼 문구 그대로(괄호 축약 노출 금지).
+  const compositionLabel = composition
+    ? saleUnit === "box"
+      ? `${composition.unitCount}개들이 한 ${freshPackLabel}(${composition.totalKg}kg)`
+      : saleUnit === "unit"
+        ? `낱개 1개`
+        : `${composition.totalKg}kg 단위`
+    : null;
+  const declarationLine =
+    composition && perUnitWeightG != null
+      ? saleUnit === "box"
+        ? `${composition.unitCount}개들이 한 ${freshPackLabel}(${composition.totalKg}kg) · 개당 약 ${perUnitWeightG.toLocaleString("ko-KR")}g — 이 기준으로 시세를 비교해요`
+        : saleUnit === "unit"
+          ? `낱개 1개 · 약 ${perUnitWeightG.toLocaleString("ko-KR")}g — 이 기준으로 시세를 비교해요`
+          : `${composition.totalKg}kg 단위 판매 — 이 기준으로 시세를 비교해요`
+      : null;
+  // FIX-45 — 확정 품목의 부류 코드(get-price-band 필수 파라미터) — 병합 목록에서 역참조.
+  const kamisCategoryCode = kamisItemCode
+    ? (kamisAll.find((it) => it.item_code === kamisItemCode)?.category_code ?? null)
+    : null;
+  // FIX-45 보완 b — 내 가격 위치 1줄(순수 모듈 · 정규화 실패 = 미렌더 · 사실만).
+  const pricePositionLines = buildPricePositionLines({
+    myPriceKrw: priceNum > 0 ? priceNum : null,
+    totalKg: composition?.totalKg ?? null,
+    unitCount: composition?.unitCount ?? null,
+    // '개' 의미 — 무게 단위 판매는 제외(구 폼 countMeaningful 동일).
+    countMeaningful: composition != null && saleUnit !== "weight",
+    wholesaleAvgKg: priceBand?.wholesale?.avg ?? null,
+    onlineUnitAvg:
+      priceBand?.online_axes?.unit && priceBand.online_axes.unit.n > 0
+        ? priceBand.online_axes.unit.avg
+        : null,
+    onlineKgAvg:
+      priceBand?.online_axes?.kg && priceBand.online_axes.kg.n > 0
+        ? priceBand.online_axes.kg.avg
+        : priceBand?.online?.status === "ok"
+          ? (priceBand.online.avg ?? null)
+          : null,
+  });
+
+  // FIX-45 — 시세 조회(구 폼 정본 effect 이식): 확정 품목 코드로만 발화(fuzzy 금지 락),
+  //   구성 타이핑 연타 방지 debounce 350ms, 수동 재조회 dep. detach 주의 — invoke 메서드 직접 호출.
+  useEffect(() => {
+    if (type !== "fresh" || !kamisItemCode || !kamisCategoryCode) {
+      setPriceBand(null);
+      setPriceBandLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPriceBandLoading(true);
+    const timer = setTimeout(() => {
+      void (async () => {
+        const fail: PriceBandResult = {
+          status: "error",
+          item_code: kamisItemCode,
+          item_name: null,
+          sources: [],
+          cached: false,
+        };
+        try {
+          const supabase = getSupabase();
+          const { data, error } = await supabase.functions.invoke("get-price-band", {
+            body: {
+              item_code: kamisItemCode,
+              category_code: kamisCategoryCode,
+              ...(perUnitWeightG != null && unitCountForQuery != null
+                ? { per_unit_weight_g: perUnitWeightG, unit_count: unitCountForQuery }
+                : {}),
+            },
+          });
+          if (cancelled) return;
+          setPriceBand(error || !data ? fail : (data as PriceBandResult));
+        } catch {
+          if (!cancelled) setPriceBand(fail);
+        } finally {
+          if (!cancelled) setPriceBandLoading(false);
+        }
+      })();
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [type, kamisItemCode, kamisCategoryCode, perUnitWeightG, unitCountForQuery, priceBandRefresh]);
   const receipt =
     priceNum > 0 && costNum != null
       ? computeProfitReceipt({
@@ -417,6 +539,7 @@ export function ProductRegisterForm45({
     setBoxCount("");
     setTotalWeight("");
     setWeightUnknown(false);
+    setSingleWeightG(""); // FIX-45 — 낱개 무게도 초기화(동일 규칙).
     setUnitQty("");
     setUnitWeight("");
     setGoodsPreset(null);
@@ -1007,15 +1130,67 @@ export function ProductRegisterForm45({
                 accent={accent}
               />
             )}
-            <Checkbox checked={weightUnknown} onToggle={() => setWeightUnknown((v) => !v)} label="무게는 잘 몰라요" accent={accent} />
             <p className="text-[10.5px] font-medium text-[#A3A3A3]">
               예: 1망 = 10kg — 카드에 &ldquo;구성: 1{freshPackLabel} · 10kg&rdquo;처럼 보여요.
             </p>
           </div>
         )}
-        {saleUnit === "weight" && (
+        {/* FIX-45 — 낱개 모드 1개 무게(g): 구 폼 정본 유실분 복원(시세 개당 환산 기준). */}
+        {type === "fresh" && saleUnit === "unit" && !weightUnknown && (
           <div className="mt-2 rounded-xl bg-[#F7F7F8] p-2.5">
-            <SubInput label="총 무게(kg)" value={totalWeight} onChange={(v) => setTotalWeight(v.replace(/[^0-9.]/g, ""))} placeholder="총 무게 kg" suffix="kg" accent={accent} />
+            <SubInput
+              label="1개 무게 약 (g)"
+              value={singleWeightG}
+              onChange={(v) => setSingleWeightG(onlyDigits(v))}
+              placeholder="예: 300"
+              suffix="g"
+              accent={accent}
+            />
+          </div>
+        )}
+        {saleUnit === "weight" && !weightUnknown && (
+          <div className="mt-2 rounded-xl bg-[#F7F7F8] p-2.5">
+            <SubInput
+              label="판매 단위(kg)"
+              value={totalWeight}
+              onChange={(v) => setTotalWeight(v.replace(/[^0-9.]/g, ""))}
+              placeholder="예: 5"
+              suffix="kg"
+              accent={accent}
+            />
+          </div>
+        )}
+        {/* FIX-45 — 구 폼 공통부 복원: 무게 미상 토글(3모드 공통) + 선언문 + 정합성 확인 배너. */}
+        {type === "fresh" && (
+          <div className="mt-2 space-y-2">
+            <Checkbox
+              checked={weightUnknown}
+              onToggle={() => setWeightUnknown((v) => !v)}
+              label="무게는 잘 몰라요"
+              accent={accent}
+            />
+            {weightUnknown && (
+              <p className="text-[10.5px] font-medium leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
+                기준 무게 데이터가 아직 없어요 — 무게 비교는 생략하고 kg당 시세만 보여드려요. 무게를
+                알게 되면 토글을 끄고 적어주세요.
+              </p>
+            )}
+            {declarationLine && (
+              <p className="text-[11px] font-medium tabular-nums leading-relaxed text-[#525252] [word-break:keep-all]">
+                {declarationLine}
+              </p>
+            )}
+            {compositionSuspect && composition && (
+              <div
+                className="rounded-lg bg-[#FFFBEB] px-3 py-2"
+                style={{ boxShadow: "inset 0 0 0 1px #FDE68A" }}
+              >
+                <p className="text-[11px] font-medium leading-relaxed text-[#92400E]">
+                  입력값을 확인해 주세요: {composition.unitCount}개에 {composition.totalKg}kg이
+                  맞습니까?
+                </p>
+              </div>
+            )}
           </div>
         )}
       </Field>
@@ -1145,11 +1320,50 @@ export function ProductRegisterForm45({
         )}
       </div>
 
+      {/* FIX-45 — 시세 엔진(구 폼 정본 이식 · 무수정 재사용): 생산자 화면 전용(§0 — /d·CardModel
+          미리보기 미노출). 노출 조건 = 구 폼 동일(fresh + 품목 확정). 숫자·기준일·건수 = API 실값만. */}
+      {type === "fresh" && kamisItemCode && (
+        <div className="rounded-2xl bg-[#F7F7F8] p-3.5">
+          <h3 className="text-[12.5px] font-bold text-[#0A0A0A]">시세는 이렇습니다. 참고하세요</h3>
+          <PriceBandAdvisor
+            priceBand={priceBand}
+            loading={priceBandLoading}
+            composition={
+              composition
+                ? {
+                    packType:
+                      saleUnit === "box" ? freshPackLabel : saleUnit === "unit" ? "낱개" : "단위",
+                    unitCount: composition.unitCount,
+                    totalKg: composition.totalKg,
+                  }
+                : null
+            }
+            compositionLabel={compositionLabel}
+            myPriceKrw={priceNum > 0 ? priceNum : null}
+            onRefresh={() => setPriceBandRefresh((n) => n + 1)}
+            onAdjustPrice={() => {
+              // 보완 a — 판매가 입력 포커스(구 폼 동작 그대로). 가격 변경 시 이익 영수증은
+              //   FIX-36b 기존 반응형 계산이 즉시 재계산(신규 계산 로직 0).
+              const el = document.getElementById("pd45-price");
+              el?.scrollIntoView({ block: "center" });
+              (el as HTMLInputElement | null)?.focus();
+            }}
+          />
+        </div>
+      )}
+
       {/* 가격 + 이익 계산(미저장 보조) */}
       <Field label="가격" required>
+        {/* FIX-45 — 구 폼 P1.5: 시세 데이터(status ok) 있을 때만 참고 문구. */}
+        {priceBand?.status === "ok" && (
+          <p className="mb-1.5 text-[11px] font-medium text-[#A3A3A3]">
+            위 시세를 참고해 판매 가격을 정하세요
+          </p>
+        )}
         <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3 focus-within:bg-white" style={{ boxShadow: "inset 0 0 0 1px transparent" }}>
           <span className="text-[14px] font-bold text-[#525252]">₩</span>
           <input
+            id="pd45-price"
             value={price}
             onChange={(e) => {
               const v = onlyDigits(e.target.value);
@@ -1162,6 +1376,16 @@ export function ProductRegisterForm45({
           />
           <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
         </div>
+        {/* FIX-45 보완 b — 내 가격 위치 1줄(시세 실값 × 단위 정규화 · 실패 = 미렌더 · 사실만). */}
+        {pricePositionLines.length > 0 && (
+          <div className="mt-1 space-y-0.5">
+            {pricePositionLines.map((l) => (
+              <p key={l} className="text-[10.5px] font-medium tabular-nums text-[#8A8A8A]">
+                {l}
+              </p>
+            ))}
+          </div>
+        )}
         <div className="mt-1.5 rounded-xl bg-[#F7F7F8] p-2.5">
           <span className="flex items-center gap-1 text-[11px] font-bold text-[#525252]">
             <Calculator className="h-3.5 w-3.5" strokeWidth={2.25} />
