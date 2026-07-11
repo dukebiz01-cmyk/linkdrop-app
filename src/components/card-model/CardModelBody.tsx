@@ -348,6 +348,29 @@ export function CardModelBody({
                   ))}
                 </div>
               )}
+              {/* FIX-40 — 공동구매 v1: 조건(사실만) + 진행률(실집계 있을 때만) + 필수 고지
+                  (참여 시점 선명 노출 · §13 압박 카피 0 · 취소는 매장 문의 정직 표기). */}
+              {model.groupBuy && (
+                <div
+                  className="mb-2 rounded-xl p-2.5"
+                  style={{
+                    backgroundColor: `${model.accent}0A`,
+                    boxShadow: `inset 0 0 0 1px ${model.accent}26`,
+                  }}
+                >
+                  <p className="text-[12px] font-bold" style={{ color: model.accent }}>
+                    공동구매 · {model.groupBuy.offerLine}
+                  </p>
+                  {model.groupBuy.progressLine && (
+                    <p className="mt-0.5 text-[11px] font-semibold tabular-nums text-[#404040]">
+                      {model.groupBuy.progressLine}
+                    </p>
+                  )}
+                  <p className="mt-1 text-[10.5px] font-medium leading-relaxed text-[#525252] [word-break:keep-all]">
+                    {model.groupBuy.noticeLine} {model.groupBuy.cancelLine}
+                  </p>
+                </div>
+              )}
               {/* 유형 · 원산지 · 판매 단위 메타 */}
               {(model.productType || model.productOrigin || model.productUnitLabel || model.productDateRangeLabel) && (
                 <div className="mb-2 flex flex-wrap gap-1.5">

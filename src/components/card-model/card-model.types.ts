@@ -84,6 +84,14 @@ export type CardModel = {
   /** FIX-39 — 판매 부스터 칩(전부 실값 · 빈 배열/미주입 = 미렌더).
    *  산출은 booster45.ts 순수 모듈(D-day·남은수량 = 조회 시점 계산 — 스냅샷 박제 금지). */
   boosterChips?: Array<{ kind: "stock" | "dday" | "orders" | "benefit"; label: string }>;
+  /** FIX-40 — 공동구매 v1 표시(미주입 = 미렌더). 산출은 booster45.buildGroupBuyView(순수).
+   *  progressLine 은 preorders 실집계 있을 때만(null = 진행률 미렌더 — 가짜 집계 금지). */
+  groupBuy?: {
+    offerLine: string;
+    progressLine: string | null;
+    noticeLine: string;
+    cancelLine: string;
+  };
 
   // ── 배송 — 백엔드 부재(운송장·배송 테이블 없음). 전부 미주입 = 미렌더. ──
   shipFee?: string;

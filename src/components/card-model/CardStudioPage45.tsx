@@ -67,8 +67,8 @@ import { decideGateUtterance } from "./gate-notes45";
 // FIX-43 — 링고 음성 공용 모듈(홈 재사용 대비): 마이크 56px 분리 버튼 + 듣는 중 파형 패널.
 import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
-// FIX-39 — 판매 부스터 v1(수량·D-day·주문·혜택 — 전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
-import { buildBoosterChips } from "./booster45";
+// FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
+import { buildBoosterChips, buildGroupBuyView } from "./booster45";
 import { SHIP_STAGES, type CardModel } from "./card-model.types";
 
 // =============================================================================
@@ -684,6 +684,11 @@ export function CardStudioPage45({
   // FIX-39 — 부스터 실값 미러: 한정 수량(payload.stock_limit)·무료배송(block_data.free_ship).
   const [productStockLimit, setProductStockLimit] = useState<number | null>(null);
   const [productFreeShip, setProductFreeShip] = useState(false);
+  // FIX-40 — 공동구매 미러(block_data.group_buy_target_n/price_krw — 유효 저장분만).
+  const [productGroupBuy, setProductGroupBuy] = useState<{
+    targetN: number;
+    priceKrw: number;
+  } | null>(null);
   const [productUnitLabel, setProductUnitLabel] = useState<string | null>(null);
   // FIX-24 — 수확·발송 기간 스냅샷(date_range_label) 미러 — 동일 패턴.
   const [productDateRangeLabel, setProductDateRangeLabel] = useState<string | null>(null);
@@ -1593,6 +1598,15 @@ export function CardStudioPage45({
     // FIX-39 — 부스터 실값 미러(등록 payload 기존 키 재사용 — 신규 저장 키 0).
     setProductStockLimit(payload.stock_limit ?? null);
     setProductFreeShip(bd?.free_ship === true);
+    // FIX-40 — 공동구매 미러(폼이 유효 통과분만 저장 — 여기선 존재 확인만).
+    const gb = payload.blocks?.[0]?.block_data as
+      | { group_buy_target_n?: unknown; group_buy_price_krw?: unknown }
+      | undefined;
+    setProductGroupBuy(
+      typeof gb?.group_buy_target_n === "number" && typeof gb?.group_buy_price_krw === "number"
+        ? { targetN: gb.group_buy_target_n, priceKrw: gb.group_buy_price_krw }
+        : null,
+    );
     flashStrip("완료! 상품이 카드에 반영됐어요"); // FIX-3 — 실등록 완료 시에만.
     return { shareUuid, shareUrl: json.shareable_url ?? `https://app.drop.how/d/${shareUuid}` };
   }
@@ -1862,6 +1876,8 @@ export function CardStudioPage45({
         : null,
       todayIso,
       orderCount: null,
+      // FIX-40 — 공동구매 활성 시 주문 칩은 진행률이 대체(이중 표기 방지 — READ ② 판정).
+      groupBuyActive: !!productGroupBuy,
       benefits: {
         coupon: couponOn,
         discountLabel:
@@ -1871,7 +1887,21 @@ export function CardStudioPage45({
         freeShipping: productFreeShip,
       },
     });
-  }, [mode, applied, dateList, saleEndIdx, selectedCoupon, productStockLimit, productFreeShip]);
+  }, [mode, applied, dateList, saleEndIdx, selectedCoupon, productStockLimit, productFreeShip, productGroupBuy]);
+
+  // FIX-40 — 공동구매 표시(순수 모듈): 참여 M = preorders 실집계 입력 없음(미발행 스튜디오)
+  //   → null = 진행률 미렌더(조건·고지만). /d 실집계 주입은 ST2b — 같은 모듈 소비.
+  const groupBuyView = useMemo(
+    () =>
+      mode === "commerce" && productGroupBuy
+        ? buildGroupBuyView({
+            targetN: productGroupBuy.targetN,
+            achievedPriceKrw: productGroupBuy.priceKrw,
+            joinedCount: null,
+          })
+        : null,
+    [mode, productGroupBuy],
+  );
 
   // 제작=공유=수신 거울 — fromStudioState(어댑터) + 스튜디오 로컬 프리뷰 필드 병합.
   const couponTitle =
@@ -1920,6 +1950,8 @@ export function CardStudioPage45({
       ...(mode === "commerce" && productDateRangeLabel ? { productDateRangeLabel } : {}),
       // FIX-39 — 판매 부스터 칩(실값 한정 · 빈 배열 = 미주입 = 미렌더).
       ...(boosterChips.length > 0 ? { boosterChips } : {}),
+      // FIX-40 — 공동구매(설정 실존 시만 · 미주입 = 미렌더).
+      ...(groupBuyView ? { groupBuy: groupBuyView } : {}),
       // 여정·확산 — 정본 데모(SHARE_JOURNEY·12명) 제거: 실 여정은 수신 후 생기는 것. 미주입=미렌더.
     },
   );

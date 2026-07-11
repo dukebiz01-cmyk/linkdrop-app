@@ -16,6 +16,8 @@ export type BoosterInput45 = {
   todayIso: string;
   /** preorders 실집계 인원. 집계 경로 없음/0 = 미렌더("벌써 N명"류 부풀림 금지). */
   orderCount?: number | null;
+  /** FIX-40 — 공동구매 활성 시 true: 주문 칩을 진행률(GroupBuyView45)이 대체 — 이중 표기 방지. */
+  groupBuyActive?: boolean;
   /** 실제 연결된 혜택만(없는 혜택 표시 금지). */
   benefits?: {
     coupon?: boolean;
@@ -50,8 +52,8 @@ export function buildBoosterChips(i: BoosterInput45): BoosterChip45[] {
   if (i.saleEndIso) {
     chips.push({ kind: "dday", label: ddayLabel(i.saleEndIso, i.todayIso) });
   }
-  // 주문 N명 — 실집계 >0 만.
-  if (i.orderCount != null && i.orderCount > 0) {
+  // 주문 N명 — 실집계 >0 만. 공동구매 활성 시엔 진행률이 같은 숫자를 표기 — 칩 생략(중복 방지).
+  if (!i.groupBuyActive && i.orderCount != null && i.orderCount > 0) {
     chips.push({ kind: "orders", label: `주문 ${i.orderCount.toLocaleString("ko-KR")}명` });
   }
   // 혜택스택 — 실제 연결분만.
@@ -59,4 +61,45 @@ export function buildBoosterChips(i: BoosterInput45): BoosterChip45[] {
   if (i.benefits?.discountLabel) chips.push({ kind: "benefit", label: i.benefits.discountLabel });
   if (i.benefits?.freeShipping) chips.push({ kind: "benefit", label: "무료배송" });
   return chips;
+}
+
+// ── FIX-40 — 공동구매 v1 표시 산출(순수 · ST2b /d 공용) ─────────────────────────
+//   정산 무접촉(v1 락): 달성/미달 판정·차액 환불·재결제 자동화 없음(판매자 수동 운영).
+//   미달 자동 취소 없음 — 기본가 진행 + 구매자 취소권(고지 고정 문구). 압박 카피 0(§13).
+
+export type GroupBuyInput45 = {
+  /** 목표 인원(≥2 아니면 전체 null — 폼 유효성과 동일 가드). */
+  targetN: number;
+  /** 달성 시 할인가(>0). 기본가 대비 검증은 폼 몫 — 여기선 표시만. */
+  achievedPriceKrw: number;
+  /** preorders 실집계 참여 인원 — null = 집계 입력 없음 → 진행률 줄 미렌더(가짜 집계 금지). */
+  joinedCount?: number | null;
+};
+
+export type GroupBuyView45 = {
+  /** "N명 모이면 ○○원" — 사실(숫자·조건)만. */
+  offerLine: string;
+  /** "참여 M명 / 목표 N명" — 실집계 있을 때만(null = 미렌더). */
+  progressLine: string | null;
+  /** 필수 고지(§13 — 참여 시점 선명 노출, 문구 고정). */
+  noticeLine: string;
+  /** 취소 경로 정직 표기 — 구매자 셀프 취소 플로우 부재(READ 판정) → 매장 문의 안내. */
+  cancelLine: string;
+};
+
+export function buildGroupBuyView(i: GroupBuyInput45): GroupBuyView45 | null {
+  if (!Number.isFinite(i.targetN) || i.targetN < 2) return null;
+  if (!Number.isFinite(i.achievedPriceKrw) || i.achievedPriceKrw <= 0) return null;
+  return {
+    offerLine:
+      `${i.targetN.toLocaleString("ko-KR")}명 모이면 ` +
+      `${i.achievedPriceKrw.toLocaleString("ko-KR")}원`,
+    progressLine:
+      i.joinedCount != null
+        ? `참여 ${i.joinedCount.toLocaleString("ko-KR")}명 / 목표 ${i.targetN.toLocaleString("ko-KR")}명`
+        : null,
+    noticeLine:
+      "목표 인원이 안 모이면 기본가로 진행됩니다. 원치 않으면 발송 전에 취소할 수 있어요.",
+    cancelLine: "취소는 매장에 문의해 주세요.",
+  };
 }

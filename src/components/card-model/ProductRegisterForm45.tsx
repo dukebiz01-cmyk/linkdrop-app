@@ -268,6 +268,11 @@ export function ProductRegisterForm45({
   // FIX-36b — 기타잡비(포장·부자재·수수료 등): 사장님 직접 입력만(추정·자동 채움 금지 §0).
   //   표시용·미저장. 미입력 = 0 취급 + 영수증 행 미렌더.
   const [miscCost, setMiscCost] = useState("");
+  // FIX-40 — 공동구매 v1(선택 · 발행 조건 아님): 목표 인원 + 달성 시 할인가.
+  //   저장은 payload jsonb 키 2개만(group_buy_target_n/group_buy_price_krw) — 정산 무접촉.
+  const [groupBuyOn, setGroupBuyOn] = useState(false);
+  const [groupBuyN, setGroupBuyN] = useState("");
+  const [groupBuyPrice, setGroupBuyPrice] = useState("");
   const [freeShip, setFreeShip] = useState(true);
   const [shipFee, setShipFee] = useState("");
   const [droppyMode, setDroppyMode] = useState<"rate" | "fixed">("rate");
@@ -352,6 +357,31 @@ export function ProductRegisterForm45({
     priceNum > 0 && costNum != null
       ? computeProfitReceipt({
           priceKrw: priceNum,
+          discountKrw: discountNum,
+          costKrw: costNum,
+          shippingMode: freeShip ? "free" : "paid",
+          shippingFeeKrw: shipFeeNum ?? 0,
+          dropyMode: droppyMode,
+          dropyPercent: droppyRate,
+          dropyFixedKrw: droppyFixedNum,
+          miscCostKrw: miscNum,
+        })
+      : null;
+  // FIX-40 — 공동구매 파생: 유효(N≥2 · 0<달성가<기본가) 통과분만. 영수증 2줄 병기용.
+  const gbTargetN = groupBuyOn && groupBuyN !== "" ? Math.floor(Number(groupBuyN)) : null;
+  const gbPriceNum = groupBuyOn && groupBuyPrice !== "" ? Math.floor(Number(groupBuyPrice)) : null;
+  const gbValid =
+    gbTargetN != null &&
+    gbTargetN >= 2 &&
+    gbPriceNum != null &&
+    gbPriceNum > 0 &&
+    priceNum > 0 &&
+    gbPriceNum < priceNum;
+  // 달성가 기준 이익 — 같은 정본 함수, priceKrw 만 달성가로(달성 시 이익도 정직 표시).
+  const gbReceipt =
+    gbValid && costNum != null
+      ? computeProfitReceipt({
+          priceKrw: gbPriceNum,
           discountKrw: discountNum,
           costKrw: costNum,
           shippingMode: freeShip ? "free" : "paid",
@@ -499,6 +529,15 @@ export function ProductRegisterForm45({
     }
     if (priceNum <= 0) return setFormError("가격을 입력해주세요.");
     if (!origin.trim()) return setFormError(`${copy.originLabel}을(를) 입력해주세요.`);
+    // FIX-40 — 공동구매 유효성: 목표 N ≥ 2 · 0 < 달성가 < 기본 판매가(아니면 저장 차단 + 사유).
+    if (groupBuyOn) {
+      if (gbTargetN == null || gbTargetN < 2) {
+        return setFormError("공동구매 목표 인원은 2명 이상이어야 해요.");
+      }
+      if (gbPriceNum == null || gbPriceNum <= 0 || gbPriceNum >= priceNum) {
+        return setFormError("공동구매 달성 할인가는 기본 판매가보다 낮아야 해요.");
+      }
+    }
     // 드로피 검증 — get_feed_dropy_reward 가드 동일: rate 0<r≤0.20 / fixed 0<f≤price.
     const rate = droppyMode === "rate" && droppyRate > 0 ? droppyRate / 100 : null;
     if (rate != null && (rate <= 0 || rate > 0.2)) return setFormError("공유 보상 비율은 20%까지예요.");
@@ -602,6 +641,9 @@ export function ProductRegisterForm45({
       ...(type === "goods" && spec.trim() ? { spec: spec.trim() } : {}),
       free_ship: freeShip,
       ...(!freeShip && shipFee ? { ship_fee_krw: Math.floor(Number(shipFee)) } : {}),
+      // FIX-40 — 공동구매 v1(표시 키만 · 정산 무접촉): 유효 통과분만 저장. 미달 자동 취소·
+      //   차액 환불 자동화 없음(v1 락 — 판매자 수동 운영).
+      ...(gbValid ? { group_buy_target_n: gbTargetN, group_buy_price_krw: gbPriceNum } : {}),
       // FIX-37 — 상품 상세정보 고시 스냅샷(jsonb 키 추가만 · 신규 테이블/마이그레이션 0).
       //   값 = 실입력·미러만, 미입력 "" 그대로(정직 표기 — 자동 생성 금지 §0).
       //   /d 렌더는 거울 수술 필요 → ST2b 이관(저장까지만).
@@ -1202,9 +1244,19 @@ export function ProductRegisterForm45({
                 className="flex justify-between border-t border-[#EFEFEF] pt-1 text-[12px] font-bold"
                 style={{ color: receipt.perUnitProfitKrw >= 0 ? accent : "#EF4444" }}
               >
-                <span>예상 이익</span>
+                <span>예상 이익{gbReceipt ? " (기본가 기준)" : ""}</span>
                 <span>{receipt.perUnitProfitKrw.toLocaleString()}원</span>
               </div>
+              {/* FIX-40 — 공동구매 달성가 기준 이익 병기(달성 시 이익도 정직 표시 — 음수 포함). */}
+              {gbReceipt && gbPriceNum != null && (
+                <div
+                  className="flex justify-between text-[11px] font-semibold"
+                  style={{ color: gbReceipt.perUnitProfitKrw >= 0 ? "#525252" : "#EF4444" }}
+                >
+                  <span>공동구매 달성가({gbPriceNum.toLocaleString()}원) 기준</span>
+                  <span>{gbReceipt.perUnitProfitKrw.toLocaleString()}원</span>
+                </div>
+              )}
               {/* FIX-36b — 음수 = 손해 정직 1줄(사실만 — 압박·권유 카피 금지). */}
               {receipt.perUnitProfitKrw < 0 && (
                 <p className="pt-0.5 text-[10.5px] font-semibold text-[#EF4444]">
@@ -1238,6 +1290,45 @@ export function ProductRegisterForm45({
             ? "내가 부담하는 배송비 — 이익 계산에만 쓰고 저장하지 않아요"
             : "구매자가 결제 시 함께 내는 금액 — 손님 카드에 배송비로 표기돼요"}
         </p>
+      </Field>
+
+      {/* FIX-40 — 공동구매 v1(선택 · 발행 조건 아님 · 정산 무접촉). 원포토(빠른 등록) 미노출. */}
+      <Field label="공동구매" hint="선택" hidden={quickMode}>
+        <Checkbox
+          checked={groupBuyOn}
+          onToggle={() => setGroupBuyOn((v) => !v)}
+          label="공동구매로 팔기"
+          accent={accent}
+        />
+        {groupBuyOn && (
+          <div className="mt-2 space-y-2 rounded-xl bg-[#F7F7F8] p-2.5">
+            <SubInput
+              label="목표 인원 (2명 이상)"
+              value={groupBuyN}
+              onChange={(v) => setGroupBuyN(onlyDigits(v))}
+              placeholder="예: 10"
+              suffix="명"
+              accent={accent}
+            />
+            <SubInput
+              label="달성 시 할인가 (기본 판매가보다 낮게)"
+              value={groupBuyPrice}
+              onChange={(v) => setGroupBuyPrice(onlyDigits(v))}
+              placeholder="예: 25000"
+              suffix="원"
+              accent={accent}
+            />
+            {gbPriceNum != null && priceNum > 0 && gbPriceNum >= priceNum && (
+              <p className="text-[10.5px] font-semibold text-[#EF4444]">
+                달성 할인가는 기본 판매가보다 낮아야 해요
+              </p>
+            )}
+            <p className="text-[10.5px] font-medium leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
+              목표 달성 시 할인가 적용은 사장님이 주문 확정 시 직접 반영해 주세요. 목표 미달이면
+              기본가로 진행돼요(자동 취소 없음).
+            </p>
+          </div>
+        )}
       </Field>
 
       {/* 공유 보상 (Droppy) — 검증: rate 0<r≤20% / fixed 0<f≤price. FIX-38: 원포토 미노출(0 유지). */}
