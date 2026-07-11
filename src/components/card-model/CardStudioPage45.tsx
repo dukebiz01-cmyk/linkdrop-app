@@ -613,6 +613,8 @@ export function CardStudioPage45({
   // FIX-28 — 상품 발송기준 실확정: 등록 폼에서 수확·발송일(harvest_date/ship_date)이 담겨
   //   저장됐는지(FIX-24 기간 포함). 판매 캘린더(seasonal)와 둘 중 1 = 발송기준 충족.
   const [productShipDateSet, setProductShipDateSet] = useState(false);
+  // FIX-38 B — 영상 출처 [AI로 만들기] 정직 게이트 인라인 펼침(가격·캐시 숫자 미표기).
+  const [aiVideoGateOpen, setAiVideoGateOpen] = useState(false);
   const [cfgFacilities, setCfgFacilities] = useState<FacilityItem[]>(() =>
     Array.isArray(store?.facilities)
       ? (store!.facilities as unknown[])
@@ -2870,6 +2872,30 @@ export function CardStudioPage45({
                       </button>
                     </div>
                     {videoError && <p className="text-[11px] font-medium text-[#DC2626]">{videoError}</p>}
+                    {/* FIX-38 B — 영상 출처 [AI로 만들기] 진입점: 노출은 하되 누르면 준비 중
+                        정직 게이트(인라인 펼침 — Radix 아님). 가격·캐시 숫자 절대 미표기.
+                        "준비 중" 칩 = 기존 게이트 배지 문법(:2225) 재사용. */}
+                    <button
+                      type="button"
+                      onClick={() => setAiVideoGateOpen((v) => !v)}
+                      className="flex w-full items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-left"
+                    >
+                      <Clapperboard
+                        className="h-4 w-4 shrink-0 text-[#8A8A8A]"
+                        strokeWidth={2.25}
+                      />
+                      <span className="flex-1 text-[13px] font-semibold text-[#0A0A0A]">
+                        AI로 만들기
+                      </span>
+                      <span className="rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[9px] font-bold text-[#64748B]">
+                        준비 중
+                      </span>
+                    </button>
+                    {aiVideoGateOpen && (
+                      <p className="rounded-xl bg-[#F7F7F8] px-3 py-2.5 text-[11px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                        AI 영상 제작은 준비 중이에요. 지금은 사진이나 영상 링크로 만들 수 있어요.
+                      </p>
+                    )}
                     {/* FIX-1 — 결과 탭 = '후보 선택'(미확정), 아래 [이 영상으로 확정]에서 확정. */}
                     {videoResults.length > 0 && (
                       <div className="max-h-56 space-y-1.5 overflow-y-auto pr-0.5 [scrollbar-width:thin]">

@@ -275,6 +275,12 @@ export function ProductRegisterForm45({
   const [headline, setHeadline] = useState("");
   const [sellingPoints, setSellingPoints] = useState<string[]>([""]);
   const [extraInfo, setExtraInfo] = useState("");
+  // FIX-38 — 원포토(빠른 등록) 모드: 사진 1장 → 이름 확인 → AI 카피 제안 → 가격·발송일·원산지.
+  //   기존 자세히 등록의 대체가 아닌 공존 경로(토글). 같은 state·handleSubmit·payload 계약을
+  //   그대로 쓰므로 FIX-36/37 필드·FIX-42 게이트 판정 전부 동일 경유(우회 0).
+  //   READ 판정: 사진→이름·분류 탐지 Edge 는 부재(detect-product 는 영상 텍스트 전용) → 그
+  //   부분은 "준비 중" 정직 표기. AI 카피는 실존 generate-promo-copy(image_url 비전) 재사용.
+  const [quickMode, setQuickMode] = useState(false);
   // FIX-37 — 상품 상세정보 고시(상품정보제공고시) 직접 입력분. 폼 기존 입력(상품명·원산지·
   //   분류·소비기한·보관방법·브랜드)은 자동 미러라 여기 중복 입력 없음. 미입력 = "" 스냅샷.
   const [noticeOpen, setNoticeOpen] = useState(false);
@@ -479,6 +485,12 @@ export function ProductRegisterForm45({
     // 필수 가드 — 사진·이름·가격·원산지(정본 required + 상품정보제공고시).
     if (!imageUrl) return setFormError("상품 사진을 올려주세요.");
     if (!name.trim()) return setFormError("상품명을 입력해주세요.");
+    // FIX-38 — 원포토(빠른 등록): 이름 확인(확정) 없이는 등록 진행 불가(§0 — 미확정 이름 저장 금지).
+    if (quickMode && !nameConfirmed) {
+      return setFormError(
+        "이름 확인이 필요해요 — 상품명을 적고 칸 밖을 눌러 체크로 확정해 주세요.",
+      );
+    }
     if (priceNum <= 0) return setFormError("가격을 입력해주세요.");
     if (!origin.trim()) return setFormError(`${copy.originLabel}을(를) 입력해주세요.`);
     // 드로피 검증 — get_feed_dropy_reward 가드 동일: rate 0<r≤0.20 / fixed 0<f≤price.
@@ -646,6 +658,23 @@ export function ProductRegisterForm45({
 
   return (
     <div className="space-y-4">
+      {/* FIX-38 — 등록 방법 토글: 원포토(빠른 등록)는 기존 자세히 등록의 대체가 아닌 공존 경로. */}
+      <Field label="등록 방법">
+        <Segmented
+          options={[
+            { id: "full", label: "자세히 등록" },
+            { id: "quick", label: "빠른 등록 — 사진 1장" },
+          ]}
+          value={quickMode ? "quick" : "full"}
+          onSelect={(id) => {
+            const q = id === "quick";
+            setQuickMode(q);
+            // 원포토 = 신선 기본(유형 선택 미노출 — 잔존 오염 방지 리셋은 selectType 재사용).
+            if (q && type !== "fresh") selectType("fresh");
+          }}
+        />
+      </Field>
+
       {/* 상품 사진 — 실 업로더 */}
       <Field label="상품 사진" required>
         <button
@@ -699,9 +728,17 @@ export function ProductRegisterForm45({
             />
           )}
         </div>
+        {/* FIX-38 — 원포토: 사진→이름·분류 AI 제안은 함수 부재로 준비 중(정직 표기 — 가짜 제안 0).
+            이름 확인(blur 확정 체크)은 FIX-34 기존 고리 재사용 — 확정 전 등록 차단. */}
+        {quickMode && (
+          <p className="mt-2 rounded-xl bg-[#F7F7F8] px-3 py-2.5 text-[11px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+            사진만으로 이름·분류까지 알아보는 AI 제안은 준비 중이에요 — 이름은 직접 적고 칸 밖을
+            눌러 체크로 확정해 주세요. 확정하면 아래 AI 카피 도우미가 사진을 보고 문구를 제안해요.
+          </p>
+        )}
       </Field>
 
-      <Field label="상품 유형">
+      <Field label="상품 유형" hidden={quickMode}>
         <Segmented options={TYPE_OPTIONS} value={type} onSelect={selectType} />
       </Field>
 
@@ -796,8 +833,9 @@ export function ProductRegisterForm45({
         </Field>
       )}
 
-      {/* 분류 — fresh 는 KAMIS 실검색(기존 CAT-2 소스) / processed 식품 유형. goods 는 위 칩으로 대체. */}
-      {type !== "goods" && (
+      {/* 분류 — fresh 는 KAMIS 실검색(기존 CAT-2 소스) / processed 식품 유형. goods 는 위 칩으로 대체.
+          FIX-38 — 원포토(빠른 등록)에선 미노출(최소 동선). */}
+      {!quickMode && type !== "goods" && (
       <Field label={copy.categoryLabel} hint={copy.categoryHint}>
         <input
           value={itemCategory}
@@ -853,8 +891,8 @@ export function ProductRegisterForm45({
         </Field>
       )}
 
-      {/* 판매 단위 */}
-      <Field label="어떻게 판매하시겠어요?">
+      {/* 판매 단위 — FIX-38: 원포토에선 미노출(기본 낱개 유지). */}
+      <Field label="어떻게 판매하시겠어요?" hidden={quickMode}>
         <Segmented options={unitOptions} value={saleUnit} onSelect={setSaleUnit} />
         {/* FIX-15 — 묶음형(팩·박스·포대·세트, 가공품·공산품) 구성: 1{단위} = N개 또는 N kg. */}
         {isBundle && (
@@ -936,8 +974,9 @@ export function ProductRegisterForm45({
 
       {/* FIX-37 — 상품 상세정보 고시(상품정보제공고시) — 인라인 펼침(Radix 금지).
           위 폼 입력(상품명·원산지·분류·소비기한·보관방법·브랜드)은 자동 미러(중복 입력 0),
-          나머지 항목만 여기서 입력. 미입력은 그대로 정직 표기 — 자동 생성 금지(§0). */}
-      <div className="rounded-2xl bg-[#F7F7F8] p-3.5">
+          나머지 항목만 여기서 입력. 미입력은 그대로 정직 표기 — 자동 생성 금지(§0).
+          FIX-38 — 원포토에선 hidden(DOM 유지·표시만 숨김 — 스냅샷은 미러값으로 동일 저장). */}
+      <div className="rounded-2xl bg-[#F7F7F8] p-3.5" hidden={quickMode}>
         <button
           type="button"
           onClick={() => setNoticeOpen((v) => !v)}
@@ -1138,8 +1177,8 @@ export function ProductRegisterForm45({
         </div>
       </Field>
 
-      {/* 배송 */}
-      <Field label="배송">
+      {/* 배송 — FIX-38: 원포토에선 미노출(기본 무료배송 유지). */}
+      <Field label="배송" hidden={quickMode}>
         <Segmented
           options={[
             { id: "free", label: "무료배송(내 부담)" },
@@ -1162,8 +1201,8 @@ export function ProductRegisterForm45({
         </p>
       </Field>
 
-      {/* 공유 보상 (Droppy) — 검증: rate 0<r≤20% / fixed 0<f≤price */}
-      <Field label="공유 보상 (Droppy)">
+      {/* 공유 보상 (Droppy) — 검증: rate 0<r≤20% / fixed 0<f≤price. FIX-38: 원포토 미노출(0 유지). */}
+      <Field label="공유 보상 (Droppy)" hidden={quickMode}>
         <Segmented
           options={[
             { id: "rate", label: "비율 %" },
@@ -1204,8 +1243,8 @@ export function ProductRegisterForm45({
         </p>
       </Field>
 
-      {/* 예정 할인(시뮬레이션 · 미저장) */}
-      <Field label="예정 할인" hint="시뮬레이션 · 저장하지 않아요">
+      {/* 예정 할인(시뮬레이션 · 미저장) — FIX-38: 원포토 미노출. */}
+      <Field label="예정 할인" hint="시뮬레이션 · 저장하지 않아요" hidden={quickMode}>
         <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
           <span className="text-[12px] font-semibold text-[#8A8A8A]">할인</span>
           <input value={plannedDiscount} onChange={(e) => setPlannedDiscount(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 2000" className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
@@ -1216,16 +1255,16 @@ export function ProductRegisterForm45({
         </p>
       </Field>
 
-      {/* 판매 수량(한정) */}
-      <Field label="몇 개나 판매하시겠어요?" hint="선택 · 한정 수량">
+      {/* 판매 수량(한정) — FIX-38: 원포토 미노출. */}
+      <Field label="몇 개나 판매하시겠어요?" hint="선택 · 한정 수량" hidden={quickMode}>
         <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
           <input value={quantity} onChange={(e) => setQuantity(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 30" className="w-full bg-transparent px-1 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
           <span className="text-[13px] font-semibold text-[#8A8A8A]">개</span>
         </div>
       </Field>
 
-      {/* 홍보 문구 */}
-      <Field label="홍보 문구" hint="선택">
+      {/* 홍보 문구 — FIX-38: 원포토 미노출(AI 는 사진·이름·가격만으로 제안). */}
+      <Field label="홍보 문구" hint="선택" hidden={quickMode}>
         <textarea value={extraInfo} onChange={(e) => setExtraInfo(e.target.value)} rows={3} placeholder={copy.promoPh} className="w-full resize-none rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[12.5px] font-medium leading-relaxed text-[#0A0A0A] outline-none placeholder:text-[#A3A3A3] focus:bg-white" style={{ boxShadow: "inset 0 0 0 1px transparent" }} onFocus={focusRing} onBlur={blurRing} />
         <p className="mt-1 text-[10.5px] text-[#A3A3A3]">{copy.promoNote}</p>
       </Field>
@@ -1303,7 +1342,21 @@ export function ProductRegisterForm45({
 
 /* ---------- 작은 재사용 조각들 (정본 그대로) ---------- */
 
-function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+// FIX-38 — hidden: 원포토(빠른 등록)에서 섹션 단위 미노출용(언마운트 — state 는 보존).
+function Field({
+  label,
+  required,
+  hint,
+  hidden,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  hint?: string;
+  hidden?: boolean;
+  children: React.ReactNode;
+}) {
+  if (hidden) return null;
   return (
     <div>
       <div className="mb-1.5 flex items-baseline gap-1.5">
