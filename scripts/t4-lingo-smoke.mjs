@@ -3,6 +3,9 @@
 // 기본 모드: 단일 메시지 발사 → SSE 파싱 → lingo_sessions/messages RLS 조회 검증.
 // 다중 모드(T4-2): `bun run scripts/t4-lingo-smoke.mjs multi`
 //   — 서툰 입력 3개를 각각 "새 세션"(session_id 없이)으로 순차 발사, 답변 전문·비용만 출력(판정 없음).
+// 종료 모드(T2.5 실측): `bun run scripts/t4-lingo-smoke.mjs close`
+//   — 새 세션으로 2턴(사실+선호) 발사 → {action:'close', session_id} 호출(장기기억 추출)
+//   → 유저 클라이언트로 lingo_user_facts 최근 5행(kind, text, created_at) RLS 조회 출력.
 //
 // 1) .env.local 에서 URL/publishable key 로드(BOM 제거 — create-review-accounts.ts 패턴).
 // 2) 테스트 계정 password 로그인 → access_token (토큰·키·비번 stdout 출력 금지).
@@ -66,8 +69,8 @@ if (!session) {
 }
 const token = session.access_token; // 출력 금지
 
-// ── lingo-chat 1회 호출 (항상 새 세션 — session_id 미전송) → SSE 파싱 ──
-async function runChat(message) {
+// ── lingo-chat 1회 호출 (sessionId 미전송 = 새 세션 / 전송 = 같은 세션 이어가기) → SSE 파싱 ──
+async function runChat(message, sessionId = null) {
   const res = await fetch(`${url}/functions/v1/lingo-chat`, {
     method: "POST",
     headers: {
@@ -75,12 +78,17 @@ async function runChat(message) {
       apikey: publishable,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ message, input_channel: "text" }),
+    body: JSON.stringify({
+      message,
+      input_channel: "text",
+      ...(sessionId ? { session_id: sessionId } : {}),
+    }),
   });
 
   const result = {
     status: res.status,
     stage: null,
+    sessionId: null, // meta 프레임의 session_id — close 모드가 같은 세션 이어가기에 사용.
     answer: "",
     done: null,
     error: null,
@@ -105,7 +113,10 @@ async function runChat(message) {
     } catch {
       return;
     }
-    if (event === "meta") result.stage = data.stage;
+    if (event === "meta") {
+      result.stage = data.stage;
+      result.sessionId = data.session_id ?? null;
+    }
     else if (event === "delta") result.answer += data.text ?? "";
     else if (event === "done") result.done = data;
     else if (event === "error") result.error = data;
@@ -134,9 +145,60 @@ function printResult(r) {
   if (r.error) console.log(`[error 전문] ${JSON.stringify(r.error)}`);
 }
 
-const mode = process.argv[2] === "multi" ? "multi" : "single";
+const mode =
+  process.argv[2] === "multi" ? "multi" : process.argv[2] === "close" ? "close" : "single";
 
-if (mode === "multi") {
+if (mode === "close") {
+  // ── T2.5 실측 — 2턴 대화 → close(장기기억 추출) → lingo_user_facts RLS 조회 ──
+  const TURNS = ["저는 괴산에서 사과 농장을 해요", "카드에 사진을 먼저 넣는 걸 좋아해요"];
+
+  console.log(`\n════ [1/2] "${TURNS[0]}" (새 세션) ════`);
+  const r1 = await runChat(TURNS[0]);
+  printResult(r1);
+  const sessionId = r1.sessionId;
+  if (!sessionId) {
+    console.error("[abort] meta 프레임에서 session_id 를 얻지 못함 — close 진행 불가");
+    await client.auth.signOut();
+    process.exit(1);
+  }
+  console.log(`[session] id=${sessionId}`);
+
+  console.log(`\n════ [2/2] "${TURNS[1]}" (같은 세션) ════`);
+  const r2 = await runChat(TURNS[1], sessionId);
+  printResult(r2);
+
+  // 종료 액션 — 단발 JSON 응답 {closed, facts_added}.
+  console.log(`\n════ close 호출 ════`);
+  const closeRes = await fetch(`${url}/functions/v1/lingo-chat`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: publishable,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action: "close", session_id: sessionId }),
+  });
+  const closeText = await closeRes.text();
+  console.log(`[close] status=${closeRes.status}`);
+  console.log(`[close 응답 JSON] ${closeText.slice(0, 500)}`);
+
+  // 유저 클라이언트(RLS 본인 SELECT)로 장기기억 최근 5행 조회.
+  const { data: facts, error: fErr } = await client
+    .from("lingo_user_facts")
+    .select("kind, fact, created_at")
+    .order("created_at", { ascending: false })
+    .limit(5);
+  console.log("\n[lingo_user_facts 최근 5행]");
+  if (fErr) {
+    console.log(`조회 실패: ${fErr.message}`);
+  } else if ((facts ?? []).length === 0) {
+    console.log("(0행)");
+  } else {
+    for (const f of facts) {
+      console.log(JSON.stringify({ kind: f.kind, text: f.fact, created_at: f.created_at }));
+    }
+  }
+} else if (mode === "multi") {
   // ── T4-2 말귀 테스트 — 서툰 입력 3개, 각각 새 세션으로 순차 발사. 판정 없음(원문만). ──
   const MESSAGES = [
     "그거 어디서 바꾸는거야",
