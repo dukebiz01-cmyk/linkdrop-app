@@ -646,7 +646,7 @@ export function CardStudioPage45({
           gate: "판매기간 또는 수확·발송일을 먼저 확정해 주세요",
           teach: "언제 받을 수 있는지 알려줘요 — 판매 캘린더나 수확·발송일 중 하나면 돼요.",
         },
-        { label: "게시", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
+        { label: "발행", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
       ];
     }
     if (mode === "reserve") {
@@ -674,7 +674,7 @@ export function CardStudioPage45({
           gate: "매장 정보(주소·시설)를 먼저 저장해 주세요",
           teach: "주소와 시설 태그를 저장하면 손님이 안심하고 예약해요. 매장정보에서 한 번에 저장돼요.",
         },
-        { label: "게시", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
+        { label: "발행", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
       ];
     }
     return [
@@ -689,7 +689,7 @@ export function CardStudioPage45({
         gate: "내 한마디를 먼저 적어 주세요",
         teach: "왜 이 영상을 보내는지 한 줄만 적어요. 그 한마디가 카드의 목소리예요.",
       },
-      { label: "게시", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
+      { label: "발행", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
     ];
   }, [mode, applied, selectedCouponId, selectedVideo, heroImageUrl, attachedProducts, productImageUrl, productName, productPrice, productShipDateSet, cfgSubtitle, cfgDates, savedStoreInfo, dropped]);
   const currentStepIdx = steps.findIndex((s) => !s.done);
@@ -909,7 +909,7 @@ export function CardStudioPage45({
             : `${currentTarget.label}를 더해보세요.`;
       return { text, action: currentTarget.id };
     }
-    return { text: "필수는 다 챙겼어요 — 이제 게시할 수 있어요.", action: null };
+    return { text: "필수는 다 챙겼어요 — 이제 발행할 수 있어요.", action: null };
   }, [firstRequiredStep, currentTarget, dockCount]);
 
   function equip(block: StudioBlock) {
@@ -3142,7 +3142,7 @@ export function CardStudioPage45({
                 >
                   <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
                   <Send className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" strokeWidth={2.25} />
-                  게시하기
+                  발행하기
                 </button>
                 {!canPublish && gateMsg && (
                   <p className="text-center text-[11px] font-medium text-[#8A8A8A]">{gateMsg}</p>
@@ -3209,7 +3209,7 @@ export function CardStudioPage45({
                 style={{ backgroundColor: accent, boxShadow: `0 10px 30px -8px ${accent}80` }}
               >
                 {saving ? <Loader2 className="h-[18px] w-[18px] animate-spin" strokeWidth={2.25} /> : <Send className="h-[18px] w-[18px]" strokeWidth={2.25} />}
-                {saving ? "발행 중…" : "전송하기"}
+                {saving ? "발행 중…" : "발행하기"}
               </button>
             </div>
           </div>
@@ -3527,16 +3527,16 @@ export function CardStudioPage45({
               </span>
               <span className="relative min-w-0 flex-1">
                 <span className="block truncate text-[11px] font-semibold leading-tight text-[#0A0A0A]">
-                  {/* FIX-18→23→28 — 필수 구간 = step.teach / 권장 구간 = 제안 문구(칩 노출 시) /
-                      필수 전부 충족 = "이제 게시할 수 있어요" 전환(STEP 2). */}
+                  {/* FIX-18→23→28→31 — 필수 구간 = step.teach / 권장 구간 = 제안 문구(칩 노출 시) /
+                      필수 전부 충족 = "이제 발행할 수 있어요" 전환. 발행 완료 후 전송(카톡)은 별개 단계. */}
                   {stripBusy ??
                     stripFlash ??
                     (dropped
-                      ? "전송 완료!"
+                      ? "발행 완료!"
                       : showSuggest && suggestion
                         ? lingo.text
                         : readyToSend
-                          ? "이제 게시할 수 있어요"
+                          ? "이제 발행할 수 있어요"
                           : lingo.text)}
                 </span>
                 {/* 단계 점 축약 — 점만(라벨 없음). done=accent · current=링 · 대기=회색 */}
