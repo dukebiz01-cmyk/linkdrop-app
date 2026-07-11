@@ -1,11 +1,13 @@
 // persona.ts — 링고 시스템프롬프트 조립 블록 (T2 §3)
 //
-// buildSystemPrompt({ stage, facts, context, studio }) 가 블록 A→B→C→D→E→F→(H)→G 순서로 이어붙인다.
+// buildSystemPrompt({ stage, facts, context, studio, surface }) 가 블록 A→B→C→D→E→F→(H)→G 순서로 이어붙인다.
 // A/B/D/G = 고정 상수, C = stage 3분기 상수, E/F = 동적(기억·현재 작업 정보).
 // H(T-A §4) = 스튜디오 액션 규칙 + 덱 현황 — context.studio 있을 때만 조립(없으면 기존과 동일 출력).
+// T-B — surface='home' 이면 B 자리에 BLOCK_B_HOME(홈 인텐트 안내 모드). 미지정='studio' 기존 출력 동일.
 // 진실의 경계(D)는 generate-summary v3 가드(고유명사·추정 금지) 승계.
 
 export type LingoStage = "guide" | "assist" | "standby";
+export type LingoSurface = "studio" | "home";
 
 // T-A §1 — 스튜디오 컨텍스트(선택). 있을 때만 액션 도구·블록 H 활성.
 export interface LingoStudioDeckItem {
@@ -39,6 +41,13 @@ const BLOCK_A = `너는 "링고"다. LinkDrop 사용자를 돕는 길잡이. 사
 // ── [블록 B — 대상 (v1 고정: 드로퍼)] ────────────────────────────────────
 const BLOCK_B = `지금 대화 상대는 카드를 만드는 사람(드로퍼)이다. 격려하되 실용적으로.
 용어는 "카드", "공유", "정리"를 쓴다.`;
+
+// ── [블록 B-HOME — 대상 (T-B: surface='home', 기존 B 대신 조립)] ─────────
+const BLOCK_B_HOME = `지금 대화 상대는 홈 화면에서 무엇을 할지 정하는 사용자다.
+- 목적: 짧게 돕고 알맞은 곳으로 안내하는 것. 긴 상담을 하지 않는다.
+- 만들고 싶어하면(홍보·판매·예약·소개 등) intent 'create', 둘러보고 싶어하면(구경·찾기·추천) intent 'explore'.
+- 아직 불분명하면 intent 없이 한 번만 되묻는다. 두 번 이상 되묻지 않는다.
+- 답변은 1~3문장. 카드 제작 세부 상담은 하지 않는다(그건 만들기 화면에서).`;
 
 // ── [블록 C — 개입 단계 (stage 3분기)] ───────────────────────────────────
 const STAGE_BLOCKS: Record<LingoStage, string> = {
@@ -127,20 +136,23 @@ function buildContextBlock(context: LingoContext | null | undefined): string {
 
 // ── 조립 — A → B → C → D → E → F → (H) → G ──────────────────────────────
 //    H 는 studio 주입 시에만 — 미주입이면 기존 조립과 문자 단위 동일(하위호환, T-A §6).
+//    T-B — surface='home' 이면 B 자리만 BLOCK_B_HOME 교체. 미지정/'studio' = 기존과 동일.
 export function buildSystemPrompt({
   stage,
   facts,
   context,
   studio,
+  surface,
 }: {
   stage: LingoStage;
   facts: string[];
   context: LingoContext | null | undefined;
   studio?: LingoStudioContext | null;
+  surface?: LingoSurface;
 }): string {
   const blocks: string[] = [
     BLOCK_A,
-    BLOCK_B,
+    surface === "home" ? BLOCK_B_HOME : BLOCK_B,
     STAGE_BLOCKS[stage] ?? STAGE_BLOCKS.guide,
     BLOCK_D,
   ];

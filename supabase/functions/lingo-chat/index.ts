@@ -1,8 +1,12 @@
 // lingo-chat — 링고 대화 엔진 v1 (T2). Claude Sonnet 4.6, SSE 스트리밍.
 //
-// POST { session_id?, message(≤2000자), context?, input_channel:'text'|'voice' }
-// → SSE: event meta {session_id, stage} → event delta {text}* → event done {message_id, tokens_used, cost_krw}
+// POST { session_id?, message(≤2000자), context?, input_channel:'text'|'voice', surface?:'studio'|'home' }
+// → SSE: event meta {session_id, stage, surface} → event delta {text}* → event done {message_id, tokens_used, cost_krw}
 //   실패 시 event error {code, friendly}. quota 초과·검증 실패는 스트림 대신 JSON.
+//
+// T-B 홈 인텐트 — surface='home' 이면: BLOCK_B_HOME 페르소나 + set_home_intent 단일 도구만
+//   부착(studio 도구 미부착·블록 H 비조립). 인텐트 확정 시 done 직전 event: intent
+//   {"intent":"create"|"explore"} 1회(서버측 enum 검증). surface 미전송 = 'studio' 기존 동작.
 //
 // T-A 액션 엔진 v1 — context.studio 가 있을 때만 tool use(apply_studio_actions) 활성:
 //   SSE 에 event: actions {"actions":[...],"steps":[...]} 1종 추가(done 직전 최대 1회).
@@ -36,6 +40,7 @@ import {
   type LingoContext,
   type LingoStage,
   type LingoStudioContext,
+  type LingoSurface,
 } from "./persona.ts";
 import { EXTRACT_SYSTEM_PROMPT } from "./extract.ts";
 
@@ -58,7 +63,8 @@ const MAX_TOKENS = 1024;
 // 하위호환(기존 요청과 동일)을 위해 기존 1024 유지.
 const MAX_TOKENS_STUDIO = 1500;
 const MAX_MESSAGE_CHARS = 2000;
-const SURFACE = "studio";
+// T-B — surface 는 요청 필드('studio' 기본 | 'home'). lingo_sessions/lingo_user_state 에 그대로 기록.
+const DEFAULT_SURFACE: LingoSurface = "studio";
 const USD_TO_KRW = 1400;
 // generation_type CHECK 기존 값 재사용(DDL 0, promo-copy 선례). response.kind 로 식별.
 const GENERATION_TYPE = "share_message";
@@ -148,6 +154,19 @@ const APPLY_STUDIO_ACTIONS_TOOL = {
   },
 };
 
+// T-B — 홈 인텐트 단일 도구 (surface='home'일 때만 부착 — studio 도구는 home 미부착).
+const SET_HOME_INTENT_TOOL = {
+  name: "set_home_intent",
+  description: "사용자가 가려는 방향이 정해졌을 때 호출. 만들기 = create, 둘러보기 = explore.",
+  input_schema: {
+    type: "object" as const,
+    properties: { intent: { enum: ["create", "explore"] } },
+    required: ["intent"],
+  },
+};
+// T-B — 서버측 재검증: enum 2종 외 제거.
+const HOME_INTENTS = new Set(["create", "explore"]);
+
 // T-A §5 — 서버측 재검증 화이트리스트(모델 출력 신뢰 금지).
 const ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField"]);
 const ACTION_MODES = new Set(["general", "reserve", "commerce"]);
@@ -230,6 +249,8 @@ type RequestBody = {
   message?: string;
   context?: LingoContext | null;
   input_channel?: string;
+  /** T-B — 'studio'(기본) | 'home'. home = 화면 이동 인텐트 모드. */
+  surface?: string;
 };
 
 Deno.serve(async (req) => {
@@ -268,6 +289,12 @@ Deno.serve(async (req) => {
       400,
     );
   }
+  // T-B — surface: 'studio'(기본) | 'home'. 그 외 값 400. 미전송 = studio(기존 동작 동일).
+  const surfaceRaw = body.surface ?? DEFAULT_SURFACE;
+  if (!isClose && surfaceRaw !== "studio" && surfaceRaw !== "home") {
+    return jsonResponse({ code: "surface_not_supported", friendly: "잘못된 요청이에요." }, 400);
+  }
+  const surface: LingoSurface = surfaceRaw === "home" ? "home" : "studio";
 
   // 1) JWT → user_id (generate-feedback 패턴: Authorization 헤더로 user 클라이언트 생성 → getUser).
   const authHeader = req.headers.get("Authorization");
@@ -335,7 +362,7 @@ Deno.serve(async (req) => {
       .from("lingo_sessions")
       .insert({
         user_id: uid,
-        surface: SURFACE,
+        surface, // T-B — 요청 surface 그대로 기록('studio' 기본 | 'home').
         context: ctxSummary,
         input_channel: inputChannel,
         status: "active",
@@ -358,7 +385,7 @@ Deno.serve(async (req) => {
       .from("lingo_user_state")
       .select("stage, sessions_count, completions_count")
       .eq("user_id", uid)
-      .eq("surface", SURFACE)
+      .eq("surface", surface)
       .maybeSingle();
     if (stateRow) {
       const s = stateRow as { stage?: string; sessions_count?: number; completions_count?: number };
@@ -369,7 +396,7 @@ Deno.serve(async (req) => {
       await admin
         .from("lingo_user_state")
         .upsert(
-          { user_id: uid, surface: SURFACE, stage: "guide", updated_at: new Date().toISOString() },
+          { user_id: uid, surface, stage: "guide", updated_at: new Date().toISOString() },
           { onConflict: "user_id,surface" },
         );
     }
@@ -400,15 +427,17 @@ Deno.serve(async (req) => {
     }));
 
   // 6) 시스템프롬프트 조립 (persona.ts §3). T-A — context.studio 있으면 블록 H(액션 규칙) 동봉.
-  const studio: LingoStudioContext | null = body.context?.studio ?? null;
-  const systemPrompt = buildSystemPrompt({ stage, facts, context: body.context, studio });
+  //    T-B — home 은 studio 기제(도구·블록 H) 전면 비활성: studio 도구는 home 에서 부착하지 않는다.
+  const studio: LingoStudioContext | null =
+    surface === "studio" ? (body.context?.studio ?? null) : null;
+  const systemPrompt = buildSystemPrompt({ stage, facts, context: body.context, studio, surface });
 
   const messages = [...history, { role: "user" as const, content: message }];
 
   // 7~10) SSE 스트림 — meta → delta* → done / error. 예외를 밖으로 던지지 않는다(원칙 4·9).
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      controller.enqueue(sseFrame("meta", { session_id: sessionId, stage }));
+      controller.enqueue(sseFrame("meta", { session_id: sessionId, stage, surface }));
 
       let fullText = "";
       let inTok = 0;
@@ -428,7 +457,12 @@ Deno.serve(async (req) => {
             { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
           ],
           messages,
-          ...(studio ? { tools: [APPLY_STUDIO_ACTIONS_TOOL] } : {}),
+          // T-B — home 은 set_home_intent 단일 도구, studio 는 기존 그대로(상호 배타).
+          ...(studio
+            ? { tools: [APPLY_STUDIO_ACTIONS_TOOL] }
+            : surface === "home"
+              ? { tools: [SET_HOME_INTENT_TOOL] }
+              : {}),
           stream: true,
         });
 
@@ -484,6 +518,23 @@ Deno.serve(async (req) => {
         return;
       }
 
+      // T-B — 홈 인텐트 파싱 → 서버측 검증(enum 2종 외 제거). 파싱 실패는 조용히 인텐트 없음.
+      let homeIntent: string | null = null;
+      if (surface === "home") {
+        for (const buf of Object.values(toolBufByIndex)) {
+          if (buf.name !== "set_home_intent" || !buf.json.trim()) continue;
+          try {
+            const parsed = JSON.parse(buf.json) as { intent?: unknown };
+            if (typeof parsed.intent === "string" && HOME_INTENTS.has(parsed.intent)) {
+              homeIntent = parsed.intent;
+              break; // done 직전 최대 1회 — 첫 유효 호출만.
+            }
+          } catch (e) {
+            console.warn("[lingo-chat] home intent parse failed (silent):", e);
+          }
+        }
+      }
+
       // T-A §3/§5 — 도구 입력 완성분 파싱 → 서버측 재검증. 파싱 실패는 조용히 액션 없음(§6).
       let studioResult: { actions: StudioAction[]; steps: StudioStep[] } | null = null;
       if (studio) {
@@ -521,11 +572,12 @@ Deno.serve(async (req) => {
             session_id: sessionId,
             role: "lingo",
             content: fullText,
-            // T-A §5 — 검증 통과 액션은 meta 에 감사 저장.
+            // T-A §5 — 검증 통과 액션은 meta 에 감사 저장. T-B — 홈 인텐트도 동일하게 감사.
             meta: {
               model: MODEL,
               stage,
               ...(studioResult ? { actions: studioResult.actions, steps: studioResult.steps } : {}),
+              ...(homeIntent ? { intent: homeIntent } : {}),
             },
             tokens_used: tokensUsed,
             cost_krw: cost,
@@ -557,7 +609,7 @@ Deno.serve(async (req) => {
         await admin.from("lingo_user_state").upsert(
           {
             user_id: uid,
-            surface: SURFACE,
+            surface,
             stage,
             sessions_count: sessionsCount + (sessionCreated ? 1 : 0),
             completions_count: completionsCount,
@@ -576,6 +628,11 @@ Deno.serve(async (req) => {
         controller.enqueue(
           sseFrame("actions", { actions: studioResult.actions, steps: studioResult.steps }),
         );
+      }
+
+      // T-B — event: intent — done 직전 최대 1회(검증 통과 시에만).
+      if (homeIntent) {
+        controller.enqueue(sseFrame("intent", { intent: homeIntent }));
       }
 
       controller.enqueue(
