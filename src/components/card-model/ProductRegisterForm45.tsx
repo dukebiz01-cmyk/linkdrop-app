@@ -16,7 +16,10 @@ import { getSupabase } from "@/lib/supabase";
 import { resizeToJpegBlob } from "@/lib/image-upload";
 // FIX-36 — 이익 계산 정본(순수 함수) 재사용: 드로피 차감 = 이 폼의 dropy_rate/dropy_fixed 그대로,
 //   기준액 = 상품 실결제액(판매가−할인, 배송비 제외). 임의 비율 창작 0(진실경계).
-import { computeProfitReceipt } from "@/components/commerce/ProductRegisterForm";
+import {
+  computeProfitReceipt,
+  computeBreakEvenPrice,
+} from "@/components/commerce/ProductRegisterForm";
 // FIX-37 — 상품 상세정보 고시표(유형별) 행 빌더 — 순수 모듈 분리(라벨 = 실제 고시 항목 명칭).
 import { buildNoticeRows45 } from "./product-notice45";
 // FIX-45 — 시세 엔진 원형 복원: 구 폼 정본 PriceBandAdvisor 무수정 재사용(공용 presentational
@@ -284,6 +287,10 @@ export function ProductRegisterForm45({
   const [groupBuyOn, setGroupBuyOn] = useState(false);
   const [groupBuyN, setGroupBuyN] = useState("");
   const [groupBuyPrice, setGroupBuyPrice] = useState("");
+  // FIX-36c — 공동구매 모집 마감일(자정 마감 기본 — 날짜만 저장, group_buy_deadline jsonb 1키).
+  const [groupBuyDeadline, setGroupBuyDeadline] = useState("");
+  // FIX-36c — 길잡이 b: 목표 이익 입력(선택 · 표시용 · 미저장).
+  const [targetProfit, setTargetProfit] = useState("");
   const [freeShip, setFreeShip] = useState(true);
   const [shipFee, setShipFee] = useState("");
   const [droppyMode, setDroppyMode] = useState<"rate" | "fixed">("rate");
@@ -352,6 +359,9 @@ export function ProductRegisterForm45({
   const costNum = cost !== "" ? Number(cost) : null;
   const shipFeeNum = shipFee !== "" ? Math.floor(Number(shipFee)) : null;
   const discountNum = plannedDiscount !== "" ? Number(plannedDiscount) : 0;
+  // FIX-36c — 공동구매 시 예정 할인 숨김(달성가가 곧 할인) → 할인 차감도 0(잔존값 무시).
+  //   일반 모드는 기존과 동일(36b 패리티 유지).
+  const effDiscount = groupBuyOn ? 0 : discountNum;
   // FIX-36b — 기타잡비: 입력분만(미입력 = 0 · 행 미렌더).
   const miscNum = miscCost !== "" ? Math.floor(Number(miscCost)) : null;
   // 고정 Droppy — 제출 가드 동일(0<f≤price 통과분만 차감 반영, 무효 = 0 취급).
@@ -479,7 +489,7 @@ export function ProductRegisterForm45({
     priceNum > 0 && costNum != null
       ? computeProfitReceipt({
           priceKrw: priceNum,
-          discountKrw: discountNum,
+          discountKrw: effDiscount,
           costKrw: costNum,
           shippingMode: freeShip ? "free" : "paid",
           shippingFeeKrw: shipFeeNum ?? 0,
@@ -504,7 +514,7 @@ export function ProductRegisterForm45({
     gbValid && costNum != null
       ? computeProfitReceipt({
           priceKrw: gbPriceNum,
-          discountKrw: discountNum,
+          discountKrw: effDiscount,
           costKrw: costNum,
           shippingMode: freeShip ? "free" : "paid",
           shippingFeeKrw: shipFeeNum ?? 0,
@@ -513,6 +523,24 @@ export function ProductRegisterForm45({
           dropyFixedKrw: droppyFixedNum,
           miscCostKrw: miscNum,
         })
+      : null;
+  // FIX-36c — 길잡이 역산(정본 computeBreakEvenPrice · 사장님 입력값만): a 손익분기 / b 목표 이익.
+  //   비용(원가) 입력 완료 시에만(추정 0 — 영수증 렌더 게이트와 동일).
+  const breakEvenBase = {
+    discountKrw: effDiscount,
+    costKrw: costNum,
+    shippingMode: (freeShip ? "free" : "paid") as "free" | "paid",
+    shippingFeeKrw: shipFeeNum ?? 0,
+    dropyMode: droppyMode,
+    dropyPercent: droppyRate,
+    dropyFixedKrw: droppyFixedNum,
+    miscCostKrw: miscNum,
+  };
+  const breakEvenPrice = costNum != null ? computeBreakEvenPrice(breakEvenBase) : null;
+  const targetProfitNum = targetProfit !== "" ? Math.floor(Number(targetProfit)) : null;
+  const targetPrice =
+    costNum != null && targetProfitNum != null && targetProfitNum > 0
+      ? computeBreakEvenPrice({ ...breakEvenBase, targetProfitKrw: targetProfitNum })
       : null;
 
   // FIX-34 — 진행 신호 방출(변경 필드는 override 로 전달 — setState 직후 stale 값 방지).
@@ -660,6 +688,12 @@ export function ProductRegisterForm45({
       if (gbPriceNum == null || gbPriceNum <= 0 || gbPriceNum >= priceNum) {
         return setFormError("공동구매 달성 할인가는 기본 판매가보다 낮아야 해요.");
       }
+      // FIX-36c — 모집 마감 ≤ 판매기간 마감. 폼이 아는 기간 = 수확·발송(FIX-24) 종료일
+      //   (판매기간 캘린더는 호스트 seasonal 블록 — 폼 밖). 날짜 미입력이면 비교 대상 없음 = 통과.
+      const saleEnd = (harvestDateEnd || harvestDate).trim();
+      if (groupBuyDeadline && saleEnd && groupBuyDeadline > saleEnd) {
+        return setFormError("공동구매 모집 마감일은 수확·발송 마감일보다 늦을 수 없어요.");
+      }
     }
     // 드로피 검증 — get_feed_dropy_reward 가드 동일: rate 0<r≤0.20 / fixed 0<f≤price.
     const rate = droppyMode === "rate" && droppyRate > 0 ? droppyRate / 100 : null;
@@ -752,7 +786,8 @@ export function ProductRegisterForm45({
           ? { unit_label: freshUnitLabel }
           : {}),
       ...(isFresh && saleUnit === "box" ? { pack_type: freshPackLabel } : {}),
-      ...(type === "processed" ? { storage_method: storage } : {}),
+      // FIX-36c — fresh 도 보관타입 저장(① 요약 칩 신규 입력 — additive 1키 확장).
+      ...(type !== "goods" ? { storage_method: storage } : {}),
       ...(type === "processed" && dateVal ? { expiry_date: dateVal } : {}),
       ...(type === "goods" && dateVal ? { ship_date: dateVal } : {}),
       // FIX-24 — 기간 종료일(미주입 = 단일일 — 하위호환: 시작일 키는 위 기존 키 그대로).
@@ -766,7 +801,14 @@ export function ProductRegisterForm45({
       ...(!freeShip && shipFee ? { ship_fee_krw: Math.floor(Number(shipFee)) } : {}),
       // FIX-40 — 공동구매 v1(표시 키만 · 정산 무접촉): 유효 통과분만 저장. 미달 자동 취소·
       //   차액 환불 자동화 없음(v1 락 — 판매자 수동 운영).
-      ...(gbValid ? { group_buy_target_n: gbTargetN, group_buy_price_krw: gbPriceNum } : {}),
+      ...(gbValid
+        ? {
+            group_buy_target_n: gbTargetN,
+            group_buy_price_krw: gbPriceNum,
+            // FIX-36c — 모집 마감일(자정 마감 · 날짜만). 미입력 = 키 생략.
+            ...(groupBuyDeadline ? { group_buy_deadline: groupBuyDeadline } : {}),
+          }
+        : {}),
       // FIX-37 — 상품 상세정보 고시 스냅샷(jsonb 키 추가만 · 신규 테이블/마이그레이션 0).
       //   값 = 실입력·미러만, 미입력 "" 그대로(정직 표기 — 자동 생성 금지 §0).
       //   /d 렌더는 거울 수술 필요 → ST2b 이관(저장까지만).
@@ -818,6 +860,13 @@ export function ProductRegisterForm45({
       setSaving(false);
       onBusyChange?.(null);
     }
+  }
+
+  // FIX-36c — 영수증 [고치기] 점프(jumpToBlock 문법 재사용): 해당 입력칸 스크롤+포커스.
+  function jumpField(id: string) {
+    const el = document.getElementById(id);
+    el?.scrollIntoView({ block: "center" });
+    (el as HTMLInputElement | null)?.focus?.();
   }
 
   const focusRing = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -913,51 +962,7 @@ export function ProductRegisterForm45({
         <Segmented options={TYPE_OPTIONS} value={type} onSelect={selectType} />
       </Field>
 
-      <Field label={copy.dateLabel} hint={copy.dateHint}>
-        {type === "processed" ? (
-          // 소비기한 — 기한은 하나(단일 유지).
-          <input type="date" value={harvestDate} onChange={(e) => setHarvestDate(e.target.value)} className={inputCls} style={{ boxShadow: "inset 0 0 0 1px transparent" }} onFocus={focusRing} onBlur={blurRing} />
-        ) : (
-          // FIX-24 — 예약판매 농산물·수제품은 "수확(준비) 후 순차배송"이 본질 — 기간이 기본.
-          //   시작일 선택 시 종료일 자동 = 시작일(단일), 종료는 min 으로 뒤로만 확장.
-          <>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="date"
-                value={harvestDate}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setHarvestDate(v);
-                  if (!v) setHarvestDateEnd("");
-                  else if (!harvestDateEnd || harvestDateEnd < v) setHarvestDateEnd(v);
-                }}
-                className={inputCls}
-                style={{ boxShadow: "inset 0 0 0 1px transparent" }}
-                onFocus={focusRing}
-                onBlur={blurRing}
-              />
-              <span className="shrink-0 text-[13px] font-bold text-[#A3A3A3]">~</span>
-              <input
-                type="date"
-                value={harvestDateEnd}
-                min={harvestDate || undefined}
-                onChange={(e) => setHarvestDateEnd(e.target.value)}
-                className={inputCls}
-                style={{ boxShadow: "inset 0 0 0 1px transparent" }}
-                onFocus={focusRing}
-                onBlur={blurRing}
-              />
-            </div>
-            {!!harvestDate && !!harvestDateEnd && harvestDateEnd > harvestDate && (
-              <p className="mt-1.5 text-[11px] font-medium text-[#8A8A8A]">
-                {type === "fresh"
-                  ? "이 기간 동안 수확 순서대로 순차 발송돼요"
-                  : "이 기간 동안 준비되는 순서대로 순차 발송돼요"}
-              </p>
-            )}
-          </>
-        )}
-      </Field>
+      {/* FIX-36c — 날짜(수확·발송/소비기한)는 ④ 재고·판매기간 섹션으로 이동(아래). */}
 
       {type === "processed" && (
         <Field label="보관 방법">
@@ -1062,8 +1067,60 @@ export function ProductRegisterForm45({
         </Field>
       )}
 
-      {/* 판매 단위 — FIX-38: 원포토에선 미노출(기본 낱개 유지). */}
+      {/* FIX-36c ① — fresh 요약 칩: 보관타입(신규 입력 1칸 — 냉장/냉동/상온, 빠른등록에도 허용)
+          + 구성 unit_label 미러 + 원산지 고시표 미러(값 있을 때만 — 창작 0). */}
+      {type === "fresh" && (
+        <Field label="보관·요약">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {STORAGE_OPTIONS.map((s) => {
+              const on = storage === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setStorage(s.id)}
+                  className="rounded-full px-2.5 py-1.5 text-[12px] font-semibold transition-colors"
+                  style={
+                    on
+                      ? { backgroundColor: accent, color: "#fff" }
+                      : { backgroundColor: "#F4F4F5", color: "#525252" }
+                  }
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+            {compositionLabel && (
+              <span className="rounded-full bg-[#F4F4F5] px-2.5 py-1.5 text-[12px] font-medium text-[#8A8A8A]">
+                구성: {compositionLabel}
+              </span>
+            )}
+            {origin.trim() && (
+              <span className="rounded-full bg-[#F4F4F5] px-2.5 py-1.5 text-[12px] font-medium text-[#8A8A8A]">
+                원산지: {origin.trim()}
+              </span>
+            )}
+          </div>
+        </Field>
+      )}
+
+      {/* FIX-36c ② — 판매 방식 입구 분기(Duke 확정): 일반 판매/공동구매 택1(기본 일반).
+          FIX-40 토글 대체 — 상태(groupBuyOn)·저장 키·고지 문구 재사용(위치만 이동).
+          빠른등록 침투 금지(일반 고정). */}
       <Field label="어떻게 판매하시겠어요?" hidden={quickMode}>
+        <Segmented
+          options={[
+            { id: "normal", label: "일반 판매" },
+            { id: "groupbuy", label: "공동구매" },
+          ]}
+          value={groupBuyOn ? "groupbuy" : "normal"}
+          onSelect={(id) => setGroupBuyOn(id === "groupbuy")}
+        />
+      </Field>
+
+      {/* 판매 구성(단위·무게) — FIX-38: 원포토에선 미노출(기본 낱개 유지).
+          FIX-36c — 라벨 개칭: "어떻게 판매하시겠어요?"는 ② 판매 방식 분기가 사용(Duke 확정). */}
+      <Field label="판매 구성 (단위·무게)" hidden={quickMode}>
         <Segmented options={unitOptions} value={saleUnit} onSelect={setSaleUnit} />
         {/* FIX-15 — 묶음형(팩·박스·포대·세트, 가공품·공산품) 구성: 1{단위} = N개 또는 N kg. */}
         {isBundle && (
@@ -1195,10 +1252,314 @@ export function ProductRegisterForm45({
         )}
       </Field>
 
-      {/* FIX-37 — 상품 상세정보 고시(상품정보제공고시) — 인라인 펼침(Radix 금지).
+      {/* FIX-36c — 고시표(FIX-37)는 ⑥(비용 뒤)으로 이동 — 아래 참조. */}
+
+      {/* FIX-45 — 시세 엔진(구 폼 정본 이식 · 무수정 재사용): 생산자 화면 전용(§0 — /d·CardModel
+          미리보기 미노출). 노출 조건 = 구 폼 동일(fresh + 품목 확정). 숫자·기준일·건수 = API 실값만. */}
+      {type === "fresh" && kamisItemCode && (
+        <div className="rounded-2xl bg-[#F7F7F8] p-3.5">
+          <h3 className="text-[12.5px] font-bold text-[#0A0A0A]">시세는 이렇습니다. 참고하세요</h3>
+          <PriceBandAdvisor
+            priceBand={priceBand}
+            loading={priceBandLoading}
+            composition={
+              composition
+                ? {
+                    packType:
+                      saleUnit === "box" ? freshPackLabel : saleUnit === "unit" ? "낱개" : "단위",
+                    unitCount: composition.unitCount,
+                    totalKg: composition.totalKg,
+                  }
+                : null
+            }
+            compositionLabel={compositionLabel}
+            myPriceKrw={priceNum > 0 ? priceNum : null}
+            onRefresh={() => setPriceBandRefresh((n) => n + 1)}
+            onAdjustPrice={() => {
+              // 보완 a — 판매가 입력 포커스(구 폼 동작 그대로). 가격 변경 시 이익 영수증은
+              //   FIX-36b 기존 반응형 계산이 즉시 재계산(신규 계산 로직 0).
+              const el = document.getElementById("pd45-price");
+              el?.scrollIntoView({ block: "center" });
+              (el as HTMLInputElement | null)?.focus();
+            }}
+          />
+        </div>
+      )}
+
+      {/* FIX-36c ③ — 가격(시세 블록·내 가격 위치 = 판매가 위 유지). 공동구매 = "기본 판매가". */}
+      <Field label={groupBuyOn ? "기본 판매가" : "가격"} required>
+        {/* FIX-45 — 구 폼 P1.5: 시세 데이터(status ok) 있을 때만 참고 문구. */}
+        {priceBand?.status === "ok" && (
+          <p className="mb-1.5 text-[11px] font-medium text-[#A3A3A3]">
+            위 시세를 참고해 판매 가격을 정하세요
+          </p>
+        )}
+        <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3 focus-within:bg-white" style={{ boxShadow: "inset 0 0 0 1px transparent" }}>
+          <span className="text-[14px] font-bold text-[#525252]">₩</span>
+          <input
+            id="pd45-price"
+            value={price}
+            onChange={(e) => {
+              const v = onlyDigits(e.target.value);
+              setPrice(v);
+              emitProgress({ priceSet: Number(v) > 0 }); // FIX-34 — 가격 진행 신호.
+            }}
+            inputMode="numeric"
+            placeholder="19900"
+            className="w-full bg-transparent px-1.5 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+          />
+          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
+        </div>
+        {/* FIX-45 보완 b — 내 가격 위치 1줄(시세 실값 × 단위 정규화 · 실패 = 미렌더 · 사실만). */}
+        {pricePositionLines.length > 0 && (
+          <div className="mt-1 space-y-0.5">
+            {pricePositionLines.map((l) => (
+              <p key={l} className="text-[10.5px] font-medium tabular-nums text-[#8A8A8A]">
+                {l}
+              </p>
+            ))}
+          </div>
+        )}
+        {/* FIX-36c — 이익 계산(원가·잡비 입력)은 ⑤ 비용, 영수증은 ⑧ 최하단으로 이동. */}
+      </Field>
+
+      {/* FIX-36c ③ — 판매 방식별 조건: 일반 = 예정 할인 / 공동구매 = 목표·달성가·모집 마감일.
+          공동구매 UI 는 FIX-40 원문 이동(고지 문구 그대로) + 마감일 1칸 신설. */}
+      {!groupBuyOn && (
+        <Field label="예정 할인" hint="시뮬레이션 · 저장하지 않아요" hidden={quickMode}>
+          <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
+            <span className="text-[12px] font-semibold text-[#8A8A8A]">할인</span>
+            <input
+              id="pd45-discount"
+              value={plannedDiscount}
+              onChange={(e) => setPlannedDiscount(onlyDigits(e.target.value))}
+              inputMode="numeric"
+              placeholder="예: 2000"
+              className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+            />
+            <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
+          </div>
+          <p className="mt-1 text-[10.5px] text-[#A3A3A3]">
+            {plannedDiscount && price ? `할인가 ${(priceNum - Number(plannedDiscount)).toLocaleString()}원` : "판매가를 입력하면 계산해 드려요"}
+          </p>
+        </Field>
+      )}
+      {groupBuyOn && (
+        <Field label="공동구매 조건" hidden={quickMode}>
+          <div className="space-y-2 rounded-xl bg-[#F7F7F8] p-2.5">
+            <SubInput
+              label="목표 인원 (2명 이상)"
+              value={groupBuyN}
+              onChange={(v) => setGroupBuyN(onlyDigits(v))}
+              placeholder="예: 10"
+              suffix="명"
+              accent={accent}
+            />
+            <SubInput
+              label="달성 시 할인가 (기본 판매가보다 낮게)"
+              value={groupBuyPrice}
+              onChange={(v) => setGroupBuyPrice(onlyDigits(v))}
+              placeholder="예: 25000"
+              suffix="원"
+              accent={accent}
+            />
+            {gbPriceNum != null && priceNum > 0 && gbPriceNum >= priceNum && (
+              <p className="text-[10.5px] font-semibold text-[#EF4444]">
+                달성 할인가는 기본 판매가보다 낮아야 해요
+              </p>
+            )}
+            {/* FIX-36c — 모집 마감일(자정 마감 · 기간화 필드 문법 재사용 — 날짜만 저장). */}
+            <div>
+              <span className="mb-1 block text-[11px] font-semibold text-[#525252]">
+                모집 마감일 <span className="font-medium text-[#A3A3A3]">(선택 · 자정 마감)</span>
+              </span>
+              <input
+                type="date"
+                value={groupBuyDeadline}
+                max={harvestDateEnd || harvestDate || undefined}
+                onChange={(e) => setGroupBuyDeadline(e.target.value)}
+                className={inputCls}
+                style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+                onFocus={focusRing}
+                onBlur={blurRing}
+              />
+            </div>
+            <p className="text-[10.5px] font-medium leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
+              목표 달성 시 할인가 적용은 사장님이 주문 확정 시 직접 반영해 주세요. 목표 미달이면
+              기본가로 진행돼요(자동 취소 없음).
+            </p>
+          </div>
+        </Field>
+      )}
+
+      {/* FIX-36c ④ — 재고·판매기간: 판매 수량(이동) + 수확·발송/소비기한(이동 — quick 노출 유지). */}
+      <Field label="몇 개나 판매하시겠어요?" hint="선택 · 한정 수량" hidden={quickMode}>
+        <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
+          <input value={quantity} onChange={(e) => setQuantity(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 30" className="w-full bg-transparent px-1 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
+          <span className="text-[13px] font-semibold text-[#8A8A8A]">개</span>
+        </div>
+      </Field>
+
+      <Field label={copy.dateLabel} hint={copy.dateHint}>
+        {type === "processed" ? (
+          // 소비기한 — 기한은 하나(단일 유지).
+          <input type="date" value={harvestDate} onChange={(e) => setHarvestDate(e.target.value)} className={inputCls} style={{ boxShadow: "inset 0 0 0 1px transparent" }} onFocus={focusRing} onBlur={blurRing} />
+        ) : (
+          // FIX-24 — 예약판매 농산물·수제품은 "수확(준비) 후 순차배송"이 본질 — 기간이 기본.
+          //   시작일 선택 시 종료일 자동 = 시작일(단일), 종료는 min 으로 뒤로만 확장.
+          <>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={harvestDate}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setHarvestDate(v);
+                  if (!v) setHarvestDateEnd("");
+                  else if (!harvestDateEnd || harvestDateEnd < v) setHarvestDateEnd(v);
+                }}
+                className={inputCls}
+                style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+                onFocus={focusRing}
+                onBlur={blurRing}
+              />
+              <span className="shrink-0 text-[13px] font-bold text-[#A3A3A3]">~</span>
+              <input
+                type="date"
+                value={harvestDateEnd}
+                min={harvestDate || undefined}
+                onChange={(e) => setHarvestDateEnd(e.target.value)}
+                className={inputCls}
+                style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+                onFocus={focusRing}
+                onBlur={blurRing}
+              />
+            </div>
+            {!!harvestDate && !!harvestDateEnd && harvestDateEnd > harvestDate && (
+              <p className="mt-1.5 text-[11px] font-medium text-[#8A8A8A]">
+                {type === "fresh"
+                  ? "이 기간 동안 수확 순서대로 순차 발송돼요"
+                  : "이 기간 동안 준비되는 순서대로 순차 발송돼요"}
+              </p>
+            )}
+          </>
+        )}
+      </Field>
+
+      {/* FIX-36c ⑤ — 비용(원가→배송→드로피→기타잡비). 원가·잡비 = 빠른등록에도 기존대로 노출. */}
+      <Field label="원가" hint="선택 · 저장하지 않아요">
+        <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
+          <input
+            id="pd45-cost"
+            value={cost}
+            onChange={(e) => setCost(onlyDigits(e.target.value))}
+            inputMode="numeric"
+            placeholder="예: 12000"
+            className="w-full bg-transparent px-1 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+          />
+          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
+        </div>
+      </Field>
+
+      {/* 배송 — FIX-38: 원포토에선 미노출(기본 무료배송 유지). */}
+      <Field label="배송" hidden={quickMode}>
+        <Segmented
+          options={[
+            { id: "free", label: "무료배송(내 부담)" },
+            { id: "paid", label: "배송비 별도(구매자 부담)" },
+          ]}
+          value={freeShip ? "free" : "paid"}
+          onSelect={(id) => setFreeShip(id === "free")}
+        />
+        {/* FIX-36 — 배송비 입력을 양 모드 노출: 무료배송 = 내 부담 비용(이익 계산 편입 · 저장 안 함) /
+            구매자 부담 = 손님 카드 "배송비 N원" 표기 근거(ship_fee_krw 저장 — 기존 payload 계약 그대로). */}
+        <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
+          <span className="shrink-0 text-[12px] font-semibold text-[#8A8A8A]">배송비</span>
+          <input
+            id="pd45-ship"
+            value={shipFee}
+            onChange={(e) => setShipFee(onlyDigits(e.target.value))}
+            inputMode="numeric"
+            placeholder="예: 4000"
+            className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+          />
+          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
+        </div>
+        <p className="mt-1 text-[10.5px] font-medium text-[#A3A3A3]">
+          {freeShip
+            ? "내가 부담하는 배송비 — 이익 계산에만 쓰고 저장하지 않아요"
+            : "구매자가 결제 시 함께 내는 금액 — 손님 카드에 배송비로 표기돼요"}
+        </p>
+      </Field>
+
+      {/* FIX-36c — 공동구매 설정은 ② 분기 + ③ 공동구매 조건으로 이동(FIX-40 UI 원문 재사용). */}
+
+      {/* 공유 보상 (Droppy) — 검증: rate 0<r≤20% / fixed 0<f≤price. FIX-38: 원포토 미노출(0 유지). */}
+      <Field label="공유 보상 (Droppy)" hidden={quickMode}>
+        <div id="pd45-droppy" />
+        <Segmented
+          options={[
+            { id: "rate", label: "비율 %" },
+            { id: "fixed", label: "고정 Droppy" },
+          ]}
+          value={droppyMode}
+          onSelect={(id) => setDroppyMode(id as "rate" | "fixed")}
+        />
+        {droppyMode === "rate" ? (
+          <div className="mt-2 rounded-xl bg-[#F7F7F8] p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-[#525252]">공유 보상 비율</span>
+              <span className="rounded-md px-1.5 py-0.5 text-[13px] font-extrabold tabular-nums" style={{ color: accent, backgroundColor: `${accent}14` }}>
+                {droppyRate}%
+              </span>
+            </div>
+            <div className="relative mt-3 h-5">
+              <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-[#E8E8EA]" />
+              <div className="absolute left-0 top-1/2 h-2 -translate-y-1/2 rounded-full transition-[width] duration-100" style={{ width: `${(droppyRate / 20) * 100}%`, backgroundColor: accent }} />
+              <div className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-white transition-[left] duration-100" style={{ left: `${(droppyRate / 20) * 100}%`, borderColor: accent, boxShadow: `0 2px 6px -1px ${accent}66` }} />
+              <input type="range" min={0} max={20} step={1} value={droppyRate} onChange={(e) => setDroppyRate(Number(e.target.value))} aria-label="공유 보상 비율" className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+            </div>
+            <div className="mt-1.5 flex justify-between text-[10px] font-medium tabular-nums text-[#A3A3A3]">
+              <span>0%</span>
+              <span>20%</span>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
+            <span className="text-[12px] font-semibold text-[#8A8A8A]">고정</span>
+            <input value={droppyFixed} onChange={(e) => setDroppyFixed(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 500" className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
+            <span className="text-[13px] font-semibold text-[#8A8A8A]">Droppy</span>
+          </div>
+        )}
+        <p className="mt-1.5 flex items-start gap-1 text-[10px] leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+          <Info className="mt-0.5 h-3 w-3 flex-none" strokeWidth={2.25} />
+          판매 성사 시 기여도에 따라 분배됩니다 · 공유만으로는 적립되지 않습니다
+        </p>
+      </Field>
+
+      {/* FIX-36c ⑤ — 기타잡비(비용 마지막 · FIX-36b 원문 이동). 빠른등록에도 기존대로 노출. */}
+      <Field label="기타 비용" hint="선택 · 저장하지 않아요">
+        <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
+          <input
+            id="pd45-misc"
+            value={miscCost}
+            onChange={(e) => setMiscCost(onlyDigits(e.target.value))}
+            inputMode="numeric"
+            placeholder="예: 1500"
+            aria-label="기타 비용 (포장·부자재·수수료 등)"
+            className="w-full bg-transparent px-1 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+          />
+          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
+        </div>
+        <p className="mt-1 text-[10.5px] font-medium text-[#A3A3A3]">
+          포장비, 부자재비 등 이 상품에 드는 잡비를 더해 주세요
+        </p>
+      </Field>
+
+      {/* FIX-36c ⑥ — 고시표(FIX-37 원문 이동 · 매장정보 미러는 고시표 내 소비자상담 전화가 담당).
           위 폼 입력(상품명·원산지·분류·소비기한·보관방법·브랜드)은 자동 미러(중복 입력 0),
           나머지 항목만 여기서 입력. 미입력은 그대로 정직 표기 — 자동 생성 금지(§0).
-          FIX-38 — 원포토에선 hidden(DOM 유지·표시만 숨김 — 스냅샷은 미러값으로 동일 저장). */}
+          원포토에선 hidden(DOM 유지·표시만 숨김 — 스냅샷은 미러값으로 동일 저장). */}
       <div className="rounded-2xl bg-[#F7F7F8] p-3.5" hidden={quickMode}>
         <button
           type="button"
@@ -1320,303 +1681,6 @@ export function ProductRegisterForm45({
         )}
       </div>
 
-      {/* FIX-45 — 시세 엔진(구 폼 정본 이식 · 무수정 재사용): 생산자 화면 전용(§0 — /d·CardModel
-          미리보기 미노출). 노출 조건 = 구 폼 동일(fresh + 품목 확정). 숫자·기준일·건수 = API 실값만. */}
-      {type === "fresh" && kamisItemCode && (
-        <div className="rounded-2xl bg-[#F7F7F8] p-3.5">
-          <h3 className="text-[12.5px] font-bold text-[#0A0A0A]">시세는 이렇습니다. 참고하세요</h3>
-          <PriceBandAdvisor
-            priceBand={priceBand}
-            loading={priceBandLoading}
-            composition={
-              composition
-                ? {
-                    packType:
-                      saleUnit === "box" ? freshPackLabel : saleUnit === "unit" ? "낱개" : "단위",
-                    unitCount: composition.unitCount,
-                    totalKg: composition.totalKg,
-                  }
-                : null
-            }
-            compositionLabel={compositionLabel}
-            myPriceKrw={priceNum > 0 ? priceNum : null}
-            onRefresh={() => setPriceBandRefresh((n) => n + 1)}
-            onAdjustPrice={() => {
-              // 보완 a — 판매가 입력 포커스(구 폼 동작 그대로). 가격 변경 시 이익 영수증은
-              //   FIX-36b 기존 반응형 계산이 즉시 재계산(신규 계산 로직 0).
-              const el = document.getElementById("pd45-price");
-              el?.scrollIntoView({ block: "center" });
-              (el as HTMLInputElement | null)?.focus();
-            }}
-          />
-        </div>
-      )}
-
-      {/* 가격 + 이익 계산(미저장 보조) */}
-      <Field label="가격" required>
-        {/* FIX-45 — 구 폼 P1.5: 시세 데이터(status ok) 있을 때만 참고 문구. */}
-        {priceBand?.status === "ok" && (
-          <p className="mb-1.5 text-[11px] font-medium text-[#A3A3A3]">
-            위 시세를 참고해 판매 가격을 정하세요
-          </p>
-        )}
-        <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3 focus-within:bg-white" style={{ boxShadow: "inset 0 0 0 1px transparent" }}>
-          <span className="text-[14px] font-bold text-[#525252]">₩</span>
-          <input
-            id="pd45-price"
-            value={price}
-            onChange={(e) => {
-              const v = onlyDigits(e.target.value);
-              setPrice(v);
-              emitProgress({ priceSet: Number(v) > 0 }); // FIX-34 — 가격 진행 신호.
-            }}
-            inputMode="numeric"
-            placeholder="19900"
-            className="w-full bg-transparent px-1.5 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
-          />
-          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
-        </div>
-        {/* FIX-45 보완 b — 내 가격 위치 1줄(시세 실값 × 단위 정규화 · 실패 = 미렌더 · 사실만). */}
-        {pricePositionLines.length > 0 && (
-          <div className="mt-1 space-y-0.5">
-            {pricePositionLines.map((l) => (
-              <p key={l} className="text-[10.5px] font-medium tabular-nums text-[#8A8A8A]">
-                {l}
-              </p>
-            ))}
-          </div>
-        )}
-        <div className="mt-1.5 rounded-xl bg-[#F7F7F8] p-2.5">
-          <span className="flex items-center gap-1 text-[11px] font-bold text-[#525252]">
-            <Calculator className="h-3.5 w-3.5" strokeWidth={2.25} />
-            이익 계산
-            <span className="ml-1 font-medium text-[#A3A3A3]">선택 · 저장하지 않아요</span>
-          </span>
-          <div className="mt-1.5 flex items-center rounded-lg bg-white px-2.5">
-            <span className="text-[11px] font-semibold text-[#8A8A8A]">원가</span>
-            <input value={cost} onChange={(e) => setCost(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 12000" className="w-full bg-transparent px-2 py-2 text-[12.5px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
-            <span className="text-[12px] font-semibold text-[#8A8A8A]">원</span>
-          </div>
-          {/* FIX-36b — 기타잡비: 직접 입력만(추정·자동 채움 금지 §0). 미입력 = 0 · 행 미렌더. */}
-          <div className="mt-1.5 flex items-center rounded-lg bg-white px-2.5">
-            <span className="shrink-0 text-[11px] font-semibold text-[#8A8A8A]">기타 비용</span>
-            <input
-              value={miscCost}
-              onChange={(e) => setMiscCost(onlyDigits(e.target.value))}
-              inputMode="numeric"
-              placeholder="예: 1500"
-              aria-label="기타 비용 (포장·부자재·수수료 등)"
-              className="w-full bg-transparent px-2 py-2 text-[12.5px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
-            />
-            <span className="text-[12px] font-semibold text-[#8A8A8A]">원</span>
-          </div>
-          <p className="mt-1 text-[10.5px] font-medium text-[#A3A3A3]">
-            포장비, 부자재비 등 이 상품에 드는 잡비를 더해 주세요
-          </p>
-          {/* FIX-36 — 이익 내역(표시용·미저장): 판매가+원가 입력 시에만 렌더.
-              배송비는 무료배송(내 부담)만 차감, 구매자 부담은 제외 안내만. 드로피 차감 병기. */}
-          {receipt !== null && costNum != null && (
-            <div className="mt-1.5 space-y-1 rounded-lg bg-white px-2.5 py-2 text-[11px] font-semibold tabular-nums text-[#525252]">
-              <div className="flex justify-between">
-                <span>판매가</span>
-                <span>{priceNum.toLocaleString()}원</span>
-              </div>
-              {discountNum > 0 && (
-                <div className="flex justify-between">
-                  <span>예정 할인</span>
-                  <span>−{Math.min(discountNum, priceNum).toLocaleString()}원</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span>원가</span>
-                <span>−{costNum.toLocaleString()}원</span>
-              </div>
-              {/* FIX-36b — 배송비 상태 명시(숨김 ≠ 미차감): 무료배송+미입력 = 0원 기준을 정직
-                  표기. 빠른등록은 배송 섹션이 숨김이라 안내 문구를 분기(숨긴 칸 가리키기 금지). */}
-              {freeShip ? (
-                shipFeeNum != null ? (
-                  <div className="flex justify-between">
-                    <span>배송비(내 부담)</span>
-                    <span>−{shipFeeNum.toLocaleString()}원</span>
-                  </div>
-                ) : (
-                  <p className="text-[10.5px] font-medium text-[#A3A3A3]">
-                    {quickMode
-                      ? "무료배송(내 부담) 기준 · 배송비 미입력 — 0원으로 계산했어요. 배송비 입력은 자세히 등록에서 해요"
-                      : "무료배송(내 부담) · 배송비 미입력 — 0원으로 계산했어요. 아래 배송 칸에 적으면 함께 빼드려요"}
-                  </p>
-                )
-              ) : (
-                <p className="text-[10.5px] font-medium text-[#A3A3A3]">
-                  배송비는 구매자 부담 — 이익 계산에서 제외돼요
-                </p>
-              )}
-              {receipt.dropyCostKrw > 0 && (
-                <div className="flex justify-between">
-                  <span>드로피 차감{droppyMode === "rate" ? ` (${droppyRate}%)` : " (고정)"}</span>
-                  <span>−{receipt.dropyCostKrw.toLocaleString()}원</span>
-                </div>
-              )}
-              {/* FIX-36b — 기타잡비 행(입력분만). */}
-              {receipt.miscCostKrw > 0 && (
-                <div className="flex justify-between">
-                  <span>기타잡비</span>
-                  <span>−{receipt.miscCostKrw.toLocaleString()}원</span>
-                </div>
-              )}
-              <div
-                className="flex justify-between border-t border-[#EFEFEF] pt-1 text-[12px] font-bold"
-                style={{ color: receipt.perUnitProfitKrw >= 0 ? accent : "#EF4444" }}
-              >
-                <span>예상 이익{gbReceipt ? " (기본가 기준)" : ""}</span>
-                <span>{receipt.perUnitProfitKrw.toLocaleString()}원</span>
-              </div>
-              {/* FIX-40 — 공동구매 달성가 기준 이익 병기(달성 시 이익도 정직 표시 — 음수 포함). */}
-              {gbReceipt && gbPriceNum != null && (
-                <div
-                  className="flex justify-between text-[11px] font-semibold"
-                  style={{ color: gbReceipt.perUnitProfitKrw >= 0 ? "#525252" : "#EF4444" }}
-                >
-                  <span>공동구매 달성가({gbPriceNum.toLocaleString()}원) 기준</span>
-                  <span>{gbReceipt.perUnitProfitKrw.toLocaleString()}원</span>
-                </div>
-              )}
-              {/* FIX-36b — 음수 = 손해 정직 1줄(사실만 — 압박·권유 카피 금지). */}
-              {receipt.perUnitProfitKrw < 0 && (
-                <p className="pt-0.5 text-[10.5px] font-semibold text-[#EF4444]">
-                  이 가격이면 손해예요
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </Field>
-
-      {/* 배송 — FIX-38: 원포토에선 미노출(기본 무료배송 유지). */}
-      <Field label="배송" hidden={quickMode}>
-        <Segmented
-          options={[
-            { id: "free", label: "무료배송(내 부담)" },
-            { id: "paid", label: "배송비 별도(구매자 부담)" },
-          ]}
-          value={freeShip ? "free" : "paid"}
-          onSelect={(id) => setFreeShip(id === "free")}
-        />
-        {/* FIX-36 — 배송비 입력을 양 모드 노출: 무료배송 = 내 부담 비용(이익 계산 편입 · 저장 안 함) /
-            구매자 부담 = 손님 카드 "배송비 N원" 표기 근거(ship_fee_krw 저장 — 기존 payload 계약 그대로). */}
-        <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
-          <span className="shrink-0 text-[12px] font-semibold text-[#8A8A8A]">배송비</span>
-          <input value={shipFee} onChange={(e) => setShipFee(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 4000" className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
-          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
-        </div>
-        <p className="mt-1 text-[10.5px] font-medium text-[#A3A3A3]">
-          {freeShip
-            ? "내가 부담하는 배송비 — 이익 계산에만 쓰고 저장하지 않아요"
-            : "구매자가 결제 시 함께 내는 금액 — 손님 카드에 배송비로 표기돼요"}
-        </p>
-      </Field>
-
-      {/* FIX-40 — 공동구매 v1(선택 · 발행 조건 아님 · 정산 무접촉). 원포토(빠른 등록) 미노출. */}
-      <Field label="공동구매" hint="선택" hidden={quickMode}>
-        <Checkbox
-          checked={groupBuyOn}
-          onToggle={() => setGroupBuyOn((v) => !v)}
-          label="공동구매로 팔기"
-          accent={accent}
-        />
-        {groupBuyOn && (
-          <div className="mt-2 space-y-2 rounded-xl bg-[#F7F7F8] p-2.5">
-            <SubInput
-              label="목표 인원 (2명 이상)"
-              value={groupBuyN}
-              onChange={(v) => setGroupBuyN(onlyDigits(v))}
-              placeholder="예: 10"
-              suffix="명"
-              accent={accent}
-            />
-            <SubInput
-              label="달성 시 할인가 (기본 판매가보다 낮게)"
-              value={groupBuyPrice}
-              onChange={(v) => setGroupBuyPrice(onlyDigits(v))}
-              placeholder="예: 25000"
-              suffix="원"
-              accent={accent}
-            />
-            {gbPriceNum != null && priceNum > 0 && gbPriceNum >= priceNum && (
-              <p className="text-[10.5px] font-semibold text-[#EF4444]">
-                달성 할인가는 기본 판매가보다 낮아야 해요
-              </p>
-            )}
-            <p className="text-[10.5px] font-medium leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
-              목표 달성 시 할인가 적용은 사장님이 주문 확정 시 직접 반영해 주세요. 목표 미달이면
-              기본가로 진행돼요(자동 취소 없음).
-            </p>
-          </div>
-        )}
-      </Field>
-
-      {/* 공유 보상 (Droppy) — 검증: rate 0<r≤20% / fixed 0<f≤price. FIX-38: 원포토 미노출(0 유지). */}
-      <Field label="공유 보상 (Droppy)" hidden={quickMode}>
-        <Segmented
-          options={[
-            { id: "rate", label: "비율 %" },
-            { id: "fixed", label: "고정 Droppy" },
-          ]}
-          value={droppyMode}
-          onSelect={(id) => setDroppyMode(id as "rate" | "fixed")}
-        />
-        {droppyMode === "rate" ? (
-          <div className="mt-2 rounded-xl bg-[#F7F7F8] p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-[#525252]">공유 보상 비율</span>
-              <span className="rounded-md px-1.5 py-0.5 text-[13px] font-extrabold tabular-nums" style={{ color: accent, backgroundColor: `${accent}14` }}>
-                {droppyRate}%
-              </span>
-            </div>
-            <div className="relative mt-3 h-5">
-              <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-[#E8E8EA]" />
-              <div className="absolute left-0 top-1/2 h-2 -translate-y-1/2 rounded-full transition-[width] duration-100" style={{ width: `${(droppyRate / 20) * 100}%`, backgroundColor: accent }} />
-              <div className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-white transition-[left] duration-100" style={{ left: `${(droppyRate / 20) * 100}%`, borderColor: accent, boxShadow: `0 2px 6px -1px ${accent}66` }} />
-              <input type="range" min={0} max={20} step={1} value={droppyRate} onChange={(e) => setDroppyRate(Number(e.target.value))} aria-label="공유 보상 비율" className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
-            </div>
-            <div className="mt-1.5 flex justify-between text-[10px] font-medium tabular-nums text-[#A3A3A3]">
-              <span>0%</span>
-              <span>20%</span>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
-            <span className="text-[12px] font-semibold text-[#8A8A8A]">고정</span>
-            <input value={droppyFixed} onChange={(e) => setDroppyFixed(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 500" className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
-            <span className="text-[13px] font-semibold text-[#8A8A8A]">Droppy</span>
-          </div>
-        )}
-        <p className="mt-1.5 flex items-start gap-1 text-[10px] leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
-          <Info className="mt-0.5 h-3 w-3 flex-none" strokeWidth={2.25} />
-          판매 성사 시 기여도에 따라 분배됩니다 · 공유만으로는 적립되지 않습니다
-        </p>
-      </Field>
-
-      {/* 예정 할인(시뮬레이션 · 미저장) — FIX-38: 원포토 미노출. */}
-      <Field label="예정 할인" hint="시뮬레이션 · 저장하지 않아요" hidden={quickMode}>
-        <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
-          <span className="text-[12px] font-semibold text-[#8A8A8A]">할인</span>
-          <input value={plannedDiscount} onChange={(e) => setPlannedDiscount(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 2000" className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
-          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
-        </div>
-        <p className="mt-1 text-[10.5px] text-[#A3A3A3]">
-          {plannedDiscount && price ? `할인가 ${(priceNum - Number(plannedDiscount)).toLocaleString()}원` : "판매가를 입력하면 계산해 드려요"}
-        </p>
-      </Field>
-
-      {/* 판매 수량(한정) — FIX-38: 원포토 미노출. */}
-      <Field label="몇 개나 판매하시겠어요?" hint="선택 · 한정 수량" hidden={quickMode}>
-        <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
-          <input value={quantity} onChange={(e) => setQuantity(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 30" className="w-full bg-transparent px-1 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
-          <span className="text-[13px] font-semibold text-[#8A8A8A]">개</span>
-        </div>
-      </Field>
-
       {/* 홍보 문구 — FIX-38: 원포토 미노출(AI 는 사진·이름·가격만으로 제안). */}
       <Field label="홍보 문구" hint="선택" hidden={quickMode}>
         <textarea value={extraInfo} onChange={(e) => setExtraInfo(e.target.value)} rows={3} placeholder={copy.promoPh} className="w-full resize-none rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[12.5px] font-medium leading-relaxed text-[#0A0A0A] outline-none placeholder:text-[#A3A3A3] focus:bg-white" style={{ boxShadow: "inset 0 0 0 1px transparent" }} onFocus={focusRing} onBlur={blurRing} />
@@ -1677,6 +1741,137 @@ export function ProductRegisterForm45({
           </button>
         </div>
       </div>
+
+      {/* FIX-36c ⑧ — 이익 영수증(최하단 · 발행 직전). 차감 순서 = 화면 입력 순서(판매가→할인→
+          원가→배송비→드로피 전액→기타잡비). 각 행 [고치기] = 입력칸 점프. 일반 1열 / 공동구매
+          2열(미달 시 기본가 · 달성 시). 표시용·미저장·/d 미노출 — 계산은 정본 단일 호출(무변경). */}
+      {receipt !== null && costNum != null && (
+        <div className="rounded-2xl bg-[#F7F7F8] p-3.5">
+          <span className="flex items-center gap-1 text-[11px] font-bold text-[#525252]">
+            <Calculator className="h-3.5 w-3.5" strokeWidth={2.25} />
+            이익 영수증
+            <span className="ml-1 font-medium text-[#A3A3A3]">표시용 · 저장하지 않아요</span>
+          </span>
+          <div className="mt-1.5 space-y-1 rounded-lg bg-white px-2.5 py-2 text-[11px] font-semibold tabular-nums text-[#525252]">
+            {gbReceipt && (
+              <div className="flex justify-end gap-3 text-[10px] font-bold text-[#A3A3A3]">
+                <span>미달 시 기본가</span>
+                <span>달성 시</span>
+              </div>
+            )}
+            <ReceiptRow
+              label={gbReceipt ? "판매가(기본/달성)" : "판매가"}
+              onFix={() => jumpField("pd45-price")}
+              base={`${priceNum.toLocaleString()}원`}
+              gb={gbReceipt && gbPriceNum != null ? `${gbPriceNum.toLocaleString()}원` : null}
+            />
+            {!groupBuyOn && discountNum > 0 && (
+              <ReceiptRow
+                label="예정 할인"
+                onFix={() => jumpField("pd45-discount")}
+                base={`−${Math.min(discountNum, priceNum).toLocaleString()}원`}
+                gb={null}
+              />
+            )}
+            <ReceiptRow
+              label="원가"
+              onFix={() => jumpField("pd45-cost")}
+              base={`−${costNum.toLocaleString()}원`}
+              gb={gbReceipt ? `−${costNum.toLocaleString()}원` : null}
+            />
+            {freeShip ? (
+              shipFeeNum != null ? (
+                <ReceiptRow
+                  label="배송비(내 부담)"
+                  onFix={() => jumpField("pd45-ship")}
+                  base={`−${shipFeeNum.toLocaleString()}원`}
+                  gb={gbReceipt ? `−${shipFeeNum.toLocaleString()}원` : null}
+                />
+              ) : (
+                <p className="text-[10.5px] font-medium text-[#A3A3A3]">
+                  {quickMode
+                    ? "무료배송(내 부담) 기준 · 배송비 미입력 — 0원으로 계산했어요. 배송비 입력은 자세히 등록에서 해요"
+                    : "무료배송(내 부담) · 배송비 미입력 — 0원으로 계산했어요. 위 배송 칸에 적으면 함께 빼드려요"}
+                </p>
+              )
+            ) : (
+              <p className="text-[10.5px] font-medium text-[#A3A3A3]">
+                배송비는 구매자 부담 — 이익 계산에서 제외돼요
+              </p>
+            )}
+            {(receipt.dropyCostKrw > 0 || (gbReceipt?.dropyCostKrw ?? 0) > 0) && (
+              <ReceiptRow
+                label={`드로피 차감${droppyMode === "rate" ? ` (${droppyRate}%)` : " (고정)"}`}
+                onFix={() => jumpField("pd45-droppy")}
+                base={`−${receipt.dropyCostKrw.toLocaleString()}원`}
+                gb={gbReceipt ? `−${gbReceipt.dropyCostKrw.toLocaleString()}원` : null}
+              />
+            )}
+            {receipt.miscCostKrw > 0 && (
+              <ReceiptRow
+                label="기타잡비"
+                onFix={() => jumpField("pd45-misc")}
+                base={`−${receipt.miscCostKrw.toLocaleString()}원`}
+                gb={gbReceipt ? `−${gbReceipt.miscCostKrw.toLocaleString()}원` : null}
+              />
+            )}
+            <div className="flex items-center justify-between gap-2 border-t border-[#EFEFEF] pt-1 text-[12px] font-bold">
+              <span style={{ color: receipt.perUnitProfitKrw >= 0 ? accent : "#EF4444" }}>
+                예상 이익
+              </span>
+              <span className="flex items-center gap-3">
+                <span style={{ color: receipt.perUnitProfitKrw >= 0 ? accent : "#EF4444" }}>
+                  {receipt.perUnitProfitKrw.toLocaleString()}원
+                </span>
+                {gbReceipt && (
+                  <span style={{ color: gbReceipt.perUnitProfitKrw >= 0 ? accent : "#EF4444" }}>
+                    {gbReceipt.perUnitProfitKrw.toLocaleString()}원
+                  </span>
+                )}
+              </span>
+            </div>
+            {receipt.perUnitProfitKrw < 0 && (
+              <p className="pt-0.5 text-[10.5px] font-semibold text-[#EF4444]">
+                이 가격이면 손해예요
+              </p>
+            )}
+            {gbReceipt && gbReceipt.perUnitProfitKrw < 0 && (
+              <p className="pt-0.5 text-[10.5px] font-semibold text-[#EF4444]">
+                이 달성가면 손해예요
+              </p>
+            )}
+          </div>
+          {/* 세금 고지 — processed·goods 만(fresh 농산물 = 부가세 면세 — 미표기). */}
+          {type !== "fresh" && (
+            <p className="mt-1.5 text-[10px] font-medium text-[#A3A3A3]">
+              부가세·결제수수료는 포함하지 않은 예상 이익이에요
+            </p>
+          )}
+          {/* 길잡이 a — 손익분기(정본 역산 · 사장님 입력값만 · 외부 데이터 0). */}
+          {breakEvenPrice != null && (
+            <p className="mt-1.5 text-[11px] font-semibold tabular-nums text-[#525252]">
+              판매가 {breakEvenPrice.toLocaleString()}원 밑으로는 손해예요
+            </p>
+          )}
+          {/* 길잡이 b — 목표 이익 역산(선택 입력 1칸). */}
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center rounded-lg bg-white px-2.5">
+              <input
+                value={targetProfit}
+                onChange={(e) => setTargetProfit(onlyDigits(e.target.value))}
+                inputMode="numeric"
+                placeholder="예: 5000"
+                aria-label="목표 이익(원)"
+                className="w-full bg-transparent px-1 py-2 text-[12px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+              />
+              <span className="shrink-0 text-[11px] font-semibold text-[#8A8A8A]">원 남기려면</span>
+            </div>
+            <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[#525252]">
+              {targetPrice != null ? `→ 판매가 최소 ${targetPrice.toLocaleString()}원` : "→ ―"}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* 등록 — 실 제출(/api/drops self_upload, 호출부 submitStudioProduct) */}
       {formError && <p className="text-[12px] font-medium text-[#DC2626]">{formError}</p>}
@@ -1760,6 +1955,38 @@ function SubInput({ label, value, onChange, placeholder, suffix, accent }: { lab
         />
         <span className="text-[12px] font-semibold text-[#8A8A8A]">{suffix}</span>
       </div>
+    </div>
+  );
+}
+
+// FIX-36c — 이익 영수증 행: 라벨 + [고치기](입력칸 점프) + 값 1~2열(일반/공동구매).
+function ReceiptRow({
+  label,
+  onFix,
+  base,
+  gb,
+}: {
+  label: string;
+  onFix: () => void;
+  base: string;
+  gb: string | null;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate">{label}</span>
+        <button
+          type="button"
+          onClick={onFix}
+          className="shrink-0 text-[10px] font-bold text-[#8A8A8A] underline underline-offset-2"
+        >
+          고치기
+        </button>
+      </span>
+      <span className="flex shrink-0 items-center gap-3">
+        <span>{base}</span>
+        {gb != null && <span>{gb}</span>}
+      </span>
     </div>
   );
 }

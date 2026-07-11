@@ -171,6 +171,50 @@ export function computeProfitReceipt(i: ProfitReceiptInput): ProfitReceipt {
   };
 }
 
+// FIX-36c — 손익분기/목표 이익 역산(순수 · 표시용 · 사장님 입력값만 — 외부 데이터·추정 0).
+//   forward(computeProfitReceipt)와 정합: 드로피 % 반올림 오차는 전진 검증 루프(±3원 내)로
+//   보정해 "이 가격이면 목표 이상 · 1원 아래면 미달"인 최소가를 낸다(돈 직결 — 정확성 우선).
+//   구 폼(studio-build) 무접촉 — export 추가만(FIX-36 전례).
+export interface BreakEvenInput {
+  discountKrw: number;
+  costKrw: number | null;
+  shippingMode: "free" | "paid";
+  shippingFeeKrw: number;
+  dropyMode: "rate" | "fixed";
+  dropyPercent: number; // 0~20(정수)
+  dropyFixedKrw: number | null;
+  miscCostKrw?: number | null;
+  /** 목표 이익(기본 0 = 손익분기). */
+  targetProfitKrw?: number;
+}
+export function computeBreakEvenPrice(i: BreakEvenInput): number | null {
+  const target = Math.max(0, i.targetProfitKrw ?? 0);
+  const fixedCosts =
+    (i.costKrw ?? 0) +
+    (i.shippingMode === "free" ? Math.max(0, i.shippingFeeKrw) : 0) +
+    Math.max(0, i.miscCostKrw ?? 0) +
+    (i.dropyMode === "fixed" ? Math.max(0, i.dropyFixedKrw ?? 0) : 0);
+  const r = i.dropyMode === "rate" ? i.dropyPercent / 100 : 0;
+  if (r >= 1) return null; // 방정식 성립 불가(실제 상한 20% — 방어).
+  const forward = (priceKrw: number) =>
+    computeProfitReceipt({
+      priceKrw,
+      discountKrw: i.discountKrw,
+      costKrw: i.costKrw,
+      shippingMode: i.shippingMode,
+      shippingFeeKrw: i.shippingFeeKrw,
+      dropyMode: i.dropyMode,
+      dropyPercent: i.dropyPercent,
+      dropyFixedKrw: i.dropyFixedKrw,
+      miscCostKrw: i.miscCostKrw ?? 0,
+    }).perUnitProfitKrw;
+  // net(1−r) ≥ target + 고정비 → 후보가 = ceil(net_be) + 할인. 반올림 오차 양방향 보정.
+  let price = Math.ceil((target + fixedCosts) / (1 - r)) + Math.max(0, i.discountKrw);
+  for (let k = 0; k < 3 && forward(price) < target; k++) price += 1;
+  for (let k = 0; k < 3 && price > 0 && forward(price - 1) >= target; k++) price -= 1;
+  return price;
+}
+
 // STUDIO-fix2 G5 — resizeToJpegBlob 은 @/lib/image-upload 로 추출(동작 무변경 이동 · 스튜디오
 //   대표 이미지 업로더와 관례 단일 출처 공유). MAX_WIDTH 상수도 lib 이 소유.
 
