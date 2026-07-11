@@ -366,6 +366,115 @@ function AppliedRow({ accent, label, onEdit }: { accent: string; label: string; 
   );
 }
 
+// FIX-32 — ±스텝 버튼(길게 누르면 반복 — 60대 친화 미세조정). onStep 은 함수형 setState 를
+//   쓰는 핸들러만 연결할 것(setInterval 의 stale closure 안전).
+function HoldButton({ label, onStep }: { label: string; onStep: () => void }) {
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stop = () => {
+    if (timer.current) {
+      clearInterval(timer.current);
+      timer.current = null;
+    }
+  };
+  return (
+    <button
+      type="button"
+      onPointerDown={() => {
+        onStep();
+        stop();
+        timer.current = setInterval(onStep, 220);
+      }}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      className="flex h-11 min-w-11 shrink-0 touch-none select-none items-center justify-center rounded-lg bg-white px-2 text-[12px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:translate-y-px"
+    >
+      {label}
+    </button>
+  );
+}
+
+// FIX-32 — 핵심구간 범위 슬라이더(외부 라이브러리 금지 — 포인터 핸들러 직접 구현).
+//   탭/드래그 시 가까운 핸들이 잡히고, 드래그는 부드럽게(1초 단위) · 놓을 때 5초 스냅.
+//   트랙 높이 44px(터치영역), 최소 간격 5초 클램프(끝≤시작 불가), 선택 구간 accent 하이라이트.
+function ClipRangeSlider({
+  durSec,
+  startSec,
+  endSec,
+  accent,
+  onChange,
+}: {
+  durSec: number;
+  startSec: number;
+  endSec: number;
+  accent: string;
+  onChange: (start: number, end: number) => void;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<"start" | "end" | null>(null);
+  const pctOf = (sec: number) => (durSec > 0 ? (Math.min(sec, durSec) / durSec) * 100 : 0);
+  const secAt = (clientX: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return 0;
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return ratio * durSec;
+  };
+  const move = (rawSec: number, snap: boolean) => {
+    const sec = snap ? Math.round(rawSec / 5) * 5 : Math.round(rawSec);
+    if (dragRef.current === "start") {
+      onChange(Math.min(Math.max(0, sec), Math.max(0, endSec - 5)), endSec);
+    } else {
+      onChange(startSec, Math.max(Math.min(durSec, sec), Math.min(durSec, startSec + 5)));
+    }
+  };
+  return (
+    <div
+      ref={trackRef}
+      onPointerDown={(e) => {
+        const sec = secAt(e.clientX);
+        dragRef.current = Math.abs(sec - startSec) <= Math.abs(sec - endSec) ? "start" : "end";
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        move(sec, false);
+      }}
+      onPointerMove={(e) => {
+        if (dragRef.current) move(secAt(e.clientX), false);
+      }}
+      onPointerUp={(e) => {
+        if (!dragRef.current) return;
+        move(secAt(e.clientX), true); // 놓을 때 5초 스냅.
+        dragRef.current = null;
+      }}
+      onPointerCancel={() => {
+        dragRef.current = null;
+      }}
+      className="relative h-11 touch-none cursor-pointer select-none"
+      aria-hidden="true"
+    >
+      <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[#E0E0E0]" />
+      <div
+        className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full"
+        style={{
+          left: `${pctOf(startSec)}%`,
+          width: `${Math.max(0, pctOf(endSec) - pctOf(startSec))}%`,
+          backgroundColor: accent,
+        }}
+      />
+      {[startSec, endSec].map((sec, i) => (
+        <span
+          key={i}
+          className="absolute top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+          style={{ left: `${pctOf(sec)}%` }}
+        >
+          <span
+            className="h-5 w-5 rounded-full bg-white"
+            style={{ boxShadow: `0 1px 4px rgba(15,23,42,0.25), 0 0 0 2px ${accent}` }}
+          />
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function CardStudioPage45({
   isBusiness,
   store,
@@ -456,10 +565,12 @@ export function CardStudioPage45({
   const [cfgTitle, setCfgTitle] = useState("");
   const [cfgSubtitle, setCfgSubtitle] = useState(""); // = 한마디(curator_message)
   const [cfgClip, setCfgClip] = useState("");
-  // FIX-27 — 핵심구간 표준 선택확정(FIX-1/4 동형): 초안(시작·끝·문구) → [적용] → 확정 스냅샷.
+  // FIX-27 — 핵심구간 표준 선택확정(FIX-1/4 동형): 초안 → [적용] → 확정 스냅샷.
   //   cfgClip 은 확정 라벨 미러(미리보기 model.clip 기존 경로 재사용)로만 세팅.
-  const [clipDraftStart, setClipDraftStart] = useState("");
-  const [clipDraftEnd, setClipDraftEnd] = useState("");
+  // FIX-32 — 초안 입력을 초 단위 숫자(슬라이더/±버튼)로 교체 — 타이핑 0. 시작·끝을 한
+  //   객체로 묶은 이유: HoldButton 반복(setInterval)에서 함수형 갱신으로 상호 클램프
+  //   (끝-5초 ≤ 시작 불가)를 stale 없이 보장.
+  const [clipSel, setClipSel] = useState({ start: 0, end: 30 });
   const [clipDraftNote, setClipDraftNote] = useState("");
   const [clipError, setClipError] = useState<string | null>(null);
   const [confirmedClip, setConfirmedClip] = useState<{
@@ -856,31 +967,35 @@ export function CardStudioPage45({
   //   실사용(suggestLitId)과 동일한 block.id 판정 규칙 — 스와이프해도 그 카드에만 불이 붙는다.
   const debugLitId = ledDebug ? (DECK[0]?.id ?? null) : null;
 
-  // FIX-27 — 핵심구간 [적용] 확정: 검증(형식·끝>시작·영상 길이 초과 차단) 통과 시에만
+  // FIX-32 — 영상 길이(초). 파싱 가능 + 10초 이상이면 범위 슬라이더, 아니면 스텝퍼 폴백.
+  const clipDurSec = selectedVideo?.durationLabel ? parseClock(selectedVideo.durationLabel) : null;
+  // FIX-32 — ±버튼 스텝(함수형 갱신 — HoldButton 반복의 stale closure 안전). 상호 클램프:
+  //   시작 ≤ 끝-5초 / 끝 ≥ 시작+5초 / 0 ~ 영상길이(불명 시 상한 없음).
+  const stepClip = (which: "start" | "end", delta: number) =>
+    setClipSel((p) => {
+      if (which === "start") {
+        return { ...p, start: Math.min(Math.max(0, p.start + delta), Math.max(0, p.end - 5)) };
+      }
+      const cap = clipDurSec ?? Number.MAX_SAFE_INTEGER;
+      return { ...p, end: Math.max(Math.min(cap, p.end + delta), p.start + 5) };
+    });
+
+  // FIX-27 — 핵심구간 [적용] 확정: 검증(끝>시작·영상 길이 초과 차단) 통과 시에만
   //   confirmedClip 확정 + 미리보기 라벨(cfgClip) + 패널 접힘 + 링고 안내 갱신.
+  //   (FIX-32 — 슬라이더/스텝퍼 클램프가 1차 방어, 여기는 확정 직전 재검증 — 계약 유지.)
   function applyClip() {
-    const startSec = parseClock(clipDraftStart);
-    if (startSec == null) {
-      setClipError("시작 시점을 0:42 형식으로 입력해 주세요.");
-      return;
-    }
-    const endRaw = clipDraftEnd.trim();
-    const endSec = endRaw ? parseClock(endRaw) : null;
-    if (endRaw && endSec == null) {
-      setClipError("끝 시점을 1:05 형식으로 입력해 주세요.");
-      return;
-    }
-    if (endSec != null && endSec <= startSec) {
+    const startSec = clipSel.start;
+    const endSec = clipSel.end;
+    if (endSec <= startSec) {
       setClipError("끝 시점은 시작보다 뒤여야 해요.");
       return;
     }
-    const durSec = selectedVideo?.durationLabel ? parseClock(selectedVideo.durationLabel) : null;
-    if (durSec != null && (startSec > durSec || (endSec != null && endSec > durSec))) {
+    if (clipDurSec != null && (startSec > clipDurSec || endSec > clipDurSec)) {
       setClipError(`영상 길이(${selectedVideo!.durationLabel}) 안에서 골라 주세요.`);
       return;
     }
     setClipError(null);
-    const label = endSec != null ? `${formatDuration(startSec)}~${formatDuration(endSec)}` : formatDuration(startSec);
+    const label = `${formatDuration(startSec)}~${formatDuration(endSec)}`;
     setConfirmedClip({ startSec, endSec, note: clipDraftNote.trim(), label });
     setCfgClip(label); // 미리보기(model.clip) 기존 주입 경로 재사용.
     setCollapsedPanels((p) => ({ ...p, clip: true }));
@@ -1189,9 +1304,10 @@ export function CardStudioPage45({
     setSelectedVideo(slot);
     // FIX-27 — 기존 durationLabel 자동 주입 제거(영상 "전체 길이"가 핵심구간 기본값으로
     //   박히던 오류 — 실확정 아님). 영상이 바뀌면 구간 확정도 리셋(구영상 구간 잔존 방지).
+    // FIX-32 — 초안은 0 ~ min(30초, 영상길이) 기본 범위로 초기화(타이핑 없는 시작점).
+    const slotDurSec = slot.durationLabel ? parseClock(slot.durationLabel) : null;
     setConfirmedClip(null);
-    setClipDraftStart("");
-    setClipDraftEnd("");
+    setClipSel({ start: 0, end: slotDurSec != null ? Math.max(5, Math.min(30, slotDurSec)) : 30 });
     setClipDraftNote("");
     setClipError(null);
     setCfgClip("");
@@ -2652,25 +2768,62 @@ export function CardStudioPage45({
                           <Video className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
                           핵심 구간 (시작~끝)
                         </p>
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            value={clipDraftStart}
-                            onChange={(e) => setClipDraftStart(e.target.value.replace(/[^0-9:]/g, ""))}
-                            inputMode="numeric"
-                            placeholder="0:42"
-                            className="w-20 rounded-lg bg-white px-2 py-1.5 text-center text-[12px] font-bold tabular-nums text-[#0A0A0A] outline-none"
-                            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                          />
-                          <span className="text-[12px] font-bold text-[#A3A3A3]">~</span>
-                          <input
-                            value={clipDraftEnd}
-                            onChange={(e) => setClipDraftEnd(e.target.value.replace(/[^0-9:]/g, ""))}
-                            inputMode="numeric"
-                            placeholder="1:05 (선택)"
-                            className="w-24 rounded-lg bg-white px-2 py-1.5 text-center text-[12px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#B4B4B4]"
-                            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                          />
-                        </div>
+                        {/* FIX-32 — 타이핑 제거: 영상 길이를 알면 범위 슬라이더(놓을 때 5초
+                            스냅) + ±5초 미세조정, 불명이면 스텝퍼 폴백. 클램프는 stepClip/
+                            슬라이더가 담당(끝-5초 ≤ 시작 불가). */}
+                        {clipDurSec != null && clipDurSec >= 10 ? (
+                          <>
+                            <ClipRangeSlider
+                              durSec={clipDurSec}
+                              startSec={clipSel.start}
+                              endSec={clipSel.end}
+                              accent={accent}
+                              onChange={(s, e2) => setClipSel({ start: s, end: e2 })}
+                            />
+                            <p className="text-center text-[13px] font-bold tabular-nums text-[#0A0A0A]">
+                              {formatDuration(clipSel.start)} ~ {formatDuration(clipSel.end)}
+                              <span className="ml-1 font-semibold text-[#8A8A8A]">· 구간 {clipSel.end - clipSel.start}초</span>
+                            </p>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="flex items-center gap-1">
+                                <span className="text-[11px] font-semibold text-[#8A8A8A]">시작</span>
+                                <HoldButton label="−5초" onStep={() => stepClip("start", -5)} />
+                                <HoldButton label="+5초" onStep={() => stepClip("start", 5)} />
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="text-[11px] font-semibold text-[#8A8A8A]">끝</span>
+                                <HoldButton label="−5초" onStep={() => stepClip("end", -5)} />
+                                <HoldButton label="+5초" onStep={() => stepClip("end", 5)} />
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-7 shrink-0 text-[11px] font-semibold text-[#8A8A8A]">시작</span>
+                              <HoldButton label="−30" onStep={() => stepClip("start", -30)} />
+                              <HoldButton label="−5" onStep={() => stepClip("start", -5)} />
+                              <span className="flex-1 text-center text-[13px] font-bold tabular-nums text-[#0A0A0A]">
+                                {formatDuration(clipSel.start)}
+                              </span>
+                              <HoldButton label="+5" onStep={() => stepClip("start", 5)} />
+                              <HoldButton label="+30" onStep={() => stepClip("start", 30)} />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-7 shrink-0 text-[11px] font-semibold text-[#8A8A8A]">끝</span>
+                              <HoldButton label="−30" onStep={() => stepClip("end", -30)} />
+                              <HoldButton label="−5" onStep={() => stepClip("end", -5)} />
+                              <span className="flex-1 text-center text-[13px] font-bold tabular-nums text-[#0A0A0A]">
+                                {formatDuration(clipSel.end)}
+                              </span>
+                              <HoldButton label="+5" onStep={() => stepClip("end", 5)} />
+                              <HoldButton label="+30" onStep={() => stepClip("end", 30)} />
+                            </div>
+                            <p className="text-center text-[12px] font-semibold tabular-nums text-[#8A8A8A]">
+                              {formatDuration(clipSel.start)} ~ {formatDuration(clipSel.end)} · 구간 {clipSel.end - clipSel.start}초
+                            </p>
+                          </>
+                        )}
                         <input
                           value={clipDraftNote}
                           onChange={(e) => setClipDraftNote(e.target.value)}
