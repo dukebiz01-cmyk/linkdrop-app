@@ -348,6 +348,19 @@ export function CardModelBody({
                   ))}
                 </div>
               )}
+              {/* FIX-41 — 품절 카드 [재입고 알림 받기](부스터 품절 칩 아래 — FIX-39 배치 조화).
+                  실동작은 receiver 콜백(onRestockAlert) 주입 시만 — 미주입 = 시각 stub(기존
+                  CardModelActions 계약). /d 배선은 거울 수술 필요 → ST2b 이관. 신청 수 표시 0. */}
+              {model.boosterChips?.some((c) => c.kind === "stock" && c.label === "품절") && (
+                <button
+                  type="button"
+                  onClick={act.onRestockAlert}
+                  className="mb-2 flex h-10 w-full items-center justify-center rounded-xl text-[12px] font-bold text-white active:scale-[0.98]"
+                  style={{ backgroundColor: model.accent }}
+                >
+                  재입고 알림 받기
+                </button>
+              )}
               {/* FIX-40 — 공동구매 v1: 조건(사실만) + 진행률(실집계 있을 때만) + 필수 고지
                   (참여 시점 선명 노출 · §13 압박 카피 0 · 취소는 매장 문의 정직 표기). */}
               {model.groupBuy && (

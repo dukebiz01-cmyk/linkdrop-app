@@ -166,4 +166,6 @@ export type CardModelActions = {
   onCopyLink?: () => void | Promise<void>;
   /** 함께 받는 카드(도킹) 열기. */
   onDockOpen?: () => void;
+  /** FIX-41 — 품절 카드 "재입고 알림 받기"(drop_alerts 신청). /d 배선은 ST2b — 미주입 = stub. */
+  onRestockAlert?: () => void;
 };
