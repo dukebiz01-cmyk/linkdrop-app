@@ -941,34 +941,66 @@ function MePage() {
           onClick={() => navigate({ to: "/home", search: { activity: "made" } })}
         />
 
-        {/* ⑤ Dropy Mall — v0-44 jet navy 카드(디자인만). §0/법무: 준비 중 게이트.
-            실기능(상품·가격·구매·드로피 잔액) 전부 미이식 · 드로피 숫자/원화 0 · 탭 이동 없음(비인터랙티브 div).
+        {/* ⑤ Dropy Mall — v0-45 세로 카드형(헤더 행 + 상품 사진 그리드 + 하단 행). §0/법무: 준비 중 게이트.
+            실기능(상품·가격·구매) 미이식 · 탭 이동 없음(비인터랙티브 div — 현행 유지).
+            정본 NEW 칩은 "준비 중" 정직 표기로 대체 유지("곧 제공" 금지).
+            잔액 칩 — 실지급 배선 0 = 전 유저 실잔액 0(가짜값 아님). 오픈 시 실 잔액 배선.
             근거: 자사몰 = post-pilot 선불전자지급수단·상품권 법무 게이트. 지금 실거래 열면 §0·법무 위반. */}
         <div
-          className="relative flex w-full items-center gap-3.5 overflow-hidden rounded-2xl bg-[#0F172A] px-4 py-4 text-left shadow-[0_12px_30px_rgba(15,23,42,0.22)]"
+          className="rounded-2xl bg-[#0F172A] p-4 shadow-[0_12px_30px_rgba(15,23,42,0.22)]"
           aria-label="Dropy Mall — 준비 중"
         >
-          <span className="flex size-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-inset ring-white/15">
-            <ShoppingBag className="size-[22px] text-[#60A5FA]" strokeWidth={2} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-1.5">
-              <span className="text-[15px] font-extrabold tracking-[-0.01em] text-white">
-                Dropy Mall
-              </span>
-              {/* NEW → 준비 중(정직 표기, "곧 제공" 금지). */}
-              <span className="rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-bold text-[#B6C2D2]">
-                준비 중
-              </span>
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-inset ring-white/15">
+              <ShoppingBag className="size-[19px] text-[#60A5FA]" strokeWidth={2} />
             </span>
-            <span className="mt-0.5 block text-[12px] font-medium text-[#B6C2D2]">
-              농산물·가공품·공산품을 드로피로 구매
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[15px] font-extrabold tracking-[-0.01em] text-white">
+                  Dropy Mall
+                </span>
+                <span className="rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-bold text-[#B6C2D2]">
+                  준비 중
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11.5px] font-medium text-[#B6C2D2]">
+                드로피로 구매하는 쇼핑몰
+              </p>
+            </div>
+            <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-white/10 px-2.5 py-1.5">
+              <Diamond className="size-3.5 text-[#60A5FA]" strokeWidth={2.5} />
+              <span className="text-[12px] font-bold tabular-nums text-white">0</span>
             </span>
-          </span>
-          {/* v0 우측 드로피 잔액 pill 제거(§0: 드로피 숫자/원화 0) → 준비 중 표기만. */}
-          <span className="flex flex-shrink-0 items-center rounded-full bg-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#94A3B8]">
-            준비 중
-          </span>
+          </div>
+
+          {/* 상품 사진 그리드 — public/dropy-mall/*.webp(마스터 배치 최적화 에셋). */}
+          <div className="mt-3.5 grid grid-cols-4 gap-2">
+            {(
+              [
+                { src: "/dropy-mall/apple.webp", alt: "사과" },
+                { src: "/dropy-mall/gochujang.webp", alt: "고추장" },
+                { src: "/dropy-mall/jam.webp", alt: "수제잼" },
+                { src: "/dropy-mall/tumbler.webp", alt: "텀블러" },
+              ] as const
+            ).map((p) => (
+              <div
+                key={p.src}
+                className="aspect-square overflow-hidden rounded-xl bg-white/95 ring-1 ring-inset ring-white/10"
+              >
+                <img
+                  src={p.src}
+                  alt={p.alt}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-2.5 flex items-center justify-center gap-0.5 text-[11.5px] font-semibold text-[#93A3B8]">
+            농산물·가공품·굿즈 둘러보기
+            <ChevronRight className="size-3.5" strokeWidth={2.5} />
+          </p>
         </div>
 
         {/* 로그아웃 + 버전 — 설정 아코디언에서 본문 최하단으로 이동(v0-44 정본 위치).

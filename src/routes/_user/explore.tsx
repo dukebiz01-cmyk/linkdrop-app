@@ -182,8 +182,8 @@ function ExplorePage() {
         })}
       </div>
 
-      {/* 카운트 + 최신순(고정 표시, 드롭다운 없음 — §0 vanity 정렬 금지). */}
-      <div className="mb-3 flex items-center justify-between px-0.5">
+      {/* 카운트 + 최신순(고정 표시, 드롭다운 없음 — §0 vanity 정렬 금지). v0-45 폴리시: mb-3→mb-3.5. */}
+      <div className="mb-3.5 flex items-center justify-between px-0.5">
         <span className="text-[12.5px] font-medium text-[#64748B]">
           {drops.length > 0 ? (
             <>
