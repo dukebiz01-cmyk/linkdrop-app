@@ -64,6 +64,9 @@ import { useLingoChat, useLingoVoice, type LingoContext } from "./useLingoChat";
 import { CARD_MODEL_ACCENTS, fromStudioState } from "./card-model-adapters";
 // FIX-42 — 발행 게이트 발화 정본 + 결정 로직(순수 — stage·1상태1발화 dedupe 실측 가능).
 import { decideGateUtterance } from "./gate-notes45";
+// FIX-43 — 링고 음성 공용 모듈(홈 재사용 대비): 마이크 56px 분리 버튼 + 듣는 중 파형 패널.
+import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
+import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 import { SHIP_STAGES, type CardModel } from "./card-model.types";
 
 // =============================================================================
@@ -615,6 +618,9 @@ export function CardStudioPage45({
   const [productShipDateSet, setProductShipDateSet] = useState(false);
   // FIX-38 B — 영상 출처 [AI로 만들기] 정직 게이트 인라인 펼침(가격·캐시 숫자 미표기).
   const [aiVideoGateOpen, setAiVideoGateOpen] = useState(false);
+  // FIX-43 — 듣는 중 파형 패널(스트립 뷰에서 캡슐이 펼쳐짐) + 실시간 인식 텍스트(interim).
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [voiceInterim, setVoiceInterim] = useState("");
   const [cfgFacilities, setCfgFacilities] = useState<FacilityItem[]>(() =>
     Array.isArray(store?.facilities)
       ? (store!.facilities as unknown[])
@@ -1936,6 +1942,51 @@ export function CardStudioPage45({
       chatChannelRef.current = "voice";
     });
   }
+
+  // FIX-43 — 캡슐 옆 마이크 orb(스트립 뷰): 탭 → 듣는 중 파형 패널로 펼침. 반이중 계약 동일
+  //   (인식 텍스트 → 입력창 → 패널에서 [전송] 확인 — 자동 전송 금지). lingo-chat 계약 무변경
+  //   (channel 'voice' 는 기존 onText 경로 그대로).
+  function handleOrbTap() {
+    if (chat.streaming) return;
+    voice.stopSpeaking();
+    if (voice.listening) {
+      voice.stopListening();
+      setVoiceOpen(false);
+      setVoiceInterim("");
+      return;
+    }
+    setVoiceInterim("");
+    setVoiceOpen(true);
+    voice.startListening(
+      (t) => {
+        setChatInput(t);
+        chatChannelRef.current = "voice";
+      },
+      { onInterim: setVoiceInterim },
+    );
+  }
+  // [취소] — 인식 텍스트 폐기 + STT 즉시 종료(파형 AudioContext 는 패널 언마운트가 정리).
+  function handleVoiceCancel() {
+    voice.stopListening();
+    setVoiceInterim("");
+    setVoiceOpen(false);
+  }
+  // [말 끝났어요] — 우아한 종료(stop): 최종 인식 텍스트가 onText 로 입력창에 반영된 뒤
+  //   패널 뷰로 전환해 사용자가 [전송]으로 확인(기존 플로우 — 자동 전송 금지).
+  function handleVoiceDone() {
+    voice.finishListening();
+    setVoiceOpen(false);
+    setVoiceInterim("");
+    openPanelAt();
+  }
+  // 자연 종료(말 멈춤 → 인식 엔진 스스로 종료) — 파형 패널을 닫고 확인 단계(패널 뷰)로.
+  useEffect(() => {
+    if (voiceOpen && !voice.listening) {
+      setVoiceOpen(false);
+      setVoiceInterim("");
+      openPanelAt();
+    }
+  }, [voiceOpen, voice.listening]);
 
   return (
     // FIX-16 — 하단 스트립 폐지: 본문 패딩은 전송 CTA 기준 원복(pb-[120px]).
@@ -4041,7 +4092,23 @@ export function CardStudioPage45({
           {/* FIX-16 — 단일 플로팅 캡슐(하단 스트립 대체): 아바타 + 한줄 안내(truncate, 두 줄 금지)
               + 단계 점 축약 + [계속] 미니 버튼. 드래그 이동(엣지 스냅)·위치 기억(fabPos state).
               탭 = 그 자리 기준 패널 확장. LED 는 캡슐 테두리(rounded-full inherit). */}
-          {lingoView === "strip" && !mirrorOpen && (
+          {/* FIX-43 — 듣는 중: 캡슐이 파형 패널로 펼쳐짐(같은 fixed 좌표 = 위치 기억 그대로,
+              별도 저장 키 0). 파형 AudioContext 는 패널 언마운트가 정리. */}
+          {lingoView === "strip" && !mirrorOpen && voiceOpen && (
+            <div
+              className="fixed z-40"
+              style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
+            >
+              <VoiceWavePanel45
+                listening={voice.listening}
+                interimText={voiceInterim}
+                accent={accent}
+                onCancel={handleVoiceCancel}
+                onDone={handleVoiceDone}
+              />
+            </div>
+          )}
+          {lingoView === "strip" && !mirrorOpen && !voiceOpen && (
             <div
               ref={fabRef}
               role="button"
@@ -4164,6 +4231,16 @@ export function CardStudioPage45({
                   <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
                 </button>
               )}
+              {/* FIX-43 — 마이크 분리 orb(56px): 캡슐의 absolute 자식 = 드래그 시 한 몸 이동
+                  (fabPos 그대로 — 별도 저장 키 0). 탭 = 듣는 중 파형 패널로 펼침. */}
+              <span className="absolute -top-16 right-0">
+                <VoiceOrb45
+                  listening={voice.listening}
+                  disabled={chat.streaming}
+                  accent={accent}
+                  onTap={handleOrbTap}
+                />
+              </span>
             </div>
           )}
 

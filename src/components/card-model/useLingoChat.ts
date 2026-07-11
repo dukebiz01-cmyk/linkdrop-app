@@ -219,10 +219,16 @@ type RecognitionLike = {
   continuous: boolean;
   interimResults: boolean;
   maxAlternatives: number;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onresult:
+    | ((e: {
+        results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal?: boolean }>;
+      }) => void)
+    | null;
   onerror: (() => void) | null;
   onend: (() => void) | null;
   start: () => void;
+  /** FIX-43 — 우아한 종료([말 끝났어요]): 지금까지 발화의 최종 결과를 확정한 뒤 onend. */
+  stop: () => void;
   abort: () => void;
 };
 
@@ -274,6 +280,20 @@ export function useLingoVoice() {
     setListening(false);
   }, []);
 
+  // FIX-43 — [말 끝났어요]: abort(폐기)가 아닌 stop(확정) — 최종 결과가 onresult 로 들어온 뒤
+  //   onend 가 listening 을 내린다. stop 미지원 구현체 폴백 = 기존 abort.
+  const finishListening = useCallback(() => {
+    const rec = recRef.current;
+    if (!rec) return;
+    try {
+      rec.stop();
+    } catch {
+      rec.abort();
+      recRef.current = null;
+      setListening(false);
+    }
+  }, []);
+
   useEffect(
     () => () => {
       recRef.current?.abort();
@@ -287,9 +307,11 @@ export function useLingoVoice() {
     [],
   );
 
-  /** 마이크 시작 — 결과는 입력창에 채우기만(자동 전송 금지, 사용자가 [전송]으로 확인). */
+  /** 마이크 시작 — 결과는 입력창에 채우기만(자동 전송 금지, 사용자가 [전송]으로 확인).
+   *  FIX-43 — opts.onInterim(선택): 실시간 인식 텍스트 스트림(파형 패널 표시용). 미주입이면
+   *  interimResults=false 기존 경로 그대로(동작 무변경 — 반이중 계약 유지). */
   const startListening = useCallback(
-    (onText: (t: string) => void) => {
+    (onText: (t: string) => void, opts?: { onInterim?: (t: string) => void }) => {
       const Ctor = getRecognitionCtor();
       if (!Ctor) {
         showNotice("음성 대화는 크롬·삼성인터넷에서 쓸 수 있어요");
@@ -299,11 +321,27 @@ export function useLingoVoice() {
         const rec = new Ctor();
         rec.lang = "ko-KR";
         rec.continuous = false;
-        rec.interimResults = false;
+        rec.interimResults = !!opts?.onInterim;
         rec.maxAlternatives = 1;
         rec.onresult = (e) => {
-          const t = e.results[0]?.[0]?.transcript?.trim() ?? "";
-          if (t) onText(t);
+          if (!opts?.onInterim) {
+            // 기존 경로(최종 1건만) — 무변경.
+            const t = e.results[0]?.[0]?.transcript?.trim() ?? "";
+            if (t) onText(t);
+            return;
+          }
+          // FIX-43 — interim 경로: 중간 결과는 표시 콜백으로만, 입력창 반영(onText)은 최종만.
+          let finalT = "";
+          let interimT = "";
+          for (let i = 0; i < e.results.length; i++) {
+            const r = e.results[i];
+            const t = r[0]?.transcript ?? "";
+            if (r.isFinal) finalT += t;
+            else interimT += t;
+          }
+          const merged = `${finalT} ${interimT}`.trim();
+          if (merged) opts.onInterim(merged);
+          if (finalT.trim()) onText(finalT.trim());
         };
         rec.onerror = () => {
           // 조용한 폴백 — 텍스트 모드 유지 + 안내 1줄.
@@ -357,5 +395,16 @@ export function useLingoVoice() {
     });
   }, [stopSpeaking]);
 
-  return { listening, speaking, notice, ttsOn, startListening, stopListening, speak, stopSpeaking, toggleTts };
+  return {
+    listening,
+    speaking,
+    notice,
+    ttsOn,
+    startListening,
+    stopListening,
+    finishListening,
+    speak,
+    stopSpeaking,
+    toggleTts,
+  };
 }
