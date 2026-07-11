@@ -672,10 +672,15 @@ export function CardStudioPage45({
     if (mode === "reserve") {
       return [
         {
-          // 영상 또는 대표 이미지 중 1(실확정 — 확정 버튼/업로드 완료).
-          label: "콘텐츠", coach: "content", block: "content", candidates: ["content", "image"], done: !!selectedVideo || !!heroImageUrl,
-          gate: "영상 또는 대표 이미지를 먼저 담아 주세요",
-          teach: "영상이나 대표 이미지 한 장이 카드의 얼굴이에요. 둘 중 하나만 담으면 돼요.",
+          // FIX-30(b) — READ 실측: 서버 /api/drops 가 비커머스에 media_url(영상 source)을
+          //   구조적으로 요구(400 "영상 링크와 목적은 필수예요" + extract-meta 필수)라
+          //   이미지 단독 예약 발행은 현재 불가. 필수표(영상 or 이미지)와의 모순을 임시
+          //   정직 표기로 해소 — done 도 영상 기준으로 회귀(이미지 단독으로 게이트가 열리면
+          //   발행에서 막혀 거짓 게이트가 됨). 서버 지원(별도 트랙) 후 `|| !!heroImageUrl`
+          //   + 원래 문구 복원.
+          label: "콘텐츠", coach: "content", block: "content", candidates: ["content", "image"], done: !!selectedVideo,
+          gate: "예약 카드는 아직 영상이 필요해요 — 곧 이미지만으로도 가능해져요",
+          teach: "지금은 영상이 카드의 시작이에요. 대표 이미지는 함께 담을 수 있고, 이미지 단독 발행도 곧 열려요.",
         },
         {
           // Duke: 쿠폰이 우선순위 필수 — 콘텐츠 다음 최우선 배치.
