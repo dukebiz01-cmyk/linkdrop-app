@@ -40,6 +40,7 @@ import {
   type CouponDisplayStatus,
 } from "@/lib/coupon-status";
 import { CashSection } from "@/components/wallet/CashSection";
+import { InstallAppButton } from "@/components/pwa/InstallAppButton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1002,6 +1003,9 @@ function MePage() {
             <ChevronRight className="size-3.5" strokeWidth={2.5} />
           </p>
         </div>
+
+        {/* T7 PWA v1 — 설치 버튼(정직 렌더: installable/kakao 외 null). 로그아웃 위 지정 지점. */}
+        <InstallAppButton />
 
         {/* 로그아웃 + 버전 — 설정 아코디언에서 본문 최하단으로 이동(v0-44 정본 위치).
             핸들러(handleSignOut)·AlertDialog 확인 플로우 무변경, 위치만. */}

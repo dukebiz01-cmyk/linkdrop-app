@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "LinkDrop 링크드롭",
+  "short_name": "LinkDrop",
+  "lang": "ko",
+  "display": "standalone",
+  "scope": "/",
+  "start_url": "/home?source=pwa",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FFFFFF",
+  "icons": [
+    { "src": "/icons/pwa-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/pwa-512.png", "sizes": "512x512", "type": "image/png" },
+    {
+      "src": "/icons/pwa-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

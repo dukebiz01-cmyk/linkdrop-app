@@ -11,6 +11,8 @@ import {
 
 import appCss from "../styles.css?url";
 import { BusinessFooter } from "@/components/business-footer";
+// T7 PWA v1 — beforeinstallprompt 캡처 싱글턴 1회 로드(SSR 가드 내장 · 서비스워커 없음).
+import "@/lib/pwa-install";
 
 // 로그인 앱 경로 — 여기선 사업자 푸터를 숨긴다(하단 BottomNav 충돌 회피).
 // 그 외(공개 경로: / · /d/ · /r · /alliance · /terms · /business-info · /privacy 등)에만 노출.
@@ -86,9 +88,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:description", content: "영상 속 정보를 친구와 카톡으로 나누는 가장 빠른 방법" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      // T7 PWA v1 — 상단 톤 실측값(#FFFFFF — home 헤더 bg-white).
+      { name: "theme-color", content: "#FFFFFF" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      // T7 PWA v1 — manifest(서비스워커 없음 — 설치 가능성만).
+      { rel: "manifest", href: "/manifest.webmanifest" },
       {
         rel: "stylesheet",
         href: appCss,
