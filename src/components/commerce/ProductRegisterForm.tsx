@@ -138,12 +138,16 @@ export interface ProfitReceiptInput {
   dropyMode: "rate" | "fixed";
   dropyPercent: number; // 0~20(정수)
   dropyFixedKrw: number | null; // 고정 Droppy(유효 가드 통과분만)
+  /** FIX-36b — 기타잡비(포장·부자재·수수료 등, 생산자 직접 입력만 — 추정·자동 채움 금지).
+   *  미전달/null = 0: 구 호출부(studio-build 폼) 계산 결과 무변경(패리티 실측). */
+  miscCostKrw?: number | null;
 }
 export interface ProfitReceipt {
   netCustomerKrw: number; // 상품 실결제액 = 판매가 − 할인
   customerTotalKrw: number; // 손님 결제(배송비 별도 모드면 +배송비)
   sellerShippingKrw: number; // 무료배송(내 부담)일 때만 비용
   dropyCostKrw: number;
+  miscCostKrw: number; // FIX-36b — 기타잡비(입력분만 · 미입력 0)
   perUnitProfitKrw: number; // 건당 남는 돈
   marginPct: number | null; // 판매가 대비 %
 }
@@ -154,12 +158,14 @@ export function computeProfitReceipt(i: ProfitReceiptInput): ProfitReceipt {
   const sellerShipping = i.shippingMode === "free" ? i.shippingFeeKrw : 0;
   const dropyCost =
     i.dropyMode === "fixed" ? (i.dropyFixedKrw ?? 0) : Math.round((net * i.dropyPercent) / 100);
-  const profit = net - (i.costKrw ?? 0) - sellerShipping - dropyCost;
+  const misc = Math.max(0, i.miscCostKrw ?? 0);
+  const profit = net - (i.costKrw ?? 0) - sellerShipping - dropyCost - misc;
   return {
     netCustomerKrw: net,
     customerTotalKrw: customerTotal,
     sellerShippingKrw: sellerShipping,
     dropyCostKrw: dropyCost,
+    miscCostKrw: misc,
     perUnitProfitKrw: profit,
     marginPct: i.priceKrw > 0 ? (profit / i.priceKrw) * 100 : null,
   };

@@ -265,6 +265,9 @@ export function ProductRegisterForm45({
   // FIX-15 b) — 공산품 카테고리 프리셋 선택값("기타"면 직접입력 itemCategory 사용).
   const [goodsPreset, setGoodsPreset] = useState<string | null>(null);
   const [cost, setCost] = useState("");
+  // FIX-36b — 기타잡비(포장·부자재·수수료 등): 사장님 직접 입력만(추정·자동 채움 금지 §0).
+  //   표시용·미저장. 미입력 = 0 취급 + 영수증 행 미렌더.
+  const [miscCost, setMiscCost] = useState("");
   const [freeShip, setFreeShip] = useState(true);
   const [shipFee, setShipFee] = useState("");
   const [droppyMode, setDroppyMode] = useState<"rate" | "fixed">("rate");
@@ -333,6 +336,8 @@ export function ProductRegisterForm45({
   const costNum = cost !== "" ? Number(cost) : null;
   const shipFeeNum = shipFee !== "" ? Math.floor(Number(shipFee)) : null;
   const discountNum = plannedDiscount !== "" ? Number(plannedDiscount) : 0;
+  // FIX-36b — 기타잡비: 입력분만(미입력 = 0 · 행 미렌더).
+  const miscNum = miscCost !== "" ? Math.floor(Number(miscCost)) : null;
   // 고정 Droppy — 제출 가드 동일(0<f≤price 통과분만 차감 반영, 무효 = 0 취급).
   const droppyFixedNum =
     droppyMode === "fixed" &&
@@ -354,6 +359,7 @@ export function ProductRegisterForm45({
           dropyMode: droppyMode,
           dropyPercent: droppyRate,
           dropyFixedKrw: droppyFixedNum,
+          miscCostKrw: miscNum,
         })
       : null;
 
@@ -1125,6 +1131,22 @@ export function ProductRegisterForm45({
             <input value={cost} onChange={(e) => setCost(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 12000" className="w-full bg-transparent px-2 py-2 text-[12.5px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
             <span className="text-[12px] font-semibold text-[#8A8A8A]">원</span>
           </div>
+          {/* FIX-36b — 기타잡비: 직접 입력만(추정·자동 채움 금지 §0). 미입력 = 0 · 행 미렌더. */}
+          <div className="mt-1.5 flex items-center rounded-lg bg-white px-2.5">
+            <span className="shrink-0 text-[11px] font-semibold text-[#8A8A8A]">기타 비용</span>
+            <input
+              value={miscCost}
+              onChange={(e) => setMiscCost(onlyDigits(e.target.value))}
+              inputMode="numeric"
+              placeholder="예: 1500"
+              aria-label="기타 비용 (포장·부자재·수수료 등)"
+              className="w-full bg-transparent px-2 py-2 text-[12.5px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+            />
+            <span className="text-[12px] font-semibold text-[#8A8A8A]">원</span>
+          </div>
+          <p className="mt-1 text-[10.5px] font-medium text-[#A3A3A3]">
+            포장비, 부자재비 등 이 상품에 드는 잡비를 더해 주세요
+          </p>
           {/* FIX-36 — 이익 내역(표시용·미저장): 판매가+원가 입력 시에만 렌더.
               배송비는 무료배송(내 부담)만 차감, 구매자 부담은 제외 안내만. 드로피 차감 병기. */}
           {receipt !== null && costNum != null && (
@@ -1143,6 +1165,8 @@ export function ProductRegisterForm45({
                 <span>원가</span>
                 <span>−{costNum.toLocaleString()}원</span>
               </div>
+              {/* FIX-36b — 배송비 상태 명시(숨김 ≠ 미차감): 무료배송+미입력 = 0원 기준을 정직
+                  표기. 빠른등록은 배송 섹션이 숨김이라 안내 문구를 분기(숨긴 칸 가리키기 금지). */}
               {freeShip ? (
                 shipFeeNum != null ? (
                   <div className="flex justify-between">
@@ -1151,7 +1175,9 @@ export function ProductRegisterForm45({
                   </div>
                 ) : (
                   <p className="text-[10.5px] font-medium text-[#A3A3A3]">
-                    아래 배송 칸에 배송비를 적으면 이익에서 함께 빼서 계산해요
+                    {quickMode
+                      ? "무료배송(내 부담) 기준 · 배송비 미입력 — 0원으로 계산했어요. 배송비 입력은 자세히 등록에서 해요"
+                      : "무료배송(내 부담) · 배송비 미입력 — 0원으로 계산했어요. 아래 배송 칸에 적으면 함께 빼드려요"}
                   </p>
                 )
               ) : (
@@ -1165,6 +1191,13 @@ export function ProductRegisterForm45({
                   <span>−{receipt.dropyCostKrw.toLocaleString()}원</span>
                 </div>
               )}
+              {/* FIX-36b — 기타잡비 행(입력분만). */}
+              {receipt.miscCostKrw > 0 && (
+                <div className="flex justify-between">
+                  <span>기타잡비</span>
+                  <span>−{receipt.miscCostKrw.toLocaleString()}원</span>
+                </div>
+              )}
               <div
                 className="flex justify-between border-t border-[#EFEFEF] pt-1 text-[12px] font-bold"
                 style={{ color: receipt.perUnitProfitKrw >= 0 ? accent : "#EF4444" }}
@@ -1172,6 +1205,12 @@ export function ProductRegisterForm45({
                 <span>예상 이익</span>
                 <span>{receipt.perUnitProfitKrw.toLocaleString()}원</span>
               </div>
+              {/* FIX-36b — 음수 = 손해 정직 1줄(사실만 — 압박·권유 카피 금지). */}
+              {receipt.perUnitProfitKrw < 0 && (
+                <p className="pt-0.5 text-[10.5px] font-semibold text-[#EF4444]">
+                  이 가격이면 손해예요
+                </p>
+              )}
             </div>
           )}
         </div>
