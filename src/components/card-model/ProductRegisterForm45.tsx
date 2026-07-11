@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Calculator,
   Check,
+  ChevronDown,
   Image as ImageIcon,
   Info,
   Loader2,
@@ -16,6 +17,8 @@ import { resizeToJpegBlob } from "@/lib/image-upload";
 // FIX-36 — 이익 계산 정본(순수 함수) 재사용: 드로피 차감 = 이 폼의 dropy_rate/dropy_fixed 그대로,
 //   기준액 = 상품 실결제액(판매가−할인, 배송비 제외). 임의 비율 창작 0(진실경계).
 import { computeProfitReceipt } from "@/components/commerce/ProductRegisterForm";
+// FIX-37 — 상품 상세정보 고시표(유형별) 행 빌더 — 순수 모듈 분리(라벨 = 실제 고시 항목 명칭).
+import { buildNoticeRows45 } from "./product-notice45";
 
 /**
  * ProductRegisterForm45 — v0-45 정본 3유형(신선/가공/공산품) 상품 등록 폼 실배선 이식.
@@ -221,6 +224,7 @@ export function ProductRegisterForm45({
   onImageChange,
   onBusyChange,
   onProgress,
+  contactPhone = null,
 }: {
   accent: string;
   onSubmit: (payload: ProductRegisterPayload45) => Promise<ProductRegisterResult45>;
@@ -230,6 +234,9 @@ export function ProductRegisterForm45({
   onBusyChange?: (busy: string | null) => void;
   /** FIX-34 — 단계 내 세부 진행 신호(이름 확정·가격·사진) — 호스트 마이크로 안내 결합. */
   onProgress?: (p: ProductFormProgress45) => void;
+  /** FIX-37 — partners.contact_phone(읽기전용). 고시표 소비자상담 전화 자동 채움 — 쓰기 금지,
+   *  수정은 매장정보 블록에서 유도. 미주입/null = "미등록" 정직 표기. */
+  contactPhone?: string | null;
 }) {
   // ── 폼 상태 (정본 ProductForm 동형) ──
   const [name, setName] = useState("");
@@ -268,6 +275,15 @@ export function ProductRegisterForm45({
   const [headline, setHeadline] = useState("");
   const [sellingPoints, setSellingPoints] = useState<string[]>([""]);
   const [extraInfo, setExtraInfo] = useState("");
+  // FIX-37 — 상품 상세정보 고시(상품정보제공고시) 직접 입력분. 폼 기존 입력(상품명·원산지·
+  //   분류·소비기한·보관방법·브랜드)은 자동 미러라 여기 중복 입력 없음. 미입력 = "" 스냅샷.
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [noticeProducer, setNoticeProducer] = useState(""); // 생산자(수입자)·소재지
+  const [noticeMadeDate, setNoticeMadeDate] = useState(""); // fresh — 제조연월일(포장일·생산연도)
+  const [noticeHandling, setNoticeHandling] = useState(""); // fresh — 보관방법 또는 취급방법
+  const [noticeIngredients, setNoticeIngredients] = useState(""); // processed — 원재료명 및 함량
+  const [noticeModel, setNoticeModel] = useState(""); // goods — 모델명
+  const [noticeAsManager, setNoticeAsManager] = useState(""); // goods — A/S 책임자
 
   // ── 실배선 상태 ──
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -568,6 +584,27 @@ export function ProductRegisterForm45({
       ...(type === "goods" && spec.trim() ? { spec: spec.trim() } : {}),
       free_ship: freeShip,
       ...(!freeShip && shipFee ? { ship_fee_krw: Math.floor(Number(shipFee)) } : {}),
+      // FIX-37 — 상품 상세정보 고시 스냅샷(jsonb 키 추가만 · 신규 테이블/마이그레이션 0).
+      //   값 = 실입력·미러만, 미입력 "" 그대로(정직 표기 — 자동 생성 금지 §0).
+      //   /d 렌더는 거울 수술 필요 → ST2b 이관(저장까지만).
+      notice_type: type,
+      notice_rows: buildNoticeRows45({
+        type,
+        name,
+        itemCategory,
+        origin,
+        expiryDate: type === "processed" ? harvestDate : "",
+        storageLabel:
+          type === "processed" ? (STORAGE_OPTIONS.find((s) => s.id === storage)?.label ?? "") : "",
+        brand,
+        producer: noticeProducer,
+        madeDate: noticeMadeDate,
+        handling: noticeHandling,
+        ingredients: noticeIngredients,
+        model: noticeModel,
+        asManager: noticeAsManager,
+        contactPhone,
+      }),
     };
 
     const payload: ProductRegisterPayload45 = {
@@ -897,6 +934,130 @@ export function ProductRegisterForm45({
         )}
       </Field>
 
+      {/* FIX-37 — 상품 상세정보 고시(상품정보제공고시) — 인라인 펼침(Radix 금지).
+          위 폼 입력(상품명·원산지·분류·소비기한·보관방법·브랜드)은 자동 미러(중복 입력 0),
+          나머지 항목만 여기서 입력. 미입력은 그대로 정직 표기 — 자동 생성 금지(§0). */}
+      <div className="rounded-2xl bg-[#F7F7F8] p-3.5">
+        <button
+          type="button"
+          onClick={() => setNoticeOpen((v) => !v)}
+          className="flex w-full items-center gap-1.5"
+        >
+          <span className="flex-1 text-left text-[12.5px] font-bold text-[#0A0A0A]">
+            상품 상세정보 고시
+          </span>
+          <span className="text-[10.5px] font-medium text-[#8A8A8A]">전자상거래 필수 항목</span>
+          <ChevronDown
+            className="h-4 w-4 shrink-0 text-[#8A8A8A] transition-transform"
+            style={{ transform: noticeOpen ? "rotate(180deg)" : "none" }}
+            strokeWidth={2.25}
+          />
+        </button>
+        {noticeOpen && (
+          <div className="mt-3 space-y-1.5">
+            {type === "fresh" && (
+              <>
+                <NoticeMirror
+                  label="품목 또는 명칭"
+                  value={itemCategory.trim() || name.trim()}
+                  from="상품명·품목 분류"
+                />
+                <NoticeMirror label="원산지" value={origin.trim()} from="원산지" />
+                <NoticeField
+                  label="생산자(수입자)"
+                  value={noticeProducer}
+                  onChange={setNoticeProducer}
+                  placeholder="예: 괴산 홍씨네 농장(충북 괴산군)"
+                  accent={accent}
+                />
+                <NoticeField
+                  label="제조연월일(포장일 또는 생산연도)"
+                  value={noticeMadeDate}
+                  onChange={setNoticeMadeDate}
+                  placeholder="예: 2026년 7월 포장"
+                  accent={accent}
+                />
+                <NoticeField
+                  label="보관방법 또는 취급방법"
+                  value={noticeHandling}
+                  onChange={setNoticeHandling}
+                  placeholder="예: 수령 후 냉장 보관"
+                  accent={accent}
+                />
+              </>
+            )}
+            {type === "processed" && (
+              <>
+                <NoticeMirror label="제품명" value={name.trim()} from="상품명" />
+                <NoticeMirror label="식품의 유형" value={itemCategory.trim()} from="식품 유형" />
+                <NoticeField
+                  label="생산자 및 소재지"
+                  value={noticeProducer}
+                  onChange={setNoticeProducer}
+                  placeholder="예: 홍씨네 공방(충북 괴산군)"
+                  accent={accent}
+                />
+                <NoticeField
+                  label="원재료명 및 함량"
+                  value={noticeIngredients}
+                  onChange={setNoticeIngredients}
+                  placeholder="예: 딸기 70%(국산), 원당 30%"
+                  accent={accent}
+                />
+                <NoticeMirror
+                  label="제조연월일, 소비기한 또는 품질유지기한"
+                  value={harvestDate.trim()}
+                  from="소비기한(유통기한)"
+                />
+                <NoticeMirror
+                  label="보관방법"
+                  value={STORAGE_OPTIONS.find((s) => s.id === storage)?.label ?? ""}
+                  from="보관 방법"
+                />
+              </>
+            )}
+            {type === "goods" && (
+              <>
+                <NoticeMirror label="품명" value={name.trim()} from="상품명" />
+                <NoticeField
+                  label="모델명"
+                  value={noticeModel}
+                  onChange={setNoticeModel}
+                  placeholder="예: FOREST-C2"
+                  accent={accent}
+                />
+                <NoticeMirror label="제조자(수입자)" value={brand.trim()} from="브랜드·제조사" />
+                <NoticeMirror label="제조국 또는 원산지" value={origin.trim()} from="제조국" />
+                <NoticeField
+                  label="A/S 책임자"
+                  value={noticeAsManager}
+                  onChange={setNoticeAsManager}
+                  placeholder="예: 홍길동"
+                  accent={accent}
+                />
+              </>
+            )}
+            {/* 소비자상담 전화 — partners.contact_phone 자동(읽기전용 · 수정은 매장정보에서). */}
+            <div className="rounded-lg bg-white px-2.5 py-2">
+              <p className="text-[10.5px] font-semibold text-[#8A8A8A]">소비자상담 관련 전화번호</p>
+              {contactPhone && contactPhone.trim() ? (
+                <p className="mt-0.5 text-[12px] font-semibold tabular-nums text-[#0A0A0A]">
+                  {contactPhone}
+                </p>
+              ) : (
+                <p className="mt-0.5 text-[11px] font-medium text-[#A3A3A3]">미등록</p>
+              )}
+              <p className="mt-1 text-[10px] font-medium text-[#A3A3A3]">
+                매장 연락처가 자동으로 들어가요 — 수정은 매장정보 블록에서 해주세요
+              </p>
+            </div>
+            <p className="text-[10px] font-medium leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
+              미입력 항목은 그대로 미입력으로 남아요 — 자동으로 채우지 않아요.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* 가격 + 이익 계산(미저장 보조) */}
       <Field label="가격" required>
         <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3 focus-within:bg-white" style={{ boxShadow: "inset 0 0 0 1px transparent" }}>
@@ -1192,6 +1353,54 @@ function SubInput({ label, value, onChange, placeholder, suffix, accent }: { lab
         />
         <span className="text-[12px] font-semibold text-[#8A8A8A]">{suffix}</span>
       </div>
+    </div>
+  );
+}
+
+// FIX-37 — 고시표 자동 미러 행(읽기전용). 빈 값 = "미입력 — 출처 안내"(창작 금지).
+function NoticeMirror({ label, value, from }: { label: string; value: string; from: string }) {
+  return (
+    <div className="rounded-lg bg-white px-2.5 py-2">
+      <p className="text-[10.5px] font-semibold text-[#8A8A8A]">{label}</p>
+      {value ? (
+        <p className="mt-0.5 text-[12px] font-semibold text-[#0A0A0A]">{value}</p>
+      ) : (
+        <p className="mt-0.5 text-[11px] font-medium text-[#A3A3A3]">
+          미입력 — 위 {from} 칸에 적으면 자동으로 채워져요
+        </p>
+      )}
+    </div>
+  );
+}
+
+// FIX-37 — 고시표 직접 입력 행.
+function NoticeField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  accent,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  accent: string;
+}) {
+  return (
+    <div
+      className="rounded-lg bg-white px-2.5 py-2"
+      style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+    >
+      <p className="text-[10.5px] font-semibold text-[#8A8A8A]">{label}</p>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="mt-0.5 w-full bg-transparent text-[12px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#C4C4C4]"
+        onFocus={(e) => (e.currentTarget.parentElement!.style.boxShadow = `inset 0 0 0 1.5px ${accent}`)}
+        onBlur={(e) => (e.currentTarget.parentElement!.style.boxShadow = "inset 0 0 0 1px transparent")}
+      />
     </div>
   );
 }

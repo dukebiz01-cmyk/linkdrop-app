@@ -2687,6 +2687,8 @@ export function CardStudioPage45({
                     onImageChange={(url) => setProductImageUrl(url)}
                     onBusyChange={setFormBusy}
                     onProgress={handleFormProgress}
+                    // FIX-37 — 고시표 소비자상담 전화 자동 채움(partners.contact_phone 읽기전용).
+                    contactPhone={store?.contact_phone ?? null}
                   />
                 )}
 
@@ -3098,6 +3100,29 @@ export function CardStudioPage45({
                     (display_name/business_type/address/metadata 만 UPDATE). 표시 토글만 유지. */}
                 {activeBlock.id === "link" && (
                   <div className="space-y-3.5">
+                    {/* FIX-37 — partners 실존 데이터 요약(매장명·주소·연락처). 없는 필드 미렌더
+                        (placeholder 창작 금지). link 블록은 예약·커머스 두 덱(DECK_IDS)에 모두
+                        포함된 공용 패널 — 중복 구현 없이 이 1곳에서 양 모드를 함께 충족. */}
+                    {store && (store.display_name || store.address || store.contact_phone) && (
+                      <div className="space-y-1 rounded-xl bg-[#F4F4F5] p-3">
+                        {[
+                          { k: "매장명", v: store.display_name },
+                          { k: "주소", v: store.address },
+                          { k: "연락처", v: store.contact_phone },
+                        ]
+                          .filter((r) => !!r.v && r.v.trim().length > 0)
+                          .map((r) => (
+                            <p key={r.k} className="flex gap-2 text-[12px]">
+                              <span className="w-12 shrink-0 font-semibold text-[#8A8A8A]">
+                                {r.k}
+                              </span>
+                              <span className="min-w-0 flex-1 font-semibold text-[#0A0A0A]">
+                                {r.v}
+                              </span>
+                            </p>
+                          ))}
+                      </div>
+                    )}
                     {store && (
                       <div>
                         <p className="mb-1 text-[11px] font-semibold text-[#8A8A8A]">매장 주소</p>
