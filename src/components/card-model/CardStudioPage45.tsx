@@ -534,6 +534,8 @@ export function CardStudioPage45({
 
   // 도킹 — 실 CardDockingPicker (studio-build DOCK-3 동형).
   const [dockedProducts, setDockedProducts] = useState<DockedProduct[]>([]);
+  // FIX-33 — 도킹 정식 단계(비필수)의 [건너뛰기] 확정. 건너뛴 뒤 수동 연결해도 done 유지.
+  const [dockSkipped, setDockSkipped] = useState(false);
 
   // 커머스 — ProductRegisterForm 임베드 결과 미러. ST2b 스위치 시 원본 제거(studio-build :380-396 동형).
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
@@ -731,6 +733,7 @@ export function CardStudioPage45({
     setShowColorPicker(false);
     setCardColor(CARD_BASE);
     setFormProgress({ nameSet: false, priceSet: false, photoSet: false, name: "" }); // FIX-34 신호 리셋.
+    setDockSkipped(false); // FIX-33 — 도킹 건너뛰기도 진행 상태 — 함께 초기화.
   };
   const switchMode = (next: BuildMode) => {
     if (next === mode) return;
@@ -805,24 +808,37 @@ export function CardStudioPage45({
   // FIX-28 — 목적별 필수패키지(Duke 확정본 — 이 표가 정본). 게시 게이트·방향등·단계 점이
   //   전부 이 steps 하나를 읽는다(단일 기준). done = 실확정 state 결합(FIX-25 원칙).
   //   candidates = 방향등·점프 대상 덱 블록 / gate = 게시 비활성 사유 1줄 / teach = 링고 티칭.
-  //   마지막 "게시" 단계(candidates 없음)만 비필수 표기 — 그 앞은 전부 필수.
+  // FIX-33 — required 플래그 도입: 발행 게이트는 required=true 만 본다(무변경).
+  //   도킹 = 정식 단계(비필수, 필수 뒤·발행 앞): done = 1장 이상 연결 or [건너뛰기].
+  //   가용(dockCount) 0장이면 단계 자체를 목록에서 제외(자동 스킵 — 단계 점 미표시).
   const steps = useMemo(() => {
     const productDone =
       !!attachedProducts[0] || (!!productImageUrl && !!productName.trim() && (productPrice ?? 0) > 0);
+    const dockStep =
+      dockCount > 0
+        ? [
+            {
+              label: "도킹", coach: "dock", block: "dock", candidates: ["dock"], required: false,
+              done: dockedProducts.length > 0 || dockSkipped,
+              gate: "", teach: "",
+            },
+          ]
+        : [];
     if (mode === "commerce") {
       return [
         {
-          label: "상품", coach: "product", block: "product", candidates: ["product", "productimage"], done: productDone,
+          label: "상품", coach: "product", block: "product", candidates: ["product", "productimage"], required: true, done: productDone,
           gate: "상품(사진·이름·가격)을 먼저 등록해 주세요",
           teach: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
         },
         {
           // 판매기간(seasonal) 또는 수확·발송일(등록 폼 날짜) 중 1 확정.
-          label: "발송기준", coach: "shipBasis", block: "seasonal", candidates: ["seasonal"], done: !!applied["seasonal"] || productShipDateSet,
+          label: "발송기준", coach: "shipBasis", block: "seasonal", candidates: ["seasonal"], required: true, done: !!applied["seasonal"] || productShipDateSet,
           gate: "판매기간 또는 수확·발송일을 먼저 확정해 주세요",
           teach: "언제 받을 수 있는지 알려줘요 — 판매 캘린더나 수확·발송일 중 하나면 돼요.",
         },
-        { label: "발행", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
+        ...dockStep,
+        { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "" },
       ];
     }
     if (mode === "reserve") {
@@ -834,45 +850,47 @@ export function CardStudioPage45({
           //   정직 표기로 해소 — done 도 영상 기준으로 회귀(이미지 단독으로 게이트가 열리면
           //   발행에서 막혀 거짓 게이트가 됨). 서버 지원(별도 트랙) 후 `|| !!heroImageUrl`
           //   + 원래 문구 복원.
-          label: "콘텐츠", coach: "content", block: "content", candidates: ["content", "image"], done: !!selectedVideo,
+          label: "콘텐츠", coach: "content", block: "content", candidates: ["content", "image"], required: true, done: !!selectedVideo,
           gate: "예약 카드는 아직 영상이 필요해요 — 곧 이미지만으로도 가능해져요",
           teach: "지금은 영상이 카드의 시작이에요. 대표 이미지는 함께 담을 수 있고, 이미지 단독 발행도 곧 열려요.",
         },
         {
           // Duke: 쿠폰이 우선순위 필수 — 콘텐츠 다음 최우선 배치.
-          label: "쿠폰", coach: "coupon", block: "coupon", candidates: ["coupon"], done: !!(applied["coupon"] && selectedCouponId),
+          label: "쿠폰", coach: "coupon", block: "coupon", candidates: ["coupon"], required: true, done: !!(applied["coupon"] && selectedCouponId),
           gate: "쿠폰을 먼저 연결해 주세요",
           teach: "왜 지금 예약해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요.",
         },
         {
-          label: "캘린더", coach: "calendar", block: "calendar", candidates: ["calendar"], done: !!applied["calendar"] && cfgDates.length > 0,
+          label: "캘린더", coach: "calendar", block: "calendar", candidates: ["calendar"], required: true, done: !!applied["calendar"] && cfgDates.length > 0,
           gate: "예약 캘린더를 먼저 설정해 주세요",
           teach: "예약 카드의 심장이에요. 받을 수 있는 날짜를 골라 캘린더를 확정해요.",
         },
         {
           // store+facilities — 동일 설정 패널(매장정보)에서 함께 충족: 1묶음 표기.
-          label: "매장·시설", coach: "store", block: "link", candidates: ["link"], done: savedStoreInfo.hasAddress && savedStoreInfo.facilities > 0,
+          label: "매장·시설", coach: "store", block: "link", candidates: ["link"], required: true, done: savedStoreInfo.hasAddress && savedStoreInfo.facilities > 0,
           gate: "매장 정보(주소·시설)를 먼저 저장해 주세요",
           teach: "주소와 시설 태그를 저장하면 손님이 안심하고 예약해요. 매장정보에서 한 번에 저장돼요.",
         },
-        { label: "발행", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
+        ...dockStep,
+        { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "" },
       ];
     }
     return [
       {
-        label: "영상", coach: "content", block: "content", candidates: ["content"], done: !!selectedVideo,
+        label: "영상", coach: "content", block: "content", candidates: ["content"], required: true, done: !!selectedVideo,
         gate: "영상을 먼저 담아 주세요",
         teach: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
       },
       {
         // 한마디(tagline) — 정보 모드 필수 승격(꾸미기 단계·색은 제거, FIX-28).
-        label: "한마디", coach: "tagline", block: "content", candidates: ["content"], done: !!cfgSubtitle.trim(),
+        label: "한마디", coach: "tagline", block: "content", candidates: ["content"], required: true, done: !!cfgSubtitle.trim(),
         gate: "내 한마디를 먼저 적어 주세요",
         teach: "왜 이 영상을 보내는지 한 줄만 적어요. 그 한마디가 카드의 목소리예요.",
       },
-      { label: "발행", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
+      ...dockStep,
+      { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "" },
     ];
-  }, [mode, applied, selectedCouponId, selectedVideo, heroImageUrl, attachedProducts, productImageUrl, productName, productPrice, productShipDateSet, cfgSubtitle, cfgDates, savedStoreInfo, dropped]);
+  }, [mode, applied, selectedCouponId, selectedVideo, heroImageUrl, attachedProducts, productImageUrl, productName, productPrice, productShipDateSet, cfgSubtitle, cfgDates, savedStoreInfo, dockCount, dockedProducts, dockSkipped, dropped]);
   const currentStepIdx = steps.findIndex((s) => !s.done);
   const nextStepLabel = currentStepIdx >= 0 ? steps[currentStepIdx].label : null;
 
@@ -941,43 +959,40 @@ export function CardStudioPage45({
   const [suggestVisible, setSuggestVisible] = useState(false);
   const readyToSend = !dropped && currentStepIdx >= 0 && steps[currentStepIdx].block === null;
 
-  // FIX-28 — 첫 미완료 필수 단계(게시 게이트·방향등·안내가 전부 이걸 읽음 — 단일 기준).
+  // FIX-28/33 — 첫 미완료 "필수" 단계(발행 게이트가 읽는 유일 기준 — 도킹 등 비필수 미포함).
   const firstRequiredStep = useMemo(
-    () => steps.find((s) => !s.done && s.candidates.length > 0) ?? null,
+    () => steps.find((s) => s.required && !s.done && s.candidates.length > 0) ?? null,
     [steps],
   );
   // 게시 게이트 — 필수 전부 충족 시에만 활성. 사유 1줄 = 첫 미완 항목의 gate 문구.
   const canPublish = !firstRequiredStep;
   const gateMsg = firstRequiredStep?.gate ?? null;
 
-  // FIX-23/25/28 — 단일 타깃: ① 필수 미완이면 그 단계 후보를 정의 순서로(진행 중 블록은
-  //   마무리 안내 유지 — FIX-25 규칙). 필수는 거절(X) 쿨다운 대상에서 제외(계속 안내).
-  //   ② 필수 완료 후에만 권장 제안 모드 — 1순위 도킹(가용 N>0·미연결일 때만, N=0 이면
-  //   생략 — 가짜 유도 금지), 2순위 쿠폰(덱에 있고 미적용 — 커머스 등 비예약 모드).
-  //   권장은 기존 쿨다운·1개 리듬·수렴 계약 적용. 전부 소진 = null(수렴·전체 소등).
+  // FIX-23/25/28/33 — 단일 타깃: 단계 순회(필수 → 도킹(비필수 정식 단계) → 발행)로 통일.
+  //   필수는 거절 쿨다운 제외(계속 안내), 비필수(도킹)는 쿨다운/[건너뛰기] 허용.
+  //   발행 단계 도달 후 권장 쿠폰(비예약 모드 잔여 제안 — 기존 리듬) → 전부 소진 = 수렴.
   const currentTarget = useMemo(() => {
     if (dropped) return null;
-    if (firstRequiredStep) {
-      for (const id of firstRequiredStep.candidates) {
+    for (const s of steps) {
+      if (s.done) continue;
+      if (s.candidates.length === 0) break; // 발행 단계 — 아래 잔여 권장으로.
+      for (const id of s.candidates) {
         const b = DECK.find((x) => x.id === id);
         if (!b || GATED_BLOCK_IDS.has(b.id)) continue;
+        if (!s.required && dismissedSuggests.includes(b.id)) continue; // 비필수만 쿨다운.
         if (applied[b.id]) return b; // 진행 중 — 마무리 안내(등록·선택·저장 완료까지 유지).
         if (!b.isPaid) return b; // 미장착 — 장착 안내.
       }
+      if (!s.required) continue; // 비필수 후보 전멸(쿨다운) — 다음 단계로.
       return null; // 이론상 도달 없음(필수 후보는 비게이트).
     }
-    // 권장 ① 도킹 — FIX-28 STEP 5.
-    if (dockCount > 0 && dockedProducts.length === 0 && !applied["dock"] && !dismissedSuggests.includes("dock")) {
-      const dock = DECK.find((b) => b.id === "dock");
-      if (dock) return dock;
-    }
-    // 권장 ② 쿠폰 — 예약 모드는 필수라 여기 도달 시 이미 적용됨(자연 제외).
+    // 잔여 권장 — 쿠폰(예약 모드는 필수라 여기 도달 시 이미 적용됨 — 자연 제외).
     if (!applied["coupon"] && !dismissedSuggests.includes("coupon")) {
       const c = DECK.find((b) => b.id === "coupon" && !GATED_BLOCK_IDS.has(b.id));
       if (c) return c;
     }
     return null;
-  }, [dropped, firstRequiredStep, DECK, applied, dismissedSuggests, dockCount, dockedProducts]);
+  }, [dropped, steps, DECK, applied, dismissedSuggests]);
 
   // 제안 칩([장착]+X) 대상 = 단일 타깃이 "장착 가능"일 때만(마무리 안내 대상엔 칩 없음).
   const suggestion = useMemo(() => {
@@ -3657,6 +3672,21 @@ export function CardStudioPage45({
                       <div className="mt-2 space-y-0.5 text-[12px] font-medium leading-relaxed text-[#6B6B6B] [word-break:keep-all]">
                         <p>왜 좋냐면: {COACH_NOTES[currentCoachKey].why}</p>
                         <p>{coachEffect(currentCoachKey)}</p>
+                        {/* FIX-33 — 도킹 단계(비필수) 건너뛰기: 캡슐 칩이 닫힌 상태(블록만 장착
+                            후 미연결 등)에서도 항상 도달 가능한 두 번째 창구. */}
+                        {currentCoachKey === "dock" && !dockSkipped && dockedProducts.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDockSkipped(true);
+                              setSuggestVisible(false);
+                              flashStrip("도킹은 건너뛰었어요 — 발행으로 마무리해요");
+                            }}
+                            className="mt-1 flex h-8 items-center rounded-lg bg-white px-2.5 text-[11px] font-bold text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                          >
+                            이번엔 건너뛰기
+                          </button>
+                        )}
                       </div>
                     )}
                     {/* FIX-29 — 게시 마무리 코칭: 장착·확정된 항목 상위 3개의 effect 요약(사실 기반). */}
@@ -3942,21 +3972,37 @@ export function CardStudioPage45({
                   >
                     {suggestion.id === "dock" ? "연결하기" : "장착"}
                   </button>
-                  {/* FIX-28 — 필수는 거절(쿨다운) 불가: X 는 권장 제안에서만. */}
-                  {!firstRequiredStep && (
-                    <button
-                      type="button"
-                      aria-label="제안 닫기"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={() => {
-                        setDismissedSuggests((d) => [...d, suggestion.id]);
-                        setSuggestVisible(false);
-                      }}
-                      className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] active:scale-95"
-                    >
-                      <X className="h-3.5 w-3.5" strokeWidth={2.5} />
-                    </button>
-                  )}
+                  {/* FIX-28 — 필수는 거절(쿨다운) 불가: X 는 권장 제안에서만.
+                      FIX-33 — 도킹(정식 단계·비필수)은 X 대신 [건너뛰기]: 단계 done 처리 →
+                      다음 단계(발행)로 진행. 건너뛴 뒤 덱에서 수동 연결해도 done 유지. */}
+                  {!firstRequiredStep &&
+                    (suggestion.id === "dock" ? (
+                      <button
+                        type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => {
+                          setDockSkipped(true);
+                          setSuggestVisible(false);
+                          flashStrip("도킹은 건너뛰었어요 — 발행으로 마무리해요");
+                        }}
+                        className="relative flex h-8 shrink-0 items-center rounded-full bg-[#F4F4F5] px-2.5 text-[11px] font-bold text-[#737373] active:scale-95"
+                      >
+                        건너뛰기
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label="제안 닫기"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => {
+                          setDismissedSuggests((d) => [...d, suggestion.id]);
+                          setSuggestVisible(false);
+                        }}
+                        className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] active:scale-95"
+                      >
+                        <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+                      </button>
+                    ))}
                 </>
               ) : (
                 <button
