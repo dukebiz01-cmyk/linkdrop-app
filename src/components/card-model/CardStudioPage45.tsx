@@ -272,6 +272,10 @@ const SL_KEYFRAMES = `
 .sl-led-ring--pill, .sl-led-ring--pill::after { border-radius: 9999px; }
 .sl-led-ring--panel { border-radius: 24px; } /* rounded-3xl 실측값 — inherit 미사용 */
 .sl-led-ring--panel::after { border-radius: 22px; }
+/* FIX-19 — 추천 방향등(덱 카드 변형): 카드 콘텐츠는 비positioned 라 흰 덮개가 콘텐츠 위로
+   올라오므로, 링을 음수 z(카드 자체 배경 위 · 콘텐츠 아래)로 내린다 — 부모에 isolate 필수. */
+.sl-led-ring--card { border-radius: 24px; z-index: -1; } /* 카드 rounded-3xl 실측값 */
+.sl-led-ring--card::after { border-radius: 22px; }
 `;
 
 type ProductCopy45 = { headline: string; sellingPoints: string[] };
@@ -670,6 +674,9 @@ export function CardStudioPage45({
     return () => clearTimeout(t);
   }, [applied, deckIndex, mode, lingoView, cfgSubtitle, selectedVideo, collapsedPanels]);
   const showSuggest = !stripBusy && !stripFlash && suggestVisible && !!suggestion;
+  // FIX-19 — 추천 방향등 단일 소스: 캡슐 한줄 제안과 같은 조건·같은 블록(문구 따로 불 따로 금지).
+  //   수렴(readyToSend)·전송 완료·거절 쿨다운 시 suggestion/showSuggest 가 꺼지므로 전 소등도 동기.
+  const suggestLitId = showSuggest && suggestion ? suggestion.id : null;
 
   // FIX-10 — 매장정보 저장(주소 + 시설 → partners UPDATE, RLS partners_owner_all).
   //   facilities 컬럼은 types.ts 미반영(마스터 신설)이라 as never 캐스트(기존 rpc 관례).
@@ -1648,7 +1655,7 @@ export function CardStudioPage45({
                 aria-label={block.label}
               >
                 <div
-                  className="relative flex h-[240px] flex-col rounded-3xl bg-white p-5 text-left"
+                  className="relative isolate flex h-[240px] flex-col rounded-3xl bg-white p-5 text-left"
                   style={{
                     boxShadow: isCenter
                       ? isOn
@@ -1657,6 +1664,9 @@ export function CardStudioPage45({
                       : "0 8px 20px -12px rgba(15,23,42,0.18), 0 0 0 1px #EDEDED",
                   }}
                 >
+                  {/* FIX-19 — 링고 추천 방향등: 능동 제안이 가리키는 카드 1장에만 LED 링(FIX-17
+                      재사용, 카드 변형). 스와이프로 화면 밖이어도 suggestLitId 로 파생 — 복귀 시 점등. */}
+                  {suggestLitId === block.id && <span className="sl-led-ring sl-led-ring--card" aria-hidden="true" />}
                   {/* 상단: 파워 + 카테고리 */}
                   <div className="flex items-center justify-between">
                     <span
@@ -3309,7 +3319,8 @@ export function CardStudioPage45({
                       const idx = DECK.findIndex((b) => b.id === suggestion.id);
                       if (idx >= 0) setDeckIndex(idx);
                       equip(suggestion);
-                      setSuggestVisible(false);
+                      // FIX-19 — 장착 즉시 소등(flash 가 showSuggest 를 끔) → flash 종료 후
+                      //   재계산된 다음 제안으로 점등 이동(suggestVisible 유지). 없으면 그대로 소등.
                       flashStrip(`+${suggestion.power}점! ${suggestion.label} 장착됐어요`);
                     }}
                     className="relative flex h-8 shrink-0 items-center rounded-full px-2.5 text-[11px] font-bold text-white active:scale-95"
