@@ -19,6 +19,8 @@ import { toast } from "sonner";
 type PlayZoneProps = {
   /** 획득한 드로피 상위 전달용(잔액 반영) — 오픈 준비중이라 미배선. 오픈 시 재배선. */
   onEarn?: (amount: number, source: string) => void;
+  /** v0-45 — 풀스크린 화면(RoleHome DropyEventScreen)이 자체 헤더를 가져 내부 제목 블록 숨김. */
+  hideHeading?: boolean;
 };
 
 type EventTab = "attendance" | "mission" | "roulette";
@@ -34,22 +36,24 @@ function notifyComingSoon() {
   toast.info("드로피 적립은 오픈 준비 중이에요. 곧 열려요.");
 }
 
-export function HomePlayZone({ onEarn }: PlayZoneProps) {
+export function HomePlayZone({ onEarn, hideHeading = false }: PlayZoneProps) {
   void onEarn; // 실지급 배선 금지(§0) — 게이트 해제 시 재배선.
   const [tab, setTab] = useState<EventTab>("attendance");
 
   return (
     <section>
-      <div className="mb-3 flex items-center gap-2">
-        <span className="flex size-6 items-center justify-center rounded-lg bg-[#2563EB]">
-          <Sparkles className="size-3.5 text-white" strokeWidth={2.5} />
-        </span>
-        <h2 className="text-[16px] font-bold tracking-[-0.01em] text-[#0F172A]">DROPY 이벤트</h2>
-        {/* 배지 — 정본 "매일 리셋"(미가동이라 거짓) 대신 정직 표기. Dropy Mall 준비중 칩 톤. */}
-        <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[11px] font-bold text-[#64748B]">
-          오픈 준비 중
-        </span>
-      </div>
+      {!hideHeading && (
+        <div className="mb-3 flex items-center gap-2">
+          <span className="flex size-6 items-center justify-center rounded-lg bg-[#2563EB]">
+            <Sparkles className="size-3.5 text-white" strokeWidth={2.5} />
+          </span>
+          <h2 className="text-[16px] font-bold tracking-[-0.01em] text-[#0F172A]">DROPY 이벤트</h2>
+          {/* 배지 — 정본 "매일 리셋"(미가동이라 거짓) 대신 정직 표기. Dropy Mall 준비중 칩 톤. */}
+          <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[11px] font-bold text-[#64748B]">
+            오픈 준비 중
+          </span>
+        </div>
+      )}
 
       {/* 내부 탭 — 정본 그대로(전환 동작 유지). */}
       <div className="mb-3 flex gap-1.5 rounded-2xl bg-[#F1F5F9] p-1">

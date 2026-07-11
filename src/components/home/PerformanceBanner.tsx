@@ -30,11 +30,11 @@ function StatCell({
           className={`size-3.5 ${accent ? "text-[#2563EB]" : "text-[#94A3B8]"}`}
           strokeWidth={2}
         />
-        <span className="text-[11.5px] font-medium text-[#64748B]">{label}</span>
+        <span className="text-[11.5px] font-semibold text-[#64748B]">{label}</span>
       </div>
       <div className="flex items-baseline gap-1">
         <span
-          className="text-[25px] font-bold leading-none tracking-[-0.02em] tabular-nums"
+          className="text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums"
           style={{ color: accent ? "#2563EB" : "#0F172A" }}
         >
           {display}

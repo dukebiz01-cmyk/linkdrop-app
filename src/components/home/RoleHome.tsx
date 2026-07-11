@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Sparkles, Users, ChevronRight, ArrowRight, TrendingUp, Bell, Gift } from "lucide-react";
+import { Sparkles, Users, ChevronRight, ArrowRight, TrendingUp, Bell, Gift, X } from "lucide-react";
 import { PerformanceBanner } from "@/components/home/PerformanceBanner";
 // P6-8(형님 확정 A안) — 홈 AI 표면 1개: 링고AI 셸(가이드 상시 + 성과 진단 접힘·lazy).
 //   P6-7 이식분(CreatorCoachCard)은 셸 내부로 수렴 — 이 파일 직접 import 제거.
@@ -100,20 +100,17 @@ function SwipeItem({ children }: { children: ReactNode }) {
   return <div className="w-[46%] shrink-0 snap-start sm:w-[42%]">{children}</div>;
 }
 
-// A안 — 헤더 Gift 토글(드로피 이벤트 아코디언 진입). 준비중 점배지 = 무채색 정적(blink/pulse 금지).
-//   열림 = 연블루 활성 톤(#EFF6FF/#BFD3F9/#2563EB — 기존 토큰), 닫힘 = 헤더 버튼 기본 톤.
-function DropyGiftButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+// v0-45 — 헤더 Gift 버튼: 탭 → DROPY 이벤트 풀스크린(구 A안 아코디언 토글 대체).
+//   점 배지 = 무채색 정적(blink/pulse 금지). 정본은 블루 배지지만 이벤트 미가동 중
+//   거짓 신호 방지 — 오픈 시 #2563EB 로 스위치.
+function DropyGiftButton({ onOpen }: { onOpen: () => void }) {
   return (
     <button
       type="button"
-      onClick={onToggle}
+      onClick={onOpen}
       aria-label="드로피 이벤트 (준비 중)"
-      aria-expanded={open}
-      className={`relative flex h-10 w-10 items-center justify-center rounded-full border transition-colors active:scale-95 ${
-        open
-          ? "border-[#BFD3F9] bg-[#EFF6FF] text-[#2563EB]"
-          : "border-[#EAEEF3] bg-white text-[#0F172A] hover:bg-[#F1F5F9]"
-      }`}
+      aria-haspopup="dialog"
+      className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[#EAEEF3] bg-white text-[#0F172A] transition-colors hover:bg-[#F1F5F9] active:scale-95"
     >
       <Gift className="size-[18px]" strokeWidth={2} />
       <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-white bg-[#94A3B8]" />
@@ -121,19 +118,47 @@ function DropyGiftButton({ open, onToggle }: { open: boolean; onToggle: () => vo
   );
 }
 
-// A안 — 헤더 아래 인라인 아코디언(#418: 바텀시트/포털/Radix 아님, me 설정과 동일 grid 0fr→1fr).
-//   헤더와 한 래퍼로 묶여 닫힘 상태에선 높이 0 = space-y-6 간격 무영향. 내부 pt-6 은 열릴 때만 보임.
-function PlayZoneAccordion({ open }: { open: boolean }) {
+// v0-45 정본 — DROPY 이벤트 풀스크린 화면(인라인 아코디언 대체). 커스텀 fixed 오버레이 —
+//   Radix/포털 아님이라 #418 비저촉. 열림(마운트) 중 body 스크롤 잠금, 닫힘/언마운트 시 원복.
+//   내부 스크롤은 본문 overflow-y-auto 가 담당. 적립 게이트·비적립 로직은 HomePlayZone 그대로.
+function DropyEventScreen({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   return (
-    <div
-      className="grid transition-all duration-300 ease-out"
-      style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
-      aria-hidden={!open}
-    >
-      <div className="overflow-hidden">
-        <div className="pt-6">
-          <HomePlayZone />
+    <div className="fixed inset-0 z-50 flex flex-col bg-white">
+      <header className="flex items-center justify-between border-b border-[#E8EDF3] px-4 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-9 items-center justify-center rounded-xl bg-[#2563EB]">
+            <Gift className="size-[18px] text-white" strokeWidth={2.25} />
+          </span>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-[16px] font-bold text-[#0F172A]">DROPY 이벤트</h1>
+              {/* 정본 칩은 "매일 리셋"(블루) — 미가동 중 거짓이라 정직 표기. 오픈 시 정본 문구·색 스위치. */}
+              <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10.5px] font-bold text-[#64748B]">
+                오픈 준비 중
+              </span>
+            </div>
+            <p className="text-[11.5px] text-[#94A3B8]">출석 · 미션 · 룰렛 — 곧 열려요</p>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="닫기"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-[#64748B] transition-colors hover:bg-[#F1F5F9] active:scale-95"
+        >
+          <X className="size-5" strokeWidth={2} />
+        </button>
+      </header>
+      <div className="flex-1 overflow-y-auto px-4 pb-8 pt-4">
+        <HomePlayZone hideHeading />
       </div>
     </div>
   );
@@ -271,8 +296,8 @@ export function RoleHome({
   onGoProposals: () => void;
 }) {
   const navigate = useNavigate();
-  // A안 — 드로피 이벤트 아코디언 열림 상태(로컬, 양 분기 중 렌더되는 쪽에서 사용).
-  const [playOpen, setPlayOpen] = useState(false);
+  // v0-45 — DROPY 이벤트 풀스크린 열림 상태(로컬, 양 분기 중 렌더되는 쪽에서 사용).
+  const [eventOpen, setEventOpen] = useState(false);
   // 링고 스타터 라우팅 — 제작 진입 단일화(create-wizard 폐기 → studio-build?purpose=).
   //   목적형(①②③) → studio-build 목적 프리셋 / ④ → 내 지갑(/me) / ⑤ → 탐색(/explore).
   const onStartPurpose = (purpose: StarterPurpose) =>
@@ -292,8 +317,8 @@ export function RoleHome({
     const recommendedDrops = user?.recommendedDrops ?? [];
     return (
       <div className="mx-auto max-w-md space-y-6 bg-white px-4 pt-6 pb-24">
-        {/* 헤더 — V4 로고마크 + 워드마크(+ 태그라인) + Gift(드로피 이벤트 A안). 유저홈은 🔔 없음.
-            헤더+아코디언을 한 래퍼로 묶어 닫힘 시 space-y-6 간격 무영향. */}
+        {/* 헤더 — V4 로고마크 + 워드마크(+ 태그라인) + Gift(드로피 이벤트 → 풀스크린). 유저홈은 🔔 없음.
+            풀스크린은 헤더와 한 래퍼 — space-y-6 의 mt-6 이 fixed inset-0 박스에 먹는 것 방지. */}
         <div>
           <header className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -307,9 +332,9 @@ export function RoleHome({
                 <p className="text-[11.5px] text-[#64748B]">링크는 목적을 만나 행동이 된다</p>
               </div>
             </div>
-            <DropyGiftButton open={playOpen} onToggle={() => setPlayOpen((v) => !v)} />
+            <DropyGiftButton onOpen={() => setEventOpen(true)} />
           </header>
-          <PlayZoneAccordion open={playOpen} />
+          {eventOpen ? <DropyEventScreen onClose={() => setEventOpen(false)} /> : null}
         </div>
 
         {/* 🆕 링고 스타터 — 모핑 히어로 + 4목적 아코디언 + 정적 CTA. 모두에게. */}
@@ -320,8 +345,11 @@ export function RoleHome({
           onExplore={onExplore}
         />
 
-        {/* 성과 2셀 — 전환·적립(placeholder 0, 데이터 배선 추후). v0 룩. */}
-        <PerformanceBanner conversionCount={0} dropyAmount={0} />
+        {/* 성과 2셀 — 전환·적립(placeholder 0, 데이터 배선 추후). v0 룩.
+            v0-45 폴리시 — 하단 여백 mb-6→mb-7 상당: space-y-6(24px) + pb-1(4px) = 28px. */}
+        <div className="pb-1">
+          <PerformanceBanner conversionCount={0} dropyAmount={0} />
+        </div>
 
         {/* 오늘 공유하기 좋은 — 추천 영상(있을 때만) 가로 스와이프. 빈 박스 방지(L12) — 없으면 숨김. */}
         {recommendedDrops.length > 0 ? (
@@ -349,9 +377,9 @@ export function RoleHome({
 
   return (
     <div className="mx-auto max-w-md space-y-6 bg-white px-4 pt-6 pb-24">
-      {/* 헤더 — 로고 + 워드마크 + 매장명(파란 도트) + Gift(드로피 이벤트 A안, 벨 왼쪽)
+      {/* 헤더 — 로고 + 워드마크 + 매장명(파란 도트) + Gift(드로피 이벤트 → 풀스크린, 벨 왼쪽)
           + 🔔(pending 새예약 빨강 배지, 0이면 숨김, 클릭→/partner/reservations).
-          헤더+아코디언을 한 래퍼로 묶어 닫힘 시 space-y-6 간격 무영향. */}
+          풀스크린은 헤더와 한 래퍼 — space-y-6 의 mt-6 이 fixed inset-0 박스에 먹는 것 방지. */}
       <div>
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -369,7 +397,7 @@ export function RoleHome({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <DropyGiftButton open={playOpen} onToggle={() => setPlayOpen((v) => !v)} />
+          <DropyGiftButton onOpen={() => setEventOpen(true)} />
           <button
             type="button"
             onClick={onGoReservations}
@@ -385,7 +413,7 @@ export function RoleHome({
           </button>
         </div>
       </header>
-      <PlayZoneAccordion open={playOpen} />
+      {eventOpen ? <DropyEventScreen onClose={() => setEventOpen(false)} /> : null}
       </div>
 
       {/* 🆕 링고 스타터 — 유저홈과 동일(+CTA 알약). */}
@@ -396,8 +424,11 @@ export function RoleHome({
         onExplore={onExplore}
       />
 
-      {/* 성과 3셀 — 전환·적립·구독자. */}
-      <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />
+      {/* 성과 3셀 — 전환·적립·구독자.
+          v0-45 폴리시 — 하단 여백 mb-6→mb-7 상당: space-y-6(24px) + pb-1(4px) = 28px. */}
+      <div className="pb-1">
+        <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />
+      </div>
 
       {/* ✅ 성과진단 보존 — 링고AI 셸: 즉석 진단(TodayAiCard) 제거, "성과 진단 보기" 진입만 유지.
           guideSlot 미주입 → 상단 슬롯·디바이더 미렌더(헤더 + 성과 진단 아코디언만). */}
