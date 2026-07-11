@@ -44,10 +44,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  ProductRegisterForm,
-  type ProductRegisterPayload,
-  type ProductRegisterResult,
-} from "@/components/commerce/ProductRegisterForm";
+  ProductRegisterForm45,
+  type ProductRegisterPayload45,
+  type ProductRegisterResult45,
+} from "./ProductRegisterForm45";
 import { CardDockingPicker, type DockedProduct } from "@/components/studio/CardDockingPicker";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import type { AttachedProduct } from "@/components/create/types";
@@ -85,6 +85,8 @@ export type StudioLabStore = {
   contact_phone: string | null;
   address: string | null;
   reservation_url: string | null;
+  /** FIX-10 — partners.facilities jsonb(기본 '[]'). 시설 태그 저장·재로드. */
+  facilities?: unknown;
 };
 export type StudioLabCoupon = {
   id: string;
@@ -250,6 +252,15 @@ const SL_KEYFRAMES = `
 .sl-slide-up { animation: sl-slide-up 0.3s ease-out both; }
 @keyframes sl-pop { 0% { transform: scale(0.4); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
 .sl-pop { animation: sl-pop 0.25s ease-out both; }
+@property --sl-led-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes sl-led-spin { to { --sl-led-angle: 360deg; } }
+.sl-led { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; padding: 2px;
+  background: conic-gradient(from var(--sl-led-angle), transparent 0deg 280deg, rgba(255,233,196,0.18) 300deg, rgba(255,233,196,0.65) 332deg, rgba(255,255,255,0.95) 352deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: sl-led-spin 2s linear infinite; }
 `;
 
 type ProductCopy45 = { headline: string; sellingPoints: string[] };
@@ -280,11 +291,14 @@ export function CardStudioPage45({
   isBusiness,
   store,
   coupons,
+  dockCount = 0,
   initialPurpose,
 }: {
   isBusiness: boolean;
   store: StudioLabStore | null;
   coupons: StudioLabCoupon[];
+  /** FIX-9 — 도킹 가능(공개 발행) 카드 실카운트(loader head count). 가짜 숫자 금지. */
+  dockCount?: number;
   /** ?purpose 진입 프리셋 — studio-build validateSearch 와 동등(정보|쿠폰|예약|구매). */
   initialPurpose?: "정보" | "쿠폰" | "예약" | "구매";
 }) {
@@ -372,7 +386,17 @@ export function CardStudioPage45({
   const [cfgBrand, setCfgBrand] = useState("");
   const [cfgPhone, setCfgPhone] = useState(true);
   const [cfgMap, setCfgMap] = useState(true);
-  const [cfgFacilities, setCfgFacilities] = useState<FacilityItem[]>([]);
+  // FIX-10 — 매장정보 실체화: partners 실값 프리필(주소·시설). 저장 = partners UPDATE
+  //   (store-hub 명함 편집과 동일 RLS partners_owner_all 경로).
+  const [cfgAddress, setCfgAddress] = useState(store?.address ?? "");
+  const [storeSaving, setStoreSaving] = useState(false);
+  const [cfgFacilities, setCfgFacilities] = useState<FacilityItem[]>(() =>
+    Array.isArray(store?.facilities)
+      ? (store!.facilities as unknown[])
+          .filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+          .map((f) => newFacility(f))
+      : [],
+  );
   const addFacility = (text = "") => setCfgFacilities((prev) => [...prev, newFacility(text)]);
   const editFacility = (id: string, text: string) =>
     setCfgFacilities((prev) => prev.map((f) => (f.id === id ? { ...f, text } : f)));
@@ -539,6 +563,81 @@ export function CardStudioPage45({
           : videoSearching
             ? "영상을 찾는 중…"
             : null;
+
+  // FIX-11 — LED 러닝 라이트: 실작업 중에만 점등, 완료 시 한 바퀴(2초) 마무리 후 정지.
+  const [ledFinish, setLedFinish] = useState(false);
+  const prevBusyRef = useRef(false);
+  useEffect(() => {
+    const busy = !!stripBusy;
+    const wasBusy = prevBusyRef.current;
+    prevBusyRef.current = busy;
+    if (wasBusy && !busy) {
+      setLedFinish(true);
+      const t = setTimeout(() => setLedFinish(false), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [stripBusy]);
+  const ledOn = !!stripBusy || ledFinish;
+
+  // FIX-9 — 링고 능동 제안(규칙 기반, LLM 아님): 미장착·비게이트·비유료 중 전환력 기여
+  //   최대 1개. 거절 시 세션 쿨다운(재노출 금지). 전송 준비 완료 시 제안 대신 수렴 문구.
+  const [dismissedSuggests, setDismissedSuggests] = useState<string[]>([]);
+  const [suggestVisible, setSuggestVisible] = useState(false);
+  const readyToSend = !dropped && currentStepIdx >= 0 && steps[currentStepIdx].block === null;
+  const suggestion = useMemo(() => {
+    if (dropped || readyToSend) return null;
+    return (
+      DECK.filter(
+        (b) => !b.isPaid && !GATED_BLOCK_IDS.has(b.id) && !applied[b.id] && !dismissedSuggests.includes(b.id),
+      ).sort((a, b) => b.power - a.power)[0] ?? null
+    );
+  }, [DECK, applied, dismissedSuggests, dropped, readyToSend]);
+  // 트리거 ① 단계 완료 — done 개수 증가 시.
+  const doneCount = steps.filter((s) => s.done).length;
+  const prevDoneRef = useRef(doneCount);
+  useEffect(() => {
+    if (doneCount > prevDoneRef.current) setSuggestVisible(true);
+    prevDoneRef.current = doneCount;
+  }, [doneCount]);
+  // 트리거 ② 설정 패널 닫힘(적용 접힘) 시.
+  const collapsedCount = Object.values(collapsedPanels).filter(Boolean).length;
+  const prevCollapsedRef = useRef(collapsedCount);
+  useEffect(() => {
+    if (collapsedCount > prevCollapsedRef.current) setSuggestVisible(true);
+    prevCollapsedRef.current = collapsedCount;
+  }, [collapsedCount]);
+  // 트리거 ③ 약 20초 무행동(주요 상호작용 시 리셋).
+  useEffect(() => {
+    const t = setTimeout(() => setSuggestVisible(true), 20000);
+    return () => clearTimeout(t);
+  }, [applied, deckIndex, mode, lingoView, cfgSubtitle, selectedVideo, collapsedPanels]);
+  const showSuggest = !stripBusy && !stripFlash && suggestVisible && !!suggestion;
+
+  // FIX-10 — 매장정보 저장(주소 + 시설 → partners UPDATE, RLS partners_owner_all).
+  //   facilities 컬럼은 types.ts 미반영(마스터 신설)이라 as never 캐스트(기존 rpc 관례).
+  async function handleStoreInfoSave() {
+    if (!store || storeSaving) return;
+    setStoreSaving(true);
+    try {
+      const facilities = cfgFacilities.map((f) => f.text.trim()).filter(Boolean);
+      const { error } = await getSupabase()
+        .from("partners")
+        .update({ address: cfgAddress.trim() || null, facilities } as never)
+        .eq("id", store.id);
+      if (error) {
+        console.error("[studio-lab] store info save failed:", error);
+        toast.error("저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      toast.success("매장 정보를 저장했어요.");
+      flashStrip("매장정보가 저장됐어요");
+    } catch (err) {
+      console.error("[studio-lab] store info save unexpected:", err);
+      toast.error("처리 중 문제가 생겼어요.");
+    } finally {
+      setStoreSaving(false);
+    }
+  }
 
   // 링고 코칭 — 정적 규칙 기반(정본 그대로 · LLM 아님). 게이트 블록은 추천에서 제외.
   const lingo = useMemo(() => {
@@ -852,7 +951,7 @@ export function CardStudioPage45({
   }
 
   // ── 상품 등록 제출 — 실배선(/api/drops self_upload). ST2b 스위치 시 원본 제거(studio-build :1104-1148 발췌). ──
-  async function submitStudioProduct(payload: ProductRegisterPayload): Promise<ProductRegisterResult> {
+  async function submitStudioProduct(payload: ProductRegisterPayload45): Promise<ProductRegisterResult45> {
     const res = await fetch("/api/drops", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1136,7 +1235,7 @@ export function CardStudioPage45({
       selectedCoupon: applied["coupon"] && couponTitle ? { title: couponTitle } : null,
       storeName: content.store,
       storePhone: cfgPhone ? (store?.contact_phone ?? null) : null,
-      storeAddress: cfgMap ? (store?.address ?? null) : null,
+      storeAddress: cfgMap ? (cfgAddress.trim() || store?.address || null) : null,
       productName,
       productPrice,
       productImageUrl: productImageUrl ?? undefined,
@@ -1167,7 +1266,8 @@ export function CardStudioPage45({
   );
 
   return (
-    <div className="min-h-screen pb-[120px] transition-colors duration-300" style={{ backgroundColor: pageBg }}>
+    // FIX-8 — 하단 스트립(48px)+CTA 높이만큼 본문 패딩 확보(pb-[184px], 콘텐츠 깔림 방지).
+    <div className="min-h-screen pb-[184px] transition-colors duration-300" style={{ backgroundColor: pageBg }}>
       <style>{SL_KEYFRAMES}</style>
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[#EDEDED] bg-white/90 backdrop-blur-lg">
@@ -1220,7 +1320,7 @@ export function CardStudioPage45({
           에서 시작 — 스크롤 전 구간에서 두 요소 비겹침. */}
       <div
         aria-hidden={heroVisible}
-        className={`pointer-events-none fixed inset-x-0 top-[134px] z-30 transition-all duration-300 ease-out ${
+        className={`pointer-events-none fixed inset-x-0 top-[134px] z-[31] transition-all duration-300 ease-out ${
           heroVisible ? "-translate-y-2 opacity-0" : "translate-y-0 opacity-100"
         }`}
       >
@@ -1264,7 +1364,8 @@ export function CardStudioPage45({
       <div className="mx-auto max-w-md px-5">
         {/* 모드 전환 (퍼블릭 / 예약·쿠폰 / 상품판매) — 비사업자는 사업자 모드 잠금(studio-build P6-3 동등)
             FIX-2 — 스티키 스택 상단 통합: 헤더(57px) 바로 아래 고정 + 페이지 배경으로 아래 콘텐츠 가림. */}
-        <div className="sticky top-[57px] z-[35] -mx-5 px-5 pb-2 pt-4" style={{ backgroundColor: pageBg }}>
+        {/* FIX-8 z-스택: 모드탭(z-30) < 미니 미리보기(z-31) < 스트립(z-38) < 패널(z-40) < 거울 시트(z-60) */}
+        <div className="sticky top-[57px] z-30 -mx-5 px-5 pb-2 pt-4" style={{ backgroundColor: pageBg }}>
         <div className="flex rounded-2xl bg-white p-1 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
           {(
             [
@@ -1492,6 +1593,12 @@ export function CardStudioPage45({
                       {block.label}
                       {gated && (
                         <span className="rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[9px] font-bold text-[#64748B]">준비 중</span>
+                      )}
+                      {/* FIX-9 — 도킹 가용 수 배지(실카운트, 0장이면 미표기 — 가짜 숫자 금지). */}
+                      {block.id === "dock" && dockCount > 0 && (
+                        <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums" style={{ backgroundColor: `${accent}14`, color: accent }}>
+                          {dockCount}장 가능
+                        </span>
                       )}
                     </p>
                     <p className="mt-1 text-[12px] leading-[1.45] text-[#5C5C5C]">{block.desc}</p>
@@ -1885,6 +1992,12 @@ export function CardStudioPage45({
                     />
                   ) : (
                     <div className="space-y-1.5">
+                      {/* FIX-9 — 가용 수량 실카운트(loader). 0장 = 숫자 대신 먼저 만들기 안내. */}
+                      {coupons.length > 0 && (
+                        <p className="px-0.5 text-[11px] font-semibold text-[#8A8A8A]">
+                          보유 쿠폰 <b className="tabular-nums" style={{ color: accent }}>{coupons.length}장</b>
+                        </p>
+                      )}
                       {coupons.length === 0 && (
                         <p className="rounded-xl bg-[#F4F4F5] px-3 py-3 text-center text-[12px] font-medium text-[#8A8A8A]">
                           활성 쿠폰이 없어요. 파트너 센터에서 쿠폰을 먼저 만들어 주세요.
@@ -1933,12 +2046,29 @@ export function CardStudioPage45({
                     </div>
                   ))}
 
-                {/* 상품 등록 — 실 ProductRegisterForm 임베드(studio-build P2 동일) */}
+                {/* 상품 등록 — FIX-13: v0-45 정본 3유형 폼(신규 이식)으로 교체.
+                    기존 commerce/ProductRegisterForm 무수정(구 스튜디오 사용 중). */}
                 {activeBlock.id === "product" && (
-                  <ProductRegisterForm embedded onSubmit={submitStudioProduct} onImageChange={(url) => setProductImageUrl(url)} />
+                  <ProductRegisterForm45
+                    accent={accent}
+                    onSubmit={submitStudioProduct}
+                    onImageChange={(url) => setProductImageUrl(url)}
+                  />
                 )}
 
                 {/* 카드 도킹 — 실 CardDockingPicker */}
+                {/* FIX-9 — 도킹 가용 수량(공개 발행 카드 실카운트). 0장 = 먼저 만들기 안내. */}
+                {activeBlock.id === "dock" && !collapsedPanels["dock"] && (
+                  dockCount > 0 ? (
+                    <p className="mb-2 px-0.5 text-[11px] font-semibold text-[#8A8A8A]">
+                      함께 보낼 수 있는 카드 <b className="tabular-nums" style={{ color: accent }}>{dockCount}장</b>
+                    </p>
+                  ) : (
+                    <p className="mb-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-center text-[12px] font-medium text-[#8A8A8A]">
+                      아직 도킹할 공개 카드가 없어요 — 먼저 카드를 만들어 보세요.
+                    </p>
+                  )
+                )}
                 {activeBlock.id === "dock" &&
                   (collapsedPanels["dock"] && dockedProducts.length > 0 ? (
                     <AppliedRow
@@ -2253,13 +2383,28 @@ export function CardStudioPage45({
                   </div>
                 )}
 
-                {/* 매장정보 — 전화/위치 토글(실 매장 연락처 기반) + 시설 태그 */}
+                {/* 매장정보 — FIX-10 실체화: 주소 실필드(partners 프리필·UPDATE 저장) + 시설 저장.
+                    전화 편집 필드는 생략 — READ 판정: 명함 편집(partner.index)이 전화를 다루지 않음
+                    (display_name/business_type/address/metadata 만 UPDATE). 표시 토글만 유지. */}
                 {activeBlock.id === "link" && (
                   <div className="space-y-3.5">
+                    {store && (
+                      <div>
+                        <p className="mb-1 text-[11px] font-semibold text-[#8A8A8A]">매장 주소</p>
+                        <input
+                          value={cfgAddress}
+                          onChange={(e) => setCfgAddress(e.target.value)}
+                          placeholder="예: 충북 괴산군 …"
+                          className="w-full rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                          onFocus={(e) => (e.currentTarget.style.boxShadow = `inset 0 0 0 1.5px ${accent}`)}
+                          onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
+                        />
+                      </div>
+                    )}
                     <div className="space-y-1.5">
                       {[
                         { on: cfgPhone, set: setCfgPhone, icon: Phone, label: "전화 걸기", has: !!store?.contact_phone },
-                        { on: cfgMap, set: setCfgMap, icon: MapPin, label: "위치 보기", has: !!store?.address },
+                        { on: cfgMap, set: setCfgMap, icon: MapPin, label: "위치 보기", has: !!(cfgAddress.trim() || store?.address) },
                       ].map((row) => (
                         <button
                           key={row.label}
@@ -2339,6 +2484,24 @@ export function CardStudioPage45({
                         </div>
                       )}
                     </div>
+
+                    {/* FIX-10 — 저장: partners UPDATE(주소 + facilities jsonb). 성공/실패 toast + 스트립 갱신. */}
+                    {store ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleStoreInfoSave()}
+                        disabled={storeSaving}
+                        className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold text-white transition-transform active:translate-y-px disabled:opacity-60"
+                        style={{ backgroundColor: accent, boxShadow: `0 6px 18px -8px ${accent}80` }}
+                      >
+                        {storeSaving ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} /> : <Check className="h-4 w-4" strokeWidth={2.5} />}
+                        {storeSaving ? "저장 중…" : "매장정보 저장"}
+                      </button>
+                    ) : (
+                      <p className="rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-center text-[12px] font-medium text-[#8A8A8A]">
+                        매장 등록 후 저장할 수 있어요. 지금은 미리보기에만 반영돼요.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -2718,11 +2881,13 @@ export function CardStudioPage45({
               <div className="sl-fade-in fixed inset-0 z-40 bg-black/25" onClick={() => setLingoView("strip")} />
               <div className="sl-slide-up fixed inset-x-0 bottom-[188px] z-40 px-5">
                 <div
-                  className={`mx-auto max-w-md rounded-3xl bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.4),0_0_0_1px_#EDEDED] ${
+                  className={`relative mx-auto max-w-md rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)] ${
                     panelDragging ? "" : "transition-transform duration-200 ease-out"
                   }`}
                   style={{ transform: `translate(${panelOffset.x}px, ${panelOffset.y}px)` }}
                 >
+                  {/* FIX-11 — LED 러닝 라이트(패널에도 동일, 실작업 중에만). */}
+                  {ledOn && <span className="sl-led" aria-hidden="true" />}
                   {/* 드래그 핸들 */}
                   <div
                     onPointerDown={onPanelPointerDown}
@@ -2838,10 +3003,14 @@ export function CardStudioPage45({
               + 모드별 단계 점 + [계속하기]. 전송 CTA 위 스택(bottom 오프셋)으로 비겹침. */}
           {lingoView === "strip" && !mirrorOpen && (
             <div
-              className="fixed inset-x-0 z-40 px-5"
-              style={{ bottom: "calc(96px + env(safe-area-inset-bottom))" }}
+              className="fixed inset-x-0 z-[38]"
+              style={{ bottom: "calc(88px + env(safe-area-inset-bottom))" }}
             >
-              <div className="mx-auto flex h-12 max-w-md items-center gap-2 rounded-2xl bg-white pl-1.5 pr-1.5 [box-shadow:0_10px_28px_-10px_rgba(15,23,42,0.28),0_0_0_1px_#EDEDED]">
+              {/* FIX-8 — 불투명 흰 배경 + 상단 보더 + 단차 그림자(본문과 물리적 분리).
+                  FIX-11 — LED 러닝 라이트(전구 웜화이트): 실작업 중에만 점등. */}
+              <div className="relative border-t border-[#E5E5E5] bg-white shadow-[0_-12px_28px_-16px_rgba(15,23,42,0.35)]">
+                {ledOn && <span className="sl-led" aria-hidden="true" />}
+              <div className="mx-auto flex h-12 max-w-md items-center gap-2 pl-1.5 pr-1.5">
                 {/* 스트립 탭 = 풀 패널 확장 */}
                 <button
                   type="button"
@@ -2864,7 +3033,15 @@ export function CardStudioPage45({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[11.5px] font-semibold leading-tight text-[#0A0A0A]">
-                      {stripBusy ?? stripFlash ?? (dropped ? "전송 완료! 링크를 공유해 보세요" : lingo.text)}
+                      {stripBusy ??
+                        stripFlash ??
+                        (showSuggest && suggestion
+                          ? `${suggestion.label}을 달면 +${suggestion.power}점 올라요`
+                          : dropped
+                            ? "전송 완료! 링크를 공유해 보세요"
+                            : readyToSend
+                              ? "이제 보낼 준비 됐어요"
+                              : lingo.text)}
                     </span>
                     {/* 단계 점 — 실상태 파생. done=accent · current=링 · 대기=회색 */}
                     <span className="mt-0.5 flex items-center gap-1">
@@ -2891,15 +3068,47 @@ export function CardStudioPage45({
                     </span>
                   </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={continueFlow}
-                  className="flex h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-[12px] font-bold text-white transition-transform active:scale-95"
-                  style={{ backgroundColor: accent }}
-                >
-                  계속하기
-                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
-                </button>
+                {/* FIX-9 — 제안 노출 중엔 [바로 장착] + 거절(X, 세션 쿨다운), 아니면 [계속하기]. */}
+                {showSuggest && suggestion ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const idx = DECK.findIndex((b) => b.id === suggestion.id);
+                        if (idx >= 0) setDeckIndex(idx);
+                        equip(suggestion);
+                        setSuggestVisible(false);
+                        flashStrip(`+${suggestion.power}점! ${suggestion.label} 장착됐어요`);
+                      }}
+                      className="flex h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-[12px] font-bold text-white transition-transform active:scale-95"
+                      style={{ backgroundColor: accent }}
+                    >
+                      바로 장착
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="제안 닫기"
+                      onClick={() => {
+                        setDismissedSuggests((d) => [...d, suggestion.id]);
+                        setSuggestVisible(false);
+                      }}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F4F4F5] text-[#737373] active:scale-95"
+                    >
+                      <X className="h-4 w-4" strokeWidth={2.5} />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={continueFlow}
+                    className="flex h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-[12px] font-bold text-white transition-transform active:scale-95"
+                    style={{ backgroundColor: accent }}
+                  >
+                    계속하기
+                    <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  </button>
+                )}
+              </div>
               </div>
             </div>
           )}

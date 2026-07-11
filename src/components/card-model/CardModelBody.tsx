@@ -545,7 +545,8 @@ export function CardModelBody({
               {variant === "studio" ? "목적 카드를 장착하면 여기에 행동 버튼이 생겨요" : "행동 버튼 준비 중"}
             </div>
           ) : bodyButtons.length > 0 ? (
-            <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
+            // FIX-12 — 행동 블록 세로 스택: 블록 하나 = 한 행(전폭). variant 3종 동일(거울).
+            <div className="mt-3.5 flex flex-col gap-1.5">
               {bodyButtons.map((b) => {
                 const BIcon = b.icon;
                 return (
@@ -553,7 +554,7 @@ export function CardModelBody({
                     key={b.id}
                     type="button"
                     onClick={b.onClick}
-                    className="cm-slide-up inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold transition-transform duration-150 active:translate-y-px"
+                    className="cm-slide-up flex h-11 w-full items-center justify-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold transition-transform duration-150 active:translate-y-px"
                     style={
                       b.main
                         ? {
