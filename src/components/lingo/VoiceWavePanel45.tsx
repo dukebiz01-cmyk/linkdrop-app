@@ -55,12 +55,22 @@ export function VoiceWavePanel45({
     let ctx: AudioContext | null = null;
     let stream: MediaStream | null = null;
     let cancelled = false;
-    const w = window as Window & { webkitAudioContext?: typeof AudioContext };
-    if (!hasWaveSupport({ ...w, navigator: w.navigator })) {
+    // window.AudioContext 는 DOM lib 에 Window 프로퍼티로 선언돼 있지 않아 구조 캐스트로 접근.
+    const w = window as unknown as {
+      AudioContext?: typeof AudioContext;
+      webkitAudioContext?: typeof AudioContext;
+    };
+    if (
+      !hasWaveSupport({
+        AudioContext: w.AudioContext,
+        webkitAudioContext: w.webkitAudioContext,
+        navigator: window.navigator,
+      })
+    ) {
       setWaveOk(false);
       return;
     }
-    const AC = w.AudioContext ?? w.webkitAudioContext!;
+    const AC = (w.AudioContext ?? w.webkitAudioContext)!;
     void (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -68,10 +78,11 @@ export function VoiceWavePanel45({
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
-        ctx = new AC();
-        const analyser = ctx.createAnalyser();
+        const ac = new AC();
+        ctx = ac; // cleanup 용 보관 — 사용은 로컬 const(let 클로저 내로잉 유실 방지).
+        const analyser = ac.createAnalyser();
         analyser.fftSize = 64; // 32 bins — 막대 14개엔 충분.
-        ctx.createMediaStreamSource(stream).connect(analyser);
+        ac.createMediaStreamSource(stream).connect(analyser);
         const data = new Uint8Array(analyser.frequencyBinCount);
         setWaveOk(true);
         const tick = () => {
