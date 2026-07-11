@@ -168,6 +168,48 @@ const GATE_NOTICE = "이 기능은 오픈 준비 중이에요. 곧 열려요.";
 //   상태·팔레트 코드는 삭제 금지(보존) — true 로 되돌리면 그대로 재활성.
 const ENABLE_CARD_COLORS = false;
 
+// FIX-29 — 전략 코칭 사전(정본 카피 — Duke 승인, 임의 창작·과장 금지). 진실 경계:
+//   성과 수치("전환율 N%" 류) 금지 — {N} 치환은 실제 보유 숫자만(coupon = 게이지 상승폭
+//   블록 power / dock = 도킹 실카운트). 톤 = 60대 친화 존댓말.
+const COACH_NOTES: Record<string, { why: string; effect: string }> = {
+  tagline: {
+    why: "사장님 목소리 한 줄이 있으면 광고가 아니라 지인의 추천이 돼요",
+    effect: "받은 분이 끝까지 읽을 이유가 생겨요",
+  },
+  coupon: {
+    why: "혜택이 보이면 '나중에'가 '지금'이 돼요",
+    effect: "+{N}점 · 받은 분 지갑에 저장돼 다시 찾아올 고리가 생겨요",
+  },
+  calendar: {
+    why: "빈자리가 보여야 예약이 시작돼요 — 전화로 묻기 전에 결정하게 돼요",
+    effect: "문의 단계를 건너뛰어요",
+  },
+  store: {
+    why: "손님은 시설을 보고 비교해요 — 화장실·주차가 결정 요소예요",
+    effect: "비교에서 빠지지 않게 돼요",
+  },
+  product: {
+    why: "사진과 가격은 신뢰의 최소 단위예요",
+    effect: "안 보이면 그냥 지나쳐요",
+  },
+  shipBasis: {
+    why: "언제 받는지 알려주면 기다림이 이해가 돼요",
+    effect: "문의와 오해가 줄어요",
+  },
+  dock: {
+    why: "카드를 함께 보내면 받는 분은 볼거리가 늘어요",
+    effect: "드로피를 더 받을 수 있어요 · 지금 {N}장 연결 가능",
+  },
+  content: {
+    why: "영상에서 출발한 카드가 더 오래 읽혀요",
+    effect: "구매 결심에 필요한 시간이 생겨요",
+  },
+  keymoment: {
+    why: "바쁜 분은 핵심만 봐요",
+    effect: "긴 영상도 20초 안에 전달돼요",
+  },
+};
+
 // 매장정보 시설 태그 — 빠른 추가용 추천 목록(정본 8종).
 const FACILITY_PRESETS = ["주차 가능", "무료 와이파이", "반려동물 동반", "단체석", "예약 가능", "포장·배달", "유아 의자", "휠체어 접근"];
 // AI 광고영상 제작 옵션 — 게이트 대상이지만 UI(선택지)는 정본 유지.
@@ -594,60 +636,60 @@ export function CardStudioPage45({
     if (mode === "commerce") {
       return [
         {
-          label: "상품", block: "product", candidates: ["product", "productimage"], done: productDone,
+          label: "상품", coach: "product", block: "product", candidates: ["product", "productimage"], done: productDone,
           gate: "상품(사진·이름·가격)을 먼저 등록해 주세요",
           teach: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
         },
         {
           // 판매기간(seasonal) 또는 수확·발송일(등록 폼 날짜) 중 1 확정.
-          label: "발송기준", block: "seasonal", candidates: ["seasonal"], done: !!applied["seasonal"] || productShipDateSet,
+          label: "발송기준", coach: "shipBasis", block: "seasonal", candidates: ["seasonal"], done: !!applied["seasonal"] || productShipDateSet,
           gate: "판매기간 또는 수확·발송일을 먼저 확정해 주세요",
           teach: "언제 받을 수 있는지 알려줘요 — 판매 캘린더나 수확·발송일 중 하나면 돼요.",
         },
-        { label: "게시", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
+        { label: "게시", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
       ];
     }
     if (mode === "reserve") {
       return [
         {
           // 영상 또는 대표 이미지 중 1(실확정 — 확정 버튼/업로드 완료).
-          label: "콘텐츠", block: "content", candidates: ["content", "image"], done: !!selectedVideo || !!heroImageUrl,
+          label: "콘텐츠", coach: "content", block: "content", candidates: ["content", "image"], done: !!selectedVideo || !!heroImageUrl,
           gate: "영상 또는 대표 이미지를 먼저 담아 주세요",
           teach: "영상이나 대표 이미지 한 장이 카드의 얼굴이에요. 둘 중 하나만 담으면 돼요.",
         },
         {
           // Duke: 쿠폰이 우선순위 필수 — 콘텐츠 다음 최우선 배치.
-          label: "쿠폰", block: "coupon", candidates: ["coupon"], done: !!(applied["coupon"] && selectedCouponId),
+          label: "쿠폰", coach: "coupon", block: "coupon", candidates: ["coupon"], done: !!(applied["coupon"] && selectedCouponId),
           gate: "쿠폰을 먼저 연결해 주세요",
           teach: "왜 지금 예약해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요.",
         },
         {
-          label: "캘린더", block: "calendar", candidates: ["calendar"], done: !!applied["calendar"] && cfgDates.length > 0,
+          label: "캘린더", coach: "calendar", block: "calendar", candidates: ["calendar"], done: !!applied["calendar"] && cfgDates.length > 0,
           gate: "예약 캘린더를 먼저 설정해 주세요",
           teach: "예약 카드의 심장이에요. 받을 수 있는 날짜를 골라 캘린더를 확정해요.",
         },
         {
           // store+facilities — 동일 설정 패널(매장정보)에서 함께 충족: 1묶음 표기.
-          label: "매장·시설", block: "link", candidates: ["link"], done: savedStoreInfo.hasAddress && savedStoreInfo.facilities > 0,
+          label: "매장·시설", coach: "store", block: "link", candidates: ["link"], done: savedStoreInfo.hasAddress && savedStoreInfo.facilities > 0,
           gate: "매장 정보(주소·시설)를 먼저 저장해 주세요",
           teach: "주소와 시설 태그를 저장하면 손님이 안심하고 예약해요. 매장정보에서 한 번에 저장돼요.",
         },
-        { label: "게시", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
+        { label: "게시", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
       ];
     }
     return [
       {
-        label: "영상", block: "content", candidates: ["content"], done: !!selectedVideo,
+        label: "영상", coach: "content", block: "content", candidates: ["content"], done: !!selectedVideo,
         gate: "영상을 먼저 담아 주세요",
         teach: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
       },
       {
         // 한마디(tagline) — 정보 모드 필수 승격(꾸미기 단계·색은 제거, FIX-28).
-        label: "한마디", block: "content", candidates: ["content"], done: !!cfgSubtitle.trim(),
+        label: "한마디", coach: "tagline", block: "content", candidates: ["content"], done: !!cfgSubtitle.trim(),
         gate: "내 한마디를 먼저 적어 주세요",
         teach: "왜 이 영상을 보내는지 한 줄만 적어요. 그 한마디가 카드의 목소리예요.",
       },
-      { label: "게시", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
+      { label: "게시", coach: "", block: null, candidates: [] as string[], done: dropped, gate: "", teach: "" },
     ];
   }, [mode, applied, selectedCouponId, selectedVideo, heroImageUrl, attachedProducts, productImageUrl, productName, productPrice, productShipDateSet, cfgSubtitle, cfgDates, savedStoreInfo, dropped]);
   const currentStepIdx = steps.findIndex((s) => !s.done);
@@ -816,6 +858,40 @@ export function CardStudioPage45({
       setStoreSaving(false);
     }
   }
+
+  // FIX-29 — 현재 타깃의 코칭 키: 필수 구간 = 단계의 coach(정본 표), 권장 구간 = 블록 id 매핑.
+  const currentCoachKey = firstRequiredStep
+    ? firstRequiredStep.coach || null
+    : currentTarget && (currentTarget.id === "dock" || currentTarget.id === "coupon")
+      ? currentTarget.id
+      : null;
+  // FIX-29 — effect 의 {N} 치환(진실 경계 — 실제 보유 숫자만): coupon = 게이지 상승폭(블록
+  //   power), dock = 도킹 실카운트(0이면 숫자 구간 미노출 — 가짜 유도 금지).
+  const coachEffect = (key: string): string | null => {
+    const note = COACH_NOTES[key];
+    if (!note) return null;
+    if (key === "coupon") return note.effect.replace("{N}", String(blockById("coupon").power));
+    if (key === "dock") {
+      return dockCount > 0 ? note.effect.replace("{N}", String(dockCount)) : "드로피를 더 받을 수 있어요";
+    }
+    return note.effect;
+  };
+  // FIX-29 — 게시 마무리 코칭: 실제 충족(장착·확정)된 항목만(사실 기반 — 미장착 언급 금지),
+  //   우선순위(목적 블록 → 콘텐츠) 상위 3개의 effect 요약.
+  const finishCoach = useMemo(() => {
+    if (!dropped) return [] as { key: string; label: string }[];
+    const done: { key: string; label: string }[] = [];
+    if (applied["coupon"] && selectedCouponId) done.push({ key: "coupon", label: "쿠폰" });
+    if (applied["calendar"] && cfgDates.length > 0) done.push({ key: "calendar", label: "예약 캘린더" });
+    if (attachedProducts[0] || (productImageUrl && productName.trim())) done.push({ key: "product", label: "상품" });
+    if (applied["seasonal"] || productShipDateSet) done.push({ key: "shipBasis", label: "발송기준" });
+    if (savedStoreInfo.hasAddress && savedStoreInfo.facilities > 0) done.push({ key: "store", label: "매장·시설" });
+    if (dockedProducts.length > 0) done.push({ key: "dock", label: "카드 도킹" });
+    if (selectedVideo) done.push({ key: "content", label: "영상" });
+    if (selectedVideo && cfgClip.trim()) done.push({ key: "keymoment", label: "핵심구간" });
+    if (cfgSubtitle.trim()) done.push({ key: "tagline", label: "한마디" });
+    return done.slice(0, 3);
+  }, [dropped, applied, selectedCouponId, cfgDates, attachedProducts, productImageUrl, productName, productShipDateSet, savedStoreInfo, dockedProducts, selectedVideo, cfgClip, cfgSubtitle]);
 
   // 링고 코칭 — FIX-28: 필수 구간은 step.teach(필수패키지 정본의 티칭 — 문구·버튼·불 단일
   //   기준), 권장 구간은 항목별 권장 문구. 타깃 없음 = 수렴("이제 게시할 수 있어요").
@@ -1476,6 +1552,17 @@ export function CardStudioPage45({
         card_title: cardModel.titleText,
         ...(mode === "commerce" && effectiveProductName ? { product_name: effectiveProductName } : {}),
         ...(mode === "commerce" && effectiveProductPrice != null ? { product_price: effectiveProductPrice } : {}),
+        // FIX-29 — 현재 타깃 + 정본 코칭(why/effect) 동봉: 링고AI 답변이 화면 안내와 같은
+        //   근거를 쓰게(창작 근거 방지 — 진실 경계).
+        ...(currentTarget && currentCoachKey && COACH_NOTES[currentCoachKey]
+          ? {
+              current_target: {
+                block: currentTarget.id,
+                why: COACH_NOTES[currentCoachKey].why,
+                effect: coachEffect(currentCoachKey) ?? COACH_NOTES[currentCoachKey].effect,
+              },
+            }
+          : {}),
       },
       ...(aiKeyPoints.length > 0
         ? { video_summary: `${selectedVideo?.title ?? "선택한 영상"} — ${aiKeyPoints.join(" / ")}` }
@@ -3201,6 +3288,27 @@ export function CardStudioPage45({
                       )}
                       <span>{stripBusy ?? stripFlash ?? lingo.text}</span>
                     </p>
+                    {/* FIX-29 — 전략 층(뭘→왜→효과): 현재 타깃의 why/effect 상시 노출(정본 카피,
+                        {N}=실보유 숫자 치환 — 진실 경계). */}
+                    {!stripBusy && !dropped && currentCoachKey && COACH_NOTES[currentCoachKey] && (
+                      <div className="mt-2 space-y-0.5 text-[12px] font-medium leading-relaxed text-[#6B6B6B] [word-break:keep-all]">
+                        <p>왜 좋냐면: {COACH_NOTES[currentCoachKey].why}</p>
+                        <p>{coachEffect(currentCoachKey)}</p>
+                      </div>
+                    )}
+                    {/* FIX-29 — 게시 마무리 코칭: 장착·확정된 항목 상위 3개의 effect 요약(사실 기반). */}
+                    {dropped && finishCoach.length > 0 && (
+                      <div className="mt-2.5 border-t border-[#ECECEE] pt-2.5">
+                        <p className="text-[12px] font-bold text-[#404040]">이 카드가 잘 되는 이유</p>
+                        <ul className="mt-1 space-y-0.5">
+                          {finishCoach.map((f) => (
+                            <li key={f.key} className="text-[12px] font-medium leading-relaxed text-[#6B6B6B] [word-break:keep-all]">
+                              {f.label} — {coachEffect(f.key)}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     {/* FIX-16 — 스트립에서 이관: 단계 점 + [계속하기](정보 소실 0). */}
                     <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#ECECEE] pt-2.5">
                       <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">

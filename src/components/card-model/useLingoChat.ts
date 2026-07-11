@@ -25,6 +25,9 @@ export type LingoContext = {
     card_title: string;
     product_name?: string;
     product_price?: number;
+    /** FIX-29 — 현재 타깃 블록 + 전략 코칭(정본 why/effect) — "이거 왜 필요해?"에
+     *  화면 안내와 같은 근거로 일관 답변하도록 동봉. */
+    current_target?: { block: string; why: string; effect: string };
   };
   video_summary?: string;
   key_points?: string[];
