@@ -24,8 +24,8 @@
 //   - verify_jwt: 기존 6함수와 동일 — 별도 config 없이 플랫폼 기본 ON 유지(끄지 않음).
 //     함수 안에서는 generate-feedback 패턴으로 Authorization JWT → auth.getUser() 재확인.
 //   - check_ai_quota: service 클라이언트 + p_user_id (generate-summary 패턴).
-//   - record_ai_generation: generation_type CHECK 미확장(DDL 0)이라 generate-promo-copy 선례 승계 —
-//     기존 값 'share_message' 재사용 + response.kind='lingo_chat' 로 식별. best-effort.
+//   - record_ai_generation: generation_type='lingo_chat' (T6b — v8.6 마이그레이션으로 CHECK 확장).
+//     response.kind('lingo_chat'/'lingo_fact_extract') 식별은 그대로. best-effort.
 //   - CORS/OPTIONS·jsonResponse: 6함수 공통 골격 동일.
 //   - USD→KRW 1400 환산: extract-bizdoc(Sonnet 단가 $3/$15) 승계.
 //   - 프롬프트 캐싱: system cache_control ephemeral (generate-feedback 승계).
@@ -72,8 +72,9 @@ const PROMOTE_TO_ASSIST_SESSIONS = 4; // guide → assist: 누적 세션 수(이
 const PROMOTE_TO_STANDBY_SESSIONS = 10; // assist → standby: 누적 세션 수.
 const RETURNING_DAYS = 30; // 이 일수 초과 공백 후 복귀 = 한 단계 강하("언제든 다시 손잡는다").
 const USD_TO_KRW = 1400;
-// generation_type CHECK 기존 값 재사용(DDL 0, promo-copy 선례). response.kind 로 식별.
-const GENERATION_TYPE = "share_message";
+// T6b — generation_type 정식화: v8.6 마이그레이션으로 CHECK 에 'lingo_chat' 추가됨.
+//   (구 'share_message' 재사용 관례 종료 — response.kind 식별자는 그대로 유지.)
+const GENERATION_TYPE = "lingo_chat";
 
 // T2.5 — 종료 추출 파라미터.
 const EXTRACT_MAX_TOKENS = 300;
