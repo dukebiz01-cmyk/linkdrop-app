@@ -49,6 +49,7 @@ import {
 import { toast } from "sonner";
 import {
   ProductRegisterForm45,
+  type ProductFormProgress45,
   type ProductRegisterPayload45,
   type ProductRegisterResult45,
 } from "./ProductRegisterForm45";
@@ -649,6 +650,20 @@ export function CardStudioPage45({
   const [sending, setSending] = useState(false);
   // FIX-14 — 상품 폼(45) 내부 비동기(등록/사진/AI카피)를 스트립 busy 에 결합(원인① 수정).
   const [formBusy, setFormBusy] = useState<string | null>(null);
+  // FIX-34 — 폼 진행 신호(이름 확정·가격·사진) → 링고 마이크로 안내. 동일 값이면 참조
+  //   유지(무한 리렌더 방지 — 폼이 onChange 마다 방출).
+  const [formProgress, setFormProgress] = useState<ProductFormProgress45>({
+    nameSet: false,
+    priceSet: false,
+    photoSet: false,
+    name: "",
+  });
+  const handleFormProgress = (p: ProductFormProgress45) =>
+    setFormProgress((prev) =>
+      prev.nameSet === p.nameSet && prev.priceSet === p.priceSet && prev.photoSet === p.photoSet && prev.name === p.name
+        ? prev
+        : p,
+    );
   // FIX-15 — 상품 구성 메타(unit_label) → 미리보기 칩(미주입=미렌더).
   const [productUnitLabel, setProductUnitLabel] = useState<string | null>(null);
   // FIX-24 — 수확·발송 기간 스냅샷(date_range_label) 미러 — 동일 패턴.
@@ -699,12 +714,14 @@ export function CardStudioPage45({
 
   // 모드 전환 — 정본: 장착·진행 초기화. 비사업자 잠금 = studio-build P6-3 완화 동등
   // (진입 허용 · 사업자 모드만 잠금).
-  const switchMode = (next: BuildMode) => {
-    if (next === mode) return;
-    if (!isBusiness && next !== "general") {
-      toast.info("예약·상품판매 카드는 사업자 인증 후 열려요.");
-      return;
-    }
+  // FIX-35 READ 판정 — mode 를 바꾸는 경로는 이 함수(모드 탭 onClick) 단 1곳(①):
+  //   ② ?purpose 프리셋은 useState 초기값으로만 1회 소비(setMode 재호출 경로 없음 —
+  //      remount 외 재적용 불가. 이 계약을 깨는 setMode(initialMode) 재실행 금지),
+  //   ③ continueFlow/방향등 점프는 setDeckIndex 만, ④ 등록 성공 리셋 경로에 setMode 없음,
+  //   ⑤ 링고 switchMode 액션은 클라 미배선(useLingoChat 이 actions 이벤트 미소비).
+  //   → 제작 중 스티키 탭 오터치가 즉시 전체 초기화로 이어지던 것이 원인 — 확인 1회 게이트.
+  const [pendingMode, setPendingMode] = useState<BuildMode | null>(null);
+  const doSwitchMode = (next: BuildMode) => {
     setMode(next);
     setApplied({});
     setDeckIndex(0);
@@ -713,6 +730,34 @@ export function CardStudioPage45({
     setSaveError(null);
     setShowColorPicker(false);
     setCardColor(CARD_BASE);
+    setFormProgress({ nameSet: false, priceSet: false, photoSet: false, name: "" }); // FIX-34 신호 리셋.
+  };
+  const switchMode = (next: BuildMode) => {
+    if (next === mode) return;
+    if (!isBusiness && next !== "general") {
+      toast.info("예약·상품판매 카드는 사업자 인증 후 열려요.");
+      return;
+    }
+    // FIX-35 — 제작 진행 중(장착·입력·등록 어느 하나라도)이면 확인 1회 후 전환.
+    const hasProgress =
+      Object.values(applied).some(Boolean) ||
+      !!selectedVideo ||
+      !!heroImageUrl ||
+      !!attachedProducts[0] ||
+      !!productName.trim() ||
+      formProgress.nameSet ||
+      formProgress.priceSet ||
+      formProgress.photoSet ||
+      dockedProducts.length > 0 ||
+      !!cfgSubtitle.trim() ||
+      !!confirmedClip ||
+      cfgDates.length > 0 ||
+      !!selectedCouponId;
+    if (hasProgress) {
+      setPendingMode(next);
+      return;
+    }
+    doSwitchMode(next);
   };
 
   // 공개/비공개 스와이프 (정본).
@@ -1068,6 +1113,21 @@ export function CardStudioPage45({
   //   기준), 권장 구간은 항목별 권장 문구. 타깃 없음 = 수렴("이제 게시할 수 있어요").
   const lingo = useMemo(() => {
     if (firstRequiredStep && currentTarget) {
+      // FIX-34 — 상품 단계 마이크로 안내: 폼 진행 신호를 따라 문구가 전진(같은 문구 무한
+      //   반복 금지). 이름은 입력된 실값만 사용(진실 경계 — 창작 금지). 등록 완료 시엔
+      //   단계 done 으로 이 분기 자체가 넘어간다(기존 전이).
+      if (firstRequiredStep.label === "상품") {
+        const fp = formProgress;
+        if (fp.nameSet && fp.priceSet && fp.photoSet) {
+          return { text: `'${fp.name}' 준비 끝 — [상품 등록]을 눌러 확정해요.`, action: currentTarget.id };
+        }
+        if (fp.nameSet && fp.priceSet) {
+          return { text: "사진 한 장이면 끝나요", action: currentTarget.id };
+        }
+        if (fp.nameSet && fp.name) {
+          return { text: `좋아요, '${fp.name}' — 이제 가격을 넣어주세요`, action: currentTarget.id };
+        }
+      }
       return { text: firstRequiredStep.teach, action: currentTarget.id };
     }
     if (currentTarget) {
@@ -1081,7 +1141,7 @@ export function CardStudioPage45({
       return { text, action: currentTarget.id };
     }
     return { text: "필수는 다 챙겼어요 — 이제 발행할 수 있어요.", action: null };
-  }, [firstRequiredStep, currentTarget, dockCount]);
+  }, [firstRequiredStep, currentTarget, dockCount, formProgress]);
 
   function equip(block: StudioBlock) {
     // ★ 정직 게이트 — 백엔드 부재 블록은 장착 자체를 막는다(카드에 가짜 데이터 표시 금지).
@@ -1923,6 +1983,34 @@ export function CardStudioPage45({
             );
           })}
         </div>
+        {/* FIX-35 — 제작 진행 중 모드 전환 확인(커스텀 인라인 — Radix 금지). 오터치는 여기서
+            차단되고, 의도된 전환만 [바꾸기]로 진행(전체 초기화). */}
+        {pendingMode && (
+          <div className="mt-2 flex items-center gap-2 rounded-2xl bg-white p-3 [box-shadow:0_0_0_1px_#EDEDED,0_8px_20px_-12px_rgba(15,23,42,0.25)]">
+            <p className="min-w-0 flex-1 text-[12px] font-semibold leading-snug text-[#0A0A0A] [word-break:keep-all]">
+              만들던 카드가 초기화돼요. 목적을 바꿀까요?
+            </p>
+            <button
+              type="button"
+              onClick={() => setPendingMode(null)}
+              className="flex h-9 shrink-0 items-center rounded-lg bg-[#F4F4F5] px-3 text-[12px] font-bold text-[#525252] active:scale-95"
+            >
+              계속 만들기
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const next = pendingMode;
+                setPendingMode(null);
+                doSwitchMode(next);
+              }}
+              className="flex h-9 shrink-0 items-center rounded-lg px-3 text-[12px] font-bold text-white active:scale-95"
+              style={{ backgroundColor: accent }}
+            >
+              바꾸기
+            </button>
+          </div>
+        )}
         </div>
 
         {/* AI 빌더 — 정본 UI 유지 + T5 게이트(LLM 배선 금지): 입력·예시 비활성 + 준비 중 칩.
@@ -2583,6 +2671,7 @@ export function CardStudioPage45({
                     onSubmit={submitStudioProduct}
                     onImageChange={(url) => setProductImageUrl(url)}
                     onBusyChange={setFormBusy}
+                    onProgress={handleFormProgress}
                   />
                 )}
 

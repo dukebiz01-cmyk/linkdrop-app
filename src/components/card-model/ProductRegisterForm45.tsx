@@ -206,11 +206,21 @@ function normalizeItemText(s: string): string {
 
 type KamisItemFull = { item_code: string; item_name: string; category_code: string };
 
+// FIX-34 — 폼 진행 신호(onBusyChange 와 같은 가벼운 콜백 방식): 링고 마이크로 안내용.
+//   name 은 입력된 실값 그대로(진실 경계 — 창작 금지).
+export type ProductFormProgress45 = {
+  nameSet: boolean;
+  priceSet: boolean;
+  photoSet: boolean;
+  name: string;
+};
+
 export function ProductRegisterForm45({
   accent,
   onSubmit,
   onImageChange,
   onBusyChange,
+  onProgress,
 }: {
   accent: string;
   onSubmit: (payload: ProductRegisterPayload45) => Promise<ProductRegisterResult45>;
@@ -218,10 +228,14 @@ export function ProductRegisterForm45({
   onImageChange?: (url: string) => void;
   /** FIX-14 — 폼 내부 비동기(등록/사진/AI카피)를 호스트 스트립 busy 로 결합. null = 유휴. */
   onBusyChange?: (busy: string | null) => void;
+  /** FIX-34 — 단계 내 세부 진행 신호(이름 확정·가격·사진) — 호스트 마이크로 안내 결합. */
+  onProgress?: (p: ProductFormProgress45) => void;
 }) {
   // ── 폼 상태 (정본 ProductForm 동형) ──
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  // FIX-34 — 이름 확정 고리(blur 확정 → 체크 표시 + 진행 신호). 수정 시작 시 해제.
+  const [nameConfirmed, setNameConfirmed] = useState(false);
   const [type, setType] = useState<ProductType45>("fresh");
   const [harvestDate, setHarvestDate] = useState("");
   // FIX-24 — 수확·발송 예정일 기간화(순차배송): 종료일. fresh/goods 만 사용,
@@ -290,6 +304,21 @@ export function ProductRegisterForm45({
   const unitOptions = UNIT_OPTIONS_BY_TYPE[type];
   const profit = profitOf(price, cost);
   const priceNum = Number(onlyDigits(price)) || 0;
+
+  // FIX-34 — 진행 신호 방출(변경 필드는 override 로 전달 — setState 직후 stale 값 방지).
+  const emitProgress = (over: Partial<ProductFormProgress45> = {}) =>
+    onProgress?.({
+      nameSet: nameConfirmed && !!name.trim(),
+      priceSet: priceNum > 0,
+      photoSet: !!imageUrl,
+      name: name.trim(),
+      ...over,
+    });
+  // 마운트 시 1회 동기화 — 폼 재마운트(패널 접힘/재장착) 후 호스트의 낡은 진행 상태 초기화.
+  useEffect(() => {
+    emitProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const isBundle = type !== "fresh" && BUNDLE_UNITS.has(saleUnit);
 
   // FIX-15 c) — 유형 전환 시 해당 없는 단위·구성값 초기화(잔존 오염 방지).
@@ -346,6 +375,7 @@ export function ProductRegisterForm45({
       setImageUrl(pub.publicUrl);
       setImagePreview(pub.publicUrl);
       onImageChange?.(pub.publicUrl);
+      emitProgress({ photoSet: true }); // FIX-34 — 사진 진행 신호.
       toast.success("사진을 업로드했어요.");
     } catch (err) {
       console.error("[ProductRegisterForm45] upload:", err);
@@ -549,7 +579,36 @@ export function ProductRegisterForm45({
       </Field>
 
       <Field label="상품명" required>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={copy.namePh} className={inputCls} style={{ boxShadow: "inset 0 0 0 1px transparent" }} onFocus={focusRing} onBlur={blurRing} />
+        {/* FIX-34 — blur 확정 고리: 확정 시 체크 표시 + 진행 신호(링고 마이크로 안내 결합). */}
+        <div className="relative">
+          <input
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (nameConfirmed) {
+                setNameConfirmed(false); // 수정 시작 — 확정 해제(다음 blur 에서 재확정).
+                emitProgress({ nameSet: false, name: e.target.value.trim() });
+              }
+            }}
+            placeholder={copy.namePh}
+            className={`${inputCls} pr-9`}
+            style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+            onFocus={focusRing}
+            onBlur={(e) => {
+              blurRing(e);
+              const confirmed = !!name.trim();
+              setNameConfirmed(confirmed);
+              emitProgress({ nameSet: confirmed, name: name.trim() });
+            }}
+          />
+          {nameConfirmed && !!name.trim() && (
+            <Check
+              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2"
+              strokeWidth={2.75}
+              style={{ color: accent }}
+            />
+          )}
+        </div>
       </Field>
 
       <Field label="상품 유형">
@@ -751,7 +810,17 @@ export function ProductRegisterForm45({
       <Field label="가격" required>
         <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3 focus-within:bg-white" style={{ boxShadow: "inset 0 0 0 1px transparent" }}>
           <span className="text-[14px] font-bold text-[#525252]">₩</span>
-          <input value={price} onChange={(e) => setPrice(onlyDigits(e.target.value))} inputMode="numeric" placeholder="19900" className="w-full bg-transparent px-1.5 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
+          <input
+            value={price}
+            onChange={(e) => {
+              const v = onlyDigits(e.target.value);
+              setPrice(v);
+              emitProgress({ priceSet: Number(v) > 0 }); // FIX-34 — 가격 진행 신호.
+            }}
+            inputMode="numeric"
+            placeholder="19900"
+            className="w-full bg-transparent px-1.5 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+          />
           <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
         </div>
         <div className="mt-1.5 rounded-xl bg-[#F7F7F8] p-2.5">
