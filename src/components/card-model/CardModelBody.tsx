@@ -329,6 +329,25 @@ export function CardModelBody({
           {/* 상품 정보 — 판매가 · 유형/원산지/단위 · 셀링포인트 */}
           {applied["product"] && (
             <div className="cm-slide-up mt-4">
+              {/* FIX-39 — 판매 부스터 칩(전부 실값 · 빈 배열/미주입 = 미렌더 · 압박 카피 0).
+                  품절만 붉은 톤, 나머지는 accent 틴트. */}
+              {(model.boosterChips?.length ?? 0) > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {model.boosterChips!.map((c, idx) => (
+                    <span
+                      key={`${c.kind}-${idx}`}
+                      className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                      style={
+                        c.label === "품절"
+                          ? { backgroundColor: "#FEF2F2", color: "#DC2626" }
+                          : { backgroundColor: `${model.accent}14`, color: model.accent }
+                      }
+                    >
+                      {c.label}
+                    </span>
+                  ))}
+                </div>
+              )}
               {/* 유형 · 원산지 · 판매 단위 메타 */}
               {(model.productType || model.productOrigin || model.productUnitLabel || model.productDateRangeLabel) && (
                 <div className="mb-2 flex flex-wrap gap-1.5">

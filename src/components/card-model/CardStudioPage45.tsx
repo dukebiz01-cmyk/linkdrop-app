@@ -67,6 +67,8 @@ import { decideGateUtterance } from "./gate-notes45";
 // FIX-43 — 링고 음성 공용 모듈(홈 재사용 대비): 마이크 56px 분리 버튼 + 듣는 중 파형 패널.
 import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
+// FIX-39 — 판매 부스터 v1(수량·D-day·주문·혜택 — 전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
+import { buildBoosterChips } from "./booster45";
 import { SHIP_STAGES, type CardModel } from "./card-model.types";
 
 // =============================================================================
@@ -679,6 +681,9 @@ export function CardStudioPage45({
         : p,
     );
   // FIX-15 — 상품 구성 메타(unit_label) → 미리보기 칩(미주입=미렌더).
+  // FIX-39 — 부스터 실값 미러: 한정 수량(payload.stock_limit)·무료배송(block_data.free_ship).
+  const [productStockLimit, setProductStockLimit] = useState<number | null>(null);
+  const [productFreeShip, setProductFreeShip] = useState(false);
   const [productUnitLabel, setProductUnitLabel] = useState<string | null>(null);
   // FIX-24 — 수확·발송 기간 스냅샷(date_range_label) 미러 — 동일 패턴.
   const [productDateRangeLabel, setProductDateRangeLabel] = useState<string | null>(null);
@@ -1581,8 +1586,13 @@ export function CardStudioPage45({
     const rangeLabel = (payload.blocks?.[0]?.block_data as { date_range_label?: unknown } | undefined)?.date_range_label;
     setProductDateRangeLabel(typeof rangeLabel === "string" && rangeLabel ? rangeLabel : null);
     // FIX-28 — 발송기준 실확정: 수확·발송일이 등록에 포함됐는지(fresh=harvest_date/goods=ship_date).
-    const bd = payload.blocks?.[0]?.block_data as { harvest_date?: unknown; ship_date?: unknown } | undefined;
+    const bd = payload.blocks?.[0]?.block_data as
+      | { harvest_date?: unknown; ship_date?: unknown; free_ship?: unknown }
+      | undefined;
     setProductShipDateSet(!!(bd?.harvest_date || bd?.ship_date));
+    // FIX-39 — 부스터 실값 미러(등록 payload 기존 키 재사용 — 신규 저장 키 0).
+    setProductStockLimit(payload.stock_limit ?? null);
+    setProductFreeShip(bd?.free_ship === true);
     flashStrip("완료! 상품이 카드에 반영됐어요"); // FIX-3 — 실등록 완료 시에만.
     return { shareUuid, shareUrl: json.shareable_url ?? `https://app.drop.how/d/${shareUuid}` };
   }
@@ -1836,6 +1846,33 @@ export function CardStudioPage45({
     };
   }, [mode, storeName, productName, productCopy.headline, selectedVideo]);
 
+  // FIX-39 — 판매 부스터 칩 산출(전부 실값 · 0=미렌더). 미발행 스튜디오엔 주문 실집계 경로가
+  //   없어 orderCount=null(가짜 집계 금지 — /d 실집계 주입은 ST2b, 같은 순수 모듈 소비).
+  //   D-day 는 조회 시점(todayIso) 계산 — 스냅샷 박제 금지. FIX-42 steps 판정과 무관(선택 요소).
+  const boosterChips = useMemo(() => {
+    if (mode !== "commerce") return [];
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const end = applied["seasonal"] ? dateList[saleEndIdx] : undefined;
+    const couponOn = !!applied["coupon"] && !!selectedCoupon;
+    return buildBoosterChips({
+      stockLimit: productStockLimit,
+      saleEndIso: end
+        ? `${end.year}-${String(end.month).padStart(2, "0")}-${String(end.day).padStart(2, "0")}`
+        : null,
+      todayIso,
+      orderCount: null,
+      benefits: {
+        coupon: couponOn,
+        discountLabel:
+          couponOn && selectedCoupon!.discount_value != null
+            ? `${selectedCoupon!.discount_value}${selectedCoupon!.discount_unit ?? ""} 할인`
+            : null,
+        freeShipping: productFreeShip,
+      },
+    });
+  }, [mode, applied, dateList, saleEndIdx, selectedCoupon, productStockLimit, productFreeShip]);
+
   // 제작=공유=수신 거울 — fromStudioState(어댑터) + 스튜디오 로컬 프리뷰 필드 병합.
   const couponTitle =
     selectedCoupon?.title ??
@@ -1881,6 +1918,8 @@ export function CardStudioPage45({
       ...(mode === "commerce" && productUnitLabel ? { productUnitLabel } : {}),
       // FIX-24 — 수확·발송 기간 칩(date_range_label 미러, 단일일=미주입=미렌더).
       ...(mode === "commerce" && productDateRangeLabel ? { productDateRangeLabel } : {}),
+      // FIX-39 — 판매 부스터 칩(실값 한정 · 빈 배열 = 미주입 = 미렌더).
+      ...(boosterChips.length > 0 ? { boosterChips } : {}),
       // 여정·확산 — 정본 데모(SHARE_JOURNEY·12명) 제거: 실 여정은 수신 후 생기는 것. 미주입=미렌더.
     },
   );
