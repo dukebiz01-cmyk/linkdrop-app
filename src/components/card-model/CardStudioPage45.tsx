@@ -414,9 +414,12 @@ export function CardStudioPage45({
   const [colorCandidate, setColorCandidate] = useState<string | null>(null);
   // 적용 후 접힘(적용됨 · 변경) 패널 — coupon/calendar/seasonal/dock.
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
-  // FIX-3 — 링고 상주: strip(하단 진행 스트립, 기본) ↔ panel(풀 패널) ↔ closed(X — FAB만 남음).
-  //   액션 수행 후 닫힘 금지 — strip 으로 축소되며 다음 안내로 내용 갱신.
+  // FIX-16 — 링고 표면 통합(하단 스트립 폐지 · 단일 플로팅 캡슐): 상태 리터럴은 승계하되 의미 재정의
+  //   "strip" = 캡슐(드래그 플로팅, 기본) / "panel" = 캡슐 자리 기준 확장 패널 / "closed" = 최소 아바타 점.
+  //   완전 소멸 없음 — X 는 점까지만, 점 탭 = 캡슐 복귀. FIX-3 계약(자동 사라짐 없음·실상태 결합) 유지.
   const [lingoView, setLingoView] = useState<"strip" | "panel" | "closed">("strip");
+  // 패널 확장 기준점 — 캡슐 위치(fabPos)에서 확장, 화면 경계 클램프.
+  const [panelBottom, setPanelBottom] = useState(188);
   const [stripFlash, setStripFlash] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // FIX-6 — 발행 후 카톡 전송 진행 상태(studio-build sending 동형).
@@ -431,7 +434,7 @@ export function CardStudioPage45({
   const FAB_MARGIN = 12;
   const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(null);
   const [fabDragging, setFabDragging] = useState(false);
-  const fabRef = useRef<HTMLButtonElement>(null);
+  const fabRef = useRef<HTMLDivElement>(null);
   const fabDrag = useRef({ active: false, moved: false, dx: 0, dy: 0 });
   const [panelOffset, setPanelOffset] = useState({ x: 0, y: 0 });
   const [panelDragging, setPanelDragging] = useState(false);
@@ -781,19 +784,20 @@ export function CardStudioPage45({
   }
   const canEdit = DECK.some((b) => CONFIGURABLE.includes(b.id) && !GATED_BLOCK_IDS.has(b.id));
 
-  // 링고AI 플로팅 버튼 드래그 (정본 — 클라 전용 pointer 이벤트).
-  function clampFab(x: number, y: number) {
-    const maxX = window.innerWidth - FAB_SIZE - FAB_MARGIN;
-    const maxY = window.innerHeight - FAB_SIZE - FAB_MARGIN;
+  // FIX-16 — 캡슐/점 공용 드래그(정본 FAB 로직 승격): 실측 폭 기준 클램프 + 엣지 스냅.
+  //   위치(fabPos)는 세션 state 로 기억 — 리렌더·액션·상태 전환(점↔캡슐↔패널) 후에도 그 자리.
+  function clampPos(x: number, y: number, w: number, h: number) {
+    const maxX = window.innerWidth - w - FAB_MARGIN;
+    const maxY = window.innerHeight - h - FAB_MARGIN;
     return { x: Math.min(Math.max(FAB_MARGIN, x), maxX), y: Math.min(Math.max(FAB_MARGIN, y), maxY) };
   }
-  function onFabPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+  function onFabPointerDown(e: React.PointerEvent<HTMLElement>) {
     const rect = fabRef.current?.getBoundingClientRect();
     if (!rect) return;
     fabDrag.current = { active: true, moved: false, dx: e.clientX - rect.left, dy: e.clientY - rect.top };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   }
-  function onFabPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+  function onFabPointerMove(e: React.PointerEvent<HTMLElement>) {
     if (!fabDrag.current.active) return;
     const nx = e.clientX - fabDrag.current.dx;
     const ny = e.clientY - fabDrag.current.dy;
@@ -805,25 +809,40 @@ export function CardStudioPage45({
         setFabDragging(true);
       }
     }
-    if (fabDrag.current.moved) setFabPos(clampFab(nx, ny));
+    if (fabDrag.current.moved && rect) setFabPos(clampPos(nx, ny, rect.width, rect.height));
   }
-  function onFabPointerUp() {
+  // 탭(무이동) 동작은 표면별로 다름 — onTap 콜백 주입(점 → 캡슐 / 캡슐 → 패널).
+  function onFabPointerUp(onTap: () => void) {
     if (!fabDrag.current.active) return;
     const wasDrag = fabDrag.current.moved;
     fabDrag.current.active = false;
     fabDrag.current.moved = false;
     setFabDragging(false);
     if (wasDrag) {
+      const rect = fabRef.current?.getBoundingClientRect();
+      const w = rect?.width ?? FAB_SIZE;
+      const h = rect?.height ?? FAB_SIZE;
       setFabPos((prev) => {
         if (!prev) return prev;
         const mid = window.innerWidth / 2;
-        const snapX = prev.x + FAB_SIZE / 2 < mid ? FAB_MARGIN : window.innerWidth - FAB_SIZE - FAB_MARGIN;
-        return clampFab(snapX, prev.y);
+        const snapX = prev.x + w / 2 < mid ? FAB_MARGIN : window.innerWidth - w - FAB_MARGIN;
+        return clampPos(snapX, prev.y, w, h);
       });
     } else {
-      setPanelOffset({ x: 0, y: 0 });
-      setLingoView("panel");
+      onTap();
     }
+  }
+  // 캡슐 탭 = 그 자리 기준 패널 확장(화면 경계 클램프 — 캡슐 아래변 높이를 패널 bottom 으로).
+  function openPanelAt() {
+    const rect = fabRef.current?.getBoundingClientRect();
+    if (rect && typeof window !== "undefined") {
+      const fromCapsule = window.innerHeight - rect.bottom;
+      setPanelBottom(Math.max(16, Math.min(window.innerHeight - 420, fromCapsule)));
+    } else {
+      setPanelBottom(188);
+    }
+    setPanelOffset({ x: 0, y: 0 });
+    setLingoView("panel");
   }
   // 링고AI 패널 드래그 (정본).
   function onPanelPointerDown(e: React.PointerEvent) {
@@ -1277,8 +1296,8 @@ export function CardStudioPage45({
   );
 
   return (
-    // FIX-8 — 하단 스트립(48px)+CTA 높이만큼 본문 패딩 확보(pb-[184px], 콘텐츠 깔림 방지).
-    <div className="min-h-screen pb-[184px] transition-colors duration-300" style={{ backgroundColor: pageBg }}>
+    // FIX-16 — 하단 스트립 폐지: 본문 패딩은 전송 CTA 기준 원복(pb-[120px]).
+    <div className="min-h-screen pb-[120px] transition-colors duration-300" style={{ backgroundColor: pageBg }}>
       <style>{SL_KEYFRAMES}</style>
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[#EDEDED] bg-white/90 backdrop-blur-lg">
@@ -2891,7 +2910,8 @@ export function CardStudioPage45({
           {lingoView === "panel" && (
             <>
               <div className="sl-fade-in fixed inset-0 z-40 bg-black/25" onClick={() => setLingoView("strip")} />
-              <div className="sl-slide-up fixed inset-x-0 bottom-[188px] z-40 px-5">
+              {/* FIX-16 — 캡슐 자리 기준 확장(panelBottom, 화면 경계 클램프). 접기 = 같은 자리 캡슐로. */}
+              <div className="sl-slide-up fixed inset-x-0 z-40 px-5" style={{ bottom: panelBottom }}>
                 <div
                   className={`relative mx-auto max-w-md rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)] ${
                     panelDragging ? "" : "transition-transform duration-200 ease-out"
@@ -2949,12 +2969,50 @@ export function CardStudioPage45({
                     </button>
                   </div>
 
-                  {/* 정적 가이드 문구(규칙 기반 코칭) */}
+                  {/* 정적 가이드 문구(규칙 기반 코칭) — FIX-16: 비동기/플래시도 여기서 갱신. */}
                   <div className="mt-3 rounded-2xl bg-[#F7F7F8] p-3.5">
                     <p className="flex items-start gap-1.5 text-pretty text-[13px] font-medium leading-relaxed text-[#404040] [word-break:keep-all]">
-                      <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} fill="currentColor" />
-                      <span>{lingo.text}</span>
+                      {stripBusy ? (
+                        <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
+                      ) : (
+                        <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} fill="currentColor" />
+                      )}
+                      <span>{stripBusy ?? stripFlash ?? lingo.text}</span>
                     </p>
+                    {/* FIX-16 — 스트립에서 이관: 단계 점 + [계속하기](정보 소실 0). */}
+                    <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#ECECEE] pt-2.5">
+                      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        {steps.map((s, i) => (
+                          <span key={s.label} className="flex items-center gap-1">
+                            <span
+                              className="h-1.5 w-1.5 rounded-full"
+                              style={
+                                s.done
+                                  ? { backgroundColor: accent }
+                                  : i === currentStepIdx
+                                    ? { backgroundColor: "#fff", boxShadow: `0 0 0 1.5px ${accent}` }
+                                    : { backgroundColor: "#D4D4D4" }
+                              }
+                            />
+                            <span className="text-[10px] font-bold" style={{ color: s.done ? accent : i === currentStepIdx ? "#0A0A0A" : "#A3A3A3" }}>
+                              {s.label}
+                            </span>
+                          </span>
+                        ))}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLingoView("strip");
+                          continueFlow();
+                        }}
+                        className="flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold text-white active:scale-95"
+                        style={{ backgroundColor: accent }}
+                      >
+                        계속하기
+                        <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* 추천 장착 — 한 줄 제안(블록 고유 아이콘) */}
@@ -3019,144 +3077,135 @@ export function CardStudioPage45({
             </>
           )}
 
-          {/* FIX-3 — 하단 상주 진행 스트립(≈48px): 아바타 + 한줄 안내(비동기 "…중" 스피너 포함)
-              + 모드별 단계 점 + [계속하기]. 전송 CTA 위 스택(bottom 오프셋)으로 비겹침. */}
+          {/* FIX-16 — 단일 플로팅 캡슐(하단 스트립 대체): 아바타 + 한줄 안내(truncate, 두 줄 금지)
+              + 단계 점 축약 + [계속] 미니 버튼. 드래그 이동(엣지 스냅)·위치 기억(fabPos state).
+              탭 = 그 자리 기준 패널 확장. LED 는 캡슐 테두리(rounded-full inherit). */}
           {lingoView === "strip" && !mirrorOpen && (
             <div
-              className="fixed inset-x-0 z-[38]"
-              style={{ bottom: "calc(88px + env(safe-area-inset-bottom))" }}
+              ref={fabRef}
+              role="button"
+              aria-label="링고AI — 탭하면 패널이 열려요 · 끌면 옮겨요"
+              onPointerDown={onFabPointerDown}
+              onPointerMove={onFabPointerMove}
+              onPointerUp={() => onFabPointerUp(openPanelAt)}
+              onPointerCancel={() => onFabPointerUp(openPanelAt)}
+              className={`fixed z-40 flex h-12 w-[240px] max-w-[70vw] touch-none select-none items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white pl-1.5 pr-1.5 shadow-[0_14px_30px_-10px_rgba(15,23,42,0.35)] ${
+                fabDragging ? "scale-[1.03] cursor-grabbing" : "cursor-grab transition-transform duration-200"
+              }`}
+              style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
             >
-              {/* FIX-8 — 불투명 흰 배경 + 상단 보더 + 단차 그림자(본문과 물리적 분리).
-                  FIX-11 — LED 러닝 라이트(전구 웜화이트): 실작업 중에만 점등. */}
-              <div className="relative border-t border-[#E5E5E5] bg-white shadow-[0_-12px_28px_-16px_rgba(15,23,42,0.35)]">
-                {ledOn && (
-                  <span className="sl-led-frame" aria-hidden="true">
-                    <span className="sl-led-spin" />
-                    <span className="sl-led-cover" />
-                  </span>
-                )}
-              <div className="relative mx-auto flex h-12 max-w-md items-center gap-2 pl-1.5 pr-1.5">
-                {/* 스트립 탭 = 풀 패널 확장 */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPanelOffset({ x: 0, y: 0 });
-                    setLingoView("panel");
-                  }}
-                  className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1 text-left active:bg-[#F7F7F8]"
-                  aria-label="링고AI 패널 열기"
-                >
-                  <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
-                    {stripBusy ? (
-                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
-                    ) : (
-                      <>
-                        <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
-                        <Sparkles className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px]" strokeWidth={2.5} fill="currentColor" />
-                      </>
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[11.5px] font-semibold leading-tight text-[#0A0A0A]">
-                      {stripBusy ??
-                        stripFlash ??
-                        (showSuggest && suggestion
-                          ? `${suggestion.label}을 달면 +${suggestion.power}점 올라요`
-                          : dropped
-                            ? "전송 완료! 링크를 공유해 보세요"
-                            : readyToSend
-                              ? "이제 보낼 준비 됐어요"
-                              : lingo.text)}
-                    </span>
-                    {/* 단계 점 — 실상태 파생. done=accent · current=링 · 대기=회색 */}
-                    <span className="mt-0.5 flex items-center gap-1">
-                      {steps.map((s, i) => (
-                        <span key={s.label} className="flex items-center gap-1">
-                          <span
-                            className="h-1.5 w-1.5 rounded-full"
-                            style={
-                              s.done
-                                ? { backgroundColor: accent }
-                                : i === currentStepIdx
-                                  ? { backgroundColor: "#fff", boxShadow: `0 0 0 1.5px ${accent}` }
-                                  : { backgroundColor: "#D4D4D4" }
-                            }
-                          />
-                          <span
-                            className="text-[9px] font-bold"
-                            style={{ color: s.done ? accent : i === currentStepIdx ? "#0A0A0A" : "#A3A3A3" }}
-                          >
-                            {s.label}
-                          </span>
-                        </span>
-                      ))}
-                    </span>
-                  </span>
-                </button>
-                {/* FIX-9 — 제안 노출 중엔 [바로 장착] + 거절(X, 세션 쿨다운), 아니면 [계속하기]. */}
-                {showSuggest && suggestion ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const idx = DECK.findIndex((b) => b.id === suggestion.id);
-                        if (idx >= 0) setDeckIndex(idx);
-                        equip(suggestion);
-                        setSuggestVisible(false);
-                        flashStrip(`+${suggestion.power}점! ${suggestion.label} 장착됐어요`);
-                      }}
-                      className="flex h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-[12px] font-bold text-white transition-transform active:scale-95"
-                      style={{ backgroundColor: accent }}
-                    >
-                      바로 장착
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="제안 닫기"
-                      onClick={() => {
-                        setDismissedSuggests((d) => [...d, suggestion.id]);
-                        setSuggestVisible(false);
-                      }}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F4F4F5] text-[#737373] active:scale-95"
-                    >
-                      <X className="h-4 w-4" strokeWidth={2.5} />
-                    </button>
-                  </>
+              {ledOn && (
+                <span className="sl-led-frame" aria-hidden="true">
+                  <span className="sl-led-spin" />
+                  <span className="sl-led-cover" />
+                </span>
+              )}
+              <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
+                {stripBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
                 ) : (
+                  <>
+                    <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
+                    <Sparkles className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px]" strokeWidth={2.5} fill="currentColor" />
+                  </>
+                )}
+              </span>
+              <span className="relative min-w-0 flex-1">
+                <span className="block truncate text-[11px] font-semibold leading-tight text-[#0A0A0A]">
+                  {stripBusy ??
+                    stripFlash ??
+                    (showSuggest && suggestion
+                      ? `${suggestion.label} +${suggestion.power}점`
+                      : dropped
+                        ? "전송 완료!"
+                        : readyToSend
+                          ? "보낼 준비 됐어요"
+                          : lingo.text)}
+                </span>
+                {/* 단계 점 축약 — 점만(라벨 없음). done=accent · current=링 · 대기=회색 */}
+                <span className="mt-1 flex items-center gap-1">
+                  {steps.map((s, i) => (
+                    <span
+                      key={s.label}
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={
+                        s.done
+                          ? { backgroundColor: accent }
+                          : i === currentStepIdx
+                            ? { backgroundColor: "#fff", boxShadow: `0 0 0 1.5px ${accent}` }
+                            : { backgroundColor: "#D4D4D4" }
+                      }
+                    />
+                  ))}
+                </span>
+              </span>
+              {/* FIX-9 — 제안 중엔 [장착]+거절(쿨다운), 아니면 [계속]. 드래그와 충돌 방지(전파 차단). */}
+              {showSuggest && suggestion ? (
+                <>
                   <button
                     type="button"
-                    onClick={continueFlow}
-                    className="flex h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-[12px] font-bold text-white transition-transform active:scale-95"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => {
+                      const idx = DECK.findIndex((b) => b.id === suggestion.id);
+                      if (idx >= 0) setDeckIndex(idx);
+                      equip(suggestion);
+                      setSuggestVisible(false);
+                      flashStrip(`+${suggestion.power}점! ${suggestion.label} 장착됐어요`);
+                    }}
+                    className="relative flex h-8 shrink-0 items-center rounded-full px-2.5 text-[11px] font-bold text-white active:scale-95"
                     style={{ backgroundColor: accent }}
                   >
-                    계속하기
-                    <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    장착
                   </button>
-                )}
-              </div>
-              </div>
+                  <button
+                    type="button"
+                    aria-label="제안 닫기"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => {
+                      setDismissedSuggests((d) => [...d, suggestion.id]);
+                      setSuggestVisible(false);
+                    }}
+                    className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] active:scale-95"
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={continueFlow}
+                  className="relative flex h-8 shrink-0 items-center gap-0.5 rounded-full px-2.5 text-[11px] font-bold text-white active:scale-95"
+                  style={{ backgroundColor: accent }}
+                >
+                  계속
+                  <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
+                </button>
+              )}
             </div>
           )}
 
-          {lingoView === "closed" && (
-            <button
+          {/* FIX-16 — 최소화(아바타 점): X 로 도달하는 최소 상태. 완전 소멸 없음 — 탭 = 캡슐 복귀.
+              같은 fabPos 공유(드래그·스냅 동일). */}
+          {lingoView === "closed" && !mirrorOpen && (
+            <div
               ref={fabRef}
-              type="button"
-              aria-label="링고AI 열기 · 길게 눌러 옮기기"
+              role="button"
+              aria-label="링고AI 캡슐 열기 · 끌면 옮기기"
               onPointerDown={onFabPointerDown}
               onPointerMove={onFabPointerMove}
-              onPointerUp={onFabPointerUp}
-              onPointerCancel={onFabPointerUp}
-              className={`fixed z-40 flex h-14 w-14 touch-none items-center justify-center rounded-full text-white ring-[3px] ring-white ${
+              onPointerUp={() => onFabPointerUp(() => setLingoView("strip"))}
+              onPointerCancel={() => onFabPointerUp(() => setLingoView("strip"))}
+              className={`fixed z-40 flex h-10 w-10 touch-none select-none items-center justify-center rounded-full text-white ring-2 ring-white ${
                 fabDragging ? "scale-110 cursor-grabbing" : "cursor-grab transition-all duration-300 ease-out active:scale-90"
               }`}
               style={
                 fabPos
-                  ? { left: fabPos.x, top: fabPos.y, backgroundColor: accent, boxShadow: `0 14px 30px -8px ${accent}, 0 4px 12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.25)` }
-                  : { right: 20, bottom: 196, backgroundColor: accent, boxShadow: `0 14px 30px -8px ${accent}, 0 4px 12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.25)` }
+                  ? { left: fabPos.x, top: fabPos.y, backgroundColor: accent, boxShadow: `0 10px 24px -8px ${accent}, 0 4px 12px rgba(15,23,42,0.18)` }
+                  : { right: 20, bottom: 196, backgroundColor: accent, boxShadow: `0 10px 24px -8px ${accent}, 0 4px 12px rgba(15,23,42,0.18)` }
               }
             >
-              <MessageCircle className="h-6 w-6" strokeWidth={2} />
+              <MessageCircle className="h-5 w-5" strokeWidth={2} />
               {lingo.action && !applied[lingo.action] && (
                 <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
@@ -3165,7 +3214,7 @@ export function CardStudioPage45({
                   </span>
                 </span>
               )}
-            </button>
+            </div>
           )}
         </>
       )}
