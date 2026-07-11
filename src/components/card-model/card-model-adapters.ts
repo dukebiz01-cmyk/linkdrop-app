@@ -17,18 +17,15 @@ import type { CardJourneyNode, CardModel } from "./card-model.types";
  *      (미주입 = 미렌더, 가짜값 금지).
  */
 
-// ── 모드별 accent — v0-45 색 시스템(색 락 해제 Day42). 브랜드 블루 = 일반/정보. ──
+// ── 모드별 accent — v0-45 정본 실측값(ST2a STEP0 정정 — ST1 추정 5색 폐기, 45는 모드 3종 체계).
+//    정본 근거: docs/ref/v0-45-card-studio-page.tsx MODE_SKIN(:996-1000) + POINT(:258).
 export const CARD_MODEL_ACCENTS = {
-  /** 일반(정보) — 브랜드 블루. */
-  general: "#2563EB",
-  /** 예약 — 그린. */
-  reserve: "#059669",
-  /** 커머스(구매) — 오렌지. */
-  commerce: "#EA580C",
-  /** 쿠폰 — 앰버. */
-  coupon: "#D97706",
-  /** 상담(리드) — 바이올렛. */
-  lead: "#7C3AED",
+  /** 일반(퍼블릭) — 슬레이트. */
+  general: "#475569",
+  /** 예약·쿠폰(reserve) — 포인트 블루. */
+  reserve: "#1D4ED8",
+  /** 상품판매(commerce) — 틸. */
+  commerce: "#0F766E",
 } as const;
 
 const DEFAULT_CARD_COLOR = "#FFFFFF";
@@ -113,15 +110,12 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
   const isReservation = variant === "reservation";
   const hasCoupon = !!input.funnelCoupon;
 
+  // 45 모드 3종 매핑 — 예약·쿠폰 = reserve / 구매 = commerce / 정보·상담 = general.
   const accent = isCommerce
     ? CARD_MODEL_ACCENTS.commerce
-    : isReservation
+    : isReservation || variant === "coupon"
       ? CARD_MODEL_ACCENTS.reserve
-      : variant === "coupon"
-        ? CARD_MODEL_ACCENTS.coupon
-        : variant === "lead"
-          ? CARD_MODEL_ACCENTS.lead
-          : CARD_MODEL_ACCENTS.general;
+      : CARD_MODEL_ACCENTS.general;
 
   const category = isCommerce
     ? "상품 카드"
@@ -256,7 +250,11 @@ export type StudioStateInput = {
   dockedProduct?: { name: string; priceKrw?: number | null; producerName?: string } | null;
 };
 
-export function fromStudioState(input: StudioStateInput): CardModel {
+/**
+ * @param preview — ST2a: 스튜디오 로컬 설정(예약 날짜/시간/좌석·시설·브랜드·판매기간 등
+ *   미영속 프리뷰 필드)을 마지막에 병합. WYSIWYG 거울 전용 — 발행 payload 와 무관.
+ */
+export function fromStudioState(input: StudioStateInput, preview?: Partial<CardModel>): CardModel {
   const isCommerce = input.buildMode === "commerce";
   const isReserve = input.buildMode === "reserve";
   const accent = isCommerce
@@ -317,6 +315,8 @@ export function fromStudioState(input: StudioStateInput): CardModel {
               .join(" · ") || "함께 담긴 카드",
         }
       : {}),
-    // ❌ 백엔드 부재(배송·후기·시설·판매기간)·여정(스튜디오 무의미) — 미주입 = 미렌더.
+    // ❌ 백엔드 부재(배송·후기)·여정(스튜디오 무의미) — 미주입 = 미렌더.
+    // ST2a — 스튜디오 로컬 프리뷰 필드(예약 날짜·시설·브랜드 등)는 preview 로 병합.
+    ...preview,
   };
 }

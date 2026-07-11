@@ -32,6 +32,7 @@ import { Route as ApiConsultationsRouteImport } from './routes/api/consultations
 import { Route as ApiAbuseReportsRouteImport } from './routes/api/abuse-reports'
 import { Route as AllianceSlugRouteImport } from './routes/alliance.$slug'
 import { Route as UserSubscribeRouteImport } from './routes/_user/subscribe'
+import { Route as UserStudioLabRouteImport } from './routes/_user/studio-lab'
 import { Route as UserStudioBuildRouteImport } from './routes/_user/studio-build'
 import { Route as UserStudioRouteImport } from './routes/_user/studio'
 import { Route as UserStartRouteImport } from './routes/_user/start'
@@ -194,6 +195,11 @@ const AllianceSlugRoute = AllianceSlugRouteImport.update({
 const UserSubscribeRoute = UserSubscribeRouteImport.update({
   id: '/subscribe',
   path: '/subscribe',
+  getParentRoute: () => UserRoute,
+} as any)
+const UserStudioLabRoute = UserStudioLabRouteImport.update({
+  id: '/studio-lab',
+  path: '/studio-lab',
   getParentRoute: () => UserRoute,
 } as any)
 const UserStudioBuildRoute = UserStudioBuildRouteImport.update({
@@ -478,6 +484,7 @@ export interface FileRoutesByFullPath {
   '/start': typeof UserStartRoute
   '/studio': typeof UserStudioRoute
   '/studio-build': typeof UserStudioBuildRoute
+  '/studio-lab': typeof UserStudioLabRoute
   '/subscribe': typeof UserSubscribeRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
@@ -551,6 +558,7 @@ export interface FileRoutesByTo {
   '/start': typeof UserStartRoute
   '/studio': typeof UserStudioRoute
   '/studio-build': typeof UserStudioBuildRoute
+  '/studio-lab': typeof UserStudioLabRoute
   '/subscribe': typeof UserSubscribeRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
@@ -628,6 +636,7 @@ export interface FileRoutesById {
   '/_user/start': typeof UserStartRoute
   '/_user/studio': typeof UserStudioRoute
   '/_user/studio-build': typeof UserStudioBuildRoute
+  '/_user/studio-lab': typeof UserStudioLabRoute
   '/_user/subscribe': typeof UserSubscribeRoute
   '/alliance/$slug': typeof AllianceSlugRoute
   '/api/abuse-reports': typeof ApiAbuseReportsRoute
@@ -703,6 +712,7 @@ export interface FileRouteTypes {
     | '/start'
     | '/studio'
     | '/studio-build'
+    | '/studio-lab'
     | '/subscribe'
     | '/alliance/$slug'
     | '/api/abuse-reports'
@@ -776,6 +786,7 @@ export interface FileRouteTypes {
     | '/start'
     | '/studio'
     | '/studio-build'
+    | '/studio-lab'
     | '/subscribe'
     | '/alliance/$slug'
     | '/api/abuse-reports'
@@ -852,6 +863,7 @@ export interface FileRouteTypes {
     | '/_user/start'
     | '/_user/studio'
     | '/_user/studio-build'
+    | '/_user/studio-lab'
     | '/_user/subscribe'
     | '/alliance/$slug'
     | '/api/abuse-reports'
@@ -1104,6 +1116,13 @@ declare module '@tanstack/react-router' {
       path: '/subscribe'
       fullPath: '/subscribe'
       preLoaderRoute: typeof UserSubscribeRouteImport
+      parentRoute: typeof UserRoute
+    }
+    '/_user/studio-lab': {
+      id: '/_user/studio-lab'
+      path: '/studio-lab'
+      fullPath: '/studio-lab'
+      preLoaderRoute: typeof UserStudioLabRouteImport
       parentRoute: typeof UserRoute
     }
     '/_user/studio-build': {
@@ -1549,6 +1568,7 @@ interface UserRouteChildren {
   UserStartRoute: typeof UserStartRoute
   UserStudioRoute: typeof UserStudioRoute
   UserStudioBuildRoute: typeof UserStudioBuildRoute
+  UserStudioLabRoute: typeof UserStudioLabRoute
   UserSubscribeRoute: typeof UserSubscribeRoute
   UserCardEditShareUuidRoute: typeof UserCardEditShareUuidRoute
   UserCouponClaim_codeRoute: typeof UserCouponClaim_codeRoute
@@ -1572,6 +1592,7 @@ const UserRouteChildren: UserRouteChildren = {
   UserStartRoute: UserStartRoute,
   UserStudioRoute: UserStudioRoute,
   UserStudioBuildRoute: UserStudioBuildRoute,
+  UserStudioLabRoute: UserStudioLabRoute,
   UserSubscribeRoute: UserSubscribeRoute,
   UserCardEditShareUuidRoute: UserCardEditShareUuidRoute,
   UserCouponClaim_codeRoute: UserCouponClaim_codeRoute,
