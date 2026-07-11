@@ -1,0 +1,322 @@
+import { Calendar, MessageCircle, Newspaper, ShoppingBag, Tag, Ticket } from "lucide-react";
+import type { CardJourneyNode, CardModel } from "./card-model.types";
+
+/**
+ * CardModel 어댑터 2방향 — READ 6항 매핑표 기준.
+ *
+ * ⚠️ 기존 파일 의존 0(회귀 0): src/lib/adapters.ts·info-drop-page.tsx·studio-build.tsx 를
+ *   import 하지 않는다. 입력 타입은 이 파일에 "미러 선언" — 필드별 출처를 주석으로 박제.
+ *   실제 연결(마운트)은 ST2 — 이 단계에서는 어떤 기존 화면에도 꽂지 않는다.
+ *
+ * 매핑 가능/불가(READ 6항 결론 승계):
+ *   ✅ 색(card_color)·본체(title/tagline/포인트/영상)·가격(price_krw/remaining_stock)·
+ *      쿠폰(funnelCoupon) — 실배선.
+ *   🟡 예약(initialSlots·calendarMode·reservation_url)·여정·확산수 — optional 운반
+ *      (여정·확산수는 get_drop_detail 미포함이라 호출부가 별도 조회 후 주입).
+ *   ❌ 배송추적·시설태그·후기·판매기간 — 백엔드 부재. 어댑터가 채우지 않는다
+ *      (미주입 = 미렌더, 가짜값 금지).
+ */
+
+// ── 모드별 accent — v0-45 색 시스템(색 락 해제 Day42). 브랜드 블루 = 일반/정보. ──
+export const CARD_MODEL_ACCENTS = {
+  /** 일반(정보) — 브랜드 블루. */
+  general: "#2563EB",
+  /** 예약 — 그린. */
+  reserve: "#059669",
+  /** 커머스(구매) — 오렌지. */
+  commerce: "#EA580C",
+  /** 쿠폰 — 앰버. */
+  coupon: "#D97706",
+  /** 상담(리드) — 바이올렛. */
+  lead: "#7C3AED",
+} as const;
+
+const DEFAULT_CARD_COLOR = "#FFFFFF";
+/** 카드 뒤 페이지 배경(쿠폰 노치 구멍색) — 앱 표면 톤. */
+const DEFAULT_PAGE_BG = "#F8FAFC";
+
+function won(n: number | null | undefined): string {
+  return n != null ? `${Math.round(n).toLocaleString("ko-KR")}원` : "";
+}
+
+/** 초 → "m:ss" 클립 라벨 (VideoSlot.durationLabel 부재 시 폴백). */
+function clipLabel(sec: number | null | undefined): string | undefined {
+  if (sec == null || !Number.isFinite(sec) || sec <= 0) return undefined;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// ═════════════════════════════════════════════════════════════
+// ① fromDropDetail — 손님(receiver/share) 방향
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * InfoDropPageProps(기존 infoDropAdapter 출력) 미러 — 필요한 필드만 발췌 선언.
+ * 각 필드 출처: src/components/info-drop-page.tsx InfoDropPageProps(92-232) 동명 필드.
+ * 여분 필드가 있는 실객체를 그대로 넘겨도 구조적 타이핑으로 수용된다.
+ */
+export type DropDetailInput = {
+  /** ← InfoDropPageProps.title (source.title). */
+  title: string;
+  /** ← InfoDropPageProps.description (ai_summary → curator_message 폴백). */
+  description: string;
+  /** ← InfoDropPageProps.variant (drop.purpose → 5종). */
+  variant?: "info" | "coupon" | "reservation" | "purchase" | "lead";
+  /** ← InfoDropPageProps.cardColor (info_drops.card_color, v7.2). */
+  cardColor?: string;
+  /** ← InfoDropPageProps.videoThumbnailUrl (image 블록 hero → source.thumbnail_url). */
+  videoThumbnailUrl?: string;
+  /** ← InfoDropPageProps.videoDurationSec (source.duration_sec). */
+  videoDurationSec?: number;
+  /** ← InfoDropPageProps.videoSourceLabel ("YouTube" | "Instagram"). */
+  videoSourceLabel?: string;
+  /** ← InfoDropPageProps.maker.name (public_profiles.display_name). */
+  maker?: { name: string };
+  /** ← InfoDropPageProps.keyPoints (drop.ai_key_points). */
+  keyPoints?: string[];
+  /** ← InfoDropPageProps.commerce (본체 product 블록 block_data). */
+  commerce?: {
+    name: string;
+    priceKrw: number | null;
+    imageUrl?: string;
+    headline?: string;
+    sellingPoints?: string[];
+    stockLimit?: number | null;
+  };
+  /** ← InfoDropPageProps.remainingStock (get_drop_detail v8.1 파생 재고). */
+  remainingStock?: number | null;
+  /** ← InfoDropPageProps.funnelCoupon (RPC coupon 객체). */
+  funnelCoupon?: { title: string } | null;
+  /** ← InfoDropPageProps.local (RPC store). */
+  local?: {
+    name?: string;
+    phone?: string;
+    address?: string;
+    reservationUrl?: string | null;
+  };
+  /** ← InfoDropPageProps.initialSlots (slot_available RPC 행). */
+  initialSlots?: Array<{ slot_date: string; slot_time: string | null; available: number }>;
+  /** ← InfoDropPageProps.calendarMode — 현재 date_range 만 구현(운반만). */
+  calendarMode?: "date_range" | "date_time_slot";
+  /** ← attachedProducts[0] 스냅샷 (name/producerName/priceKrw) — 도킹 카드 표기. */
+  attachedProducts?: Array<{ name: string; priceKrw?: number | null; producerName?: string }>;
+  /** 🟡 별도 조회 주입 — get_share_journey(카드 단건 RPC 미포함). 미주입 = 미렌더. */
+  journey?: CardJourneyNode[];
+  /** 🟡 별도 조회 주입 — share_count/SM-3 배치값. */
+  shareCount?: number;
+};
+
+export function fromDropDetail(input: DropDetailInput): CardModel {
+  const variant = input.variant ?? "info";
+  const isCommerce = variant === "purchase" && !!input.commerce;
+  const isReservation = variant === "reservation";
+  const hasCoupon = !!input.funnelCoupon;
+
+  const accent = isCommerce
+    ? CARD_MODEL_ACCENTS.commerce
+    : isReservation
+      ? CARD_MODEL_ACCENTS.reserve
+      : variant === "coupon"
+        ? CARD_MODEL_ACCENTS.coupon
+        : variant === "lead"
+          ? CARD_MODEL_ACCENTS.lead
+          : CARD_MODEL_ACCENTS.general;
+
+  const category = isCommerce
+    ? "상품 카드"
+    : isReservation
+      ? "예약 카드"
+      : variant === "coupon"
+        ? "쿠폰 카드"
+        : variant === "lead"
+          ? "상담 카드"
+          : "정보 카드";
+  const categoryIcon = isCommerce
+    ? ShoppingBag
+    : isReservation
+      ? Calendar
+      : variant === "coupon"
+        ? Ticket
+        : variant === "lead"
+          ? MessageCircle
+          : Newspaper;
+
+  // 예약 — initialSlots(slot_date/slot_time/available) → dates/times/slotsByDate 집계.
+  const slots = input.initialSlots ?? [];
+  const dates = [...new Set(slots.map((s) => s.slot_date))];
+  const times = [...new Set(slots.map((s) => s.slot_time).filter((t): t is string => !!t))];
+  const slotsByDate: Record<string, number> = {};
+  for (const s of slots) {
+    slotsByDate[s.slot_date] = (slotsByDate[s.slot_date] ?? 0) + (s.available ?? 0);
+  }
+
+  const heroImageUrl = isCommerce
+    ? (input.commerce?.imageUrl || input.videoThumbnailUrl)
+    : input.videoThumbnailUrl;
+
+  const dock = input.attachedProducts?.[0];
+  const qty = input.remainingStock ?? input.commerce?.stockLimit ?? null;
+
+  return {
+    accent,
+    cardColor: input.cardColor ?? DEFAULT_CARD_COLOR,
+    pageBg: DEFAULT_PAGE_BG,
+    category,
+    categoryIcon,
+    source: input.videoSourceLabel ?? "YouTube",
+    ctaIcon: Tag,
+    store: input.local?.name || input.maker?.name || undefined,
+    applied: {
+      // 본체 콘텐츠 — 영상 썸네일 유무. 커머스는 상품 이미지 슬롯(productimage)로.
+      content: !isCommerce && !!input.videoThumbnailUrl,
+      productimage: isCommerce && !!heroImageUrl,
+      product: isCommerce,
+      calendar: isReservation && (dates.length > 0 || !!input.local?.reservationUrl),
+      coupon: hasCoupon,
+      link: !!(input.local?.phone || input.local?.address),
+      dock: !!dock,
+      // ❌ 백엔드 부재 — 켜지 않는다(가짜 렌더 금지): seasonal/delivery/review/brand/
+      //    top/boost/marketing/party.
+    },
+    titleText: isCommerce ? input.commerce!.name || input.title : input.title,
+    subtitleText: isCommerce
+      ? input.commerce?.headline || input.description
+      : input.description,
+    heroImageUrl,
+    clip: clipLabel(input.videoDurationSec),
+    priceText: isCommerce ? won(input.commerce?.priceKrw) : undefined,
+    productQty: qty != null && qty > 0 ? String(qty) : undefined,
+    productPoints: isCommerce
+      ? (input.commerce?.sellingPoints?.length ? input.commerce.sellingPoints : input.keyPoints)
+      : input.keyPoints,
+    // 예약 데이터 — 슬롯 없으면 미주입(=예약 섹션 미렌더, 외부 reservation_url 은 link 버튼 몫).
+    ...(dates.length > 0 ? { dates, slotsByDate } : {}),
+    ...(times.length > 0 ? { times } : {}),
+    couponLabel: input.funnelCoupon?.title,
+    couponShort: input.funnelCoupon?.title,
+    phone: !!input.local?.phone,
+    map: !!input.local?.address,
+    ...(dock
+      ? {
+          dockTitle: dock.name,
+          dockMeta:
+            [dock.producerName, dock.priceKrw != null ? won(dock.priceKrw) : ""]
+              .filter(Boolean)
+              .join(" · ") || "함께 담긴 카드",
+        }
+      : {}),
+    // 🟡 여정·확산 — 호출부 별도 조회 주입(미주입 = 미렌더).
+    ...(input.journey ? { journey: input.journey } : {}),
+    ...(input.shareCount != null ? { spreadCount: input.shareCount } : {}),
+  };
+}
+
+// ═════════════════════════════════════════════════════════════
+// ② fromStudioState — 스튜디오 미리보기 방향
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * studio-build.tsx 로컬 state 미러 — 각 필드 출처는 studio-build.tsx useState(361-432).
+ * studio-build 는 이 단계에서 수정하지 않는다 — 연결(state → 이 입력 조립)은 ST2.
+ */
+export type StudioStateInput = {
+  /** ← studio-build buildMode(365): general | reserve | commerce. */
+  buildMode: "general" | "reserve" | "commerce";
+  /** ← studio-build cardColor(366). */
+  cardColor: string;
+  /** ← studio-build applied(361) — 블록 장착 토글 맵(content/coupon/calendar/link/image/dock…). */
+  applied: Record<string, boolean>;
+  /** ← studio-build tagline(411). */
+  tagline: string;
+  /** ← studio-build selectedVideo(413) — CardBody.types.ts VideoSlot 미러(필드 발췌). */
+  selectedVideo?: {
+    videoId: string;
+    thumbnailUrl: string;
+    title: string;
+    isShorts: boolean;
+    durationLabel?: string;
+    sourceLabel?: string;
+  } | null;
+  /** ← studio-build pickedPoints(424). */
+  pickedPoints?: string[];
+  /** ← studio-build selectedCoupon(449 파생) — coupons 행에서 title 만. */
+  selectedCoupon?: { title: string } | null;
+  /** ← studio-build store(파트너) display_name/contact. */
+  storeName?: string | null;
+  storePhone?: string | null;
+  storeAddress?: string | null;
+  /** ← studio-build productName(385)/productPrice(386)/productImageUrl(382). */
+  productName?: string;
+  productPrice?: number | null;
+  productImageUrl?: string;
+  /** ← studio-build productCopy(388) — ProductCopyValue{headline, sellingPoints}. */
+  productCopy?: { headline?: string; sellingPoints?: string[] };
+  /** ← studio-build dockedProducts(379) 첫 항목 스냅샷. */
+  dockedProduct?: { name: string; priceKrw?: number | null; producerName?: string } | null;
+};
+
+export function fromStudioState(input: StudioStateInput): CardModel {
+  const isCommerce = input.buildMode === "commerce";
+  const isReserve = input.buildMode === "reserve";
+  const accent = isCommerce
+    ? CARD_MODEL_ACCENTS.commerce
+    : isReserve
+      ? CARD_MODEL_ACCENTS.reserve
+      : CARD_MODEL_ACCENTS.general;
+
+  const video = input.selectedVideo ?? null;
+  const heroImageUrl = isCommerce ? input.productImageUrl : video?.thumbnailUrl;
+
+  return {
+    accent,
+    cardColor: input.cardColor || DEFAULT_CARD_COLOR,
+    pageBg: DEFAULT_PAGE_BG,
+    category: isCommerce ? "상품 카드" : isReserve ? "예약 카드" : "정보 카드",
+    categoryIcon: isCommerce ? ShoppingBag : isReserve ? Calendar : Newspaper,
+    source: video?.sourceLabel ?? "YouTube",
+    ctaIcon: Tag,
+    store: input.storeName || undefined,
+    applied: {
+      // studio applied 맵 승계 + 모드 파생 플래그 보강(미리보기 즉시 반영).
+      ...input.applied,
+      content: !!video && !isCommerce,
+      productimage: isCommerce && !!input.productImageUrl,
+      product: isCommerce,
+      coupon: !!input.selectedCoupon && (input.applied["coupon"] ?? true),
+      link: !!(input.storePhone || input.storeAddress) && (input.applied["link"] ?? true),
+      dock: !!input.dockedProduct,
+    },
+    titleText: isCommerce
+      ? input.productName || "상품 이름"
+      : input.storeName || video?.title || "",
+    subtitleText: isCommerce
+      ? input.productCopy?.headline || input.tagline
+      : input.tagline,
+    heroImageUrl,
+    clip: video?.durationLabel,
+    priceText: isCommerce ? won(input.productPrice) : undefined,
+    productPoints: isCommerce
+      ? (input.productCopy?.sellingPoints?.length
+          ? input.productCopy.sellingPoints
+          : input.pickedPoints)
+      : input.pickedPoints,
+    couponLabel: input.selectedCoupon?.title,
+    couponShort: input.selectedCoupon?.title,
+    phone: !!input.storePhone,
+    map: !!input.storeAddress,
+    ...(input.dockedProduct
+      ? {
+          dockTitle: input.dockedProduct.name,
+          dockMeta:
+            [
+              input.dockedProduct.producerName,
+              input.dockedProduct.priceKrw != null ? won(input.dockedProduct.priceKrw) : "",
+            ]
+              .filter(Boolean)
+              .join(" · ") || "함께 담긴 카드",
+        }
+      : {}),
+    // ❌ 백엔드 부재(배송·후기·시설·판매기간)·여정(스튜디오 무의미) — 미주입 = 미렌더.
+  };
+}
