@@ -13,6 +13,9 @@ import {
 import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
 import { resizeToJpegBlob } from "@/lib/image-upload";
+// FIX-36 — 이익 계산 정본(순수 함수) 재사용: 드로피 차감 = 이 폼의 dropy_rate/dropy_fixed 그대로,
+//   기준액 = 상품 실결제액(판매가−할인, 배송비 제외). 임의 비율 창작 0(진실경계).
+import { computeProfitReceipt } from "@/components/commerce/ProductRegisterForm";
 
 /**
  * ProductRegisterForm45 — v0-45 정본 3유형(신선/가공/공산품) 상품 등록 폼 실배선 이식.
@@ -107,6 +110,8 @@ const UNIT_OPTIONS_BY_TYPE: Record<ProductType45, { id: SaleUnit45; label: strin
 };
 // 묶음형 단위 — "1{단위} = N개 / N kg" 구성 입력 대상(신선 box 는 기존 boxCount UI 유지).
 const BUNDLE_UNITS = new Set<SaleUnit45>(["pack", "box", "sack", "set"]);
+// FIX-36 — fresh 포장 단위 프리셋(박스·묶음 판매 시). "기타"는 라벨·저장에서 "묶음"으로 표기.
+const FRESH_PACK_TYPES = ["박스", "망", "봉", "포대", "기타"];
 // FIX-15 b) — 공산품 카테고리 프리셋 1뎁스("기타" 선택 시 직접입력 노출).
 const GOODS_CATEGORY_PRESETS = [
   "생활용품",
@@ -193,12 +198,7 @@ const TYPE_COPY: Record<
 };
 
 const onlyDigits = (v: string) => v.replace(/[^0-9]/g, "");
-function profitOf(price: string, cost: string) {
-  const p = Number(onlyDigits(price));
-  const c = Number(onlyDigits(cost));
-  if (!p || !c) return null;
-  return p - c;
-}
+// FIX-36 — 구 profitOf(판매가−원가만) 제거: 이익 계산은 computeProfitReceipt(정본) 단일 호출.
 // KAMIS 검색 정규화 — 기존 CAT-2 규칙 동일(공백·괄호 제거 + 소문자).
 function normalizeItemText(s: string): string {
   return s.toLowerCase().replace(/[\s()（）]/g, "");
@@ -247,6 +247,8 @@ export function ProductRegisterForm45({
   const [brand, setBrand] = useState("");
   const [spec, setSpec] = useState("");
   const [saleUnit, setSaleUnit] = useState<SaleUnit45>("unit");
+  // FIX-36 — fresh 박스·묶음 판매의 포장 단위(박스/망/봉/포대). 라벨·unit_label·pack_type 저장에 사용.
+  const [freshPackType, setFreshPackType] = useState("박스");
   const [boxCount, setBoxCount] = useState("");
   const [totalWeight, setTotalWeight] = useState("");
   const [weightUnknown, setWeightUnknown] = useState(false);
@@ -302,8 +304,36 @@ export function ProductRegisterForm45({
 
   const copy = TYPE_COPY[type];
   const unitOptions = UNIT_OPTIONS_BY_TYPE[type];
-  const profit = profitOf(price, cost);
   const priceNum = Number(onlyDigits(price)) || 0;
+  // FIX-36 — 이익 영수증(표시용·미저장): 정본 computeProfitReceipt 단일 호출(재발명 0).
+  //   판매가·원가 둘 다 입력됐을 때만 계산(미완 입력 = 미렌더 — 0·추정치 창작 금지).
+  //   배송비: 무료배송(내 부담)만 비용 차감 / 구매자 부담은 제외(병기만) — 정본 규칙 그대로.
+  const costNum = cost !== "" ? Number(cost) : null;
+  const shipFeeNum = shipFee !== "" ? Math.floor(Number(shipFee)) : null;
+  const discountNum = plannedDiscount !== "" ? Number(plannedDiscount) : 0;
+  // 고정 Droppy — 제출 가드 동일(0<f≤price 통과분만 차감 반영, 무효 = 0 취급).
+  const droppyFixedNum =
+    droppyMode === "fixed" &&
+    droppyFixed &&
+    Number(droppyFixed) > 0 &&
+    Number(droppyFixed) <= priceNum
+      ? Math.floor(Number(droppyFixed))
+      : null;
+  // FIX-36 — fresh 포장 단위 표시 라벨("기타"는 "묶음"). UI·제출 스냅샷 공용.
+  const freshPackLabel = freshPackType === "기타" ? "묶음" : freshPackType;
+  const receipt =
+    priceNum > 0 && costNum != null
+      ? computeProfitReceipt({
+          priceKrw: priceNum,
+          discountKrw: discountNum,
+          costKrw: costNum,
+          shippingMode: freeShip ? "free" : "paid",
+          shippingFeeKrw: shipFeeNum ?? 0,
+          dropyMode: droppyMode,
+          dropyPercent: droppyRate,
+          dropyFixedKrw: droppyFixedNum,
+        })
+      : null;
 
   // FIX-34 — 진행 신호 방출(변경 필드는 override 로 전달 — setState 직후 stale 값 방지).
   const emitProgress = (over: Partial<ProductFormProgress45> = {}) =>
@@ -325,6 +355,7 @@ export function ProductRegisterForm45({
   const selectType = (t: ProductType45) => {
     setType(t);
     setSaleUnit("unit");
+    setFreshPackType("박스"); // FIX-36 — 포장 단위도 초기화(잔존 오염 방지 동일 규칙).
     setBoxCount("");
     setTotalWeight("");
     setWeightUnknown(false);
@@ -461,6 +492,22 @@ export function ProductRegisterForm45({
         : unitWeightNum != null
           ? `1${UNIT_LABELS[saleUnit]} · ${unitWeightNum}kg`
           : null;
+    // FIX-36 — fresh 묶음 스냅샷: 포장 단위(망/박스/봉/포대) + 기존 box_count/total_weight_kg 값으로
+    //   unit_label 생성(FIX-15 가공·공산품과 같은 소비 키 — 거울 무접촉으로 카드 표시).
+    const freshQtyNum =
+      isFresh && saleUnit === "box" && boxCount && Number(boxCount) >= 1
+        ? Math.floor(Number(boxCount))
+        : null;
+    const freshWeightNum =
+      isFresh && saleUnit !== "unit" && !weightUnknown && totalWeight && Number(totalWeight) > 0
+        ? Number(totalWeight)
+        : null;
+    const freshUnitLabel =
+      isFresh && saleUnit === "box" && (freshQtyNum != null || freshWeightNum != null)
+        ? `1${freshPackLabel}${freshQtyNum != null ? ` · ${freshQtyNum}개입` : ""}${freshWeightNum != null ? ` · ${freshWeightNum}kg` : ""}`
+        : isFresh && saleUnit === "weight" && freshWeightNum != null
+          ? `${freshWeightNum}kg 단위`
+          : null;
     // 날짜 키 매핑 — fresh=harvest_date(기존 키) / processed=expiry_date / goods=ship_date(신규 키).
     const dateVal = harvestDate.trim() || null;
     // FIX-24 — 기간(순차배송): 종료일. 시작일과 같거나 processed 면 단일(_end 미저장).
@@ -502,7 +549,13 @@ export function ProductRegisterForm45({
       // FIX-15 — 묶음형 구성(가공품·공산품): unit_qty / unit_weight_kg / unit_label(표시용 스냅샷).
       ...(unitQtyNum != null ? { unit_qty: unitQtyNum } : {}),
       ...(unitWeightNum != null ? { unit_weight_kg: unitWeightNum } : {}),
-      ...(unitLabel ? { unit_label: unitLabel } : {}),
+      // FIX-36 — fresh 박스·묶음도 unit_label 스냅샷 합류(우선순위: 기존 묶음형 → fresh).
+      ...(unitLabel
+        ? { unit_label: unitLabel }
+        : freshUnitLabel
+          ? { unit_label: freshUnitLabel }
+          : {}),
+      ...(isFresh && saleUnit === "box" ? { pack_type: freshPackLabel } : {}),
       ...(type === "processed" ? { storage_method: storage } : {}),
       ...(type === "processed" && dateVal ? { expiry_date: dateVal } : {}),
       ...(type === "goods" && dateVal ? { ship_date: dateVal } : {}),
@@ -792,11 +845,49 @@ export function ProductRegisterForm45({
         )}
         {type === "fresh" && saleUnit === "box" && (
           <div className="mt-2 space-y-2 rounded-xl bg-[#F7F7F8] p-2.5">
-            <SubInput label="한 박스 개수" value={boxCount} onChange={(v) => setBoxCount(onlyDigits(v))} placeholder="한 박스 N개" suffix="개" accent={accent} />
+            {/* FIX-36 — 포장 단위 선택(망/박스/봉/포대) + 묶음구성. 라벨·unit_label 스냅샷에 반영. */}
+            <div className="flex flex-wrap gap-1.5">
+              {FRESH_PACK_TYPES.map((p) => {
+                const on = freshPackType === p;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setFreshPackType(p)}
+                    className="rounded-full px-2.5 py-1.5 text-[12px] font-semibold transition-colors"
+                    style={
+                      on
+                        ? { backgroundColor: accent, color: "#fff" }
+                        : { backgroundColor: "#FFFFFF", color: "#525252" }
+                    }
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+            <SubInput
+              label={`1${freshPackLabel} 구성 — 개수`}
+              value={boxCount}
+              onChange={(v) => setBoxCount(onlyDigits(v))}
+              placeholder={`1${freshPackLabel} = N개`}
+              suffix="개"
+              accent={accent}
+            />
             {!weightUnknown && (
-              <SubInput label="총 무게(kg)" value={totalWeight} onChange={(v) => setTotalWeight(v.replace(/[^0-9.]/g, ""))} placeholder="총 무게 kg" suffix="kg" accent={accent} />
+              <SubInput
+                label={`1${freshPackLabel} 구성 — 무게(kg)`}
+                value={totalWeight}
+                onChange={(v) => setTotalWeight(v.replace(/[^0-9.]/g, ""))}
+                placeholder={`1${freshPackLabel} = N kg`}
+                suffix="kg"
+                accent={accent}
+              />
             )}
             <Checkbox checked={weightUnknown} onToggle={() => setWeightUnknown((v) => !v)} label="무게는 잘 몰라요" accent={accent} />
+            <p className="text-[10.5px] font-medium text-[#A3A3A3]">
+              예: 1망 = 10kg — 카드에 &ldquo;구성: 1{freshPackLabel} · 10kg&rdquo;처럼 보여요.
+            </p>
           </div>
         )}
         {saleUnit === "weight" && (
@@ -834,10 +925,54 @@ export function ProductRegisterForm45({
             <input value={cost} onChange={(e) => setCost(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 12000" className="w-full bg-transparent px-2 py-2 text-[12.5px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
             <span className="text-[12px] font-semibold text-[#8A8A8A]">원</span>
           </div>
-          {profit !== null && (
-            <p className="mt-1.5 text-[11.5px] font-semibold" style={{ color: profit >= 0 ? accent : "#EF4444" }}>
-              개당 이익 {profit.toLocaleString()}원
-            </p>
+          {/* FIX-36 — 이익 내역(표시용·미저장): 판매가+원가 입력 시에만 렌더.
+              배송비는 무료배송(내 부담)만 차감, 구매자 부담은 제외 안내만. 드로피 차감 병기. */}
+          {receipt !== null && costNum != null && (
+            <div className="mt-1.5 space-y-1 rounded-lg bg-white px-2.5 py-2 text-[11px] font-semibold tabular-nums text-[#525252]">
+              <div className="flex justify-between">
+                <span>판매가</span>
+                <span>{priceNum.toLocaleString()}원</span>
+              </div>
+              {discountNum > 0 && (
+                <div className="flex justify-between">
+                  <span>예정 할인</span>
+                  <span>−{Math.min(discountNum, priceNum).toLocaleString()}원</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span>원가</span>
+                <span>−{costNum.toLocaleString()}원</span>
+              </div>
+              {freeShip ? (
+                shipFeeNum != null ? (
+                  <div className="flex justify-between">
+                    <span>배송비(내 부담)</span>
+                    <span>−{shipFeeNum.toLocaleString()}원</span>
+                  </div>
+                ) : (
+                  <p className="text-[10.5px] font-medium text-[#A3A3A3]">
+                    아래 배송 칸에 배송비를 적으면 이익에서 함께 빼서 계산해요
+                  </p>
+                )
+              ) : (
+                <p className="text-[10.5px] font-medium text-[#A3A3A3]">
+                  배송비는 구매자 부담 — 이익 계산에서 제외돼요
+                </p>
+              )}
+              {receipt.dropyCostKrw > 0 && (
+                <div className="flex justify-between">
+                  <span>드로피 차감{droppyMode === "rate" ? ` (${droppyRate}%)` : " (고정)"}</span>
+                  <span>−{receipt.dropyCostKrw.toLocaleString()}원</span>
+                </div>
+              )}
+              <div
+                className="flex justify-between border-t border-[#EFEFEF] pt-1 text-[12px] font-bold"
+                style={{ color: receipt.perUnitProfitKrw >= 0 ? accent : "#EF4444" }}
+              >
+                <span>예상 이익</span>
+                <span>{receipt.perUnitProfitKrw.toLocaleString()}원</span>
+              </div>
+            </div>
           )}
         </div>
       </Field>
@@ -852,13 +987,18 @@ export function ProductRegisterForm45({
           value={freeShip ? "free" : "paid"}
           onSelect={(id) => setFreeShip(id === "free")}
         />
-        {!freeShip && (
-          <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
-            <span className="text-[12px] font-semibold text-[#8A8A8A]">배송비</span>
-            <input value={shipFee} onChange={(e) => setShipFee(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 4000" className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
-            <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
-          </div>
-        )}
+        {/* FIX-36 — 배송비 입력을 양 모드 노출: 무료배송 = 내 부담 비용(이익 계산 편입 · 저장 안 함) /
+            구매자 부담 = 손님 카드 "배송비 N원" 표기 근거(ship_fee_krw 저장 — 기존 payload 계약 그대로). */}
+        <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
+          <span className="shrink-0 text-[12px] font-semibold text-[#8A8A8A]">배송비</span>
+          <input value={shipFee} onChange={(e) => setShipFee(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 4000" className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
+          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
+        </div>
+        <p className="mt-1 text-[10.5px] font-medium text-[#A3A3A3]">
+          {freeShip
+            ? "내가 부담하는 배송비 — 이익 계산에만 쓰고 저장하지 않아요"
+            : "구매자가 결제 시 함께 내는 금액 — 손님 카드에 배송비로 표기돼요"}
+        </p>
       </Field>
 
       {/* 공유 보상 (Droppy) — 검증: rate 0<r≤20% / fixed 0<f≤price */}

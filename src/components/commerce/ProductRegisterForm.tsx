@@ -125,6 +125,7 @@ const SALE_MODE_OPTIONS: Array<{ key: SaleMode; label: string }> = [
 
 // ============================================================================
 // DR2-ⓑ ③ 이익 계산 정본(순수 함수) — CP-1b(주문시트)가 이식할 단일 기준.
+//   FIX-36 — ProductRegisterForm45(스튜디오랩 커머스)도 import 재사용: export 만 추가(동작 무변경).
 //   ⚠️ Droppy % 기준 = 상품 실결제액(판매가 − 쿠폰/할인, 배송비 제외) — 표시·계산 동일.
 //   shipping: free = 판매자 비용, paid = 구매자 부담(비용 아님 · 손님 결제에 병기만).
 // ============================================================================
@@ -146,7 +147,7 @@ export interface ProfitReceipt {
   perUnitProfitKrw: number; // 건당 남는 돈
   marginPct: number | null; // 판매가 대비 %
 }
-function computeProfitReceipt(i: ProfitReceiptInput): ProfitReceipt {
+export function computeProfitReceipt(i: ProfitReceiptInput): ProfitReceipt {
   const discount = Math.min(Math.max(i.discountKrw, 0), i.priceKrw);
   const net = i.priceKrw - discount;
   const customerTotal = i.shippingMode === "paid" ? net + i.shippingFeeKrw : net;
