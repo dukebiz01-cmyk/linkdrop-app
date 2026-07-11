@@ -16,7 +16,8 @@ import { KeyboardAwareBar } from "@/components/keyboard-aware-bar";
  * focused 화면(`/results`/`/coupon`/`/create-wizard`)은 _user.tsx 가 shouldHideNav 로 미렌더.
  */
 
-const INK = "#0F172A";
+// v0-45 bottom-nav-v4 — 색 락 해제(Day42): 액티브 = 브랜드 블루. INK 상수는 액티브 아이콘 전용.
+const INK = "#2563EB";
 const MUTED = "#94A3B8";
 type NavIconProps = { active: boolean };
 
@@ -178,25 +179,33 @@ export function BottomNav() {
             {TABS.map((tab) => {
               const active = tab.match(pathname);
 
-              // NAV-1 — 아이콘 + 한글 라벨 상시. active 시 알약(bg-[#F1F5F9]) + 채움 아이콘 +
-              //   잉크 라벨(아이콘 톤 동기). 알약 h-8 로 내부 재배치(그리드 66px 불변) — 아이콘 무수정.
+              // NAV-1 — 아이콘 + 한글 라벨 상시. v0-45: active 시 연블루 알약(bg-[#EFF6FF]) +
+              //   브랜드블루 채움 아이콘·라벨 + 상단 슬라이딩 인디케이터.
+              //   알약 h-8 내부 재배치(그리드 66px 불변) — 아이콘 무수정.
               const content = (
-                <span className="flex flex-col items-center justify-center gap-1 transition-all duration-200 group-active:scale-90">
+                <>
                   <span
-                    className={`flex h-8 w-14 items-center justify-center rounded-2xl ${
-                      active ? "bg-[#F1F5F9]" : "bg-transparent"
+                    className={`absolute -top-px left-1/2 h-[3px] -translate-x-1/2 rounded-full bg-[#2563EB] transition-all duration-300 ease-out ${
+                      active ? "w-8 opacity-100" : "w-0 opacity-0"
                     }`}
-                  >
-                    <tab.Icon active={active} />
+                  />
+                  <span className="flex flex-col items-center justify-center gap-1 transition-all duration-200 group-active:scale-90">
+                    <span
+                      className={`flex h-8 w-14 items-center justify-center rounded-2xl ${
+                        active ? "bg-[#EFF6FF]" : "bg-transparent"
+                      }`}
+                    >
+                      <tab.Icon active={active} />
+                    </span>
+                    <span
+                      className={`whitespace-nowrap text-[10px] leading-none tracking-ko ${
+                        active ? "font-bold text-[#2563EB]" : "font-medium text-[#94A3B8]"
+                      }`}
+                    >
+                      {tab.label}
+                    </span>
                   </span>
-                  <span
-                    className={`whitespace-nowrap text-[10px] font-semibold leading-none tracking-ko ${
-                      active ? "text-[#0F172A]" : "text-[#94A3B8]"
-                    }`}
-                  >
-                    {tab.label}
-                  </span>
-                </span>
+                </>
               );
 
               const className =
