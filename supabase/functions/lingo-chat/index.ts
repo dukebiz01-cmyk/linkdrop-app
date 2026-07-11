@@ -4,6 +4,12 @@
 // → SSE: event meta {session_id, stage} → event delta {text}* → event done {message_id, tokens_used, cost_krw}
 //   실패 시 event error {code, friendly}. quota 초과·검증 실패는 스트림 대신 JSON.
 //
+// T-A 액션 엔진 v1 — context.studio 가 있을 때만 tool use(apply_studio_actions) 활성:
+//   SSE 에 event: actions {"actions":[...],"steps":[...]} 1종 추가(done 직전 최대 1회).
+//   스트리밍 tool_use 는 input_json_delta 버퍼링 → 완성 후 파싱 → 서버측 화이트리스트
+//   재검증(§5) 통과분만 전송 + lingo_messages meta 에 감사 저장. studio 없으면 tools
+//   미부착 — 기존 텍스트 대화와 동일(하위호환 §6).
+//
 // T2.5 종료 액션 — POST { action:'close', session_id } (message 없이 허용, 단발 JSON 응답):
 //   소유권 검증 → 세션 메시지(최대 40행) 로드 → 4행(2턴) 미만이면 추출 없이 closed →
 //   추출(EXTRACT_SYSTEM_PROMPT, max_tokens 300, 비스트리밍) → 중복(포함관계) 제외 적재 →
@@ -25,7 +31,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.110.0";
-import { buildSystemPrompt, type LingoContext, type LingoStage } from "./persona.ts";
+import {
+  buildSystemPrompt,
+  type LingoContext,
+  type LingoStage,
+  type LingoStudioContext,
+} from "./persona.ts";
 import { EXTRACT_SYSTEM_PROMPT } from "./extract.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -43,6 +54,9 @@ const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
 const MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 1024;
+// T-A §3 — 액션 모드 전용 상향(1024→1500, 액션 JSON 여유분). 비-스튜디오 경로는 §6
+// 하위호환(기존 요청과 동일)을 위해 기존 1024 유지.
+const MAX_TOKENS_STUDIO = 1500;
 const MAX_MESSAGE_CHARS = 2000;
 const SURFACE = "studio";
 const USD_TO_KRW = 1400;
@@ -79,6 +93,134 @@ function costKrw(inTok: number, outTok: number): number {
 const encoder = new TextEncoder();
 function sseFrame(event: string, data: object): Uint8Array {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+// ─────────────────────────────────────────────────────────────
+// T-A §3 — 단일 도구 apply_studio_actions (context.studio 있을 때만 부착)
+// ─────────────────────────────────────────────────────────────
+
+const APPLY_STUDIO_ACTIONS_TOOL = {
+  name: "apply_studio_actions",
+  description: "사용자의 요청을 스튜디오 카드에 실제로 반영할 때 사용. 답변 텍스트와 함께 호출.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      actions: {
+        type: "array",
+        maxItems: 8,
+        items: {
+          type: "object",
+          properties: {
+            type: { enum: ["switchMode", "equip", "detach", "setField"] },
+            mode: { enum: ["general", "reserve", "commerce"] },
+            blockId: { type: "string" },
+            field: {
+              enum: [
+                "title",
+                "subtitle",
+                "clip",
+                "date",
+                "time",
+                "coupon",
+                "productName",
+                "productPrice",
+                "dock",
+                "phone",
+                "map",
+              ],
+            },
+            value: { type: "string" },
+          },
+          required: ["type"],
+        },
+      },
+      steps: {
+        type: "array",
+        maxItems: 5,
+        items: {
+          type: "object",
+          properties: { label: { type: "string" }, note: { type: "string" } },
+          required: ["label"],
+        },
+      },
+    },
+    required: ["actions"],
+  },
+};
+
+// T-A §5 — 서버측 재검증 화이트리스트(모델 출력 신뢰 금지).
+const ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField"]);
+const ACTION_MODES = new Set(["general", "reserve", "commerce"]);
+const ACTION_FIELDS = new Set([
+  "title",
+  "subtitle",
+  "clip",
+  "date",
+  "time",
+  "coupon",
+  "productName",
+  "productPrice",
+  "dock",
+  "phone",
+  "map",
+]);
+
+type StudioAction = { type: string; mode?: string; blockId?: string; field?: string; value?: string };
+type StudioStep = { label: string; note?: string };
+
+// 도구 입력(파싱된 JSON) → 검증 통과분만. 전부 제거되면 actions 빈 배열(호출부가 미전송 처리).
+function validateStudioActions(
+  parsed: unknown,
+  studio: LingoStudioContext,
+): { actions: StudioAction[]; steps: StudioStep[] } {
+  const deckById = new Map(
+    (studio.deck ?? [])
+      .filter((d) => d && typeof d.id === "string")
+      .map((d) => [d.id, d] as const),
+  );
+  const obj = (parsed ?? {}) as { actions?: unknown; steps?: unknown };
+  const rawActions = Array.isArray(obj.actions) ? obj.actions : [];
+  const actions: StudioAction[] = [];
+  for (const raw of rawActions) {
+    if (actions.length >= 8) break; // 8개 초과 절단
+    if (!raw || typeof raw !== "object") continue;
+    const a = raw as StudioAction;
+    if (typeof a.type !== "string" || !ACTION_TYPES.has(a.type)) continue; // type 4종 외 제거
+    if (a.type === "switchMode") {
+      if (typeof a.mode !== "string" || !ACTION_MODES.has(a.mode)) continue; // mode 3종 외 제거
+      actions.push({ type: "switchMode", mode: a.mode });
+    } else if (a.type === "equip" || a.type === "detach") {
+      const blockId = typeof a.blockId === "string" ? a.blockId : "";
+      const item = deckById.get(blockId);
+      if (!item) continue; // 요청 deck 에 없는 blockId 제거
+      if (a.type === "equip" && item.locked) continue; // locked 블록 equip 제거
+      actions.push({ type: a.type, blockId });
+    } else {
+      // setField
+      const field = typeof a.field === "string" ? a.field : "";
+      if (!ACTION_FIELDS.has(field)) continue; // field 11종 외 제거
+      let value =
+        typeof a.value === "string" ? a.value : typeof a.value === "number" ? String(a.value) : "";
+      if (field === "productPrice") {
+        value = value.replace(/[^0-9,]/g, ""); // v0 클라이언트와 동일 규칙
+        if (!value) continue; // 빈 값이 되면 해당 액션 제거
+      }
+      actions.push({ type: "setField", field, value });
+    }
+  }
+  const rawSteps = Array.isArray(obj.steps) ? obj.steps : [];
+  const steps: StudioStep[] = rawSteps
+    .filter(
+      (s): s is { label: string; note?: unknown } =>
+        !!s && typeof s === "object" && typeof (s as { label?: unknown }).label === "string" &&
+        ((s as { label: string }).label.trim().length > 0),
+    )
+    .slice(0, 5) // 5개 초과 절단
+    .map((s) => ({
+      label: s.label.trim(),
+      ...(typeof s.note === "string" && s.note.trim() ? { note: s.note.trim() } : {}),
+    }));
+  return { actions, steps };
 }
 
 type RequestBody = {
@@ -256,8 +398,9 @@ Deno.serve(async (req) => {
       content: r.content,
     }));
 
-  // 6) 시스템프롬프트 조립 (persona.ts §3).
-  const systemPrompt = buildSystemPrompt({ stage, facts, context: body.context });
+  // 6) 시스템프롬프트 조립 (persona.ts §3). T-A — context.studio 있으면 블록 H(액션 규칙) 동봉.
+  const studio: LingoStudioContext | null = body.context?.studio ?? null;
+  const systemPrompt = buildSystemPrompt({ stage, facts, context: body.context, studio });
 
   const messages = [...history, { role: "user" as const, content: message }];
 
@@ -269,33 +412,54 @@ Deno.serve(async (req) => {
       let fullText = "";
       let inTok = 0;
       let outTok = 0;
+      // T-A §3 — 스트리밍 tool_use 버퍼: content_block_start(type: 'tool_use')에서 index 별로
+      //   { name, json } 를 열고, content_block_delta(delta.type: 'input_json_delta')의
+      //   partial_json 을 이어붙인다(SDK 0.110.0 RawContentBlockStartEvent/InputJSONDelta 실측).
+      //   텍스트 delta 는 기존대로 즉시 중계, 도구 입력은 스트림 완결 후 파싱.
+      const toolBufByIndex: Record<number, { name: string; json: string }> = {};
       try {
         // 7) Anthropic 스트리밍 — system 에 cache_control ephemeral (generate-feedback 방식 승계).
+        //    T-A — studio 있을 때만 tools 부착(없으면 파라미터 자체 미부착, §1)·max_tokens 상향(§3).
         const aiStream = await anthropic.messages.create({
           model: MODEL,
-          max_tokens: MAX_TOKENS,
+          max_tokens: studio ? MAX_TOKENS_STUDIO : MAX_TOKENS,
           system: [
             { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
           ],
           messages,
+          ...(studio ? { tools: [APPLY_STUDIO_ACTIONS_TOOL] } : {}),
           stream: true,
         });
 
-        // 8) 중계 + 전문 버퍼링.
+        // 8) 중계 + 전문 버퍼링(+ 도구 입력 버퍼링).
         for await (const event of aiStream) {
           if (event.type === "message_start") {
             inTok = event.message.usage.input_tokens ?? 0;
+          } else if (
+            event.type === "content_block_start" &&
+            event.content_block.type === "tool_use"
+          ) {
+            toolBufByIndex[event.index] = { name: event.content_block.name, json: "" };
           } else if (
             event.type === "content_block_delta" &&
             event.delta.type === "text_delta"
           ) {
             fullText += event.delta.text;
             controller.enqueue(sseFrame("delta", { text: event.delta.text }));
+          } else if (
+            event.type === "content_block_delta" &&
+            event.delta.type === "input_json_delta"
+          ) {
+            const buf = toolBufByIndex[event.index];
+            if (buf) buf.json += event.delta.partial_json;
           } else if (event.type === "message_delta") {
             outTok = event.usage.output_tokens ?? outTok;
           }
         }
-        if (!fullText.trim()) throw new Error("EMPTY_RESULT");
+        // T-A — 도구 호출만 있고 텍스트가 빈 응답은 정상(EMPTY_RESULT 아님).
+        if (!fullText.trim() && Object.keys(toolBufByIndex).length === 0) {
+          throw new Error("EMPTY_RESULT");
+        }
       } catch (e) {
         console.error("[lingo-chat] anthropic stream failed:", e);
         // 10) 실패 — user 메시지는 기록하되 meta 에 상태 표시(lingo_messages.meta). best-effort.
@@ -319,6 +483,24 @@ Deno.serve(async (req) => {
         return;
       }
 
+      // T-A §3/§5 — 도구 입력 완성분 파싱 → 서버측 재검증. 파싱 실패는 조용히 액션 없음(§6).
+      let studioResult: { actions: StudioAction[]; steps: StudioStep[] } | null = null;
+      if (studio) {
+        for (const buf of Object.values(toolBufByIndex)) {
+          if (buf.name !== "apply_studio_actions" || !buf.json.trim()) continue;
+          try {
+            const parsed = JSON.parse(buf.json);
+            const validated = validateStudioActions(parsed, studio);
+            if (validated.actions.length > 0) {
+              studioResult = validated;
+              break; // done 직전 최대 1회 — 첫 유효 호출만.
+            }
+          } catch (e) {
+            console.warn("[lingo-chat] tool input parse failed (silent):", e);
+          }
+        }
+      }
+
       // 9) 완료 기록 — 전부 service_role. 실패해도 스트림은 완결(응답은 이미 전달됨).
       const cost = costKrw(inTok, outTok);
       const tokensUsed = inTok + outTok;
@@ -338,7 +520,12 @@ Deno.serve(async (req) => {
             session_id: sessionId,
             role: "lingo",
             content: fullText,
-            meta: { model: MODEL, stage },
+            // T-A §5 — 검증 통과 액션은 meta 에 감사 저장.
+            meta: {
+              model: MODEL,
+              stage,
+              ...(studioResult ? { actions: studioResult.actions, steps: studioResult.steps } : {}),
+            },
             tokens_used: tokensUsed,
             cost_krw: cost,
           })
@@ -381,6 +568,13 @@ Deno.serve(async (req) => {
         );
       } catch (e) {
         console.error("[lingo-chat] state upsert failed:", e);
+      }
+
+      // T-A §2 — event: actions — done 직전 최대 1회. 검증 후 빈 배열이면 미전송.
+      if (studioResult) {
+        controller.enqueue(
+          sseFrame("actions", { actions: studioResult.actions, steps: studioResult.steps }),
+        );
       }
 
       controller.enqueue(

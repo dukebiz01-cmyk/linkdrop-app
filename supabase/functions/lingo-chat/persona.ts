@@ -1,16 +1,32 @@
 // persona.ts — 링고 시스템프롬프트 조립 블록 (T2 §3)
 //
-// buildSystemPrompt({ stage, facts, context }) 가 블록 A→B→C→D→E→F→G 순서로 이어붙인다.
+// buildSystemPrompt({ stage, facts, context, studio }) 가 블록 A→B→C→D→E→F→(H)→G 순서로 이어붙인다.
 // A/B/D/G = 고정 상수, C = stage 3분기 상수, E/F = 동적(기억·현재 작업 정보).
+// H(T-A §4) = 스튜디오 액션 규칙 + 덱 현황 — context.studio 있을 때만 조립(없으면 기존과 동일 출력).
 // 진실의 경계(D)는 generate-summary v3 가드(고유명사·추정 금지) 승계.
 
 export type LingoStage = "guide" | "assist" | "standby";
+
+// T-A §1 — 스튜디오 컨텍스트(선택). 있을 때만 액션 도구·블록 H 활성.
+export interface LingoStudioDeckItem {
+  id: string;
+  label?: string;
+  applied?: boolean;
+  locked?: boolean;
+}
+export interface LingoStudioContext {
+  mode?: string;
+  deck?: LingoStudioDeckItem[];
+  fields?: Record<string, string | null | undefined>;
+}
 
 export interface LingoContext {
   drop_id?: string | null;
   video_summary?: string | null;
   key_points?: string[] | null;
   studio_state?: Record<string, unknown> | null;
+  /** T-A §1 — 스튜디오 액션 모드 컨텍스트(선택). */
+  studio?: LingoStudioContext | null;
 }
 
 // ── [블록 A — 정체성·톤 (고정)] ──────────────────────────────────────────
@@ -38,6 +54,40 @@ const BLOCK_D = `[진실의 경계]
 - 모르면 솔직히 "그건 원본 영상이나 매장에서 확인해 주세요"라고 답한다.
 - 보상·쿠폰을 "현금", "환급", "현금처럼", "보장"으로 표현하지 않는다. "매장에서 쓸 수 있는 혜택" 수준의 중립 표현만 쓴다.
 - 확정되지 않은 것은 단정하지 않고 "~인 것 같아요" 톤으로 말한다.`;
+
+// ── [블록 H — 스튜디오 액션 모드 (T-A §4, studio 있을 때만 조립)] ─────────
+const BLOCK_H = `[스튜디오 액션 규칙]
+- 아래 [덱 현황]의 블록만 다룰 수 있다. 목록에 없는 blockId 를 만들지 않는다.
+- locked: true 블록은 장착(equip)하지 않는다. 대신 "완성도를 올리면 열려요"라고 안내만 한다.
+- setField 의 value 는 사용자가 직접 말한 값, 또는 [현재 작업 정보]에 실제로 있는 값만 쓴다.
+  가격(productPrice)·날짜·쿠폰 조건을 지어내지 않는다. 사용자가 값을 말하지 않았으면
+  기입하지 말고 어떤 값을 원하는지 되묻는다.
+- 이미 applied: true 인 블록을 다시 equip 하지 않는다.
+- 카드를 통째로 구성하는 요청("~카드 만들어줘")이면: 목적에 맞게 2~5개 액션으로 조립하고,
+  steps 에 조립 순서(label + 한 줄 note)를 담는다. 단순 요청 1건이면 steps 는 생략.
+- 반영한 뒤 답변 텍스트는 짧게: 무엇을 했고, 다음에 뭘 고르면 되는지 한 가지만.
+- 요청이 모호하면 액션 없이 되묻는다. 추측으로 조작하지 않는다.`;
+
+// [덱 현황] 동적 블록 — deck 을 "- id(label) 장착됨/미장착/잠김" 줄로, 비어있지 않은
+// fields 를 "현재 입력값"으로 주입(T-A §4).
+function buildStudioBlock(studio: LingoStudioContext): string {
+  const deckLines = (studio.deck ?? [])
+    .filter((d) => d && typeof d.id === "string" && d.id.length > 0)
+    .map((d) => {
+      const state = d.locked ? "잠김" : d.applied ? "장착됨" : "미장착";
+      return `- ${d.id}(${(d.label ?? d.id).trim() || d.id}) ${state}`;
+    });
+  const fieldLines = Object.entries(studio.fields ?? {})
+    .filter(([, v]) => typeof v === "string" && v.trim().length > 0)
+    .map(([k, v]) => `- ${k}: ${(v as string).trim()}`);
+  const parts = [BLOCK_H];
+  parts.push(
+    `[덱 현황]${studio.mode ? ` (모드: ${studio.mode})` : ""}\n` +
+      (deckLines.length > 0 ? deckLines.join("\n") : "- (덱 정보 없음)"),
+  );
+  if (fieldLines.length > 0) parts.push(`[현재 입력값]\n${fieldLines.join("\n")}`);
+  return parts.join("\n\n");
+}
 
 // ── [블록 G — 출력 규칙 (고정)] ──────────────────────────────────────────
 const BLOCK_G = `[출력 규칙]
@@ -75,15 +125,18 @@ function buildContextBlock(context: LingoContext | null | undefined): string {
   return `[현재 작업 정보]\n${lines.join("\n")}\n위 정보가 이 대화의 사실 근거다.`;
 }
 
-// ── 조립 — A → B → C → D → E → F → G ────────────────────────────────────
+// ── 조립 — A → B → C → D → E → F → (H) → G ──────────────────────────────
+//    H 는 studio 주입 시에만 — 미주입이면 기존 조립과 문자 단위 동일(하위호환, T-A §6).
 export function buildSystemPrompt({
   stage,
   facts,
   context,
+  studio,
 }: {
   stage: LingoStage;
   facts: string[];
   context: LingoContext | null | undefined;
+  studio?: LingoStudioContext | null;
 }): string {
   const blocks: string[] = [
     BLOCK_A,
@@ -94,6 +147,7 @@ export function buildSystemPrompt({
   const memory = buildMemoryBlock(facts);
   if (memory) blocks.push(memory);
   blocks.push(buildContextBlock(context));
+  if (studio) blocks.push(buildStudioBlock(studio));
   blocks.push(BLOCK_G);
   return blocks.join("\n\n");
 }
