@@ -19,6 +19,7 @@ import {
   MapPin,
   Megaphone,
   MessageCircle,
+  Mic,
   Minus,
   Palette,
   Pencil,
@@ -29,6 +30,7 @@ import {
   Search,
   Send,
   Sparkles,
+  Square,
   Star,
   Store,
   Tag,
@@ -39,6 +41,8 @@ import {
   Undo2,
   Users,
   Video,
+  Volume2,
+  VolumeX,
   X,
   Zap,
 } from "lucide-react";
@@ -55,6 +59,7 @@ import { getSupabase } from "@/lib/supabase";
 import { resizeToJpegBlob } from "@/lib/image-upload";
 import { shareToKakao } from "@/lib/kakao";
 import { CardModelBody } from "./CardModelBody";
+import { useLingoChat, useLingoVoice, type LingoContext } from "./useLingoChat";
 import { CARD_MODEL_ACCENTS, fromStudioState } from "./card-model-adapters";
 import { SHIP_STAGES, type CardModel } from "./card-model.types";
 
@@ -427,6 +432,13 @@ export function CardStudioPage45({
   //   "strip" = 캡슐(드래그 플로팅, 기본) / "panel" = 캡슐 자리 기준 확장 패널 / "closed" = 최소 아바타 점.
   //   완전 소멸 없음 — X 는 점까지만, 점 탭 = 캡슐 복귀. FIX-3 계약(자동 사라짐 없음·실상태 결합) 유지.
   const [lingoView, setLingoView] = useState<"strip" | "panel" | "closed">("strip");
+  // T5 — 링고 대화 실배선(41창 백엔드 계약): SSE 채팅 + 음성 반이중 v1.
+  const chat = useLingoChat();
+  const voice = useLingoVoice();
+  const [chatInput, setChatInput] = useState("");
+  // 입력 채널 — 마이크 결과로 채워지면 "voice", 손으로 고치기 시작하면 "text"로 복귀.
+  const chatChannelRef = useRef<"text" | "voice">("text");
+  const chatListRef = useRef<HTMLDivElement>(null);
   // 패널 확장 기준점 — 캡슐 위치(fabPos)에서 확장, 화면 경계 클램프.
   const [panelBottom, setPanelBottom] = useState(188);
   const [stripFlash, setStripFlash] = useState<string | null>(null);
@@ -567,6 +579,25 @@ export function CardStudioPage45({
   const currentStepIdx = steps.findIndex((s) => !s.done);
   const nextStepLabel = currentStepIdx >= 0 ? steps[currentStepIdx].label : null;
 
+  // T5 — 빈 채팅박스 금지: 패널 첫 진입 시 현재 모드·단계 기반 시작 제안 1개를 링고 말풍선으로
+  //   선노출(이미 대화가 있으면 seed 는 no-op).
+  useEffect(() => {
+    if (lingoView !== "panel") return;
+    const intro =
+      mode === "commerce"
+        ? "상품 카드를 같이 완성해 볼까요? 소개 문구나 가격 고민, 뭐든 물어보세요."
+        : mode === "reserve"
+          ? "예약·쿠폰 카드를 같이 만들어 볼까요? 어떤 매장·혜택인지 알려주시면 문구부터 도와드릴게요."
+          : "카드를 같이 완성해 볼까요? 영상 고르기부터 한마디 문구까지 뭐든 물어보세요.";
+    chat.seed(nextStepLabel ? `${intro} 지금은 ${nextStepLabel} 단계예요.` : intro);
+  }, [lingoView, mode, nextStepLabel, chat.seed]);
+
+  // T5 — 새 말풍선/타자 진행 시 대화 리스트 하단 고정.
+  useEffect(() => {
+    const el = chatListRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chat.messages]);
+
   // FIX-3 — 비동기 작업 진행 표시(실제 상태와 결합 — 스피너는 진행 중일 때만).
   const stripBusy = saving
     ? "카드를 발행하는 중…"
@@ -580,7 +611,11 @@ export function CardStudioPage45({
             ? "AI가 영상 요약을 읽는 중…"
             : videoSearching
               ? "영상을 찾는 중…"
-              : null;
+              : voice.listening // T5 — 음성 인식 중에도 LED 점등(반이중 "듣는 중").
+                ? "듣고 있어요…"
+                : chat.streaming // T5 — 대화 스트리밍 중 LED 점등.
+                  ? "링고가 생각 중…"
+                  : null;
 
   // FIX-11 — LED 러닝 라이트: 실작업 중에만 점등, 완료 시 한 바퀴(2초) 마무리 후 정지.
   const [ledFinish, setLedFinish] = useState(false);
@@ -1308,6 +1343,53 @@ export function CardStudioPage45({
       // 여정·확산 — 정본 데모(SHARE_JOURNEY·12명) 제거: 실 여정은 수신 후 생기는 것. 미주입=미렌더.
     },
   );
+
+  // T5 STEP 2 — 먼저 아는 링고: 매 전송 시 스튜디오 요약 context 동봉.
+  //   민감정보(결제·전화번호 등) 미포함 — 제작 상태 요약만.
+  function buildLingoContext(): LingoContext {
+    const effectiveProductName = productName.trim() || attachedProducts[0]?.name || "";
+    const effectiveProductPrice = productPrice ?? attachedProducts[0]?.priceKrw ?? null;
+    return {
+      studio_state: {
+        mode,
+        applied_blocks: DECK.filter((b) => applied[b.id]).map((b) => b.label),
+        score,
+        card_title: cardModel.titleText,
+        ...(mode === "commerce" && effectiveProductName ? { product_name: effectiveProductName } : {}),
+        ...(mode === "commerce" && effectiveProductPrice != null ? { product_price: effectiveProductPrice } : {}),
+      },
+      ...(aiKeyPoints.length > 0
+        ? { video_summary: `${selectedVideo?.title ?? "선택한 영상"} — ${aiKeyPoints.join(" / ")}` }
+        : {}),
+      ...(pickedPoints.length > 0 ? { key_points: pickedPoints } : {}),
+    };
+  }
+
+  // T5 — 전송(반이중): 낭독 중단 → 스트림 완주 → done 텍스트 낭독. 실패해도 제작 흐름 비차단.
+  async function handleChatSend() {
+    const text = chatInput.trim();
+    if (!text || chat.streaming || voice.listening) return;
+    voice.stopSpeaking(); // 새 입력 시작 = 낭독 즉시 중단.
+    const channel = chatChannelRef.current;
+    setChatInput("");
+    chatChannelRef.current = "text";
+    const finalText = await chat.send(text, channel, buildLingoContext());
+    if (finalText) voice.speak(finalText);
+  }
+
+  // T5 — 마이크(반이중): 듣기 시작 → 결과를 입력창에 채움(자동 전송 금지 — [전송]으로 확인).
+  function handleMicTap() {
+    if (chat.streaming) return;
+    voice.stopSpeaking();
+    if (voice.listening) {
+      voice.stopListening();
+      return;
+    }
+    voice.startListening((t) => {
+      setChatInput(t);
+      chatChannelRef.current = "voice";
+    });
+  }
 
   return (
     // FIX-16 — 하단 스트립 폐지: 본문 패딩은 전송 CTA 기준 원복(pb-[120px]).
@@ -2914,7 +2996,8 @@ export function CardStudioPage45({
                   {/* FIX-17 — LED 러닝 라이트(패널 동일, 안쪽 밴드·명시 radius 재구현).
                       콘텐츠는 아래 relative 레이어 — 흰 덮개 위에 그려지도록(페인트 순서). */}
                   {ledOn && <span className="sl-led-ring sl-led-ring--panel" aria-hidden="true" />}
-                  <div className="relative">
+                  {/* T5 — 대화 추가로 패널이 길어질 수 있어 내부 스크롤(가이드·대화·도구 공존). */}
+                  <div className="relative max-h-[70vh] overflow-y-auto">
                   {/* 드래그 핸들 */}
                   <div
                     onPointerDown={onPanelPointerDown}
@@ -2935,7 +3018,7 @@ export function CardStudioPage45({
                       <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">링고AI</p>
                       <p className="flex items-center gap-1 text-[11px] font-medium text-[#9A9A9A]">
                         <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
-                        전환 코칭 — 대화는 오픈 준비 중이에요
+                        {chat.streaming ? "생각 중…" : voice.speaking ? "말하는 중…" : "전환 코칭 · 대화 — 무엇이든 물어보세요"}
                       </p>
                     </div>
                     {/* FIX-3 — 접기(→스트립) / X(완전 닫기, FAB 은 남음) 분리. */}
@@ -3018,17 +3101,107 @@ export function CardStudioPage45({
                     );
                   })()}
 
-                  {/* 입력 컴포저 — T5 예약석(대화 LLM 배선 금지): 비활성 표시만. 오픈 시 lingo-chat 재배선. */}
+                  {/* T5 — 링고 대화 실배선: 말풍선 리스트(가이드 아래 공존, 내부 스크롤) + 입력행
+                      (텍스트·낭독 토글·마이크·전송/중지). 반이중 — 스트리밍/듣기 중 입력 잠금,
+                      [중지] = 스트림 abort. 대화 실패해도 제작 흐름은 차단하지 않는다. */}
                   <div className="mt-3">
-                    <div className="flex items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5 opacity-60">
+                    {chat.messages.length > 0 && (
+                      <div
+                        ref={chatListRef}
+                        className="max-h-[220px] space-y-2 overflow-y-auto rounded-2xl bg-[#FAFAFA] p-3 [box-shadow:inset_0_0_0_1px_#EFEFEF]"
+                      >
+                        {chat.messages.map((m) => (
+                          <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                            <p
+                              className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[13px] font-medium leading-relaxed [word-break:keep-all] ${
+                                m.role === "user"
+                                  ? "rounded-br-md text-white"
+                                  : "rounded-bl-md bg-white text-[#404040] [box-shadow:inset_0_0_0_1px_#ECECEE]"
+                              }`}
+                              style={m.role === "user" ? { backgroundColor: accent } : undefined}
+                            >
+                              {m.text ||
+                                (m.streaming ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
+                                ) : null)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* 음성 상태 1줄 — 미지원·인식 폴백 안내 / 듣는 중 / 말하는 중 (일반 톤). */}
+                    {(voice.notice || voice.listening || voice.speaking) && (
+                      <p className="mt-1.5 px-1 text-[11px] font-medium text-[#8A8A8A]">
+                        {voice.notice ??
+                          (voice.listening
+                            ? "듣고 있어요 — 끝나면 입력창에 채워드려요"
+                            : "말하는 중이에요 — 새로 입력하면 멈춰요")}
+                      </p>
+                    )}
+                    <div className="mt-2 flex items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5">
                       <input
-                        disabled
-                        placeholder="링고 대화는 오픈 준비 중이에요"
-                        className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#9A9A9A]"
+                        value={chatInput}
+                        maxLength={2000}
+                        disabled={chat.streaming || voice.listening}
+                        placeholder={chat.streaming ? "링고가 생각 중…" : voice.listening ? "듣고 있어요…" : "링고AI에게 물어보기"}
+                        onChange={(e) => {
+                          setChatInput(e.target.value);
+                          chatChannelRef.current = "text"; // 손으로 고치면 텍스트 채널로 복귀.
+                        }}
+                        onFocus={() => voice.stopSpeaking()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            void handleChatSend();
+                          }
+                        }}
+                        className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#9A9A9A] disabled:opacity-60"
                       />
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white" style={{ backgroundColor: accent }}>
-                        <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
-                      </span>
+                      <button
+                        type="button"
+                        aria-label={voice.ttsOn ? "응답 낭독 끄기" : "응답 낭독 켜기"}
+                        onClick={voice.toggleTts}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                      >
+                        {voice.ttsOn ? (
+                          <Volume2 className="h-4 w-4" strokeWidth={2.25} />
+                        ) : (
+                          <VolumeX className="h-4 w-4 text-[#A3A3A3]" strokeWidth={2.25} />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={voice.listening ? "듣기 중지" : "음성으로 말하기"}
+                        onClick={handleMicTap}
+                        disabled={chat.streaming}
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full active:scale-95 disabled:opacity-40 ${
+                          voice.listening ? "animate-pulse text-white" : "bg-white text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5]"
+                        }`}
+                        style={voice.listening ? { backgroundColor: accent } : undefined}
+                      >
+                        <Mic className="h-4 w-4" strokeWidth={2.25} />
+                      </button>
+                      {chat.streaming ? (
+                        <button
+                          type="button"
+                          aria-label="응답 중지"
+                          onClick={chat.stop}
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#404040] text-white active:scale-95"
+                        >
+                          <Square className="h-3.5 w-3.5" strokeWidth={2.5} fill="currentColor" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label="전송"
+                          onClick={() => void handleChatSend()}
+                          disabled={!chatInput.trim() || voice.listening}
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white active:scale-95 disabled:opacity-40"
+                          style={{ backgroundColor: accent }}
+                        >
+                          <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
+                        </button>
+                      )}
                     </div>
                   </div>
 
