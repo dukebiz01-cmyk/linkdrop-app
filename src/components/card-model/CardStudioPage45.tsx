@@ -564,30 +564,32 @@ export function CardStudioPage45({
   }, []);
 
   // FIX-3 — 모드별 진행 단계(실상태 파생 — 가짜 진행 없음).
+  // FIX-23 — candidates: 단계 완료(done)에 기여하는 후보 블록 집합 — 단일 타깃(currentTarget)의
+  //   단계 내 선택 풀. block 은 단계 대표(점 표시용) 그대로 유지.
   const steps = useMemo(() => {
     const productDone =
       !!attachedProducts[0] || (!!productImageUrl && !!productName.trim() && (productPrice ?? 0) > 0);
     const styleDone = !!applied["bgcolor"] || !!cfgSubtitle.trim() || score >= 40;
     if (mode === "commerce") {
       return [
-        { label: "상품", block: "product", done: productDone },
-        { label: "혜택", block: "coupon", done: !!(applied["coupon"] && selectedCouponId) || !!applied["seasonal"] },
-        { label: "꾸미기", block: "bgcolor", done: styleDone },
-        { label: "전송", block: null, done: dropped },
+        { label: "상품", block: "product", candidates: ["product", "productimage"], done: productDone },
+        { label: "혜택", block: "coupon", candidates: ["coupon", "seasonal"], done: !!(applied["coupon"] && selectedCouponId) || !!applied["seasonal"] },
+        { label: "꾸미기", block: "bgcolor", candidates: ["bgcolor"], done: styleDone },
+        { label: "전송", block: null, candidates: [], done: dropped },
       ];
     }
     if (mode === "reserve") {
       return [
-        { label: "영상", block: "content", done: !!selectedVideo },
-        { label: "예약·혜택", block: "calendar", done: !!applied["calendar"] || !!(applied["coupon"] && selectedCouponId) },
-        { label: "꾸미기", block: "bgcolor", done: styleDone },
-        { label: "전송", block: null, done: dropped },
+        { label: "영상", block: "content", candidates: ["content"], done: !!selectedVideo },
+        { label: "예약·혜택", block: "calendar", candidates: ["calendar", "coupon"], done: !!applied["calendar"] || !!(applied["coupon"] && selectedCouponId) },
+        { label: "꾸미기", block: "bgcolor", candidates: ["bgcolor"], done: styleDone },
+        { label: "전송", block: null, candidates: [], done: dropped },
       ];
     }
     return [
-      { label: "영상", block: "content", done: !!selectedVideo },
-      { label: "꾸미기", block: "bgcolor", done: styleDone },
-      { label: "전송", block: null, done: dropped },
+      { label: "영상", block: "content", candidates: ["content"], done: !!selectedVideo },
+      { label: "꾸미기", block: "bgcolor", candidates: ["bgcolor"], done: styleDone },
+      { label: "전송", block: null, candidates: [], done: dropped },
     ];
   }, [mode, applied, selectedCouponId, selectedVideo, attachedProducts, productImageUrl, productName, productPrice, cfgSubtitle, score, dropped]);
   const currentStepIdx = steps.findIndex((s) => !s.done);
@@ -651,19 +653,42 @@ export function CardStudioPage45({
     if (import.meta.env.DEV) console.debug("[studio-lab] stripBusy →", stripBusy ?? "(idle)");
   }, [stripBusy]);
 
-  // FIX-9 — 링고 능동 제안(규칙 기반, LLM 아님): 미장착·비게이트·비유료 중 전환력 기여
-  //   최대 1개. 거절 시 세션 쿨다운(재노출 금지). 전송 준비 완료 시 제안 대신 수렴 문구.
+  // FIX-9 — 능동 제안 노출 리듬(트리거·거절 쿨다운)은 유지. FIX-23 — 대상 선택은 아래
+  //   단일 타깃(currentTarget)으로 통합: 말(티칭)·버튼(계속/장착)·불(방향등)이 전부
+  //   같은 블록에서 파생 — 구조적으로 어긋날 수 없다.
   const [dismissedSuggests, setDismissedSuggests] = useState<string[]>([]);
   const [suggestVisible, setSuggestVisible] = useState(false);
   const readyToSend = !dropped && currentStepIdx >= 0 && steps[currentStepIdx].block === null;
+
+  // FIX-23 — 단일 타깃: 첫 미완료 단계의 후보(candidates) 중 장착 가능(미장착·비게이트·
+  //   비유료·비쿨다운) 블록을 power 최대로 선택 — FIX-9 점수 휴리스틱은 단계 내부
+  //   타이브레이커로 강등. 후보가 장착됐는데 단계 미완이면(예: 쿠폰 미선택) 그 블록을
+  //   유지해 마무리를 안내. 단계 후보 전멸(쿨다운)이면 다음 단계로. 전 단계 완료·발행
+  //   후 = null(수렴 "보낼 준비 됐어요" + 전체 소등 — 기존 계약).
+  const currentTarget = useMemo(() => {
+    if (dropped) return null;
+    for (const s of steps) {
+      if (s.done) continue;
+      if (s.candidates.length === 0) return null; // 전송 단계 도달 = 수렴.
+      const cands = s.candidates
+        .map((id) => DECK.find((b) => b.id === id))
+        .filter((b): b is (typeof DECK)[number] => !!b && !GATED_BLOCK_IDS.has(b.id));
+      const equippable = cands
+        .filter((b) => !b.isPaid && !applied[b.id] && !dismissedSuggests.includes(b.id))
+        .sort((a, b) => b.power - a.power)[0];
+      if (equippable) return equippable;
+      const incomplete = cands.find((b) => applied[b.id] && !dismissedSuggests.includes(b.id));
+      if (incomplete) return incomplete;
+      // 전 후보 거절(쿨다운) — 다음 단계로 이동.
+    }
+    return null;
+  }, [steps, DECK, applied, dismissedSuggests, dropped]);
+
+  // 제안 칩([장착]+X) 대상 = 단일 타깃이 "장착 가능"일 때만(마무리 안내 대상엔 칩 없음).
   const suggestion = useMemo(() => {
-    if (dropped || readyToSend) return null;
-    return (
-      DECK.filter(
-        (b) => !b.isPaid && !GATED_BLOCK_IDS.has(b.id) && !applied[b.id] && !dismissedSuggests.includes(b.id),
-      ).sort((a, b) => b.power - a.power)[0] ?? null
-    );
-  }, [DECK, applied, dismissedSuggests, dropped, readyToSend]);
+    if (dropped || readyToSend || !currentTarget || applied[currentTarget.id]) return null;
+    return currentTarget;
+  }, [currentTarget, applied, dropped, readyToSend]);
   // 트리거 ① 단계 완료 — done 개수 증가 시.
   const doneCount = steps.filter((s) => s.done).length;
   const prevDoneRef = useRef(doneCount);
@@ -684,9 +709,10 @@ export function CardStudioPage45({
     return () => clearTimeout(t);
   }, [applied, deckIndex, mode, lingoView, cfgSubtitle, selectedVideo, collapsedPanels]);
   const showSuggest = !stripBusy && !stripFlash && suggestVisible && !!suggestion;
-  // FIX-19 — 추천 방향등 단일 소스: 캡슐 한줄 제안과 같은 조건·같은 블록(문구 따로 불 따로 금지).
-  //   수렴(readyToSend)·전송 완료·거절 쿨다운 시 suggestion/showSuggest 가 꺼지므로 전 소등도 동기.
-  const suggestLitId = showSuggest && suggestion ? suggestion.id : null;
+  // FIX-19→23 — 방향등 = 단일 타깃 그 자체(캡슐 기본 문구=해당 단계 티칭과 상시 동행).
+  //   단계 완료 시 타깃이 다음 단계 블록으로 넘어가며 불도 즉시 이동(순서대로 켜짐).
+  //   busy/flash 중엔 기존처럼 잠시 소등, 수렴·발행 후 = 타깃 null → 전체 소등(기존 계약).
+  const suggestLitId = !stripBusy && !stripFlash && currentTarget ? currentTarget.id : null;
   // FIX-21 — 디버그 강제 점등도 '중앙 자리'가 아니라 특정 카드 1장(덱 첫 블록 id)으로 고정.
   //   실사용(suggestLitId)과 동일한 block.id 판정 규칙 — 스와이프해도 그 카드에만 불이 붙는다.
   const debugLitId = ledDebug ? (DECK[0]?.id ?? null) : null;
@@ -717,34 +743,24 @@ export function CardStudioPage45({
     }
   }
 
-  // 링고 코칭 — 정적 규칙 기반(정본 그대로 · LLM 아님). 게이트 블록은 추천에서 제외.
+  // 링고 코칭 — FIX-23: 단일 타깃(currentTarget)에서 파생(문구는 기존 HINTS 유지 + 보강).
+  //   타깃 없음 = 수렴 문구(기존 그대로). 마무리 대상(장착됐지만 입력 미완)도 같은 HINTS 톤.
   const lingo = useMemo(() => {
-    const deckBlocks = DECK_IDS[mode].map(blockById).filter((b) => !GATED_BLOCK_IDS.has(b.id));
-    const nextLever = deckBlocks.filter((b) => !b.isPaid && !applied[b.id]).sort((a, b) => b.power - a.power)[0];
-    const firstMissingMain = deckBlocks.find((b) => isMainBlock(b.id) && !applied[b.id]);
-    if (firstMissingMain) {
-      const HINTS: Record<string, string> = {
-        content: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
-        image: "본체 이미지 한 장이면 카드가 확 살아나요. 가장 잘 나온 컷부터 올려보세요.",
-        calendar: "예약 카드인데 누를 곳이 없어요. 예약 캘린더를 장착해야 친구가 바로 행동해요.",
-        product: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
-        productimage: "상품 사진이 본체가 돼요. 신선도와 품질이 드러난 한 장이 주문을 부릅니다.",
-        seasonal: "지금이 구매 적기라는 걸 판매 캘린더로 보여주면 주문이 앞당겨져요.",
-      };
-      return { text: HINTS[firstMissingMain.id] ?? `${firstMissingMain.label}부터 장착해보세요.`, action: firstMissingMain.id };
+    if (!currentTarget) {
+      return { text: "전환 레버가 충분해요. 강화(부스트)는 오픈 준비 중 — 지금은 전송으로 마무리해요.", action: null };
     }
-    if (deckBlocks.some((b) => b.id === "coupon") && !applied["coupon"]) {
-      return { text: "왜 지금 행동해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요.", action: "coupon" };
-    }
-    if (score < ENHANCE_UNLOCK) {
-      return {
-        text: nextLever ? `${nextLever.label}까지 더하면 전환력이 확 올라가요.` : "거의 다 됐어요. 마무리만 하면 완성!",
-        action: nextLever?.id ?? null,
-      };
-    }
-    return { text: "전환 레버가 충분해요. 강화(부스트)는 오픈 준비 중 — 지금은 전송으로 마무리해요.", action: null };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applied, score, mode]);
+    const HINTS: Record<string, string> = {
+      content: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
+      image: "본체 이미지 한 장이면 카드가 확 살아나요. 가장 잘 나온 컷부터 올려보세요.",
+      calendar: "예약 카드인데 누를 곳이 없어요. 예약 캘린더를 장착해야 친구가 바로 행동해요.",
+      product: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
+      productimage: "상품 사진이 본체가 돼요. 신선도와 품질이 드러난 한 장이 주문을 부릅니다.",
+      seasonal: "지금이 구매 적기라는 걸 판매 캘린더로 보여주면 주문이 앞당겨져요.",
+      coupon: "왜 지금 행동해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요.",
+      bgcolor: "배경색 하나로 카드 인상이 확 달라져요. 꾸미기로 마무리해 볼까요?",
+    };
+    return { text: HINTS[currentTarget.id] ?? `${currentTarget.label}부터 장착해보세요.`, action: currentTarget.id };
+  }, [currentTarget]);
 
   function equip(block: StudioBlock) {
     // ★ 정직 게이트 — 백엔드 부재 블록은 장착 자체를 막는다(카드에 가짜 데이터 표시 금지).
@@ -842,14 +858,14 @@ export function CardStudioPage45({
     setLingoView("strip");
   }
 
-  // FIX-3 — [계속하기]: 현재 단계의 블록으로 흐름 복귀(전송 단계면 거울 시트).
+  // FIX-3→23 — [계속하기]: 단일 타깃 블록으로 흐름 복귀(타깃 없음 = 수렴 → 거울 시트).
+  //   안내 문구·방향등과 같은 소스라 항상 같은 카드로 점프한다.
   function continueFlow() {
-    const step = steps[currentStepIdx >= 0 ? currentStepIdx : steps.length - 1];
-    if (!step.block) {
+    if (!currentTarget) {
       setMirrorOpen(true);
       return;
     }
-    if (!jumpToBlock(step.block)) scrollToDeck();
+    if (!jumpToBlock(currentTarget.id)) scrollToDeck();
   }
   const canEdit = DECK.some((b) => CONFIGURABLE.includes(b.id) && !GATED_BLOCK_IDS.has(b.id));
 
@@ -3307,19 +3323,11 @@ export function CardStudioPage45({
               </span>
               <span className="relative min-w-0 flex-1">
                 <span className="block truncate text-[11px] font-semibold leading-tight text-[#0A0A0A]">
-                  {/* FIX-18 — 본문 코칭 카드 흡수: 제안 블록이 코칭 대상과 같으면 티칭 문장을
-                      그대로 노출(단계 진입 시 lingo 재계산 → 캡슐 안내가 해당 단계 티칭으로 갱신). */}
+                  {/* FIX-18→23 — 제안·티칭 모두 단일 타깃(lingo.text)에서 파생: 분기 단순화.
+                      단계 진입 시 타깃 재계산 → 캡슐 안내가 해당 단계 티칭으로 갱신. */}
                   {stripBusy ??
                     stripFlash ??
-                    (showSuggest && suggestion
-                      ? suggestion.id === lingo.action
-                        ? lingo.text
-                        : `${suggestion.label} +${suggestion.power}점`
-                      : dropped
-                        ? "전송 완료!"
-                        : readyToSend
-                          ? "보낼 준비 됐어요"
-                          : lingo.text)}
+                    (dropped ? "전송 완료!" : readyToSend ? "보낼 준비 됐어요" : lingo.text)}
                 </span>
                 {/* 단계 점 축약 — 점만(라벨 없음). done=accent · current=링 · 대기=회색 */}
                 <span className="mt-1 flex items-center gap-1">
