@@ -569,7 +569,10 @@ export function CardStudioPage45({
   const steps = useMemo(() => {
     const productDone =
       !!attachedProducts[0] || (!!productImageUrl && !!productName.trim() && (productPrice ?? 0) > 0);
-    const styleDone = !!applied["bgcolor"] || !!cfgSubtitle.trim() || score >= 40;
+    // FIX-25 — 꾸미기 done 을 실제 확정 state 에 결합: 색 [적용] 확정(cardColor 변경) 또는
+    //   한마디 입력. 기존 score>=40 프록시(상품30+쿠폰18=48로 자동 done)와 applied.bgcolor
+    //   (피커만 열어도 true — equip 토글)는 실확정이 아니라 제거.
+    const styleDone = cardColor !== CARD_BASE || !!cfgSubtitle.trim();
     if (mode === "commerce") {
       return [
         { label: "상품", block: "product", candidates: ["product", "productimage"], done: productDone },
@@ -591,7 +594,7 @@ export function CardStudioPage45({
       { label: "꾸미기", block: "bgcolor", candidates: ["bgcolor"], done: styleDone },
       { label: "전송", block: null, candidates: [], done: dropped },
     ];
-  }, [mode, applied, selectedCouponId, selectedVideo, attachedProducts, productImageUrl, productName, productPrice, cfgSubtitle, score, dropped]);
+  }, [mode, applied, selectedCouponId, selectedVideo, attachedProducts, productImageUrl, productName, productPrice, cfgSubtitle, cardColor, dropped]);
   const currentStepIdx = steps.findIndex((s) => !s.done);
   const nextStepLabel = currentStepIdx >= 0 ? steps[currentStepIdx].label : null;
 
@@ -673,12 +676,16 @@ export function CardStudioPage45({
       const cands = s.candidates
         .map((id) => DECK.find((b) => b.id === id))
         .filter((b): b is (typeof DECK)[number] => !!b && !GATED_BLOCK_IDS.has(b.id));
-      const equippable = cands
-        .filter((b) => !b.isPaid && !applied[b.id] && !dismissedSuggests.includes(b.id))
-        .sort((a, b) => b.power - a.power)[0];
-      if (equippable) return equippable;
-      const incomplete = cands.find((b) => applied[b.id] && !dismissedSuggests.includes(b.id));
-      if (incomplete) return incomplete;
+      // FIX-25 — 단계 내 선택 규칙 교정: candidates 정의 순서 = 단계 대표 우선(혜택에서
+      //   power 규칙이 쿠폰(18) 대신 판매 캘린더(30)를 먼저 켜던 문제). 후보가 장착돼
+      //   있으면(단계는 미완 = 입력/등록 미마무리) 그 블록을 유지해 마무리를 안내 —
+      //   상품 폼을 여는 순간(장착) 타깃이 이미지 등록으로 튀던 문제도 함께 해소.
+      //   power 는 candidates 배열 구성에 반영된 보조 기준으로 강등(FIX-23 취지 유지).
+      for (const b of cands) {
+        if (dismissedSuggests.includes(b.id)) continue; // 거절 쿨다운 — 차순위로.
+        if (applied[b.id]) return b; // 진행 중 — 마무리 안내(등록·선택 완료까지 유지).
+        if (!b.isPaid) return b; // 미장착 — 장착 제안.
+      }
       // 전 후보 거절(쿨다운) — 다음 단계로 이동.
     }
     return null;
