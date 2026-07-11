@@ -272,10 +272,16 @@ const SL_KEYFRAMES = `
 .sl-led-ring--pill, .sl-led-ring--pill::after { border-radius: 9999px; }
 .sl-led-ring--panel { border-radius: 24px; } /* rounded-3xl 실측값 — inherit 미사용 */
 .sl-led-ring--panel::after { border-radius: 22px; }
-/* FIX-19 — 추천 방향등(덱 카드 변형): 카드 콘텐츠는 비positioned 라 흰 덮개가 콘텐츠 위로
-   올라오므로, 링을 음수 z(카드 자체 배경 위 · 콘텐츠 아래)로 내린다 — 부모에 isolate 필수. */
-.sl-led-ring--card { border-radius: 24px; z-index: -1; } /* 카드 rounded-3xl 실측값 */
-.sl-led-ring--card::after { border-radius: 22px; }
+/* FIX-20 — 카드 방향등 래퍼 패딩 방식(FIX-19 음수 z 폐기 — 카드 불투명 배경·풀사이즈
+   자식(아크릴 패널 inset-0)에 가려질 수 있어 실기기 신뢰 불가):
+   wrapper(-m 2px + p 2px, rounded 26px, overflow hidden)의 패딩 2px 가 곧 링 띠.
+   회전 레이어(span)는 카드보다 앞 형제 — 카드 본체(positioned·불투명 bg)가 중앙을 덮어
+   패딩 띠만 노출. 덮개·마스크·음수 z 불요, 카드 콘텐츠 무접촉.
+   래퍼는 상시 유지 + 레이어만 조건 렌더 — 점등/소등 간 카드 크기 불변(레이아웃 점프 0). */
+.sl-led-wrap { position: relative; isolation: isolate; margin: -2px; padding: 2px; border-radius: 26px; overflow: hidden; }
+.sl-led-wrap-spin { position: absolute; left: 50%; top: 50%; width: 800px; height: 800px; margin: -400px 0 0 -400px;
+  background: conic-gradient(transparent 0deg 290deg, rgba(255,138,0,0.25) 308deg, rgba(255,138,0,0.9) 338deg, #FFC46B 352deg, #FFF3E0 358deg, transparent 360deg);
+  animation: sl-led-rotate 2s linear infinite; }
 `;
 
 type ProductCopy45 = { headline: string; sellingPoints: string[] };
@@ -1626,6 +1632,9 @@ export function CardStudioPage45({
             const gated = GATED_BLOCK_IDS.has(block.id);
             const locked = (!!block.isPaid && score < ENHANCE_UNLOCK) || gated;
             const isCenter = offset === 0;
+            // FIX-20 — 방향등 점등 판정: 제안 동기(suggestLitId, FIX-19 계약 그대로)
+            //   + ?led=1 이면 중앙 카드 강제 점등(항상 화면에 보임 — 렌더 단독 검증용).
+            const lit = suggestLitId === block.id || (ledDebug && isCenter);
             return (
               <button
                 key={block.id}
@@ -1654,19 +1663,26 @@ export function CardStudioPage45({
                 }}
                 aria-label={block.label}
               >
+                {/* FIX-20 — 방향등 래퍼: 상시 유지(레이아웃 점프 0), 점등 시 회전 레이어만 렌더.
+                    카드(positioned·불투명 bg)가 뒤 형제라 중앙을 덮고 패딩 2px 띠만 노출.
+                    스와이프로 화면 밖이어도 lit 은 파생 상태 — 복귀 시 점등(FIX-19 계약 유지). */}
+                <div className="sl-led-wrap">
+                  {lit && <span className="sl-led-wrap-spin" aria-hidden="true" />}
                 <div
-                  className="relative isolate flex h-[240px] flex-col rounded-3xl bg-white p-5 text-left"
+                  className="relative flex h-[240px] flex-col rounded-3xl bg-white p-5 text-left"
                   style={{
-                    boxShadow: isCenter
-                      ? isOn
-                        ? `0 16px 36px -14px rgba(15,23,42,0.28), 0 0 0 2px ${accent}`
-                        : "0 16px 36px -14px rgba(15,23,42,0.22), 0 0 0 1px #EDEDED"
-                      : "0 8px 20px -12px rgba(15,23,42,0.18), 0 0 0 1px #EDEDED",
+                    // 점등 중엔 회색 아웃라인(0 0 0 1px)만 제거 — 2px 앰버 띠 전폭 노출(드롭 섀도는 유지).
+                    boxShadow: lit
+                      ? isCenter
+                        ? "0 16px 36px -14px rgba(15,23,42,0.22)"
+                        : "0 8px 20px -12px rgba(15,23,42,0.18)"
+                      : isCenter
+                        ? isOn
+                          ? `0 16px 36px -14px rgba(15,23,42,0.28), 0 0 0 2px ${accent}`
+                          : "0 16px 36px -14px rgba(15,23,42,0.22), 0 0 0 1px #EDEDED"
+                        : "0 8px 20px -12px rgba(15,23,42,0.18), 0 0 0 1px #EDEDED",
                   }}
                 >
-                  {/* FIX-19 — 링고 추천 방향등: 능동 제안이 가리키는 카드 1장에만 LED 링(FIX-17
-                      재사용, 카드 변형). 스와이프로 화면 밖이어도 suggestLitId 로 파생 — 복귀 시 점등. */}
-                  {suggestLitId === block.id && <span className="sl-led-ring sl-led-ring--card" aria-hidden="true" />}
                   {/* 상단: 파워 + 카테고리 */}
                   <div className="flex items-center justify-between">
                     <span
@@ -1753,6 +1769,7 @@ export function CardStudioPage45({
                     </div>
                     <p className="mt-1.5 text-[12px] font-medium leading-[1.5] text-[#1F2937]">{block.detail}</p>
                   </div>
+                </div>
                 </div>
               </button>
             );
