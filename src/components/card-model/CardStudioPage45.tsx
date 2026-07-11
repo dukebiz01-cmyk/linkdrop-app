@@ -62,6 +62,8 @@ import { shareToKakao } from "@/lib/kakao";
 import { CardModelBody } from "./CardModelBody";
 import { useLingoChat, useLingoVoice, type LingoContext } from "./useLingoChat";
 import { CARD_MODEL_ACCENTS, fromStudioState } from "./card-model-adapters";
+// FIX-42 — 발행 게이트 발화 정본 + 결정 로직(순수 — stage·1상태1발화 dedupe 실측 가능).
+import { decideGateUtterance } from "./gate-notes45";
 import { SHIP_STAGES, type CardModel } from "./card-model.types";
 
 // =============================================================================
@@ -210,6 +212,8 @@ const COACH_NOTES: Record<string, { why: string; effect: string }> = {
     effect: "긴 영상도 20초 안에 전달돼요",
   },
 };
+
+// FIX-42 — 발행 게이트 발화 정본·결정 로직은 gate-notes45.ts(순수 모듈 — 실측 가능)로 분리.
 
 // 매장정보 시설 태그 — 빠른 추가용 추천 목록(정본 8종).
 const FACILITY_PRESETS = ["주차 가능", "무료 와이파이", "반려동물 동반", "단체석", "예약 가능", "포장·배달", "유아 의자", "휠체어 접근"];
@@ -814,13 +818,24 @@ export function CardStudioPage45({
   const steps = useMemo(() => {
     const productDone =
       !!attachedProducts[0] || (!!productImageUrl && !!productName.trim() && (productPrice ?? 0) > 0);
+    // FIX-42 — 누락 사유 1줄(missing): 실제 미충족 필드명 기준(창작 금지). 이 표가 배지·발화의
+    //   단일 소스 — 배지용 목록 복제 금지. 첫 번째 미충족 필드 하나만 말한다(방향등 순서 동일).
+    const productMissing = productDone
+      ? null
+      : !productImageUrl
+        ? "상품 사진 미등록"
+        : !productName.trim()
+          ? "상품 이름 미입력"
+          : "상품 가격 미입력";
     const dockStep =
       dockCount > 0
         ? [
             {
               label: "도킹", coach: "dock", block: "dock", candidates: ["dock"], required: false,
               done: dockedProducts.length > 0 || dockSkipped,
-              gate: "", teach: "",
+              gate: "",
+              teach: "",
+              missing: null as string | null,
             },
           ]
         : [];
@@ -830,15 +845,17 @@ export function CardStudioPage45({
           label: "상품", coach: "product", block: "product", candidates: ["product", "productimage"], required: true, done: productDone,
           gate: "상품(사진·이름·가격)을 먼저 등록해 주세요",
           teach: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
+          missing: productMissing,
         },
         {
           // 판매기간(seasonal) 또는 수확·발송일(등록 폼 날짜) 중 1 확정.
           label: "발송기준", coach: "shipBasis", block: "seasonal", candidates: ["seasonal"], required: true, done: !!applied["seasonal"] || productShipDateSet,
           gate: "판매기간 또는 수확·발송일을 먼저 확정해 주세요",
           teach: "언제 받을 수 있는지 알려줘요 — 판매 캘린더나 수확·발송일 중 하나면 돼요.",
+          missing: "판매기간·발송일 미확정",
         },
         ...dockStep,
-        { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "" },
+        { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "", missing: null as string | null },
       ];
     }
     if (mode === "reserve") {
@@ -853,26 +870,30 @@ export function CardStudioPage45({
           label: "콘텐츠", coach: "content", block: "content", candidates: ["content", "image"], required: true, done: !!selectedVideo,
           gate: "예약 카드는 아직 영상이 필요해요 — 곧 이미지만으로도 가능해져요",
           teach: "지금은 영상이 카드의 시작이에요. 대표 이미지는 함께 담을 수 있고, 이미지 단독 발행도 곧 열려요.",
+          missing: "영상 미선택",
         },
         {
           // Duke: 쿠폰이 우선순위 필수 — 콘텐츠 다음 최우선 배치.
           label: "쿠폰", coach: "coupon", block: "coupon", candidates: ["coupon"], required: true, done: !!(applied["coupon"] && selectedCouponId),
           gate: "쿠폰을 먼저 연결해 주세요",
           teach: "왜 지금 예약해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요.",
+          missing: !applied["coupon"] ? "쿠폰 미설정" : "쿠폰 미선택",
         },
         {
           label: "캘린더", coach: "calendar", block: "calendar", candidates: ["calendar"], required: true, done: !!applied["calendar"] && cfgDates.length > 0,
           gate: "예약 캘린더를 먼저 설정해 주세요",
           teach: "예약 카드의 심장이에요. 받을 수 있는 날짜를 골라 캘린더를 확정해요.",
+          missing: !applied["calendar"] ? "캘린더 미설정" : "예약 날짜 미선택",
         },
         {
           // store+facilities — 동일 설정 패널(매장정보)에서 함께 충족: 1묶음 표기.
           label: "매장·시설", coach: "store", block: "link", candidates: ["link"], required: true, done: savedStoreInfo.hasAddress && savedStoreInfo.facilities > 0,
           gate: "매장 정보(주소·시설)를 먼저 저장해 주세요",
           teach: "주소와 시설 태그를 저장하면 손님이 안심하고 예약해요. 매장정보에서 한 번에 저장돼요.",
+          missing: !savedStoreInfo.hasAddress ? "매장 주소 미저장" : "시설 정보 미저장",
         },
         ...dockStep,
-        { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "" },
+        { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "", missing: null as string | null },
       ];
     }
     return [
@@ -880,15 +901,17 @@ export function CardStudioPage45({
         label: "영상", coach: "content", block: "content", candidates: ["content"], required: true, done: !!selectedVideo,
         gate: "영상을 먼저 담아 주세요",
         teach: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
+        missing: "영상 미선택",
       },
       {
         // 한마디(tagline) — 정보 모드 필수 승격(꾸미기 단계·색은 제거, FIX-28).
         label: "한마디", coach: "tagline", block: "content", candidates: ["content"], required: true, done: !!cfgSubtitle.trim(),
         gate: "내 한마디를 먼저 적어 주세요",
         teach: "왜 이 영상을 보내는지 한 줄만 적어요. 그 한마디가 카드의 목소리예요.",
+        missing: "한마디 미입력",
       },
       ...dockStep,
-      { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "" },
+      { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "", missing: null as string | null },
     ];
   }, [mode, applied, selectedCouponId, selectedVideo, heroImageUrl, attachedProducts, productImageUrl, productName, productPrice, productShipDateSet, cfgSubtitle, cfgDates, savedStoreInfo, dockCount, dockedProducts, dockSkipped, dropped]);
   const currentStepIdx = steps.findIndex((s) => !s.done);
@@ -967,6 +990,20 @@ export function CardStudioPage45({
   // 게시 게이트 — 필수 전부 충족 시에만 활성. 사유 1줄 = 첫 미완 항목의 gate 문구.
   const canPublish = !firstRequiredStep;
   const gateMsg = firstRequiredStep?.gate ?? null;
+
+  // FIX-42 — [필수] 배지 파생(steps 정본 단일 소스 — 배지용 목록 복제 금지). key = step.block.
+  //   같은 블록에 필수 단계 복수(일반 모드 영상+한마디 → content)면: 전부 done 이어야 done,
+  //   사유는 첫 미충족 단계 것(방향등 순서와 동일).
+  const requiredBadges = useMemo(() => {
+    const m: Record<string, { done: boolean; missing: string | null }> = {};
+    for (const s of steps) {
+      if (!s.required || !s.block) continue;
+      const prev = m[s.block];
+      if (!prev) m[s.block] = { done: s.done, missing: s.done ? null : s.missing };
+      else if (prev.done && !s.done) m[s.block] = { done: false, missing: s.missing };
+    }
+    return m;
+  }, [steps]);
 
   // FIX-23/25/28/33 — 단일 타깃: 단계 순회(필수 → 도킹(비필수 정식 단계) → 발행)로 통일.
   //   필수는 거절 쿨다운 제외(계속 안내), 비필수(도킹)는 쿨다운/[건너뛰기] 허용.
@@ -1157,6 +1194,34 @@ export function CardStudioPage45({
     }
     return { text: "필수는 다 챙겼어요 — 이제 발행할 수 있어요.", action: null };
   }, [firstRequiredStep, currentTarget, dockCount, formProgress]);
+
+  // FIX-42 — 링고 능동 안내(§13) 트리거 ①: 잠금 발행 버튼 클릭 시도.
+  //   · 발화 = GATE_NOTES 정본(서버 호출 0) → 스트립/캡슐 플래시 채널(기존 stripFlash 재사용,
+  //     프리뷰 버스트는 발화가 아니므로 미발동 — flashStrip 대신 전용 타이머).
+  //   · 1상태 1발화: coach 키 기준 세션 내 dedupe. 무시(재클릭)하면 침묵 — 배지가 이어받는다.
+  //   · stage 게이트: guide=상태별 각 1회 / assist=게이트 도달 후 통산 1회 / standby=발화 0.
+  //     stage 미수신(대화 전) = "guide"(서버 lingo_user_state 신규 기본값과 동일).
+  //   · 방향등: currentTarget 이 이미 같은 블록을 가리킴(단일 소스) — 여기선 덱 점프만 재사용.
+  //   트리거 ②(장시간 무입력)는 전용 막힘 감지 신호 부재로 보류(기존 20초 타이머는 제안 노출
+  //   리듬 공용이라 비막힘 상황에도 발화하게 됨 — §13 위반 위험). 보고 후 별도 슬라이스.
+  const spokenGateKeysRef = useRef<string[]>([]);
+  function handleGateBlockedClick() {
+    const step = firstRequiredStep;
+    if (!step) return;
+    if (currentTarget && !jumpToBlock(currentTarget.id)) scrollToDeck();
+    const key = step.coach || step.label;
+    const text = decideGateUtterance({
+      stage: chat.stage ?? "guide", // 미수신 = guide(서버 lingo_user_state 신규 기본값 동일).
+      coachKey: key,
+      spokenKeys: spokenGateKeysRef.current,
+      unmetRequiredCount: steps.filter((s) => s.required && !s.done).length,
+    });
+    if (!text) return; // 침묵 — 배지·방향등이 이어받는다.
+    spokenGateKeysRef.current = [...spokenGateKeysRef.current, key];
+    setStripFlash(text);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setStripFlash(null), 5000);
+  }
 
   function equip(block: StudioBlock) {
     // ★ 정직 게이트 — 백엔드 부재 블록은 장착 자체를 막는다(카드에 가짜 데이터 표시 금지).
@@ -2224,6 +2289,22 @@ export function CardStudioPage45({
                       {gated && (
                         <span className="rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[9px] font-bold text-[#64748B]">준비 중</span>
                       )}
+                      {/* FIX-42 — [필수] 배지(steps 정본 파생 — requiredBadges 단일 소스).
+                          미충족 = 붉은 [필수] / 충족 = 체크 배지 전환(기존 체크 문법 재사용). */}
+                      {requiredBadges[block.id] &&
+                        (requiredBadges[block.id].done ? (
+                          <span
+                            className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold"
+                            style={{ backgroundColor: `${accent}14`, color: accent }}
+                          >
+                            <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                            필수
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-[#FEF2F2] px-1.5 py-0.5 text-[9px] font-bold text-[#DC2626]">
+                            필수
+                          </span>
+                        ))}
                       {/* FIX-9 — 도킹 가용 수 배지(실카운트, 0장이면 미표기 — 가짜 숫자 금지). */}
                       {block.id === "dock" && dockCount > 0 && (
                         <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums" style={{ backgroundColor: `${accent}14`, color: accent }}>
@@ -2232,6 +2313,14 @@ export function CardStudioPage45({
                       )}
                     </p>
                     <p className="mt-1 text-[12px] leading-[1.45] text-[#5C5C5C]">{block.desc}</p>
+                    {/* FIX-42 — 누락 사유 1줄(실필드명 — steps.missing 그대로, 창작 금지). */}
+                    {requiredBadges[block.id] &&
+                      !requiredBadges[block.id].done &&
+                      requiredBadges[block.id].missing && (
+                        <p className="mt-0.5 text-[11px] font-semibold text-[#DC2626]">
+                          {requiredBadges[block.id].missing}
+                        </p>
+                      )}
                   </div>
 
                   {/* 잠금 / 장착 상태 */}
@@ -3535,18 +3624,26 @@ export function CardStudioPage45({
             ) : (
               <>
                 {/* FIX-28 — 게시 게이트: 필수패키지 미완이면 비활성 + 사유 1줄(첫 미완 항목).
-                    방향등은 currentTarget 이 같은 항목을 이미 가리킴(단일 기준). */}
-                <button
-                  type="button"
-                  disabled={!canPublish}
-                  onClick={() => setMirrorOpen(true)}
-                  className="group relative flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-xl text-[14px] font-bold tracking-[-0.01em] text-white transition-all duration-300 active:scale-[0.98] disabled:opacity-45 disabled:active:scale-100"
-                  style={{ backgroundColor: accent, boxShadow: canPublish ? `0 6px 18px -8px ${accent}80` : "none" }}
+                    방향등은 currentTarget 이 같은 항목을 이미 가리킴(단일 기준).
+                    FIX-42 — 잠금 클릭 시도 = 링고 능동 안내 트리거 ①: disabled 버튼은 클릭이
+                    죽으므로 pointer-events-none + 래퍼 onClick 으로 시도를 감지(게이트 무변경). */}
+                <div
+                  onClick={() => {
+                    if (!canPublish) handleGateBlockedClick();
+                  }}
                 >
-                  <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-                  <Send className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" strokeWidth={2.25} />
-                  발행하기
-                </button>
+                  <button
+                    type="button"
+                    disabled={!canPublish}
+                    onClick={() => setMirrorOpen(true)}
+                    className="group relative flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-xl text-[14px] font-bold tracking-[-0.01em] text-white transition-all duration-300 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 disabled:active:scale-100"
+                    style={{ backgroundColor: accent, boxShadow: canPublish ? `0 6px 18px -8px ${accent}80` : "none" }}
+                  >
+                    <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+                    <Send className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" strokeWidth={2.25} />
+                    발행하기
+                  </button>
+                </div>
                 {!canPublish && gateMsg && (
                   <p className="text-center text-[11px] font-medium text-[#8A8A8A]">{gateMsg}</p>
                 )}

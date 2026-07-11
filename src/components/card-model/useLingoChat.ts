@@ -17,6 +17,10 @@ export type LingoMessage = {
   streaming?: boolean;
 };
 
+// FIX-42 — 개입 강도 게이트(서버 lingo_user_state.stage 정본: guide→assist→standby).
+//   meta 이벤트에 이미 실려 오던 값(주석 :4)을 보관·노출만 추가 — 서버·전송 계약 무변경.
+export type LingoStage = "guide" | "assist" | "standby";
+
 export type LingoContext = {
   studio_state: {
     mode: string;
@@ -64,6 +68,8 @@ function parseSseBlock(block: string): { event: string; data: string } | null {
 export function useLingoChat() {
   const [messages, setMessages] = useState<LingoMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
+  // FIX-42 — meta.stage 수신값(대화 전 = null). 소비처(능동 안내)가 기본값 정책을 정한다.
+  const [stage, setStage] = useState<LingoStage | null>(null);
   const streamingRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
   const acRef = useRef<AbortController | null>(null);
@@ -158,6 +164,10 @@ export function useLingoChat() {
             if (ev.event === "meta") {
               const d = safeJson(ev.data);
               if (typeof d?.session_id === "string") sessionIdRef.current = d.session_id;
+              // FIX-42 — stage 보관(guide/assist/standby 외 값은 무시 — 서버 CHECK 동일).
+              if (d?.stage === "guide" || d?.stage === "assist" || d?.stage === "standby") {
+                setStage(d.stage);
+              }
             } else if (ev.event === "delta") {
               const d = safeJson(ev.data);
               if (typeof d?.text === "string" && d.text) {
@@ -199,7 +209,7 @@ export function useLingoChat() {
     [],
   );
 
-  return { messages, streaming, seed, send, stop };
+  return { messages, streaming, stage, seed, send, stop };
 }
 
 // ── 음성 반이중 v1 — Web Speech API (지원 감지, 미지원 시 정직 안내) ──────────────
