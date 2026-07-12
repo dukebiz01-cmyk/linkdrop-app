@@ -13,6 +13,10 @@ import appCss from "../styles.css?url";
 import { BusinessFooter } from "@/components/business-footer";
 // T7 PWA v1 — beforeinstallprompt 캡처 싱글턴 1회 로드(SSR 가드 내장 · 서비스워커 없음).
 import "@/lib/pwa-install";
+// FIX-47b — 인앱 브라우저 전역 유도 배너(getInAppBrowser 공용 판정 재사용 · §13 안내 1줄만).
+import { useEffect, useState } from "react";
+import { X } from "lucide-react";
+import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 
 // 로그인 앱 경로 — 여기선 사업자 푸터를 숨긴다(하단 BottomNav 충돌 회피).
 // 그 외(공개 경로: / · /d/ · /r · /alliance · /terms · /business-info · /privacy 등)에만 노출.
@@ -133,6 +137,8 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {/* FIX-47b — 인앱 유도 배너(전역 셸 상단 1줄): 자동 리다이렉트·팝업 0(§13). */}
+      <InAppBrowserBanner />
       <Outlet />
       {!isApp &&
         (pathname === "/" ? (
@@ -143,5 +149,47 @@ function RootComponent() {
           <BusinessFooter />
         ))}
     </QueryClientProvider>
+  );
+}
+
+// FIX-47b — 인앱 브라우저 전역 유도 배너. 감지 = pwa-install getInAppBrowser 공용(중복 정의 0).
+//   마운트 후 판정(SSR=미렌더 — hydration 안전) · X 닫기 = sessionStorage 세션 내 재노출 0
+//   (useLingoVoice TTS 세션 키 관례 동일 — localStorage 아님). 일반 브라우저 = 미렌더.
+const INAPP_BANNER_KEY = "ld-inapp-banner-dismissed";
+
+function InAppBrowserBanner() {
+  const [inApp, setInApp] = useState<InAppBrowser | null>(null);
+  useEffect(() => {
+    try {
+      if (window.sessionStorage.getItem(INAPP_BANNER_KEY) === "1") return;
+    } catch {
+      // sessionStorage 접근 불가(일부 WebView 프라이빗 모드) — 배너는 표시.
+    }
+    setInApp(getInAppBrowser());
+  }, []);
+  if (!inApp) return null;
+  return (
+    <div className="flex items-start gap-2 bg-[#0F172A] px-4 py-2.5 text-white">
+      <p className="min-w-0 flex-1 text-xs font-medium leading-relaxed tracking-ko [word-break:keep-all]">
+        {inApp === "kakao"
+          ? "카카오톡 브라우저예요. 오른쪽 위 메뉴 → '다른 브라우저로 열기'를 누르면 로그인과 음성까지 전부 쓸 수 있어요"
+          : "앱 속 브라우저예요. 크롬 등 다른 브라우저로 열면 로그인과 음성까지 전부 쓸 수 있어요"}
+      </p>
+      <button
+        type="button"
+        aria-label="안내 닫기"
+        onClick={() => {
+          try {
+            window.sessionStorage.setItem(INAPP_BANNER_KEY, "1");
+          } catch {
+            // 저장 실패 — 이번 렌더만 닫힘(다음 진입 시 재노출 허용, 정직 폴백).
+          }
+          setInApp(null);
+        }}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/70 hover:text-white"
+      >
+        <X className="h-4 w-4" strokeWidth={2.5} />
+      </button>
+    </div>
   );
 }
