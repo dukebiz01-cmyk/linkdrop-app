@@ -35,6 +35,9 @@ import {
   type CardModelActions,
   type CardModelVariant,
 } from "./card-model.types";
+// ST2b-0 — 쿠폰 마감 타이머(1-A 배지 재사용 · 수신카드 1-C couponTimer 동형 — 거울 원칙).
+//   L6 예외: 미리보기 한정 클라 시계 폴백(31창 승인 — 구 studio-build 주석 승계), serverNow 미주입.
+import { TimerBadge } from "@/components/home/ShareCardTile";
 
 /**
  * CardModelBody — CardModel 거울 2.0 렌더러. 정본: docs/ref/v0-45-card-body.tsx (868줄).
@@ -907,6 +910,14 @@ export function CardModelBody({
               </span>
               <span className="ml-auto text-[11px] font-medium text-[#6E6E6E]">도킹 연결됨</span>
             </div>
+
+            {/* ST2b-0 — 마감 타이머: 수신카드 1-C couponTimer 동형(relative 스트립 + 배지 무수정).
+                couponExpiresAt 미주입 = 미렌더. 만료 = TimerBadge 자체 "마감" 고정 표기(L2). */}
+            {model.couponExpiresAt ? (
+              <div className="relative mt-3 h-7">
+                <TimerBadge expiresAt={model.couponExpiresAt} />
+              </div>
+            ) : null}
 
             <div className="mt-3 flex items-center gap-3">
               <span

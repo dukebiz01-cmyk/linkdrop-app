@@ -234,8 +234,9 @@ export type StudioStateInput = {
   } | null;
   /** ← studio-build pickedPoints(424). */
   pickedPoints?: string[];
-  /** ← studio-build selectedCoupon(449 파생) — coupons 행에서 title 만. */
-  selectedCoupon?: { title: string } | null;
+  /** ← studio-build selectedCoupon(449 파생) — coupons 행에서 title 만.
+   *  ST2b-0 — valid_until additive(옵셔널): 미리보기 마감 타이머용. 미주입 = 타이머 미렌더. */
+  selectedCoupon?: { title: string; valid_until?: string | null } | null;
   /** ← studio-build store(파트너) display_name/contact. */
   storeName?: string | null;
   storePhone?: string | null;
@@ -301,6 +302,10 @@ export function fromStudioState(input: StudioStateInput, preview?: Partial<CardM
       : input.pickedPoints,
     couponLabel: input.selectedCoupon?.title,
     couponShort: input.selectedCoupon?.title,
+    // ST2b-0 — 마감 타이머(실값만 · 미주입 = 미렌더). /d 방향(fromDropDetail)은 ST2b-2 몫.
+    ...(input.selectedCoupon?.valid_until
+      ? { couponExpiresAt: input.selectedCoupon.valid_until }
+      : {}),
     phone: !!input.storePhone,
     map: !!input.storeAddress,
     ...(input.dockedProduct

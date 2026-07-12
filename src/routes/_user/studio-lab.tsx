@@ -5,6 +5,8 @@ import {
   type StudioLabCoupon,
   type StudioLabStore,
 } from "@/components/card-model/CardStudioPage45";
+// ST2b-0 — 쿠폰 만들기 시트용 전체 쿠폰 행 타입(구 studio-build loader 동일 소스).
+import type { CouponRow } from "@/routes/_partner/partner.coupons";
 
 /**
  * ⚠️ 임시 검증 라우트 — ST2b 스위치 후 제거.
@@ -17,14 +19,16 @@ import {
  * 모드(예약·상품판매)는 컴포넌트 switchMode 잠금 + 저장측 create_drop_v2 비사업자
  * purpose 게이트(v7.4)가 이중 방어.
  *
- * loader = studio-build.tsx:2682-2778 발췌 복제(isBusiness·store·coupons 만 —
- * manageCoupons/myRewards 는 45 UX 에 없어 미조회). // ST2b 스위치 시 원본 제거
+ * loader = studio-build.tsx:2682-2778 발췌 복제(isBusiness·store·coupons·manageCoupons —
+ * ST2b-0 에서 manageCoupons 합류. myRewards 는 의도적 비노출 확정[43창]). // ST2b 스위치 시 원본 제거
  */
 
 type StudioLabLoaderData = {
   isBusiness: boolean;
   store: StudioLabStore | null;
   coupons: StudioLabCoupon[];
+  /** ST2b-0 — 쿠폰 만들기 시트용 전체 쿠폰(활성/비활성 · studio-build/partner.coupons 동일 쿼리). */
+  manageCoupons: CouponRow[];
   /** FIX-9 — 도킹 가용(공개 발행) 카드 실카운트. head count 만(행 미전송). */
   dockCount: number;
 };
@@ -43,7 +47,13 @@ export const Route = createFileRoute("/_user/studio-lab")({
     return out;
   },
   loader: async (): Promise<StudioLabLoaderData> => {
-    const empty: StudioLabLoaderData = { isBusiness: false, store: null, coupons: [], dockCount: 0 };
+    const empty: StudioLabLoaderData = {
+      isBusiness: false,
+      store: null,
+      coupons: [],
+      manageCoupons: [],
+      dockCount: 0,
+    };
     const supabase = await getAuthClient();
     if (!supabase) return empty;
 
@@ -101,19 +111,38 @@ export const Route = createFileRoute("/_user/studio-lab")({
       console.error("[studio-lab] coupon load failed", e);
     }
 
-    return { isBusiness, store, coupons, dockCount };
+    // ST2b-0 — 쿠폰 만들기 시트용 전체 쿠폰(활성/비활성) — 구 studio-build :2747-2763
+    //   발췌 복제(partner.coupons CouponsPage 와 동일 쿼리). 실패 = 빈 배열(만들기 폼은 동작).
+    let manageCoupons: CouponRow[] = [];
+    try {
+      const { data: rows, error: rowsErr } = await supabase
+        .from("coupons")
+        .select(
+          "id, title, coupon_type, discount_value, discount_unit, conditions, valid_until, total_count, is_active, created_at, gift_item",
+        )
+        .eq("partner_id", store.id)
+        .order("created_at", { ascending: false });
+      if (!rowsErr && Array.isArray(rows)) {
+        manageCoupons = rows as CouponRow[];
+      }
+    } catch (e) {
+      console.error("[studio-lab] manage coupons load failed", e);
+    }
+
+    return { isBusiness, store, coupons, manageCoupons, dockCount };
   },
   component: StudioLabPage,
 });
 
 function StudioLabPage() {
-  const { isBusiness, store, coupons, dockCount } = Route.useLoaderData();
+  const { isBusiness, store, coupons, manageCoupons, dockCount } = Route.useLoaderData();
   const { purpose, led } = Route.useSearch();
   return (
     <CardStudioPage45
       isBusiness={isBusiness}
       store={store}
       coupons={coupons}
+      manageCoupons={manageCoupons}
       dockCount={dockCount}
       initialPurpose={purpose}
       ledDebug={led === 1}

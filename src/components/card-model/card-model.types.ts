@@ -128,6 +128,9 @@ export type CardModel = {
   // ── 쿠폰 — CouponPreviewCoupon(title) 발췌. applied["coupon"] 게이트. ──
   couponLabel?: string;
   couponShort?: string;
+  /** ST2b-0 — 쿠폰 마감 시각(ISO, coupons.valid_until). 미주입 = 타이머 미렌더
+   *  (수신카드 1-C couponTimer 게이트 동형 — 거울 원칙). */
+  couponExpiresAt?: string | null;
 
   // ── 매장정보(link 블록) ──
   phone?: boolean;

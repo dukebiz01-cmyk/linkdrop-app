@@ -54,6 +54,9 @@ import {
   type ProductRegisterResult45,
 } from "./ProductRegisterForm45";
 import { CardDockingPicker, type DockedProduct } from "@/components/studio/CardDockingPicker";
+// ST2b-0 — 쿠폰 만들기 이식(구 studio-build 임베드 방식 그대로 · View 내부 무수정).
+//   구는 Radix Sheet 래핑 → 여기선 인라인 펼침으로 래핑만 교체(Radix 금지 락).
+import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import type { AttachedProduct } from "@/components/create/types";
 import { getSupabase } from "@/lib/supabase";
@@ -527,6 +530,7 @@ export function CardStudioPage45({
   isBusiness,
   store,
   coupons,
+  manageCoupons = [],
   dockCount = 0,
   initialPurpose,
   ledDebug = false,
@@ -534,6 +538,9 @@ export function CardStudioPage45({
   isBusiness: boolean;
   store: StudioLabStore | null;
   coupons: StudioLabCoupon[];
+  /** ST2b-0 — 쿠폰 만들기 시트용 전체 쿠폰(활성/비활성 · partner.coupons 동일 쿼리).
+   *  미주입 = 만들기 폼만(목록 빈 배열) — CouponManageView 계약 그대로. */
+  manageCoupons?: CouponRow[];
   /** FIX-9 — 도킹 가능(공개 발행) 카드 실카운트(loader head count). 가짜 숫자 금지. */
   dockCount?: number;
   /** ?purpose 진입 프리셋 — studio-build validateSearch 와 동등(정보|쿠폰|예약|구매). */
@@ -575,6 +582,10 @@ export function CardStudioPage45({
   const [saleStartIdx, setSaleStartIdx] = useState(0);
   const [saleEndIdx, setSaleEndIdx] = useState(6);
 
+  // ST2b-0 — 쿠폰 만들기 인라인 펼침(구 Radix Sheet 대체 — 래핑만 교체, View 내부 무수정).
+  //   생성 완료(onChanged) = router.invalidate → loader 재실행 → coupons/manageCoupons 갱신
+  //   → 새 쿠폰 즉시 연결 가능(예약 모드 쿠폰 필수 게이트 데드락 해소).
+  const [couponMakeOpen, setCouponMakeOpen] = useState(false);
   // 쿠폰 — 실 loader 쿠폰 목록에서 선택. ST2b 스위치 시 원본 제거(studio-build selectedCouponId 동형).
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
   const selectedCoupon = coupons.find((c) => c.id === selectedCouponId) ?? null;
@@ -2053,7 +2064,11 @@ export function CardStudioPage45({
       tagline: cfgSubtitle,
       selectedVideo,
       pickedPoints,
-      selectedCoupon: applied["coupon"] && couponTitle ? { title: couponTitle } : null,
+      // ST2b-0 — valid_until 동봉(실값만): 미리보기 마감 타이머(수신 1-C 동형) 재료.
+      selectedCoupon:
+        applied["coupon"] && couponTitle
+          ? { title: couponTitle, valid_until: selectedCoupon?.valid_until ?? null }
+          : null,
       storeName: content.store,
       storePhone: cfgPhone ? (store?.contact_phone ?? null) : null,
       storeAddress: cfgMap ? (cfgAddress.trim() || store?.address || null) : null,
@@ -3165,7 +3180,7 @@ export function CardStudioPage45({
                       )}
                       {coupons.length === 0 && (
                         <p className="rounded-xl bg-[#F4F4F5] px-3 py-3 text-center text-[12px] font-medium text-[#8A8A8A]">
-                          활성 쿠폰이 없어요. 파트너 센터에서 쿠폰을 먼저 만들어 주세요.
+                          아직 활성 쿠폰이 없어요 — 아래 [새 쿠폰 만들기]로 바로 만들 수 있어요.
                         </p>
                       )}
                       {coupons.map((c) => {
@@ -3207,6 +3222,35 @@ export function CardStudioPage45({
                           <Check className="h-4 w-4" strokeWidth={2.5} />
                           이 쿠폰 적용
                         </button>
+                      )}
+                      {/* ST2b-0 — 새 쿠폰 만들기(구 studio-build 바텀시트 이식 · 인라인 펼침,
+                          Radix 0). CouponManageView 무수정 임베드 — 생성 완료 시
+                          router.invalidate 로 연결 목록 즉시 갱신(생성→즉시 선택 가능). */}
+                      <button
+                        type="button"
+                        onClick={() => setCouponMakeOpen((v) => !v)}
+                        className="flex w-full items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-left"
+                      >
+                        <Plus className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
+                        <span className="flex-1 text-[13px] font-semibold text-[#0A0A0A]">
+                          새 쿠폰 만들기
+                        </span>
+                        <ChevronDown
+                          className="h-4 w-4 shrink-0 text-[#8A8A8A] transition-transform"
+                          style={{ transform: couponMakeOpen ? "rotate(180deg)" : "none" }}
+                          strokeWidth={2.25}
+                        />
+                      </button>
+                      {couponMakeOpen && (
+                        <div className="max-h-[60vh] overflow-y-auto rounded-xl bg-[#F7F7F8] p-3 [scrollbar-width:thin]">
+                          <CouponManageView
+                            partnerId={store?.id ?? null}
+                            coupons={manageCoupons}
+                            onChanged={async () => {
+                              await router.invalidate();
+                            }}
+                          />
+                        </div>
                       )}
                     </div>
                   ))}
