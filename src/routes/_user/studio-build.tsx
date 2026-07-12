@@ -11,6 +11,13 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { CouponManageView, type CouponRow } from "@/routes/_partner/partner.coupons";
+// ST2b-1 — 정식 교체: 기본 렌더 = 신 스튜디오(CardStudioPage45). 구 컴포넌트(CardStudioPage)는
+//   ?legacy=1 스위치백으로 보존(코드 삭제·이동 금지 — ST3 안정 후 정리).
+import {
+  CardStudioPage45,
+  type StudioLabCoupon,
+  type StudioLabStore,
+} from "@/components/card-model/CardStudioPage45";
 import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 import type { AttachedProduct } from "@/components/create/types";
 // P3 — 구매 미리보기 미러: 손님 /d purchase 와 동일 변환(buildProductWidget) 재사용(단일 소스).
@@ -2665,7 +2672,13 @@ type StudioBuildLoaderData = {
   manageCoupons: CouponRow[];
   // P6-2 — 내 캐쉬(reward_ledger 누적, 구 /studio 셸 이식). 실패·미조회 = null(graceful).
   myRewards: number | null;
+  /** ST2b-1 — 신 스튜디오(FIX-9) 도킹 가용 카드 실카운트. 구 컴포넌트는 미소비(무영향). */
+  dockCount: number;
 };
+
+// ST2b-1 — 구 스튜디오 스위치백 파라미터(?legacy=1 → 구 CardStudioPage 렌더).
+//   1줄 복귀 경로 — 제거 시점: ST3 안정 후(이 상수·validateSearch 분기·StudioBuildSwitch 정리).
+const STUDIO_LEGACY_PARAM = "legacy";
 
 export const Route = createFileRoute("/_user/studio-build")({
   head: () => ({ meta: [{ title: "카드 스튜디오 — LinkDrop" }] }),
@@ -2673,9 +2686,14 @@ export const Route = createFileRoute("/_user/studio-build")({
   //   초기 buildMode 만 프리셋(switchMode 미호출·CardBody 거울 무영향). 비사업자 가드는 렌더가 담당.
   validateSearch: (
     search: Record<string, unknown>,
-  ): { purpose?: "정보" | "쿠폰" | "예약" | "구매" } => {
+  ): { purpose?: "정보" | "쿠폰" | "예약" | "구매"; legacy?: 1 } => {
     const p = search.purpose;
-    return p === "정보" || p === "쿠폰" || p === "예약" || p === "구매" ? { purpose: p } : {};
+    const out: { purpose?: "정보" | "쿠폰" | "예약" | "구매"; legacy?: 1 } =
+      p === "정보" || p === "쿠폰" || p === "예약" || p === "구매" ? { purpose: p } : {};
+    // ST2b-1 — ?legacy=1 스위치백(구 스튜디오). 제거 시점: ST3 안정 후.
+    const legacyRaw = search[STUDIO_LEGACY_PARAM];
+    if (legacyRaw === "1" || legacyRaw === 1) out.legacy = 1;
+    return out;
   },
   // S1 — 실데이터 로딩 길 + 비즈니스 게이트. 화면 하드코딩 치환은 다음 단계.
   //   인증은 부모 _user.tsx beforeLoad 담당 → 세션 throw 금지(graceful). 매장 없으면 등록 유도.
@@ -2686,6 +2704,7 @@ export const Route = createFileRoute("/_user/studio-build")({
       coupons: [],
       manageCoupons: [],
       myRewards: null,
+      dockCount: 0,
     };
     const supabase = await getAuthClient();
     if (!supabase) return empty;
@@ -2694,6 +2713,20 @@ export const Route = createFileRoute("/_user/studio-build")({
     const userId = sessionData.session?.user.id ?? null;
     if (!userId) return empty; // 인증은 _user.tsx 담당 — 여기선 throw 안 함(graceful).
 
+    // ST2b-1 — 도킹 가용 카드 실카운트(신 스튜디오 FIX-9 소비 — studio-lab loader 동일 쿼리).
+    //   가짜 숫자 금지 — 실패 시 0. 구 컴포넌트는 미소비(무영향).
+    let dockCount = 0;
+    try {
+      const { count } = await supabase
+        .from("info_drops")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "published")
+        .eq("is_public", true);
+      dockCount = count ?? 0;
+    } catch {
+      // graceful — 0 유지.
+    }
+
     // 비즈니스 여부 (create-wizard.tsx:77 패턴).
     const { data: isBusinessRaw } = await supabase.rpc("is_active_partner_owner", {
       _user_id: userId,
@@ -2701,11 +2734,17 @@ export const Route = createFileRoute("/_user/studio-build")({
     const isBusiness = Boolean(isBusinessRaw);
 
     // 내 매장 (partner.register.tsx:57-61 패턴) — display_name 은 다음 단계 표시용.
-    const { data: store } = await supabase
+    // ST2b-1 — facilities 동봉(신 스튜디오 FIX-10 시설 태그 재로드 — studio-lab select 동일).
+    //   types.ts 미반영 컬럼이라 select 는 as never + 결과 캐스트(studio-lab 정본 패턴).
+    //   구 컴포넌트는 초과 필드 무해.
+    const { data: storeRaw } = await supabase
       .from("partners")
-      .select("id, display_name, verification_status, contact_phone, address, reservation_url")
+      .select(
+        "id, display_name, verification_status, contact_phone, address, reservation_url, facilities" as never,
+      )
       .eq("owner_user_id", userId)
       .maybeSingle();
+    const store = (storeRaw as unknown as StudioBuildStore | null) ?? null;
 
     // P6-3(형님 확정 A안) — 전면 redirect 차단 → "잠금 열람"으로 완화: 비사업자(또는 매장
     //   미보유)도 진입 허용. 사업자 모드 잠금은 컴포넌트 게이트(switchMode·탭 Lock)가,
@@ -2723,7 +2762,7 @@ export const Route = createFileRoute("/_user/studio-build")({
       } catch {
         // graceful — null 유지
       }
-      return { ...empty, isBusiness, myRewards: lockedRewards };
+      return { ...empty, isBusiness, myRewards: lockedRewards, dockCount };
     }
 
     // 활성 쿠폰 (create-drop-wizard.tsx:401 패턴). get_active_store_coupons 는 types.ts 미반영.
@@ -2774,7 +2813,27 @@ export const Route = createFileRoute("/_user/studio-build")({
       // 조회 실패 — 헤더는 표기 생략 대신 0원 렌더 방지 위해 null 유지.
     }
 
-    return { isBusiness, store, coupons, manageCoupons, myRewards };
+    return { isBusiness, store, coupons, manageCoupons, myRewards, dockCount };
   },
-  component: CardStudioPage,
+  component: StudioBuildSwitch,
 });
+
+// ST2b-1 — 정식 교체 스위치: 기본 = 신 스튜디오(CardStudioPage45) / ?legacy=1 = 구(보존).
+//   진입 계약 무변경: ?purpose 딥링크·/studio 리다이렉트·비사업자 잠금 열람(loader 게이트)
+//   전부 신이 동일 수용(타입 호환: StudioBuildStore ⊂ StudioLabStore[facilities 옵셔널] ·
+//   StudioBuildCoupon ≡ StudioLabCoupon). 제거 시점: ST3 안정 후(구 렌더 경로 정리).
+function StudioBuildSwitch() {
+  const search = Route.useSearch();
+  const data = Route.useLoaderData();
+  if (search.legacy === 1) return <CardStudioPage />;
+  return (
+    <CardStudioPage45
+      isBusiness={data.isBusiness}
+      store={data.store as StudioLabStore | null}
+      coupons={data.coupons as StudioLabCoupon[]}
+      manageCoupons={data.manageCoupons}
+      dockCount={data.dockCount}
+      initialPurpose={search.purpose}
+    />
+  );
+}
