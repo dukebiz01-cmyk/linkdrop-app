@@ -192,6 +192,9 @@ const LINGO_MODE_LABELS: Record<string, string> = {
   reserve: "예약·쿠폰",
   commerce: "상품판매",
 };
+// LINGO-V2b C2 — setField 값 상한. READ 판정: title(cfgTitle)·한마디(cfgSubtitle) 입력칸과
+//   저장측(curator_message) 모두 명시 상한 부재 → 스펙 지시 100자 채택(둘 동일 준용).
+const LINGO_FIELD_MAX = 100;
 // LINGO-V2 — setField 표기 라벨(클라 실행 가능 필드 = title/subtitle 만 — 그 외는 정직 안내).
 const LINGO_FIELD_LABELS: Record<string, string> = {
   title: "제목",
@@ -2151,13 +2154,22 @@ export function CardStudioPage45({
   //   실행은 전부 기존 체인 재사용: equip() = 덱 장착(정직 게이트 포함) /
   //   switchMode() = FIX-35 전환 확인 게이트(우회 금지). 발행·결제·삭제 실행 경로는
   //   여기 자체가 없다(§13 — 서버도 해당 액션을 발행하지 않음).
-  //   undo = 1단계(가역 보장): 직전 applied·제목·한마디 스냅샷 복원.
+  //   undo = 1단계(가역 보장). LINGO-V2b D2 — 스냅샷 = "이번 적용이 실제 바꾼 키 + 이전 값"
+  //   목록만(전체 맵 복원 금지 — 손 수정분 보존). done 목록과 동일 소스에서 수집.
   //   (기존 정본 헬퍼 lingoUndo()[규칙 기반 장착 되돌리기]와 별개 — 이름 충돌 회피 lingoActUndo.)
   const [lingoActUndo, setLingoActUndo] = useState<{
-    applied: Record<string, boolean>;
-    title: string;
-    subtitle: string;
+    blocks: { id: string; prev: boolean }[];
+    fields: { field: "title" | "subtitle"; prev: string }[];
   } | null>(null);
+  // LINGO-V2b E2 — [적용] 연타 재진입 가드: 같은 제안 객체는 1회만 소비(동기 ref —
+  //   clearProposal 의 setState 비동기 공백을 막는다). 확인어 경로도 동일 소비 함수 경유.
+  const lingoConsumedRef = useRef<object | null>(null);
+  function consumeLingoProposal(p: { actions: LingoStudioAction[] }) {
+    if (lingoConsumedRef.current === p) return; // 연타 2회차 = no-op(이중 적용·토글 라스 방지).
+    lingoConsumedRef.current = p;
+    chat.clearProposal();
+    applyLingoActions(p.actions);
+  }
 
   // 액션 요약 라벨 — 액션 실값에서만 파생(재작성·창작 0).
   const lingoActionLabel = (a: LingoStudioAction): string => {
@@ -2199,11 +2211,9 @@ export function CardStudioPage45({
     const stale: string[] = [];
     const manual: string[] = [];
     const cur: Record<string, boolean> = { ...applied };
-    let undoSnap: { applied: Record<string, boolean>; title: string; subtitle: string } | null =
-      null;
-    const ensureUndo = () => {
-      if (!undoSnap) undoSnap = { applied: { ...applied }, title: cfgTitle, subtitle: cfgSubtitle };
-    };
+    // LINGO-V2b D2 — 정밀 undo 수집: 실제 바꾼 키의 이전 값만(전체 스냅샷 금지).
+    const undoBlocks: { id: string; prev: boolean }[] = [];
+    const undoFields: { field: "title" | "subtitle"; prev: string }[] = [];
     for (const a of actions) {
       if (a.type === "equip" || a.type === "detach") {
         const b = DECK.find((d) => d.id === a.blockId);
@@ -2213,20 +2223,34 @@ export function CardStudioPage45({
           stale.push(lingoActionLabel(a));
           continue;
         }
-        ensureUndo();
+        undoBlocks.push({ id: b.id, prev: !!cur[b.id] });
         equip(b); // 기존 장착 체인(정직 게이트·버스트 포함) — 신규 장착 경로 0.
         cur[b.id] = a.type === "equip";
         done.push(lingoActionLabel(a));
       } else if (a.type === "setField") {
         if (a.field === "title" || a.field === "subtitle") {
-          const v = (a.value ?? "").trim();
+          let v = (a.value ?? "").trim();
           if (!v) {
             stale.push(lingoActionLabel(a));
             continue;
           }
-          ensureUndo();
+          // LINGO-V2b C2 — 상한 절단. READ 판정: 입력칸·저장측 모두 명시 상한 부재 →
+          //   스펙 지시 100자 채택(title·subtitle 동일 준용). 초과 시 절단 + 정직 표기.
+          const over = v.length > LINGO_FIELD_MAX;
+          if (over) v = v.slice(0, LINGO_FIELD_MAX);
+          if (!undoFields.some((f) => f.field === a.field)) {
+            undoFields.push({
+              field: a.field,
+              prev: a.field === "title" ? cfgTitle : cfgSubtitle,
+            });
+          }
           (a.field === "title" ? setCfgTitle : setCfgSubtitle)(v);
-          done.push(lingoActionLabel(a));
+          done.push(
+            lingoActionLabel({ ...a, value: v }) +
+              (over
+                ? ` (${LINGO_FIELD_LABELS[a.field]}이 길어 ${LINGO_FIELD_MAX}자로 줄였어요)`
+                : ""),
+          );
         } else {
           // 클라 실행 경로가 없는 필드 — 임의 실행 금지(§13), 화면 조작으로 정직 안내.
           manual.push(lingoActionLabel(a));
@@ -2241,7 +2265,7 @@ export function CardStudioPage45({
       );
       return;
     }
-    if (undoSnap) setLingoActUndo(undoSnap);
+    setLingoActUndo({ blocks: undoBlocks, fields: undoFields });
     // 적용 결과 요약 — 실적용 값만(§13). 방향등(currentTarget)은 applied 파생이라 자연 이동.
     chat.notify(
       `적용했어요: ${done.join(" · ")}` +
@@ -2252,9 +2276,17 @@ export function CardStudioPage45({
 
   function undoLingoActions() {
     if (!lingoActUndo) return;
-    setApplied(lingoActUndo.applied);
-    setCfgTitle(lingoActUndo.title);
-    setCfgSubtitle(lingoActUndo.subtitle);
+    // LINGO-V2b D2 — 역연산 복원: 이번 적용이 바꾼 키만 이전 값으로(손 수정분 무접촉).
+    if (lingoActUndo.blocks.length > 0) {
+      setApplied((p) => {
+        const next = { ...p };
+        for (const b of lingoActUndo.blocks) next[b.id] = b.prev;
+        return next;
+      });
+    }
+    for (const f of lingoActUndo.fields) {
+      (f.field === "title" ? setCfgTitle : setCfgSubtitle)(f.prev);
+    }
     setLingoActUndo(null);
     chat.notify("방금 적용한 걸 되돌렸어요.");
   }
@@ -2277,8 +2309,7 @@ export function CardStudioPage45({
       const p = chat.proposal;
       setChatInput("");
       chatChannelRef.current = "text";
-      chat.clearProposal();
-      applyLingoActions(p.actions);
+      consumeLingoProposal(p); // LINGO-V2b E2 — 버튼과 동일 소비 함수(재진입 가드 공유).
       return;
     }
     voice.stopSpeaking(); // 새 입력 시작 = 낭독 즉시 중단.
@@ -4468,13 +4499,17 @@ export function CardStudioPage45({
                             ))}
                           </ul>
                         )}
+                        {/* LINGO-V2b B3 — 확인 방법 힌트(§13 톤 — 사실 안내 1줄). */}
+                        <p className="mt-1.5 text-[10.5px] font-medium text-[#A3A3A3] [word-break:keep-all]">
+                          적용하려면 [적용]을 누르거나 &ldquo;확인&rdquo;이라고 답해 주세요.
+                        </p>
                         <div className="mt-2 flex gap-1.5">
                           <button
                             type="button"
                             onClick={() => {
+                              // LINGO-V2b E2 — 소비는 동기 ref 가드 함수로(연타 이중 적용 방지).
                               const p = chat.proposal;
-                              chat.clearProposal();
-                              if (p) applyLingoActions(p.actions);
+                              if (p) consumeLingoProposal(p);
                             }}
                             className="flex h-9 flex-1 items-center justify-center rounded-lg text-[12px] font-bold text-white active:translate-y-px"
                             style={{ backgroundColor: accent }}

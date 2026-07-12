@@ -245,9 +245,26 @@ export function useLingoChat() {
                   label: s.label,
                   ...(typeof s.note === "string" && s.note ? { note: s.note } : {}),
                 }));
-              if (actions.length > 0) setProposal({ actions, steps });
+              if (actions.length > 0) {
+                setProposal({ actions, steps });
+              } else {
+                // LINGO-V2b A1(클라 커버분) — actions 이벤트는 실존하는데 파싱(safeJson null)·
+                //   재가드로 전량 소실: 정직 안내 1줄. 서버는 빈 actions 를 미전송하므로
+                //   이 분기 = 클라 측 소실 확정(텍스트 해석 기반 판정 아님 — 진실경계).
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: nextId(),
+                    role: "lingo",
+                    text: "제안을 불러오지 못했어요. 다시 한번 말씀해 주시면 새로 준비할게요",
+                  },
+                ]);
+              }
             } else if (ev.event === "done") {
               gotDone = true;
+              // LINGO-V2b A1 스텁 — 서버 done 프레임에 actions_sent 플래그 합의(41창 회신) 후:
+              //   actions_sent=true 인데 proposal 미수신(이벤트 자체 유실)이면 위와 동일한
+              //   정직 안내를 배선 예정. 현재는 이벤트 실존 케이스만 커버(추측 판정 금지).
             } else if (ev.event === "error") {
               const friendly =
                 (safeJson(ev.data)?.friendly as string | undefined) ?? FALLBACK_FRIENDLY;
