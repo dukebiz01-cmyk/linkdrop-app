@@ -60,7 +60,12 @@ import { getSupabase } from "@/lib/supabase";
 import { resizeToJpegBlob } from "@/lib/image-upload";
 import { shareToKakao } from "@/lib/kakao";
 import { CardModelBody } from "./CardModelBody";
-import { useLingoChat, useLingoVoice, type LingoContext } from "./useLingoChat";
+import {
+  useLingoChat,
+  useLingoVoice,
+  type LingoContext,
+  type LingoStudioAction,
+} from "./useLingoChat";
 import { CARD_MODEL_ACCENTS, fromStudioState } from "./card-model-adapters";
 // FIX-42 — 발행 게이트 발화 정본 + 결정 로직(순수 — stage·1상태1발화 dedupe 실측 가능).
 import { decideGateUtterance } from "./gate-notes45";
@@ -179,6 +184,28 @@ const CARD_BASE = "#FFFFFF";
 //   도달 강화 상품 미출시. UI(덱 카드·설정 폼)는 정본 그대로 유지.
 const GATED_BLOCK_IDS = new Set(["delivery", "review", "top", "boost", "marketing"]);
 const GATE_NOTICE = "이 기능은 오픈 준비 중이에요. 곧 열려요.";
+// LINGO-V2 — 확인어 정본 상수(정확 일치·클라 판정 — LLM 재해석 금지). trim 후 일치만 적용.
+const LINGO_CONFIRM_WORDS = new Set(["확인", "응", "좋아", "해줘"]);
+// LINGO-V2 — 모드 라벨(액션 요약 표기용 — 탭 라벨과 동일 어휘).
+const LINGO_MODE_LABELS: Record<string, string> = {
+  general: "퍼블릭",
+  reserve: "예약·쿠폰",
+  commerce: "상품판매",
+};
+// LINGO-V2 — setField 표기 라벨(클라 실행 가능 필드 = title/subtitle 만 — 그 외는 정직 안내).
+const LINGO_FIELD_LABELS: Record<string, string> = {
+  title: "제목",
+  subtitle: "한마디",
+  clip: "핵심구간",
+  date: "날짜",
+  time: "시간",
+  coupon: "쿠폰",
+  productName: "상품명",
+  productPrice: "가격",
+  dock: "도킹",
+  phone: "전화",
+  map: "지도",
+};
 // FIX-28 — 카드 배경색 UI 스위치(재도입 스위치 1개). false = 덱 카드·팔레트 숨김 +
 //   cardColor 기본값 고정 + 게시 시 색 저장 스킵. set_drop_card_color RPC·cardColor
 //   상태·팔레트 코드는 삭제 금지(보존) — true 로 되돌리면 그대로 재활성.
@@ -2093,13 +2120,167 @@ export function CardStudioPage45({
         ? { video_summary: `${selectedVideo?.title ?? "선택한 영상"} — ${aiKeyPoints.join(" / ")}` }
         : {}),
       ...(pickedPoints.length > 0 ? { key_points: pickedPoints } : {}),
+      // LINGO-V2 — 계약 v2 §1: 실제 덱 스냅샷(전송 시점 실상태 — 불일치 시 서버가 액션 무음
+      //   제거하므로 신선도가 생명). 스튜디오 표면 전용(이 함수 자체가 스튜디오에서만 호출됨 —
+      //   홈 등 비스튜디오 바이트 무변경). fields = 실값만(빈 값 미동봉).
+      studio: {
+        mode,
+        deck: DECK.map((b) => ({
+          id: b.id,
+          label: b.label,
+          applied: !!applied[b.id],
+          locked: GATED_BLOCK_IDS.has(b.id) || (!!b.isPaid && score < ENHANCE_UNLOCK),
+        })),
+        fields: {
+          ...(cfgTitle.trim() ? { title: cfgTitle.trim() } : {}),
+          ...(cfgSubtitle.trim() ? { subtitle: cfgSubtitle.trim() } : {}),
+          ...(confirmedClip ? { clip: confirmedClip.label } : {}),
+          ...(mode === "commerce" && effectiveProductName
+            ? { productName: effectiveProductName }
+            : {}),
+          ...(mode === "commerce" && effectiveProductPrice != null
+            ? { productPrice: String(effectiveProductPrice) }
+            : {}),
+          ...(selectedCoupon?.title ? { coupon: selectedCoupon.title } : {}),
+        },
+      },
     };
   }
+
+  // ── LINGO-V2 — 액션 적용(확인 게이트 통과 후에만) ────────────────────────
+  //   실행은 전부 기존 체인 재사용: equip() = 덱 장착(정직 게이트 포함) /
+  //   switchMode() = FIX-35 전환 확인 게이트(우회 금지). 발행·결제·삭제 실행 경로는
+  //   여기 자체가 없다(§13 — 서버도 해당 액션을 발행하지 않음).
+  //   undo = 1단계(가역 보장): 직전 applied·제목·한마디 스냅샷 복원.
+  //   (기존 정본 헬퍼 lingoUndo()[규칙 기반 장착 되돌리기]와 별개 — 이름 충돌 회피 lingoActUndo.)
+  const [lingoActUndo, setLingoActUndo] = useState<{
+    applied: Record<string, boolean>;
+    title: string;
+    subtitle: string;
+  } | null>(null);
+
+  // 액션 요약 라벨 — 액션 실값에서만 파생(재작성·창작 0).
+  const lingoActionLabel = (a: LingoStudioAction): string => {
+    if (a.type === "switchMode") {
+      return `모드 전환 → ${LINGO_MODE_LABELS[a.mode ?? ""] ?? a.mode ?? "?"}`;
+    }
+    if (a.type === "equip" || a.type === "detach") {
+      const b = DECK.find((d) => d.id === a.blockId);
+      return `${b?.label ?? a.blockId ?? "?"} ${a.type === "equip" ? "장착" : "해제"}`;
+    }
+    const v = (a.value ?? "").trim();
+    return `${LINGO_FIELD_LABELS[a.field ?? ""] ?? a.field ?? "?"}${v ? ` = "${v.slice(0, 40)}"` : ""}`;
+  };
+
+  function applyLingoActions(actions: LingoStudioAction[]) {
+    // switchMode 동반 시 — 전환은 전체 리셋(FIX-35 doSwitchMode)이라 다른 액션과 동시 실행
+    //   불가: 전환만 게이트로 보내고 나머지는 정직 안내(전환 뒤 재요청 유도).
+    const sw = actions.find((a) => a.type === "switchMode");
+    if (sw) {
+      const rest = actions.length - 1;
+      const valid =
+        (sw.mode === "general" || sw.mode === "reserve" || sw.mode === "commerce") &&
+        sw.mode !== mode;
+      if (valid) {
+        switchMode(sw.mode as BuildMode); // FIX-35 확인 게이트 경유(진행 중이면 확인 1회).
+        chat.notify(
+          rest > 0
+            ? "모드 전환부터 진행할게요 — 전환이 끝나면 나머지는 다시 말씀해 주세요."
+            : "모드 전환을 진행할게요 — 화면의 확인을 눌러 주세요.",
+        );
+      } else {
+        chat.notify("그 사이 바뀌었네요, 다시 볼까요?");
+      }
+      return;
+    }
+    // 최종 가드(41창 ②) — 스냅샷 이후 손으로 바뀐 대상은 적용 포기(정직). 로컬 미러(cur)로
+    //   같은 배치 안 순차 판정(setApplied 비동기 보완).
+    const done: string[] = [];
+    const stale: string[] = [];
+    const manual: string[] = [];
+    const cur: Record<string, boolean> = { ...applied };
+    let undoSnap: { applied: Record<string, boolean>; title: string; subtitle: string } | null =
+      null;
+    const ensureUndo = () => {
+      if (!undoSnap) undoSnap = { applied: { ...applied }, title: cfgTitle, subtitle: cfgSubtitle };
+    };
+    for (const a of actions) {
+      if (a.type === "equip" || a.type === "detach") {
+        const b = DECK.find((d) => d.id === a.blockId);
+        const locked = !b || GATED_BLOCK_IDS.has(b.id) || (!!b.isPaid && score < ENHANCE_UNLOCK);
+        const already = !!b && (a.type === "equip" ? cur[b.id] : !cur[b.id]);
+        if (!b || locked || already) {
+          stale.push(lingoActionLabel(a));
+          continue;
+        }
+        ensureUndo();
+        equip(b); // 기존 장착 체인(정직 게이트·버스트 포함) — 신규 장착 경로 0.
+        cur[b.id] = a.type === "equip";
+        done.push(lingoActionLabel(a));
+      } else if (a.type === "setField") {
+        if (a.field === "title" || a.field === "subtitle") {
+          const v = (a.value ?? "").trim();
+          if (!v) {
+            stale.push(lingoActionLabel(a));
+            continue;
+          }
+          ensureUndo();
+          (a.field === "title" ? setCfgTitle : setCfgSubtitle)(v);
+          done.push(lingoActionLabel(a));
+        } else {
+          // 클라 실행 경로가 없는 필드 — 임의 실행 금지(§13), 화면 조작으로 정직 안내.
+          manual.push(lingoActionLabel(a));
+        }
+      }
+    }
+    if (done.length === 0) {
+      chat.notify(
+        stale.length > 0
+          ? "그 사이 바뀌었네요, 다시 볼까요?"
+          : "이건 제가 직접 못 만져요 — 화면에서 해주시면 돼요.",
+      );
+      return;
+    }
+    if (undoSnap) setLingoActUndo(undoSnap);
+    // 적용 결과 요약 — 실적용 값만(§13). 방향등(currentTarget)은 applied 파생이라 자연 이동.
+    chat.notify(
+      `적용했어요: ${done.join(" · ")}` +
+        (stale.length > 0 ? `\n그 사이 바뀐 건 그대로 두었어요: ${stale.join(" · ")}` : "") +
+        (manual.length > 0 ? `\n직접 해주셔야 해요: ${manual.join(" · ")}` : ""),
+    );
+  }
+
+  function undoLingoActions() {
+    if (!lingoActUndo) return;
+    setApplied(lingoActUndo.applied);
+    setCfgTitle(lingoActUndo.title);
+    setCfgSubtitle(lingoActUndo.subtitle);
+    setLingoActUndo(null);
+    chat.notify("방금 적용한 걸 되돌렸어요.");
+  }
+
+  // LINGO-V2 — close 픽스(장기기억 트리거): 실동작 지점 실측 판정 = SPA 라우트 이탈 시
+  //   언마운트 cleanup 1곳. beforeunload/pagehide 는 unload 중 비동기 JWT 확보가 신뢰 불가
+  //   + 과호출 위험 → 제외. hook 이 세션 ref 를 비워 최대 1회(멱등 서버 + 클라 no-op).
+  const lingoCloseRef = useRef(chat.close);
+  lingoCloseRef.current = chat.close;
+  useEffect(() => () => lingoCloseRef.current(), []);
 
   // T5 — 전송(반이중): 낭독 중단 → 스트림 완주 → done 텍스트 낭독. 실패해도 제작 흐름 비차단.
   async function handleChatSend() {
     const text = chatInput.trim();
     if (!text || chat.streaming || voice.listening) return;
+    // LINGO-V2 — 확인어 게이트(정본 상수·정확 일치·클라 판정): 제안 대기 중 확인어면 서버
+    //   왕복 없이 적용. 음성도 같은 경로(STT→입력창→[전송] 반이중) — 동일 판정.
+    //   그 외 입력은 일반 대화로 전송(send 시작 시 제안 만료 — 스테일 적용 금지).
+    if (chat.proposal && LINGO_CONFIRM_WORDS.has(text)) {
+      const p = chat.proposal;
+      setChatInput("");
+      chatChannelRef.current = "text";
+      chat.clearProposal();
+      applyLingoActions(p.actions);
+      return;
+    }
     voice.stopSpeaking(); // 새 입력 시작 = 낭독 즉시 중단.
     const channel = chatChannelRef.current;
     setChatInput("");
@@ -4254,6 +4435,71 @@ export function CardStudioPage45({
                             ? "듣고 있어요 — 끝나면 입력창에 채워드려요"
                             : "말하는 중이에요 — 새로 입력하면 멈춰요")}
                       </p>
+                    )}
+                    {/* LINGO-V2 — 액션 제안 카드(확인 게이트): 제안 발화는 위 delta 말풍선
+                        그대로(재작성 0) — 카드는 액션 실값 요약 + [적용]/[안 할래요]만.
+                        확인어("확인"/"응"/"좋아"/"해줘") 입력·음성도 [적용]과 동일 판정
+                        (handleChatSend 게이트). 거절 = 조용히 닫기(재제안 금지는 서버 §13). */}
+                    {chat.proposal && !chat.streaming && (
+                      <div className="mt-2 rounded-xl bg-white p-2.5 [box-shadow:inset_0_0_0_1px_#ECECEE]">
+                        <p className="text-[11px] font-bold text-[#525252]">
+                          카드에 이렇게 반영할까요?
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {chat.proposal.actions.map((a, i) => (
+                            <span
+                              key={i}
+                              className="rounded-full bg-[#F4F4F5] px-2 py-1 text-[11px] font-semibold text-[#404040]"
+                            >
+                              {lingoActionLabel(a)}
+                            </span>
+                          ))}
+                        </div>
+                        {chat.proposal.steps.length > 0 && (
+                          <ul className="mt-1.5 space-y-0.5">
+                            {chat.proposal.steps.map((s, i) => (
+                              <li
+                                key={i}
+                                className="text-[10.5px] font-medium text-[#8A8A8A] [word-break:keep-all]"
+                              >
+                                {i + 1}. {s.label}
+                                {s.note ? ` — ${s.note}` : ""}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="mt-2 flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = chat.proposal;
+                              chat.clearProposal();
+                              if (p) applyLingoActions(p.actions);
+                            }}
+                            className="flex h-9 flex-1 items-center justify-center rounded-lg text-[12px] font-bold text-white active:translate-y-px"
+                            style={{ backgroundColor: accent }}
+                          >
+                            적용
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => chat.clearProposal()}
+                            className="flex h-9 flex-1 items-center justify-center rounded-lg bg-[#F4F4F5] text-[12px] font-bold text-[#525252]"
+                          >
+                            안 할래요
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {/* LINGO-V2 — 되돌리기 1단계(가역 보장): 마지막 적용 스냅샷 복원. */}
+                    {lingoActUndo && !chat.proposal && (
+                      <button
+                        type="button"
+                        onClick={undoLingoActions}
+                        className="mt-1.5 flex h-8 items-center rounded-lg bg-white px-2.5 text-[11px] font-bold text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                      >
+                        방금 적용 되돌리기
+                      </button>
                     )}
                     <div className="mt-2 flex items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5">
                       <input

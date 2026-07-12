@@ -7,8 +7,17 @@
 //
 // 음성 v1: Web Speech API 만(백엔드 무변경) — 반이중(듣기→입력창 확인→전송→낭독→중단).
 //   인식 결과는 자동 전송하지 않는다(오인식 방지 — 사용자가 [전송]으로 확인).
+//
+// LINGO-V2 — 계약 v2 클라 배선(정본 = lingo-chat Edge 소스 실측 — docs 계약 문서 부재 판정):
+//   · 요청: context.studio { mode, deck:[{id,label,applied,locked}], fields } 동봉(호출부 몫).
+//   · 수신: event:actions {actions:[{type,mode,blockId,field,value}], steps:[{label,note}]}
+//     — done 직전 최대 1회. type 4종(switchMode/equip/detach/setField) 외 클라 재가드 제거.
+//   · 제안은 확인 게이트 통과 전 상태로만 보관 — 새 send() 시작 시 만료(스테일 적용 금지).
+//   · 종료: {action:'close', session_id} 직invoke(verify_jwt·유저 세션 JWT) fire-and-forget
+//     1회 — 세션 ref 를 비워 중복 no-op(멱등 서버 + 클라 과호출 방지).
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getSupabase } from "@/lib/supabase";
 
 export type LingoMessage = {
   id: string;
@@ -20,6 +29,33 @@ export type LingoMessage = {
 // FIX-42 — 개입 강도 게이트(서버 lingo_user_state.stage 정본: guide→assist→standby).
 //   meta 이벤트에 이미 실려 오던 값(주석 :4)을 보관·노출만 추가 — 서버·전송 계약 무변경.
 export type LingoStage = "guide" | "assist" | "standby";
+
+// LINGO-V2 — 계약 v2 스키마(서버 persona.ts LingoStudioDeckItem/LingoStudioContext 와
+//   필드명 문자 단위 동일 — 이탈 금지).
+export type LingoStudioDeckItem = {
+  id: string;
+  label?: string;
+  applied?: boolean;
+  locked?: boolean;
+};
+export type LingoStudioSnapshot = {
+  mode?: string;
+  deck?: LingoStudioDeckItem[];
+  fields?: Record<string, string>;
+};
+// 서버 검증 화이트리스트와 동일: type 4종 / mode 3종 / field 11종은 서버가 재검증 —
+//   클라는 type 4종만 경량 재가드(그 외 필드는 적용 시점 최종 가드가 판정).
+export type LingoStudioAction = {
+  type: "switchMode" | "equip" | "detach" | "setField";
+  mode?: string;
+  blockId?: string;
+  field?: string;
+  value?: string;
+};
+export type LingoActionProposal = {
+  actions: LingoStudioAction[];
+  steps: { label: string; note?: string }[];
+};
 
 export type LingoContext = {
   studio_state: {
@@ -35,9 +71,14 @@ export type LingoContext = {
   };
   video_summary?: string;
   key_points?: string[];
+  /** LINGO-V2 — 계약 v2 §1: 실제 덱 스냅샷(전송 시점 실상태). 스튜디오 표면에서만 동봉. */
+  studio?: LingoStudioSnapshot;
 };
 
 const FALLBACK_FRIENDLY = "죄송해요, 지금 답을 만들지 못했어요. 잠시 후 다시 물어봐 주세요.";
+
+// LINGO-V2 — 클라 경량 재가드(서버 §5 재검증이 1차 — 여기선 type 4종·8개 상한만).
+const LINGO_ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField"]);
 
 // id — 세션 내 유일이면 충분(모듈 카운터, 시계 불요).
 let msgSeq = 0;
@@ -70,6 +111,9 @@ export function useLingoChat() {
   const [streaming, setStreaming] = useState(false);
   // FIX-42 — meta.stage 수신값(대화 전 = null). 소비처(능동 안내)가 기본값 정책을 정한다.
   const [stage, setStage] = useState<LingoStage | null>(null);
+  // LINGO-V2 — 액션 제안(event:actions 수신분). 확인 게이트 통과 전까지만 유효 —
+  //   새 send() 시작 시 만료(스테일 액션 적용 금지). 거절([안 할래요]) = clearProposal.
+  const [proposal, setProposal] = useState<LingoActionProposal | null>(null);
   const streamingRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
   const acRef = useRef<AbortController | null>(null);
@@ -87,6 +131,7 @@ export function useLingoChat() {
   const send = useCallback(
     async (message: string, channel: "text" | "voice", context: LingoContext): Promise<string | null> => {
       if (streamingRef.current) return null;
+      setProposal(null); // LINGO-V2 — 새 대화 시작 = 미확인 제안 만료(스테일 적용 금지).
       const botId = nextId();
       setMessages((prev) => [
         ...prev,
@@ -174,6 +219,33 @@ export function useLingoChat() {
                 acc += d.text;
                 appendBot(d.text);
               }
+            } else if (ev.event === "actions") {
+              // LINGO-V2 — 액션 제안 수신(서버 §5 재검증 통과분). 클라 경량 재가드:
+              //   type 4종 외 제거 + 8개 상한. 빈 배열 = 제안 없음(카드 미노출).
+              const d = safeJson(ev.data);
+              const rawActions = Array.isArray(d?.actions) ? (d.actions as unknown[]) : [];
+              const actions: LingoStudioAction[] = [];
+              for (const raw of rawActions) {
+                if (actions.length >= 8) break;
+                if (!raw || typeof raw !== "object") continue;
+                const a = raw as LingoStudioAction;
+                if (typeof a.type !== "string" || !LINGO_ACTION_TYPES.has(a.type)) continue;
+                actions.push(a);
+              }
+              const rawSteps = Array.isArray(d?.steps) ? (d.steps as unknown[]) : [];
+              const steps = rawSteps
+                .filter(
+                  (s): s is { label: string; note?: unknown } =>
+                    !!s &&
+                    typeof s === "object" &&
+                    typeof (s as { label?: unknown }).label === "string",
+                )
+                .slice(0, 5)
+                .map((s) => ({
+                  label: s.label,
+                  ...(typeof s.note === "string" && s.note ? { note: s.note } : {}),
+                }));
+              if (actions.length > 0) setProposal({ actions, steps });
             } else if (ev.event === "done") {
               gotDone = true;
             } else if (ev.event === "error") {
@@ -209,7 +281,35 @@ export function useLingoChat() {
     [],
   );
 
-  return { messages, streaming, stage, seed, send, stop };
+  // LINGO-V2 — 제안 소거([안 할래요]·적용 후). 거절 시 재제안 금지는 서버 몫(§13) —
+  //   클라는 조용히 닫기만(재요청·재해석 없음).
+  const clearProposal = useCallback(() => setProposal(null), []);
+
+  // LINGO-V2 — 로컬 안내 말풍선(서버 왕복 0): 적용 결과 요약·정직 안내 전용.
+  //   §13 재작성 아님 — 호출부가 실적용 값만 담는다(제안 발화는 delta 그대로 유지).
+  const notify = useCallback((text: string) => {
+    setMessages((prev) => [...prev, { id: nextId(), role: "lingo", text }]);
+  }, []);
+
+  // LINGO-V2 — 종료(장기기억 트리거): {action:'close', session_id} 를 lingo-chat Edge 에
+  //   직invoke(verify_jwt — 유저 세션 JWT 자동 첨부, FIX-44 실측 패턴). fire-and-forget.
+  //   중계 라우트(/api/lingo/chat)는 message 필수라 close 를 통과 못 시킴 — 직호출이 유일 경로
+  //   (서버·라우트 무수정 제약). 세션 ref 를 먼저 비워 재호출 no-op(과호출 금지) +
+  //   다음 대화는 새 세션(closed 세션 재사용 방지).
+  const close = useCallback(() => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    sessionIdRef.current = null;
+    try {
+      void getSupabase()
+        .functions.invoke("lingo-chat", { body: { action: "close", session_id: sid } })
+        .catch(() => {});
+    } catch {
+      // 미설정 환경(getSupabase throw) — 종료는 조용히 생략.
+    }
+  }, []);
+
+  return { messages, streaming, stage, proposal, seed, send, stop, clearProposal, notify, close };
 }
 
 // ── 음성 반이중 v1 — Web Speech API (지원 감지, 미지원 시 정직 안내) ──────────────
