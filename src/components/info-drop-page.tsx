@@ -68,7 +68,13 @@ import { CardBody } from "@/components/card/CardBody";
 // Phase 1-C — 1-A 배지 재사용(수신카드 주입). 순환 없음: ShareCardTile 트리(home-page→drop-feed-card)는 본 파일 미참조.
 import { TimerBadge, StockMeta } from "@/components/home/ShareCardTile";
 // ST2b-2a A2 — 판매기간 D-day 라벨(FIX-39 booster45 순수 모듈 재사용 — 조회 시점 계산).
-import { ddayLabel } from "@/components/card-model/booster45";
+import { ddayLabel, buildGroupBuyView } from "@/components/card-model/booster45";
+// ST2b-2b B1 — 재입고 알림(FIX-41) 실배선 — 락 문구 정본 사용.
+import {
+  requestRestockAlert,
+  RESTOCK_ALERT_CONFIRM_COPY,
+  RESTOCK_ALERT_DUPLICATE_COPY,
+} from "@/lib/restock-alerts";
 
 // SM-4 — 여정 렌더부 공용 추출분(share-journey.tsx). 타입·타임라인 모두 공용 소비.
 import { ShareJourneyTimeline, type ShareJourneyRpcNode } from "@/components/share-journey";
@@ -1714,6 +1720,21 @@ export function InfoDropPage({
           </div>
         ) : null}
 
+        {/* ST2b-2b B1 — 재입고 알림(FIX-41 실배선): 품절(remaining_stock 0)일 때만.
+            비로그인 = 로그인 유도 정직 문구 · 완료 카피 = restock-alerts 락 문구. */}
+        {resolvedVariant === "purchase" &&
+        commerce?.selfUpload &&
+        remainingStock != null &&
+        remainingStock <= 0 ? (
+          <RestockAlertButton dropId={dropId} />
+        ) : null}
+
+        {/* ST2b-2b B2 — 공동구매(FIX-40 순수 모듈 buildGroupBuyView 소비): groupBuy 저장분만.
+            진행률 = 실집계 입력 부재 → 미렌더(가짜 집계 금지) · 마감 = 조회 시점 D-day. */}
+        {resolvedVariant === "purchase" && commerce?.groupBuy ? (
+          <GroupBuySection groupBuy={commerce.groupBuy} />
+        ) : null}
+
         {/* C13 S3(🅱) — purchase 한마디는 위젯 아래(스튜디오 tagline 슬롯=위젯 아래와 정합). */}
         {resolvedVariant === "purchase" && makerMessage && (
           <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium italic leading-relaxed tracking-ko text-text-muted">
@@ -2347,5 +2368,74 @@ function SaleDdayBadge({ saleEndIso }: { saleEndIso: string }) {
     <span className="inline-flex shrink-0 items-center rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white">
       {ddayLabel(saleEndIso, today)}
     </span>
+  );
+}
+
+// ST2b-2b B1 — 재입고 알림 버튼(FIX-41 restock-alerts 실배선). 상태 4분기 정직 표기:
+//   완료/중복 = 락 문구 · 비로그인 = 로그인 유도 · 오류 = 재시도 안내. 서버 발신 없음(v1).
+function RestockAlertButton({ dropId }: { dropId: string }) {
+  const [phase, setPhase] = useState<"idle" | "busy" | "created" | "duplicate" | "unauthenticated" | "error">("idle");
+  if (phase === "created" || phase === "duplicate") {
+    return (
+      <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium leading-relaxed tracking-ko text-text-muted [word-break:keep-all]">
+        {phase === "duplicate" ? RESTOCK_ALERT_DUPLICATE_COPY : RESTOCK_ALERT_CONFIRM_COPY}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        disabled={phase === "busy"}
+        onClick={() => {
+          setPhase("busy");
+          void requestRestockAlert(dropId).then((r) =>
+            setPhase(r === "created" ? "created" : r === "duplicate" ? "duplicate" : r === "unauthenticated" ? "unauthenticated" : "error"),
+          );
+        }}
+        className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-border bg-bg text-sm font-semibold tracking-ko text-text-strong hover:border-text-muted disabled:opacity-60"
+      >
+        재입고 알림 받기
+      </button>
+      {phase === "unauthenticated" ? (
+        <p className="text-xs font-medium tracking-ko text-text-subtle">
+          로그인하면 재입고 알림을 받을 수 있어요.
+        </p>
+      ) : null}
+      {phase === "error" ? (
+        <p className="text-xs font-medium tracking-ko text-text-subtle">
+          지금은 신청이 안 됐어요 — 잠시 후 다시 시도해 주세요.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ST2b-2b B2 — 공동구매 표시(FIX-40 buildGroupBuyView — 사실만: 조건·고지·취소 경로).
+//   진행률(joinedCount)은 실집계 입력 부재 → null(미렌더 — 가짜 집계 금지). 마감 = 조회 시점.
+function GroupBuySection({
+  groupBuy,
+}: {
+  groupBuy: { targetN: number; priceKrw: number; deadline: string | null };
+}) {
+  const view = buildGroupBuyView({
+    targetN: groupBuy.targetN,
+    achievedPriceKrw: groupBuy.priceKrw,
+    joinedCount: null,
+  });
+  if (!view) return null;
+  return (
+    <section className="space-y-2 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-bold tracking-ko text-text-strong">
+          공동구매 · {view.offerLine}
+        </p>
+        {groupBuy.deadline ? <SaleDdayBadge saleEndIso={groupBuy.deadline} /> : null}
+      </div>
+      <p className="text-xs font-medium leading-relaxed tracking-ko text-text-muted [word-break:keep-all]">
+        {view.noticeLine}
+      </p>
+      <p className="text-xs font-medium tracking-ko text-text-subtle">{view.cancelLine}</p>
+    </section>
   );
 }
