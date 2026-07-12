@@ -30,11 +30,28 @@ if (typeof window !== "undefined") {
 
 export type InstallState = "installable" | "installed" | "kakao" | "unsupported";
 
+// FIX-47 — 인앱 WebView 판정(공용 단일 정의 — PWA 카톡 안내·음성 게이트가 함께 소비,
+//   중복 정의 금지). 마이크(getUserMedia/Web Speech)가 차단·권한 루프에 빠지는 알려진
+//   인앱 브라우저 목록. SSR = null(호출부가 마운트 후 판정 — hydration 안전).
+export type InAppBrowser = "kakao" | "naver" | "instagram" | "facebook" | "line" | "daum";
+
+export function getInAppBrowser(): InAppBrowser | null {
+  if (typeof window === "undefined") return null;
+  const ua = window.navigator.userAgent;
+  if (/KAKAOTALK/i.test(ua)) return "kakao";
+  if (/NAVER\(inapp/i.test(ua)) return "naver";
+  if (/Instagram/i.test(ua)) return "instagram";
+  if (/FBAN|FBAV/i.test(ua)) return "facebook";
+  if (/\bLine\//i.test(ua)) return "line";
+  if (/DaumApps/i.test(ua)) return "daum";
+  return null;
+}
+
 /** 환경 판정 — installed > kakao > installable > unsupported(iOS Safari 포함). */
 export function getInstallState(): InstallState {
   if (typeof window === "undefined") return "unsupported";
   if (installed || window.matchMedia?.("(display-mode: standalone)")?.matches) return "installed";
-  if (/KAKAOTALK/i.test(window.navigator.userAgent)) return "kakao";
+  if (getInAppBrowser() === "kakao") return "kakao"; // FIX-47 — 공용 판정 재사용(동작 동일).
   if (deferredPrompt) return "installable";
   return "unsupported";
 }

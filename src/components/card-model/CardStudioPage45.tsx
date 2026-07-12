@@ -74,6 +74,8 @@ import { CARD_MODEL_ACCENTS, fromStudioState } from "./card-model-adapters";
 import { decideGateUtterance } from "./gate-notes45";
 // FIX-43 — 링고 음성 공용 모듈(홈 재사용 대비): 마이크 56px 분리 버튼 + 듣는 중 파형 패널.
 import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
+// FIX-47 — 인앱 WebView 음성 정직 게이트(pwa-install 공용 판정 재사용 — 중복 정의 0).
+import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
 import { buildBoosterChips, buildGroupBuyView, stockUnitLabelFrom } from "./booster45";
@@ -709,6 +711,13 @@ export function CardStudioPage45({
   // T5 — 링고 대화 실배선(41창 백엔드 계약): SSE 채팅 + 음성 반이중 v1.
   const chat = useLingoChat();
   const voice = useLingoVoice();
+  // FIX-47 — 인앱 WebView(카톡 등) 음성 정직 게이트: 마이크 진입점 미렌더(가짜 버튼·권한
+  //   루프 원천 차단) + 안내 1줄. 마운트 후 판정(SSR=null — hydration 안전). 텍스트 대화
+  //   무접촉. 일반 브라우저 권한 거부는 기존 폴백(useLingoVoice notice)과 별개 게이트.
+  const [inAppNoMic, setInAppNoMic] = useState<InAppBrowser | null>(null);
+  useEffect(() => {
+    setInAppNoMic(getInAppBrowser());
+  }, []);
   const [chatInput, setChatInput] = useState("");
   // 입력 채널 — 마이크 결과로 채워지면 "voice", 손으로 고치기 시작하면 "text"로 복귀.
   const chatChannelRef = useRef<"text" | "voice">("text");
@@ -4526,6 +4535,15 @@ export function CardStudioPage45({
                         ))}
                       </div>
                     )}
+                    {/* FIX-47 — 인앱 WebView 음성 게이트 안내 1줄(카톡 = 락 문구 원문 · 기타
+                        인앱 = 동일 톤 일반형). 텍스트 대화는 그대로 — 음성만 게이트. */}
+                    {inAppNoMic && (
+                      <p className="mt-1.5 px-1 text-[11px] font-medium text-[#8A8A8A] [word-break:keep-all]">
+                        {inAppNoMic === "kakao"
+                          ? "카카오톡 브라우저에서는 음성을 쓸 수 없어요. 오른쪽 위 메뉴에서 '다른 브라우저로 열기'를 누르면 쓸 수 있어요"
+                          : "앱 속 브라우저에서는 음성을 쓸 수 없어요 — 크롬·삼성인터넷으로 열면 쓸 수 있어요"}
+                      </p>
+                    )}
                     {/* 음성 상태 1줄 — 미지원·인식 폴백 안내 / 듣는 중 / 말하는 중 (일반 톤). */}
                     {(voice.notice || voice.listening || voice.speaking) && (
                       <p className="mt-1.5 px-1 text-[11px] font-medium text-[#8A8A8A]">
@@ -4635,18 +4653,21 @@ export function CardStudioPage45({
                           <VolumeX className="h-4 w-4 text-[#A3A3A3]" strokeWidth={2.25} />
                         )}
                       </button>
-                      <button
-                        type="button"
-                        aria-label={voice.listening ? "듣기 중지" : "음성으로 말하기"}
-                        onClick={handleMicTap}
-                        disabled={chat.streaming}
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full active:scale-95 disabled:opacity-40 ${
-                          voice.listening ? "animate-pulse text-white" : "bg-white text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5]"
-                        }`}
-                        style={voice.listening ? { backgroundColor: accent } : undefined}
-                      >
-                        <Mic className="h-4 w-4" strokeWidth={2.25} />
-                      </button>
+                      {/* FIX-47 — 인앱 WebView 음성 게이트: 마이크 버튼 미렌더(권한 루프 차단). */}
+                      {!inAppNoMic && (
+                        <button
+                          type="button"
+                          aria-label={voice.listening ? "듣기 중지" : "음성으로 말하기"}
+                          onClick={handleMicTap}
+                          disabled={chat.streaming}
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full active:scale-95 disabled:opacity-40 ${
+                            voice.listening ? "animate-pulse text-white" : "bg-white text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5]"
+                          }`}
+                          style={voice.listening ? { backgroundColor: accent } : undefined}
+                        >
+                          <Mic className="h-4 w-4" strokeWidth={2.25} />
+                        </button>
+                      )}
                       {chat.streaming ? (
                         <button
                           type="button"
@@ -4847,15 +4868,18 @@ export function CardStudioPage45({
                 </button>
               )}
               {/* FIX-43 — 마이크 분리 orb(56px): 캡슐의 absolute 자식 = 드래그 시 한 몸 이동
-                  (fabPos 그대로 — 별도 저장 키 0). 탭 = 듣는 중 파형 패널로 펼침. */}
-              <span className="absolute -top-16 right-0">
-                <VoiceOrb45
-                  listening={voice.listening}
-                  disabled={chat.streaming}
-                  accent={accent}
-                  onTap={handleOrbTap}
-                />
-              </span>
+                  (fabPos 그대로 — 별도 저장 키 0). 탭 = 듣는 중 파형 패널로 펼침.
+                  FIX-47 — 인앱 WebView(카톡 등)에선 미렌더(음성 정직 게이트). */}
+              {!inAppNoMic && (
+                <span className="absolute -top-16 right-0">
+                  <VoiceOrb45
+                    listening={voice.listening}
+                    disabled={chat.streaming}
+                    accent={accent}
+                    onTap={handleOrbTap}
+                  />
+                </span>
+              )}
             </div>
           )}
 
