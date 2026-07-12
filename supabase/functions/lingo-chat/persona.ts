@@ -115,17 +115,15 @@ const BLOCK_P = `[성과 진단 규칙]
 
 // [성과 실측] 동적 블록 — RPC 반환 JSON 실값 그대로(가공·요약 금지). 실패 = 정직 가드.
 function buildPerformanceBlock(perf: LingoPerformance): string {
+  // T-D 핫픽스 — 여러 줄 한국어 문구는 템플릿 리터럴(백틱)로 통일(이스케이프 실수 재발 방지).
   if (!perf.ok) {
-    return (
-      "[성과 실측]
-성과 데이터를 불러오지 못함 — 지어내지 말고 " +
-      "'지금 성과를 불러오지 못했어요. 잠시 뒤 다시 볼까요?'로 정직하게 답할 것"
-    );
+    return `[성과 실측]
+성과 데이터를 불러오지 못함 — 지어내지 말고 '지금 성과를 불러오지 못했어요. 잠시 뒤 다시 볼까요?'로 정직하게 답할 것`;
   }
-  return BLOCK_P + "
+  return `${BLOCK_P}
 
 [성과 실측]
-" + JSON.stringify(perf.metrics);
+${JSON.stringify(perf.metrics)}`;
 }
 
 // ── [블록 G — 출력 규칙 (고정)] ──────────────────────────────────────────
