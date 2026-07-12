@@ -101,8 +101,48 @@ function parseUnitToKg(unit: string): number | null {
   return m[2].toLowerCase() === "g" ? n / 1000 : n;
 }
 
-// DR2-ⓑ 4점 앵커 — 값 크기 순 배치용 점 모델. glyph 는 고정(도매● ▲내가격 ◇인터넷 ○소매).
-type AnchorPoint = { key: string; glyph: string; label: string; value: number };
+// DR2-ⓑ 4점 앵커 — 값 크기 순 배치용 점 모델. 도형은 key 고정(도매=채운 원 · 내가격=채운
+//   삼각형 · 인터넷=마름모 테두리 · 소매=원 테두리).
+//   FIX-45c — 텍스트 특수문자(●▲◇○) → 인라인 SVG 도형(폰트 의존 제거 · 의미 무변경).
+//   12px 고정 + 모양·색 병행(내 가격 = accent 삼각형 / 소스 = muted) — currentColor 상속.
+type AnchorPoint = { key: string; label: string; value: number };
+
+function AnchorGlyph({ kind }: { kind: string }) {
+  const common = {
+    width: 12,
+    height: 12,
+    viewBox: "0 0 12 12",
+    "aria-hidden": true,
+    className: "block",
+  } as const;
+  if (kind === "mine") {
+    return (
+      <svg {...common}>
+        <path d="M6 1.2 L11 10.8 H1 Z" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (kind === "wholesale") {
+    return (
+      <svg {...common}>
+        <circle cx="6" cy="6" r="4.5" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (kind === "online") {
+    return (
+      <svg {...common}>
+        <path d="M6 1.2 L10.8 6 L6 10.8 L1.2 6 Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    );
+  }
+  // retail — 원 테두리(○).
+  return (
+    <svg {...common}>
+      <circle cx="6" cy="6" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
 // "2026-07-03" → "7/3"
 function fmtRefDate(iso: string): string {
   const m = Number(iso.slice(5, 7));
@@ -271,17 +311,16 @@ export function PriceBandAdvisor({
   const anchorPoints: AnchorPoint[] = [];
   if (totalKg != null && totalKg > 0 && myPriceKrw != null && myPriceKrw > 0) {
     if (w) {
-      anchorPoints.push({ key: "wholesale", glyph: "●", label: "도매", value: w.avg * totalKg });
+      anchorPoints.push({ key: "wholesale", label: "도매", value: w.avg * totalKg });
     }
-    anchorPoints.push({ key: "mine", glyph: "▲", label: "내 가격", value: myPriceKrw });
-    // F4/T3a-ⓑ — ◇인터넷 점 = 번역 가능한 축의 평균값(3값 상세는 표 행에 — 바 라벨 과밀 금지).
+    anchorPoints.push({ key: "mine", label: "내 가격", value: myPriceKrw });
+    // F4/T3a-ⓑ — 인터넷 점(마름모) = 번역 가능한 축의 평균값(3값 상세는 표 행에 — 바 라벨 과밀 금지).
     if (internetAnchorValue != null) {
-      anchorPoints.push({ key: "online", glyph: "◇", label: "인터넷", value: internetAnchorValue });
+      anchorPoints.push({ key: "online", label: "인터넷", value: internetAnchorValue });
     }
     if (retailKg) {
       anchorPoints.push({
         key: "retail",
-        glyph: "○",
         label: "소매",
         value: ((retailKg.min + retailKg.max) / 2) * totalKg,
       });
@@ -587,7 +626,8 @@ export function PriceBandAdvisor({
         ) : null}
       </div>
 
-      {/* DR2-ⓑ 4점 앵커 — 정적 위치 바(도매● ▲내가격 ◇인터넷 ○소매 · 값 크기 순). */}
+      {/* DR2-ⓑ 4점 앵커 — 정적 위치 바(도매·내가격·인터넷·소매 SVG 도형 · 값 크기 순).
+          FIX-45c — 글리프 = AnchorGlyph 인라인 SVG(폰트 의존 0 · 색은 기존 클래스 currentColor). */}
       {showAnchor ? (
         <div className="space-y-1 pt-1">
           <div className="relative h-6">
@@ -596,11 +636,11 @@ export function PriceBandAdvisor({
               <span
                 key={p.key}
                 style={{ left: `${p.pos}%` }}
-                className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-[13px] ${
+                className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${
                   p.key === "mine" ? "text-accent" : "text-text-muted"
                 }`}
               >
-                {p.glyph}
+                <AnchorGlyph kind={p.key} />
               </span>
             ))}
           </div>

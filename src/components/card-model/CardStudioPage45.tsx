@@ -68,7 +68,7 @@ import { decideGateUtterance } from "./gate-notes45";
 import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
-import { buildBoosterChips, buildGroupBuyView } from "./booster45";
+import { buildBoosterChips, buildGroupBuyView, stockUnitLabelFrom } from "./booster45";
 import { SHIP_STAGES, type CardModel } from "./card-model.types";
 
 // =============================================================================
@@ -683,6 +683,8 @@ export function CardStudioPage45({
   // FIX-15 — 상품 구성 메타(unit_label) → 미리보기 칩(미주입=미렌더).
   // FIX-39 — 부스터 실값 미러: 한정 수량(payload.stock_limit)·무료배송(block_data.free_ship).
   const [productStockLimit, setProductStockLimit] = useState<number | null>(null);
+  // FIX-45c — 남은수량 단위 미러(기존 저장 키 sale_unit/pack_type 파생만 — 신규 저장 키 0). 기본 '개'.
+  const [productStockUnit, setProductStockUnit] = useState<string>("개");
   const [productFreeShip, setProductFreeShip] = useState(false);
   // FIX-40 — 공동구매 미러(block_data.group_buy_target_n/price_krw — 유효 저장분만).
   const [productGroupBuy, setProductGroupBuy] = useState<{
@@ -1597,6 +1599,16 @@ export function CardStudioPage45({
     setProductShipDateSet(!!(bd?.harvest_date || bd?.ship_date));
     // FIX-39 — 부스터 실값 미러(등록 payload 기존 키 재사용 — 신규 저장 키 0).
     setProductStockLimit(payload.stock_limit ?? null);
+    // FIX-45c — 남은수량 단위 = 판매 구성 동기화(기존 저장 키 sale_unit/pack_type 파생만).
+    const su = payload.blocks?.[0]?.block_data as
+      | { sale_unit?: unknown; pack_type?: unknown }
+      | undefined;
+    setProductStockUnit(
+      stockUnitLabelFrom(
+        typeof su?.sale_unit === "string" ? su.sale_unit : null,
+        typeof su?.pack_type === "string" ? su.pack_type : null,
+      ),
+    );
     setProductFreeShip(bd?.free_ship === true);
     // FIX-40 — 공동구매 미러(폼이 유효 통과분만 저장 — 여기선 존재 확인만).
     const gb = payload.blocks?.[0]?.block_data as
@@ -1871,6 +1883,8 @@ export function CardStudioPage45({
     const couponOn = !!applied["coupon"] && !!selectedCoupon;
     return buildBoosterChips({
       stockLimit: productStockLimit,
+      // FIX-45c — 남은수량 단위 = 판매 구성 라벨("N박스 남음") — 기본 '개' 하위호환.
+      stockUnitLabel: productStockUnit,
       saleEndIso: end
         ? `${end.year}-${String(end.month).padStart(2, "0")}-${String(end.day).padStart(2, "0")}`
         : null,
@@ -1887,7 +1901,7 @@ export function CardStudioPage45({
         freeShipping: productFreeShip,
       },
     });
-  }, [mode, applied, dateList, saleEndIdx, selectedCoupon, productStockLimit, productFreeShip, productGroupBuy]);
+  }, [mode, applied, dateList, saleEndIdx, selectedCoupon, productStockLimit, productStockUnit, productFreeShip, productGroupBuy]);
 
   // FIX-40 — 공동구매 표시(순수 모듈): 참여 M = preorders 실집계 입력 없음(미발행 스튜디오)
   //   → null = 진행률 미렌더(조건·고지만). /d 실집계 주입은 ST2b — 같은 모듈 소비.

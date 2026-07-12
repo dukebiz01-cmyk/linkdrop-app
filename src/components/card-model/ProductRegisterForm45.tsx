@@ -209,6 +209,24 @@ const TYPE_COPY: Record<
 };
 
 const onlyDigits = (v: string) => v.replace(/[^0-9]/g, "");
+// FIX-45c — 한글 받침 유무 → 조사(이나/나) 선택. 마지막 글자가 한글이 아니면 '나'.
+const josaIna = (w: string) => {
+  const c = w.charCodeAt(w.length - 1);
+  return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 !== 0 ? "이나" : "나";
+};
+// FIX-45c — 판매 수량 라벨·단위 파생(A안 · 순수): 라벨·단위가 판매 구성을 따라감.
+//   저장(stock_limit)은 구성 단위 개수 그대로(키·값 변환 금지) — 표기만 동기화.
+//   weight="총 몇 kg" / fresh box=포장 단위(박스·망·봉·포대·묶음) / 낱개='개' / 그 외 UNIT_LABELS.
+export function qtyUnitMeta45(
+  type: ProductType45,
+  saleUnit: SaleUnit45,
+  freshPackLabel: string,
+): { unit: string; label: string } {
+  if (saleUnit === "weight") return { unit: "kg", label: "총 몇 kg 판매하시겠어요?" };
+  const unit =
+    saleUnit === "unit" ? "개" : type === "fresh" ? freshPackLabel : UNIT_LABELS[saleUnit];
+  return { unit, label: `몇 ${unit}${josaIna(unit)} 판매하시겠어요?` };
+}
 // FIX-36 — 구 profitOf(판매가−원가만) 제거: 이익 계산은 computeProfitReceipt(정본) 단일 호출.
 // KAMIS 검색 정규화 — 기존 CAT-2 규칙 동일(공백·괄호 제거 + 소문자).
 function normalizeItemText(s: string): string {
@@ -558,6 +576,32 @@ export function ProductRegisterForm45({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const isBundle = type !== "fresh" && BUNDLE_UNITS.has(saleUnit);
+
+  // FIX-45c — 판매 수량 라벨·단위(판매 구성 동기화) + 환산 확인 1줄.
+  //   환산 = 사장님 선언값 곱셈만(수량 × 선언 단위 무게) — 선언 무게 없으면 미렌더(추정 금지).
+  //   weight 모드는 입력 자체가 kg — 환산 불필요(미렌더).
+  const qtyMeta = qtyUnitMeta45(type, saleUnit, freshPackLabel);
+  const qtyNum = quantity && Number(quantity) >= 1 ? Math.floor(Number(quantity)) : null;
+  const qtyPerUnitKg =
+    type === "fresh"
+      ? weightUnknown || saleUnit === "weight"
+        ? null
+        : saleUnit === "box"
+          ? totalWeight && Number(totalWeight) > 0
+            ? Number(totalWeight)
+            : null
+          : singleWeightG && Number(singleWeightG) > 0
+            ? Number(singleWeightG) / 1000
+            : null
+      : isBundle && unitWeight && Number(unitWeight) > 0
+        ? Number(unitWeight)
+        : null;
+  const qtyConversionLine =
+    qtyNum != null && qtyPerUnitKg != null
+      ? `총 ${qtyNum.toLocaleString("ko-KR")}${qtyMeta.unit} = ${(
+          Math.round(qtyNum * qtyPerUnitKg * 1000) / 1000
+        ).toLocaleString("ko-KR")}kg 판매`
+      : null;
 
   // FIX-15 c) — 유형 전환 시 해당 없는 단위·구성값 초기화(잔존 오염 방지).
   const selectType = (t: ProductType45) => {
@@ -1071,6 +1115,14 @@ export function ProductRegisterForm45({
           + 구성 unit_label 미러 + 원산지 고시표 미러(값 있을 때만 — 창작 0). */}
       {type === "fresh" && (
         <Field label="보관·요약">
+          {/* FIX-45c — 원산지 칩을 보관타입 칩 행 위 별도 행으로 분리(문구·값·저장 무변경 — 줄배치만). */}
+          {origin.trim() && (
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-full bg-[#F4F4F5] px-2.5 py-1.5 text-[12px] font-medium text-[#8A8A8A]">
+                원산지: {origin.trim()}
+              </span>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-1.5">
             {STORAGE_OPTIONS.map((s) => {
               const on = storage === s.id;
@@ -1093,11 +1145,6 @@ export function ProductRegisterForm45({
             {compositionLabel && (
               <span className="rounded-full bg-[#F4F4F5] px-2.5 py-1.5 text-[12px] font-medium text-[#8A8A8A]">
                 구성: {compositionLabel}
-              </span>
-            )}
-            {origin.trim() && (
-              <span className="rounded-full bg-[#F4F4F5] px-2.5 py-1.5 text-[12px] font-medium text-[#8A8A8A]">
-                원산지: {origin.trim()}
               </span>
             )}
           </div>
@@ -1392,12 +1439,18 @@ export function ProductRegisterForm45({
         </Field>
       )}
 
-      {/* FIX-36c ④ — 재고·판매기간: 판매 수량(이동) + 수확·발송/소비기한(이동 — quick 노출 유지). */}
-      <Field label="몇 개나 판매하시겠어요?" hint="선택 · 한정 수량" hidden={quickMode}>
+      {/* FIX-36c ④ — 재고·판매기간: 판매 수량(이동) + 수확·발송/소비기한(이동 — quick 노출 유지).
+          FIX-45c — 라벨·단위 = 판매 구성 동기화(A안 · 표기만 — 위치·저장 무변경) + 환산 확인 1줄. */}
+      <Field label={qtyMeta.label} hint="선택 · 한정 수량" hidden={quickMode}>
         <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
           <input value={quantity} onChange={(e) => setQuantity(onlyDigits(e.target.value))} inputMode="numeric" placeholder="예: 30" className="w-full bg-transparent px-1 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" />
-          <span className="text-[13px] font-semibold text-[#8A8A8A]">개</span>
+          <span className="shrink-0 text-[13px] font-semibold text-[#8A8A8A]">{qtyMeta.unit}</span>
         </div>
+        {qtyConversionLine && (
+          <p className="mt-1 text-[10.5px] font-medium tabular-nums text-[#A3A3A3]">
+            {qtyConversionLine}
+          </p>
+        )}
       </Field>
 
       <Field label={copy.dateLabel} hint={copy.dateHint}>

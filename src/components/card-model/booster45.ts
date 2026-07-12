@@ -8,6 +8,8 @@ export type BoosterChip45 = { kind: "stock" | "dday" | "orders" | "benefit"; lab
 export type BoosterInput45 = {
   /** 한정 수량 실값(stock_limit). null/0/미설정 = 미렌더. */
   stockLimit?: number | null;
+  /** FIX-45c — 남은수량 단위 라벨(판매 구성 동기화: '박스'/'망'/'kg' 등). 미주입 = '개'(하위호환). */
+  stockUnitLabel?: string | null;
   /** 재고 소진 상태(잔여 0 — /d 의 remaining_stock 파생 등). true = "품절" 정직 표기. */
   soldOut?: boolean;
   /** 판매기간 마감일(yyyy-mm-dd). 미설정 = D-day 미렌더. */
@@ -39,6 +41,28 @@ export function ddayLabel(saleEndIso: string, todayIso: string): string {
   return "판매 마감";
 }
 
+/** FIX-45c — 남은수량 단위 라벨 파생(순수 · 스튜디오/ST2b /d 공용): 기존 저장 키
+ *  sale_unit(+fresh 는 pack_type 스냅샷)만 읽어 표기 라벨로 번역 — 신규 저장 키 0.
+ *  weight='kg' / fresh box=pack_type(박스·망·봉·포대·묶음) / 그 외 판매단위 라벨 / 기본 '개'. */
+export function stockUnitLabelFrom(
+  saleUnit?: string | null,
+  packType?: string | null,
+): string {
+  if (saleUnit === "weight") return "kg";
+  if (saleUnit === "box" && packType) return packType;
+  // 가공품·공산품 판매단위 라벨(폼 UNIT_LABELS 와 동일 값 — 순수 모듈이라 상수 자체 보유).
+  const map: Record<string, string> = {
+    pack: "팩",
+    bottle: "병",
+    bag: "봉지",
+    can: "캔",
+    box: "박스",
+    sack: "포대",
+    set: "세트",
+  };
+  return (saleUnit && map[saleUnit]) || "개";
+}
+
 /** 부스터 칩 배열 — 빈 배열 = 스택 자체 미렌더. */
 export function buildBoosterChips(i: BoosterInput45): BoosterChip45[] {
   const chips: BoosterChip45[] = [];
@@ -46,7 +70,11 @@ export function buildBoosterChips(i: BoosterInput45): BoosterChip45[] {
   if (i.soldOut) {
     chips.push({ kind: "stock", label: "품절" });
   } else if (i.stockLimit != null && i.stockLimit > 0) {
-    chips.push({ kind: "stock", label: `${i.stockLimit.toLocaleString("ko-KR")}개 남음` });
+    // FIX-45c — 단위 = 판매 구성 라벨(미주입 '개'). 값(stock_limit)은 구성 단위 개수 그대로(변환 0).
+    chips.push({
+      kind: "stock",
+      label: `${i.stockLimit.toLocaleString("ko-KR")}${i.stockUnitLabel || "개"} 남음`,
+    });
   }
   // D-day — 마감일 실존 시만.
   if (i.saleEndIso) {
