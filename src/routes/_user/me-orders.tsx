@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { ArrowLeft, CalendarDays, Package, Store, Phone } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
+import { getSupabase } from "@/lib/supabase";
 
 // STEP 1 손님 주문상태 — 본인 선주문 읽기전용 뷰. partner.preorders.tsx 미러(액션 버튼 전부 제거).
 //   _user 자식 규칙: 세션/userId 없어도 throw 금지 → graceful 빈 배열(리다이렉트 루프 방지).
@@ -20,6 +22,9 @@ type MyPreorderRow = {
   unit_price_krw: number;
   total_krw: number;
   partner_message: string | null;
+  /** ST2b-3(v8.8) — 취소 요청 표식(구매자 요청만, 실행은 파트너 — Duke 락 ⓐ). */
+  cancel_requested_at?: string | null;
+  customer_message?: string | null;
 };
 
 type LoaderData = {
@@ -229,6 +234,10 @@ function MyPreorderCard({ row }: { row: MyPreorderRow }) {
         </div>
       ) : null}
 
+      {/* ST2b-3(v8.8) — 셀프 취소 요청(ⓐ 락: 요청 표식만 — 실행은 파트너 cancel_preorder).
+          읽기전용 원칙 유지: 행 상태를 바꾸지 않는 요청 1버튼 + 선택 사유 1칸. */}
+      {isActive ? <CancelRequestBlock row={row} /> : null}
+
       {/* 농가 메모 (있으면, 2줄 클램프) — 취소사유/안내 */}
       {row.partner_message?.trim() ? (
         <p className="mt-2 line-clamp-2 whitespace-pre-line text-sm text-text-muted">
@@ -236,5 +245,75 @@ function MyPreorderCard({ row }: { row: MyPreorderRow }) {
         </p>
       ) : null}
     </li>
+  );
+}
+
+// ST2b-3(v8.8) — 취소 요청 블록: request_preorder_cancel(요청 표식 전용 RPC · 멱등).
+//   이미 요청됨(서버값 or 방금 성공) = 안내 1줄 + 재요청 버튼 숨김. 실행·전이는 파트너 몫.
+function CancelRequestBlock({ row }: { row: MyPreorderRow }) {
+  const [requested, setRequested] = useState(!!row.cancel_requested_at);
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(false);
+  if (requested) {
+    return (
+      <p className="mt-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-xs font-medium leading-relaxed tracking-ko text-text-muted [word-break:keep-all]">
+        취소를 요청했어요. 사장님이 확인 후 처리해 드려요
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-1.5">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-bg px-4 text-sm font-semibold tracking-ko text-text-muted hover:border-text-muted"
+        >
+          취소 요청
+        </button>
+      ) : (
+        <>
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={200}
+            placeholder="취소 사유 (선택)"
+            className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm font-medium tracking-ko text-text-strong outline-none placeholder:text-text-subtle"
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              setErr(false);
+              void (async () => {
+                try {
+                  const { error } = await getSupabase().rpc("request_preorder_cancel" as never, {
+                    p_preorder_id: row.preorder_id,
+                    p_reason: reason.trim() || null,
+                  } as never);
+                  if (error) setErr(true);
+                  else setRequested(true);
+                } catch {
+                  setErr(true);
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-action px-4 text-sm font-semibold tracking-ko text-action-foreground disabled:opacity-60"
+          >
+            {busy ? "요청 중…" : "취소 요청 보내기"}
+          </button>
+        </>
+      )}
+      {err ? (
+        <p className="text-xs font-medium tracking-ko text-text-subtle">
+          지금은 요청이 안 됐어요 — 잠시 후 다시 시도해 주세요.
+        </p>
+      ) : null}
+    </div>
   );
 }

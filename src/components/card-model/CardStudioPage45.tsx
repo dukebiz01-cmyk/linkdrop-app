@@ -1902,6 +1902,30 @@ export function CardStudioPage45({
           console.warn("[studio-lab] update_drop_key_points exception:", e);
         }
       }
+      // ④ ST2b-3(v8.8) — 판매기간 영속화: seasonal 확정값을 update_drop p_block_patch
+      //    (서버 2키 화이트리스트 {sale_start, sale_end})로 메인 product 블록에 병합.
+      //    best-effort — 실패해도 발행 진행. /d D-day 는 ST2b-2a 선배선(adapters sale_end
+      //    소비)이 자동 점등. 기존 RPC 3종·POST 무접촉(이 호출 1개 추가만).
+      if (mode === "commerce" && applied["seasonal"] && supabase) {
+        try {
+          const pad2 = (n: number) => String(n).padStart(2, "0");
+          const sd = dateList[saleStartIdx];
+          const ed = dateList[saleEndIdx];
+          const isoOf = (d: { year: number; month: number; day: number }) =>
+            `${d.year}-${pad2(d.month)}-${pad2(d.day)}`;
+          if (sd && ed) {
+            const { error: spanErr } = await supabase.rpc("update_drop" as never, {
+              p_share_uuid: publishedShareUuid,
+              p_curator_message: null,
+              p_curator_note: null,
+              p_block_patch: { sale_start: isoOf(sd), sale_end: isoOf(ed) },
+            } as never);
+            if (spanErr) console.warn("[studio-lab] 판매기간 저장 실패:", (spanErr as { message?: string }).message);
+          }
+        } catch (e) {
+          console.warn("[studio-lab] update_drop(p_block_patch) exception:", e);
+        }
+      }
       // ③ 카드색 영속화 — 6색 팔레트 값 저장. best-effort.
       //    FIX-28 — 기본값(CARD_BASE)이면 스킵(색 UI 숨김 중 불필요 호출 0 — RPC 는 보존).
       if (dropId && supabase && cardColor && cardColor !== CARD_BASE) {

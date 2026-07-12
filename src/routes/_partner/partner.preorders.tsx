@@ -32,6 +32,8 @@ type PreorderRow = {
   total_krw: number;
   customer_name: string;
   customer_message: string | null;
+  /** ST2b-3(v8.8) — 구매자 취소 요청 표식(실행은 기존 cancel_preorder 그대로). */
+  cancel_requested_at?: string | null;
 };
 
 type LoaderData = {
@@ -305,6 +307,12 @@ function PreorderCard({
             {row.product_name?.trim() || "상품"}
           </p>
           <StatusBadge status={row.status} />
+          {/* ST2b-3(v8.8) — 취소 요청 배지(표식만 — 실행은 기존 취소 버튼). */}
+          {row.cancel_requested_at && (row.status === "pending" || row.status === "confirmed") ? (
+            <span className="inline-flex items-center rounded-full bg-intent-danger-bg px-2 py-0.5 text-[11px] font-bold text-intent-danger">
+              취소 요청됨
+            </span>
+          ) : null}
         </div>
         {row.created_at ? (
           <span className="shrink-0 text-xs font-medium text-text-subtle">
