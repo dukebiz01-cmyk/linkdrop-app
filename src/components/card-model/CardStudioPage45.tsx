@@ -69,6 +69,14 @@ import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
 import { buildBoosterChips, buildGroupBuyView, stockUnitLabelFrom } from "./booster45";
+// FIX-44 — 영상 서치 도우미 순수 모듈(URL 파싱·후보 번역·41창 확정 문구 원문).
+import {
+  FINDER_EMPTY_MSG,
+  FINDER_FAIL_MSG,
+  mapYoutubeSearchCandidates,
+  parseYouTubeId,
+  type YoutubeSearchItem,
+} from "./video-finder45";
 import { SHIP_STAGES, type CardModel } from "./card-model.types";
 
 // =============================================================================
@@ -643,6 +651,12 @@ export function CardStudioPage45({
   const [burstKey, setBurstKey] = useState(0);
   // FIX-1/4 — 선택=미확정(candidate) → [확정/적용]=확정 패턴. 모든 선택형 패널 일관.
   const [videoCandidate, setVideoCandidate] = useState<DiscoverCandidate | null>(null);
+  // FIX-44 — 영상 서치 도우미(B안): 검색·선택만. 결과는 기존 videoResults 후보 체인에 주입 —
+  //   [이 영상으로 확정] 전까지 덱·카드 무변경(자동 장착 절대 금지). YouTube 한정 락.
+  const [finderOpen, setFinderOpen] = useState(false);
+  const [finderQuery, setFinderQuery] = useState("");
+  const [finderLoading, setFinderLoading] = useState(false);
+  const [finderNotice, setFinderNotice] = useState<string | null>(null);
   const [couponCandidate, setCouponCandidate] = useState<string | null>(null);
   const [colorCandidate, setColorCandidate] = useState<string | null>(null);
   // 적용 후 접힘(적용됨 · 변경) 패널 — coupon/calendar/seasonal/dock.
@@ -1433,6 +1447,51 @@ export function CardStudioPage45({
   const handleVideoSearch = async () => {
     const k = videoQuery.trim();
     if (!k || videoSearching) return;
+    // FIX-44 — 외부영상 URL 직접 붙여넣기(READ 판정: 전용 URL 칸 부재 → 이 검색 입력이 URL 수용).
+    //   YouTube 한정 락. oembed 실값(제목·채널)으로 후보 1건 구성 → 아래 같은 선택·확정 체인
+    //   (자동 장착 0 — [이 영상으로 확정]을 눌러야 카드 반영).
+    const pastedId = parseYouTubeId(k);
+    if (pastedId) {
+      setVideoSearching(true);
+      setVideoError(null);
+      setFinderNotice(null);
+      try {
+        const vUrl = `https://www.youtube.com/watch?v=${pastedId}`;
+        const res = await fetch("/api/oembed?url=" + encodeURIComponent(vUrl));
+        const meta = (await res.json()) as {
+          title?: string | null;
+          author_name?: string | null;
+          thumbnail_url?: string | null;
+          duration_sec?: number | null;
+          message?: string;
+        };
+        if (!res.ok) {
+          setVideoError(meta.message ?? "영상 정보를 불러올 수 없어요. 링크를 확인해 주세요.");
+          setVideoResults([]);
+          return;
+        }
+        setVideoResults([
+          {
+            provider: "youtube",
+            source_url: vUrl,
+            source_id: pastedId,
+            canonical_url: vUrl,
+            title: meta.title ?? null,
+            thumbnail_url: meta.thumbnail_url ?? null,
+            author_name: meta.author_name ?? null,
+            duration_sec: meta.duration_sec ?? null,
+            raw_meta: {},
+          },
+        ]);
+      } catch {
+        setVideoError("네트워크 오류로 영상 정보를 불러오지 못했어요.");
+        setVideoResults([]);
+      } finally {
+        setVideoSearching(false);
+        setVideoSearched(true);
+      }
+      return;
+    }
     setVideoSearching(true);
     setVideoError(null);
     try {
@@ -1454,6 +1513,41 @@ export function CardStudioPage45({
     } finally {
       setVideoSearching(false);
       setVideoSearched(true);
+    }
+  };
+
+  // FIX-44 — 영상 서치 도우미 검색(Edge youtube-search 직invoke — 유저 세션 JWT 자동 첨부).
+  //   검색어 기본 채움 = DB 검증 매장명(partners.display_name)만 — 키워드 창작 금지.
+  //   성공 후보만 기존 videoResults 체인에 주입(선택 전까지 덱 무변경). 0건/실패 =
+  //   41창 확정 문구 원문(가짜 후보·재시도 루프 0). Instagram·타 플랫폼 시도 금지.
+  const handleFinderSearch = async () => {
+    const q = finderQuery.trim();
+    if (!q || finderLoading) return;
+    setFinderLoading(true);
+    setFinderNotice(null);
+    try {
+      const { data, error } = await getSupabase().functions.invoke("youtube-search", {
+        body: { q },
+      });
+      if (error || !data) {
+        setFinderNotice(FINDER_FAIL_MSG);
+        return;
+      }
+      const items = (data as { candidates?: YoutubeSearchItem[] }).candidates ?? [];
+      const mapped = mapYoutubeSearchCandidates(items);
+      if (mapped.length === 0) {
+        // 0건 — 확정 문구 원문 + URL 입력칸(검색 입력 — URL 수용) 포커스.
+        setFinderNotice(FINDER_EMPTY_MSG);
+        document.getElementById("st45-video-query")?.focus?.();
+        return;
+      }
+      setVideoResults(mapped);
+      setVideoSearched(true);
+      setVideoError(null);
+    } catch {
+      setFinderNotice(FINDER_FAIL_MSG);
+    } finally {
+      setFinderLoading(false);
     }
   };
 
@@ -2985,6 +3079,7 @@ export function CardStudioPage45({
                     <div className="flex items-center gap-1.5 rounded-xl bg-[#F4F4F5] py-1.5 pl-3 pr-1.5">
                       <Search className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
                       <input
+                        id="st45-video-query"
                         value={videoQuery}
                         onChange={(e) => setVideoQuery(e.target.value)}
                         onKeyDown={(e) => {
@@ -2993,7 +3088,7 @@ export function CardStudioPage45({
                             void handleVideoSearch();
                           }
                         }}
-                        placeholder="영상 키워드 검색 (YouTube)"
+                        placeholder="영상 키워드·주소 검색 (YouTube)"
                         className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:text-[#9A9A9A]"
                       />
                       <button
@@ -3008,6 +3103,73 @@ export function CardStudioPage45({
                       </button>
                     </div>
                     {videoError && <p className="text-[11px] font-medium text-[#DC2626]">{videoError}</p>}
+                    {/* FIX-44 — 영상 서치 도우미(B안): [영상 찾기] → 매장명 기본 채움(DB 검증
+                        display_name만 — 키워드 창작 금지) → Edge youtube-search 후보 3~5 →
+                        아래 기존 후보 카드·[이 영상으로 확정] 체인 그대로(자동 장착 0 —
+                        선택 전까지 덱 무변경). 인라인 펼침(Radix 0). */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFinderOpen((v) => {
+                          const next = !v;
+                          if (next && !finderQuery.trim() && storeName) setFinderQuery(storeName);
+                          return next;
+                        })
+                      }
+                      className="flex w-full items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-left"
+                    >
+                      <Clapperboard className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
+                      <span className="flex-1 text-[13px] font-semibold text-[#0A0A0A]">영상 찾기</span>
+                      <span className="text-[10.5px] font-medium text-[#8A8A8A]">매장 영상 검색</span>
+                      <ChevronDown
+                        className="h-4 w-4 shrink-0 text-[#8A8A8A] transition-transform"
+                        style={{ transform: finderOpen ? "rotate(180deg)" : "none" }}
+                        strokeWidth={2.25}
+                      />
+                    </button>
+                    {finderOpen && (
+                      <div className="space-y-1.5 rounded-xl bg-[#F7F7F8] p-2.5">
+                        <div
+                          className="flex items-center gap-1.5 rounded-xl bg-white py-1.5 pl-3 pr-1.5"
+                          style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                        >
+                          <input
+                            value={finderQuery}
+                            onChange={(e) => setFinderQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                                e.preventDefault();
+                                void handleFinderSearch();
+                              }
+                            }}
+                            placeholder="매장명으로 영상을 찾아요"
+                            className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:text-[#9A9A9A]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleFinderSearch()}
+                            disabled={finderLoading || !finderQuery.trim()}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white disabled:opacity-40"
+                            style={{ backgroundColor: accent }}
+                            aria-label="영상 찾기 검색"
+                          >
+                            {finderLoading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+                            ) : (
+                              <Search className="h-4 w-4" strokeWidth={2.5} />
+                            )}
+                          </button>
+                        </div>
+                        <p className="text-[10.5px] font-medium text-[#A3A3A3] [word-break:keep-all]">
+                          후보 중에서 고른 뒤 [이 영상으로 확정]을 눌러야 카드에 담겨요.
+                        </p>
+                        {finderNotice && (
+                          <p className="rounded-lg bg-white px-2.5 py-2 text-[11.5px] font-medium leading-relaxed text-[#525252] [word-break:keep-all]">
+                            {finderNotice}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {/* FIX-38 B — 영상 출처 [AI로 만들기] 진입점: 노출은 하되 누르면 준비 중
                         정직 게이트(인라인 펼침 — Radix 아님). 가격·캐시 숫자 절대 미표기.
                         "준비 중" 칩 = 기존 게이트 배지 문법(:2225) 재사용. */}
@@ -3970,6 +4132,25 @@ export function CardStudioPage45({
                           >
                             이번엔 건너뛰기
                           </button>
+                        )}
+                        {/* FIX-44 — 콘텐츠 단계 제안(B안 — 정본 상수 문법 · lingo-chat 호출 0):
+                            상시 층 1줄 + [영상 찾기] 열기. 영상 확정 시 소멸 — 무시 시 침묵(§13,
+                            FIX-33 dock 버튼 문법 동형 — 재발화·재촉 없음). */}
+                        {currentCoachKey === "content" && !selectedVideo && (
+                          <>
+                            <p>매장 영상을 찾아볼까요?</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                jumpToBlock("content");
+                                if (!finderQuery.trim() && storeName) setFinderQuery(storeName);
+                                setFinderOpen(true);
+                              }}
+                              className="mt-1 flex h-8 items-center rounded-lg bg-white px-2.5 text-[11px] font-bold text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                            >
+                              영상 찾기
+                            </button>
+                          </>
                         )}
                       </div>
                     )}
