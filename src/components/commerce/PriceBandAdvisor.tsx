@@ -8,6 +8,10 @@ import { RotateCw, TrendingUp } from "lucide-react";
 //   순수 presentational: props {priceBand, loading, composition} 만. invoke·state 는 호출부 몫.
 //   §0: 생산자 가격 결정 참고용만 — 시세를 저장/손님 카드로 내보내지 않는다. 단정·권유 금지.
 //   표기 규칙: 전 금액 백원 반올림 + "약" 접두.
+//   FIX-45b 락(43창 Duke, 2026-07-12): 소스 간 통합 평균 금지 — 도매/온라인은 다른 상품의
+//   가격. 축별 분리 + 사장님 선언 무게 환산 + 내 위치 비교만 허용. 축별 표본 n<3 은
+//   "참고 부족" 시각 강등(흐림 — 실값은 보이되 비교문·헤드라인에서 제외). 미렌더 금지
+//   (1건이라도 실값은 실값 — 숨기면 그것대로 왜곡).
 
 // get-price-band 응답 소스(레거시 sources 배열 — P5b 표기는 아래 구조화 블록 사용).
 export type PriceSource = {
@@ -105,9 +109,10 @@ function parseUnitToKg(unit: string): number | null {
 //   삼각형 · 인터넷=마름모 테두리 · 소매=원 테두리).
 //   FIX-45c — 텍스트 특수문자(●▲◇○) → 인라인 SVG 도형(폰트 의존 제거 · 의미 무변경).
 //   12px 고정 + 모양·색 병행(내 가격 = accent 삼각형 / 소스 = muted) — currentColor 상속.
-type AnchorPoint = { key: string; label: string; value: number };
+//   FIX-45b — low: 해당 축 표본 n<3(신뢰 게이트) → 마커 점선/반투명 강등(값·위치는 유지).
+type AnchorPoint = { key: string; label: string; value: number; low?: boolean };
 
-function AnchorGlyph({ kind }: { kind: string }) {
+function AnchorGlyph({ kind, low }: { kind: string; low?: boolean }) {
   const common = {
     width: 12,
     height: 12,
@@ -115,6 +120,7 @@ function AnchorGlyph({ kind }: { kind: string }) {
     "aria-hidden": true,
     className: "block",
   } as const;
+  // FIX-45b — low(표본 n<3): 채움 → 점선 테두리 강등(반투명은 호출부 span opacity 가 담당).
   if (kind === "mine") {
     return (
       <svg {...common}>
@@ -123,7 +129,11 @@ function AnchorGlyph({ kind }: { kind: string }) {
     );
   }
   if (kind === "wholesale") {
-    return (
+    return low ? (
+      <svg {...common}>
+        <circle cx="6" cy="6" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2" />
+      </svg>
+    ) : (
       <svg {...common}>
         <circle cx="6" cy="6" r="4.5" fill="currentColor" />
       </svg>
@@ -132,11 +142,17 @@ function AnchorGlyph({ kind }: { kind: string }) {
   if (kind === "online") {
     return (
       <svg {...common}>
-        <path d="M6 1.2 L10.8 6 L6 10.8 L1.2 6 Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        <path
+          d="M6 1.2 L10.8 6 L6 10.8 L1.2 6 Z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          {...(low ? { strokeDasharray: "2 2" } : {})}
+        />
       </svg>
     );
   }
-  // retail — 원 테두리(○).
+  // retail — 원 테두리(○). 표본 수 필드 부재(KAMIS 조사) — 게이트 대상 아님.
   return (
     <svg {...common}>
       <circle cx="6" cy="6" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
@@ -226,11 +242,28 @@ export function PriceBandAdvisor({
   const filteredCount = priceBand.online?.filtered_count ?? 0;
   // P5d 인터넷 신뢰 판정 — confidence "low" 아님 + 표본 ≥10. 구응답(confidence 없음)은 표본만.
   const onlineTrusted = o != null && o.confidence !== "low" && o.converted_count >= 10;
+  // FIX-45b — 축별 표본 신뢰 게이트(표시 게이트만 · 계산/API 무접촉): n<MIN_TRUST_N = 흐림.
+  //   도매 축 표본 = market_count(기존 "N개 시장" 값 그대로 재사용).
+  const MIN_TRUST_N = 3;
+  const wTrusted = w != null && w.market_count >= MIN_TRUST_N;
   // DR2-fix1 F4 — 인터넷가 = 네이버 유사상품 실판매가 분포의 최저·평균·최고 3값(사분위→교체).
   const oBand = o ? { min: o.min as number, max: o.max as number } : null;
   const oAvg = o ? o.avg : null;
   // 헤드라인·내 판매단위의 kg 기준 밴드 — P5d 역전: 도매 우선, 인터넷은 신뢰될 때만 후보.
-  const kgBand = w ? { min: w.min, max: w.max } : onlineTrusted && oBand ? oBand : null;
+  //   FIX-45b — 신뢰 축만 재산출: 도매 n<3 이면 헤드라인 후보에서 제외(인터넷 신뢰 축으로).
+  //   신뢰 축 전무 + 저표본 실값 존재 → 흐림 밴드로 유지(정직 강등 — 미렌더 금지).
+  const kgBandTrusted =
+    w && wTrusted ? { min: w.min, max: w.max } : onlineTrusted && oBand ? oBand : null;
+  const kgBandLowSrc = kgBandTrusted
+    ? null
+    : w
+      ? { min: w.min, max: w.max }
+      : o && oBand
+        ? oBand
+        : null;
+  const kgBand = kgBandTrusted ?? kgBandLowSrc;
+  const kgBandLow = kgBandTrusted == null && kgBandLowSrc != null;
+  const kgBandLowNote = kgBandLow ? (w ? `${w.market_count}개 시장` : `${o?.converted_count ?? 0}건`) : null;
   // DR2-ⓑ 4-A 소매 — legacy sources 의 retail 행을 kg당 환산(무게 단위 파싱 가능분만·아니면 미표시).
   const retailSrc = priceBand.sources.find((s) => s.price_type === "retail") ?? null;
   const retailUnitKg = retailSrc ? parseUnitToKg(retailSrc.unit) : null;
@@ -290,6 +323,16 @@ export function PriceBandAdvisor({
         : o && oAvg != null && totalKg != null && totalKg > 0
           ? oAvg * totalKg
           : null;
+  // FIX-45b — ◇앵커가 실제 소비한 축의 표본 n(위와 동일 선택 체인) — n<3 = 점선·반투명 강등.
+  const internetAnchorN =
+    unitAxis && countMeaningful
+      ? unitAxis.n
+      : kgAxisBlk && totalKg != null && totalKg > 0
+        ? kgAxisBlk.n
+        : o && oAvg != null && totalKg != null && totalKg > 0
+          ? o.converted_count
+          : null;
+  const internetAnchorTrusted = internetAnchorN != null && internetAnchorN >= MIN_TRUST_N;
   // T3a-ⓑ [3] — 품종 분포 상위 5(태그별 n) · 소매 품종 라벨("밤(10kg)"→"밤·10kg").
   const onlineKindsTop = Object.entries(priceBand.kinds?.online ?? {})
     .sort((a, b) => b[1] - a[1])
@@ -311,12 +354,18 @@ export function PriceBandAdvisor({
   const anchorPoints: AnchorPoint[] = [];
   if (totalKg != null && totalKg > 0 && myPriceKrw != null && myPriceKrw > 0) {
     if (w) {
-      anchorPoints.push({ key: "wholesale", label: "도매", value: w.avg * totalKg });
+      // FIX-45b — n<3 축 마커는 점선·반투명 강등(low) — 값 자체는 유지(실값 미렌더 금지).
+      anchorPoints.push({ key: "wholesale", label: "도매", value: w.avg * totalKg, low: !wTrusted });
     }
     anchorPoints.push({ key: "mine", label: "내 가격", value: myPriceKrw });
     // F4/T3a-ⓑ — 인터넷 점(마름모) = 번역 가능한 축의 평균값(3값 상세는 표 행에 — 바 라벨 과밀 금지).
     if (internetAnchorValue != null) {
-      anchorPoints.push({ key: "online", label: "인터넷", value: internetAnchorValue });
+      anchorPoints.push({
+        key: "online",
+        label: "인터넷",
+        value: internetAnchorValue,
+        low: !internetAnchorTrusted,
+      });
     }
     if (retailKg) {
       anchorPoints.push({
@@ -344,29 +393,33 @@ export function PriceBandAdvisor({
     }
   }
   // 격차 문구 2축 — 순수 산수(권유 어휘 0). 도매축 = 평균 대비 차액 / 인터넷축 = 밴드 위치 사실.
+  //   FIX-45b — 비교문("~보다 +N원")은 신뢰 축(n≥3)만 생성. n<3 축 기준 비교 = 미생성.
   const wholesaleTotal = totalKg != null && totalKg > 0 && w ? w.avg * totalKg : null;
   const gapWholesale =
-    wholesaleTotal != null && myPriceKrw != null && myPriceKrw > 0
+    wTrusted && wholesaleTotal != null && myPriceKrw != null && myPriceKrw > 0
       ? myPriceKrw - wholesaleTotal
       : null;
   // T3a-ⓑ — 인터넷 격차축도 ◇와 동일한 축 선택으로 일반화(unit축×개수 → kg축×kg → 구응답).
+  //   FIX-45b — 선택된 축의 표본 n 을 함께 기록(비교문 신뢰 게이트용 — 선택 체인 동일).
   const internetBandTotal =
     unitAxis && countMeaningful && unitAxis.min != null && unitAxis.max != null
       ? {
           min: unitAxis.min * (composition as PriceComposition).unitCount,
           max: unitAxis.max * (composition as PriceComposition).unitCount,
+          n: unitAxis.n,
         }
       : kgAxisBlk &&
           kgAxisBlk.min != null &&
           kgAxisBlk.max != null &&
           totalKg != null &&
           totalKg > 0
-        ? { min: kgAxisBlk.min * totalKg, max: kgAxisBlk.max * totalKg }
+        ? { min: kgAxisBlk.min * totalKg, max: kgAxisBlk.max * totalKg, n: kgAxisBlk.n }
         : o && oBand && totalKg != null && totalKg > 0
-          ? { min: oBand.min * totalKg, max: oBand.max * totalKg }
+          ? { min: oBand.min * totalKg, max: oBand.max * totalKg, n: o.converted_count }
           : null;
+  // FIX-45b — 인터넷 비교문도 신뢰 축(n≥3)만 생성(n<3 = 미생성 — 표 행 흐림 표기가 담당).
   const onlineRelation =
-    internetBandTotal && myPriceKrw != null && myPriceKrw > 0
+    internetBandTotal && internetBandTotal.n >= MIN_TRUST_N && myPriceKrw != null && myPriceKrw > 0
       ? myPriceKrw < internetBandTotal.min
         ? "인터넷 시세보다 낮아요"
         : myPriceKrw > internetBandTotal.max
@@ -408,12 +461,22 @@ export function PriceBandAdvisor({
         <span className="text-sm font-bold tracking-ko text-text-strong">시세 참고 정보</span>
       </div>
 
-      {/* ① 헤드라인 — 개당(구성 있을 때) / kg당(없을 때). 26px. */}
-      <p className="text-[26px] font-bold leading-tight tabular-nums tracking-ko text-text-strong">
+      {/* ① 헤드라인 — 개당(구성 있을 때) / kg당(없을 때). 26px.
+          FIX-45b — 신뢰 축(n≥3)만으로 산출. 신뢰 축 전무 시 저표본 실값 흐림 + "참고 부족" 병기. */}
+      <p
+        className={`text-[26px] font-bold leading-tight tabular-nums tracking-ko text-text-strong${
+          kgBandLow ? " opacity-50" : ""
+        }`}
+      >
         {hasPerUnit
           ? `개당 약 ${fmtWonH(toUnit(kgBand.min))}~${fmtWonH(toUnit(kgBand.max))}원`
           : `kg당 약 ${fmtWonH(kgBand.min)}~${fmtWonH(kgBand.max)}원`}
       </p>
+      {kgBandLow ? (
+        <p className="text-[11px] font-semibold tracking-ko text-text-subtle">
+          참고 부족 ({kgBandLowNote}) — 표본이 적어 참고만 해 주세요
+        </p>
+      ) : null}
 
       {/* ② 근거 줄 — 내 구성으로 환산했음을 명시(12px muted). 구성 없으면 생략.
           DR2-ⓑ: compositionLabel 있으면 선언문 라벨 사용(괄호 축약 노출 제거). */}
@@ -461,8 +524,9 @@ export function PriceBandAdvisor({
         </thead>
         {/* H3 — 행 구분선(연회색)·행머리 좌측 정렬 고정·숫자 전부 우측 정렬 유지. */}
         <tbody className="divide-y divide-[#F1F5F9] [&_td]:py-2 [&_td]:align-baseline">
+          {/* FIX-45b — n<3 행 = 흐림(opacity) + "참고 부족" 라벨(숫자는 보이되 시각 강등). */}
           {w ? (
-            <tr>
+            <tr className={wTrusted ? undefined : "opacity-50"}>
               <td className="whitespace-nowrap">
                 <span className="text-[12px] font-bold text-text-strong">도매</span>
                 <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
@@ -477,6 +541,7 @@ export function PriceBandAdvisor({
                 {fmtWonH(w.max)}
               </td>
               <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
+                {!wTrusted ? <span className="block font-semibold">참고 부족</span> : null}
                 <span className="block">{w.market_count}개 시장</span>
                 <span className="block">{fmtRefDate(w.as_of)}</span>
               </td>
@@ -506,7 +571,7 @@ export function PriceBandAdvisor({
           ) : null}
           {/* T3a-ⓑ [1] — 인터넷 이원축: 개당(실값) / kg당(백원 반올림). 구응답은 kg당 행 폴백. */}
           {unitAxis ? (
-            <tr>
+            <tr className={unitAxis.n >= MIN_TRUST_N ? undefined : "opacity-50"}>
               <td className="whitespace-nowrap">
                 <span className="text-[12px] font-bold text-text-strong">인터넷</span>
                 <span className="block text-[10px] font-medium text-text-subtle">개당</span>
@@ -521,6 +586,9 @@ export function PriceBandAdvisor({
                 {(unitAxis.max as number).toLocaleString("ko-KR")}
               </td>
               <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
+                {unitAxis.n < MIN_TRUST_N ? (
+                  <span className="block font-semibold">참고 부족</span>
+                ) : null}
                 <span className="block">{unitAxis.n}건</span>
                 {priceBand.online?.as_of ? (
                   <span className="block">{fmtRefDate(priceBand.online.as_of)}</span>
@@ -529,7 +597,7 @@ export function PriceBandAdvisor({
             </tr>
           ) : null}
           {kgAxisBlk ? (
-            <tr>
+            <tr className={kgAxisBlk.n >= MIN_TRUST_N ? undefined : "opacity-50"}>
               <td className="whitespace-nowrap">
                 <span className="text-[12px] font-bold text-text-strong">인터넷</span>
                 <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
@@ -544,6 +612,9 @@ export function PriceBandAdvisor({
                 {fmtWonH(kgAxisBlk.max as number)}
               </td>
               <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
+                {kgAxisBlk.n < MIN_TRUST_N ? (
+                  <span className="block font-semibold">참고 부족</span>
+                ) : null}
                 <span className="block">{kgAxisBlk.n}건</span>
                 {priceBand.online?.as_of ? (
                   <span className="block">{fmtRefDate(priceBand.online.as_of)}</span>
@@ -552,7 +623,7 @@ export function PriceBandAdvisor({
             </tr>
           ) : null}
           {!unitAxis && !kgAxisBlk && o && oBand && oAvg != null ? (
-            <tr>
+            <tr className={o.converted_count >= MIN_TRUST_N ? undefined : "opacity-50"}>
               <td className="whitespace-nowrap">
                 <span className="text-[12px] font-bold text-text-strong">인터넷</span>
                 <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
@@ -567,6 +638,9 @@ export function PriceBandAdvisor({
                 {fmtWonH(oBand.max)}
               </td>
               <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
+                {o.converted_count < MIN_TRUST_N ? (
+                  <span className="block font-semibold">참고 부족</span>
+                ) : null}
                 <span className="block">{o.converted_count}건</span>
                 <span className="block">{fmtRefDate(o.as_of)}</span>
               </td>
@@ -638,9 +712,9 @@ export function PriceBandAdvisor({
                 style={{ left: `${p.pos}%` }}
                 className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${
                   p.key === "mine" ? "text-accent" : "text-text-muted"
-                }`}
+                }${p.low ? " opacity-50" : ""}`}
               >
-                <AnchorGlyph kind={p.key} />
+                <AnchorGlyph kind={p.key} low={p.low} />
               </span>
             ))}
           </div>
@@ -691,8 +765,13 @@ export function PriceBandAdvisor({
 
       {/* ④ 내 판매단위 강조 — 구성 입력이 있을 때만. 우측 정렬 금액.
           DR2-ⓑ: compositionLabel 있으면 선언문 라벨(괄호 축약·모드 불일치 라벨 제거). */}
+      {/* FIX-45b — 헤드라인 밴드 재사용처: 저표본 밴드(kgBandLow)면 동일 흐림 강등. */}
       {composition ? (
-        <div className="flex items-baseline justify-between gap-2 rounded-lg bg-surface px-3 py-2.5">
+        <div
+          className={`flex items-baseline justify-between gap-2 rounded-lg bg-surface px-3 py-2.5${
+            kgBandLow ? " opacity-50" : ""
+          }`}
+        >
           <span className="shrink-0 text-xs font-semibold tracking-ko text-text-strong">
             {compositionLabel ?? `${composition.unitCount}개들이 ${composition.packType}`}
           </span>
