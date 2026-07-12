@@ -67,6 +67,8 @@ import { CouponPreview } from "@/components/receiver/CouponPreview";
 import { CardBody } from "@/components/card/CardBody";
 // Phase 1-C — 1-A 배지 재사용(수신카드 주입). 순환 없음: ShareCardTile 트리(home-page→drop-feed-card)는 본 파일 미참조.
 import { TimerBadge, StockMeta } from "@/components/home/ShareCardTile";
+// ST2b-2a A2 — 판매기간 D-day 라벨(FIX-39 booster45 순수 모듈 재사용 — 조회 시점 계산).
+import { ddayLabel } from "@/components/card-model/booster45";
 
 // SM-4 — 여정 렌더부 공용 추출분(share-journey.tsx). 타입·타임라인 모두 공용 소비.
 import { ShareJourneyTimeline, type ShareJourneyRpcNode } from "@/components/share-journey";
@@ -121,6 +123,15 @@ export interface InfoDropPageProps {
     priceBandEnabled?: boolean;
     /** BADGE-ⓑ(4b) — Droppy 예상 보상(floor(dropy_rate×price_krw), adapters 산출). 미주입=미렌더. */
     dropyReward?: number;
+    // ── ST2b-2 — 45 신규 키 ADDITIVE 운반(전부 미주입 = 미렌더, 구 발행 카드 회귀 0) ──
+    /** A1 — 상품정보제공고시 스냅샷(FIX-37 표시형 행 그대로). */
+    noticeRows?: Array<{ label: string; value: string }>;
+    /** A2/A4 — 남은수량 단위 라벨(FIX-45c — '박스'/'망'/'kg' 등). 미주입 = '개'. */
+    stockUnitLabel?: string;
+    /** B2 — 공동구매 표시 키(폼 유효 통과 저장분만). */
+    groupBuy?: { targetN: number; priceKrw: number; deadline: string | null };
+    /** B2 — 판매기간 마감(sale_end 영속화) — 부스터 D-day 근거. */
+    saleEndIso?: string;
   };
   /** ③ 카드 담기 — 담은(관련) 상품. 본체 source 와 무관, 별도 "관련 상품" 섹션. */
   attachedProducts?: Array<{
@@ -1694,8 +1705,12 @@ export function InfoDropPage({
             [보정2] 게이트: selfUpload 커머스 variant 에서만. 흰 필 래퍼 = navy 배경 대비용(배지 무수정). */}
         {/* BADGE-ⓑ(S24) — 이중 래퍼 정리: 뱃지 자체가 고대비 필(다크)로 승격돼 흰 필 래퍼 불요. */}
         {resolvedVariant === "purchase" && commerce?.selfUpload && remainingStock != null ? (
-          <div className="flex justify-end">
-            <StockMeta remaining={remainingStock} />
+          <div className="flex items-center justify-end gap-1.5">
+            {/* ST2b-2a A2 — 판매기간 D-day 칩(booster45 ddayLabel · 조회 시점 계산, 박제 금지).
+                saleEndIso 미주입(구 발행분) = 미렌더. */}
+            {commerce?.saleEndIso ? <SaleDdayBadge saleEndIso={commerce.saleEndIso} /> : null}
+            {/* ST2b-2a A4 — 단위 라벨(FIX-45c) additive: 미주입 = 기존 '개' 렌더 동일. */}
+            <StockMeta remaining={remainingStock} unitLabel={commerce?.stockUnitLabel} />
           </div>
         ) : null}
 
@@ -1705,6 +1720,12 @@ export function InfoDropPage({
             &quot;{makerMessage}&quot;
           </p>
         )}
+
+        {/* ST2b-2a A1 — 상품정보제공고시(FIX-37 스냅샷 표시형 그대로) 인라인 펼침.
+            noticeRows 미주입(구 발행분) = 미렌더(회귀 0). Radix 0 — useState 펼침. */}
+        {resolvedVariant === "purchase" && commerce?.noticeRows && commerce.noticeRows.length > 0 ? (
+          <NoticeRowsSection rows={commerce.noticeRows} />
+        ) : null}
 
         {/* B 상품 홍보 카드 — 리치(큰 이미지 + 헤드라인 + 셀링포인트 + 구매버튼). "관련 상품"보다 상단·강조.
             업주 1인칭 홍보물. 탭/구매 → 그 상품 카드(/d/{refShareUuid}). 없으면 미표시. */}
@@ -2266,5 +2287,65 @@ export function InfoDropPageReservation() {
         channelUrl: "https://youtube.com/@campingworker",
       }}
     />
+  );
+}
+
+// ST2b-2a A1 — 상품정보제공고시 인라인 펼침(FIX-37 스냅샷 {label,value} 표시형 그대로 —
+//   유형 분기 불요). 미입력 값 = "미입력" 정직 표기(자동 생성 0). Radix 0 — useState 펼침.
+function NoticeRowsSection({ rows }: { rows: Array<{ label: string; value: string }> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="rounded-2xl border border-border bg-surface">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex min-h-[44px] w-full items-center gap-1.5 px-4 py-3 text-left"
+      >
+        <span className="flex-1 text-sm font-bold tracking-ko text-text-strong">
+          상품 상세정보 고시
+        </span>
+        <span className="text-[11px] font-medium tracking-ko text-text-subtle">
+          전자상거래 필수 항목
+        </span>
+        <ChevronDown
+          className="size-4 shrink-0 text-text-subtle transition-transform"
+          style={{ transform: open ? "rotate(180deg)" : "none" }}
+          strokeWidth={2.25}
+        />
+      </button>
+      {open ? (
+        <div className="space-y-1.5 px-4 pb-4">
+          {rows.map((r, i) => (
+            <div key={i} className="rounded-lg bg-bg px-3 py-2">
+              <p className="text-[11px] font-semibold tracking-ko text-text-subtle">{r.label}</p>
+              {r.value ? (
+                <p className="mt-0.5 text-[13px] font-semibold tracking-ko text-text-strong">
+                  {r.value}
+                </p>
+              ) : (
+                <p className="mt-0.5 text-xs font-medium tracking-ko text-text-subtle">미입력</p>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+// ST2b-2a A2 — 판매기간 D-day 배지(조회 시점 계산 — 박제 금지). 마운트 가드 = SSR/클라
+//   시계·타임존 불일치 방지(TimerBadge 하이드레이션 문법 동형). 마감 경과 = "판매 마감" 정직.
+function SaleDdayBadge({ saleEndIso }: { saleEndIso: string }) {
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => {
+    const t = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setToday(`${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`);
+  }, []);
+  if (!today) return null;
+  return (
+    <span className="inline-flex shrink-0 items-center rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white">
+      {ddayLabel(saleEndIso, today)}
+    </span>
   );
 }

@@ -11,6 +11,8 @@ import type { ProductWidgetProps } from "@/components/card/ProductWidget";
 import type { CouponPreviewCoupon } from "@/components/receiver/CouponPreview";
 import type { DropPurpose } from "@/lib/types";
 import { parseVideoUrl } from "@/lib/video-metadata";
+// ST2b-2 — 남은수량 단위 라벨 파생(FIX-45c 순수 모듈 재사용 — 스튜디오·/d 동일 번역).
+import { stockUnitLabelFrom } from "@/components/card-model/booster45";
 
 const PROD_BASE = "https://app.drop.how";
 
@@ -175,6 +177,14 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     price_band_enabled?: unknown;
     dropy_rate?: unknown;
     dropy_fixed?: unknown;
+    // ST2b-2 — 45 신규 키 ADDITIVE 소비(미주입 = 미렌더 — 구 발행 카드 회귀 0).
+    notice_rows?: unknown;
+    sale_unit?: unknown;
+    pack_type?: unknown;
+    group_buy_target_n?: unknown;
+    group_buy_price_krw?: unknown;
+    group_buy_deadline?: unknown;
+    sale_end?: unknown;
   };
   const priceKrw = typeof data.price_krw === "number" ? data.price_krw : null;
   // BADGE-ⓑ(4b)/DR2-ⓑ — Droppy 예상 보상, fixed-우선(정본 우선규칙 · 3면 동일: 피드 RPC
@@ -219,7 +229,44 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
       ? data.stock_limit
       : null;
   const priceBandEnabled = data.price_band_enabled === true;
+  // ST2b-2a A1 — 고시표 스냅샷(FIX-37 표시형 {label,value} 그대로 — 유형 분기 불요).
+  //   실값 행만 통과(라벨 문자열 필수 · value 는 문자열만, 빈 값 행도 "미입력" 정직 표기용 유지).
+  const noticeRows = Array.isArray(data.notice_rows)
+    ? (data.notice_rows as unknown[])
+        .filter(
+          (r): r is { label: string; value?: unknown } =>
+            !!r && typeof r === "object" && typeof (r as { label?: unknown }).label === "string",
+        )
+        .map((r) => ({ label: r.label, value: typeof r.value === "string" ? r.value : "" }))
+    : [];
+  // ST2b-2a A2/A4 — 남은수량 단위 라벨(FIX-45c 파생 재사용 — sale_unit/pack_type 실값만).
+  const saleUnit = typeof data.sale_unit === "string" ? data.sale_unit : null;
+  const packType = typeof data.pack_type === "string" ? data.pack_type : null;
+  const stockUnitLabel = stockUnitLabelFrom(saleUnit, packType);
+  // ST2b-2b B2 — 공동구매 표시 키(폼이 유효 통과분만 저장 — 여기선 형 검증만).
+  const gbTargetN =
+    typeof data.group_buy_target_n === "number" && data.group_buy_target_n >= 2
+      ? data.group_buy_target_n
+      : null;
+  const gbPriceKrw =
+    typeof data.group_buy_price_krw === "number" && data.group_buy_price_krw > 0
+      ? data.group_buy_price_krw
+      : null;
+  const gbDeadline =
+    typeof data.group_buy_deadline === "string" && data.group_buy_deadline.trim()
+      ? data.group_buy_deadline.trim()
+      : null;
+  // ST2b-2b B2 — 판매기간 마감(sale_end · 영속화 additive 키). 부스터 D-day 근거.
+  const saleEndIso =
+    typeof data.sale_end === "string" && data.sale_end.trim() ? data.sale_end.trim() : null;
   return {
+    // ST2b-2 — additive 동봉(전부 미주입 = 미렌더).
+    ...(noticeRows.length > 0 ? { noticeRows } : {}),
+    ...(stockUnitLabel !== "개" ? { stockUnitLabel } : {}),
+    ...(gbTargetN != null && gbPriceKrw != null
+      ? { groupBuy: { targetN: gbTargetN, priceKrw: gbPriceKrw, deadline: gbDeadline } }
+      : {}),
+    ...(saleEndIso ? { saleEndIso } : {}),
     name,
     priceKrw,
     buyUrl: d.source.source_url ?? "#",

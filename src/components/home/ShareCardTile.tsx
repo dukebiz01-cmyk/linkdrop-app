@@ -90,7 +90,9 @@ export function TimerBadge({ expiresAt, serverNow }: { expiresAt: string; server
 //   tabular-nums(자릿수 가변에도 흔들림 0). radius·높이·폰트 = TimerBadge 계열 통일
 //   (rounded·px-1.5·py-0.5·text-[10px] — 지시의 rounded-md 대신 TimerBadge 동일 radius 택1).
 //   색 로직 무변경(기본 슬레이트 / ≤5 앰버 / 0 저채도) — 컨테이너만 뱃지화.
-export function StockMeta({ remaining }: { remaining: number }) {
+// ST2b-2a A4 — unitLabel additive(FIX-45c 판매 구성 단위: '박스'/'망'/'kg' 등).
+//   미주입 = '개'(기존 소비처 렌더와 문자 동등 — 회귀 0).
+export function StockMeta({ remaining, unitLabel }: { remaining: number; unitLabel?: string }) {
   // BADGE-ⓑ(S24) — 썸네일 오버레이 승격: TimerBadge 동일 문법(text-[10px] font-semibold text-white
   //   + 배경 필: 평상 bg-black/65 / ≤5 앰버 / 0 저채도 "마감"). 위치는 소비처가 지정(비-positioned).
   if (remaining <= 0) {
@@ -108,7 +110,8 @@ export function StockMeta({ remaining }: { remaining: number }) {
       }`}
     >
       <Package className="size-3" strokeWidth={2} />
-      {remaining}개 남음
+      {remaining}
+      {unitLabel ?? "개"} 남음
     </span>
   );
 }
