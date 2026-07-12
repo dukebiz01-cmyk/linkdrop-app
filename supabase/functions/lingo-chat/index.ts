@@ -38,6 +38,7 @@ import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.110.0";
 import {
   buildSystemPrompt,
   type LingoContext,
+  type LingoPerformance,
   type LingoStage,
   type LingoStudioContext,
   type LingoSurface,
@@ -468,7 +469,35 @@ Deno.serve(async (req) => {
   //    T-B — home 은 studio 기제(도구·블록 H) 전면 비활성: studio 도구는 home 에서 부착하지 않는다.
   const studio: LingoStudioContext | null =
     surface === "studio" ? (body.context?.studio ?? null) : null;
-  const systemPrompt = buildSystemPrompt({ stage, facts, context: body.context, studio, surface });
+
+  // T-D — 홈 성과 진단: surface='home' + context.performance===true 일 때만 성과 실측 주입.
+  //   RPC 호출 = generate-feedback 승계(:148-155 user 클라이언트 · :185-187
+  //   get_creator_performance(p_period) — 호출자 JWT 컨텍스트, 기본 '30d' 동일).
+  //   실패/예외 = 예외 던지지 않고 정직 가드 블록 주입(스트림 정상 완결).
+  //   performance 미지정/false·studio surface = performance null → 조립 문자 단위 기존 동일.
+  let performance: LingoPerformance | null = null;
+  if (surface === "home" && body.context?.performance === true) {
+    try {
+      const { data: perfData, error: perfErr } = await userClient.rpc("get_creator_performance", {
+        p_period: "30d",
+      });
+      performance =
+        perfErr || !perfData
+          ? { ok: false }
+          : { ok: true, metrics: perfData as Record<string, unknown> };
+    } catch (_e) {
+      performance = { ok: false };
+    }
+  }
+
+  const systemPrompt = buildSystemPrompt({
+    stage,
+    facts,
+    context: body.context,
+    studio,
+    surface,
+    performance,
+  });
 
   const messages = [...history, { role: "user" as const, content: message }];
 
@@ -670,20 +699,34 @@ Deno.serve(async (req) => {
         console.error("[lingo-chat] state upsert failed:", e);
       }
 
+      // T-C — done 프레임 확장 재료: 실제 방출 시점에만 true(검증 후 빈 배열 = studioResult
+      //   미세팅 = 미전송 = false). surface 무관 두 필드 항상 포함.
+      let actionsSent = false;
+      let intentSent = false;
+
       // T-A §2 — event: actions — done 직전 최대 1회. 검증 후 빈 배열이면 미전송.
       if (studioResult) {
         controller.enqueue(
           sseFrame("actions", { actions: studioResult.actions, steps: studioResult.steps }),
         );
+        actionsSent = true;
       }
 
       // T-B — event: intent — done 직전 최대 1회(검증 통과 시에만).
       if (homeIntent) {
         controller.enqueue(sseFrame("intent", { intent: homeIntent }));
+        intentSent = true;
       }
 
       controller.enqueue(
-        sseFrame("done", { message_id: messageId, tokens_used: tokensUsed, cost_krw: cost }),
+        sseFrame("done", {
+          message_id: messageId,
+          tokens_used: tokensUsed,
+          cost_krw: cost,
+          // T-C — 방출 플래그(항상 포함): 클라가 delta 예고-actions 유실 불일치를 판정할 근거.
+          actions_sent: actionsSent,
+          intent_sent: intentSent,
+        }),
       );
       controller.close();
     },

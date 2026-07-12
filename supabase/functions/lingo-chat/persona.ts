@@ -29,6 +29,8 @@ export interface LingoContext {
   studio_state?: Record<string, unknown> | null;
   /** T-A §1 — 스튜디오 액션 모드 컨텍스트(선택). */
   studio?: LingoStudioContext | null;
+  /** T-D — 홈 성과 진단 요청 플래그(surface=home 전용 — index 가 RPC 집계 주입). */
+  performance?: boolean;
 }
 
 // ── [블록 A — 정체성·톤 (고정)] ──────────────────────────────────────────
@@ -98,6 +100,34 @@ function buildStudioBlock(studio: LingoStudioContext): string {
   return parts.join("\n\n");
 }
 
+// ── [블록 P — 성과 진단 규칙 (T-D, performance 주입 시에만 조립)] ──────────
+export type LingoPerformance =
+  | { ok: true; metrics: Record<string, unknown> }
+  | { ok: false };
+
+const BLOCK_P = `[성과 진단 규칙]
+- 아래 [성과 실측]의 숫자만 인용한다. 재계산·반올림·근사 금지 — 주어진 값 그대로 쓴다.
+- 예측을 말하지 않는다("다음 주에는 N건" 류 금지). 다른 매장·평균과 비교하지 않는다.
+- 조회수·공유수 같은 표시용 숫자는 언급하지 않는다. 검증된 전환(전환·쿠폰 사용·확산·재입고 대기)만 다룬다.
+- 구조: ①실측 숫자 기반 해석 한두 문장 → ②다음 행동 하나(카드 만들기/수정 등 스튜디오로 배웅).
+- 데이터가 없거나 부족하면: "아직 성과가 쌓이기 전이에요"라고 정직하게 말하고 다음 행동 하나만 제안한다. 진단을 지어내지 않는다.
+- 답변은 3~5문장. 과장·아부 금지.`;
+
+// [성과 실측] 동적 블록 — RPC 반환 JSON 실값 그대로(가공·요약 금지). 실패 = 정직 가드.
+function buildPerformanceBlock(perf: LingoPerformance): string {
+  if (!perf.ok) {
+    return (
+      "[성과 실측]
+성과 데이터를 불러오지 못함 — 지어내지 말고 " +
+      "'지금 성과를 불러오지 못했어요. 잠시 뒤 다시 볼까요?'로 정직하게 답할 것"
+    );
+  }
+  return BLOCK_P + "
+
+[성과 실측]
+" + JSON.stringify(perf.metrics);
+}
+
 // ── [블록 G — 출력 규칙 (고정)] ──────────────────────────────────────────
 const BLOCK_G = `[출력 규칙]
 - 답변은 3~5문장 이내. 목록이 꼭 필요할 때만 최대 3개.
@@ -143,12 +173,15 @@ export function buildSystemPrompt({
   context,
   studio,
   surface,
+  performance,
 }: {
   stage: LingoStage;
   facts: string[];
   context: LingoContext | null | undefined;
   studio?: LingoStudioContext | null;
   surface?: LingoSurface;
+  /** T-D — 홈 성과 진단(미주입 = 기존 조립 문자 단위 동일 — 하위호환). */
+  performance?: LingoPerformance | null;
 }): string {
   const blocks: string[] = [
     BLOCK_A,
@@ -160,6 +193,8 @@ export function buildSystemPrompt({
   if (memory) blocks.push(memory);
   blocks.push(buildContextBlock(context));
   if (studio) blocks.push(buildStudioBlock(studio));
+  // T-D — 성과 진단 블록(P): performance 주입 시에만(홈 인텐트 안내와 병존).
+  if (performance) blocks.push(buildPerformanceBlock(performance));
   blocks.push(BLOCK_G);
   return blocks.join("\n\n");
 }
