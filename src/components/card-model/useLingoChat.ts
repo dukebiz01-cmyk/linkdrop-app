@@ -480,20 +480,32 @@ export function useLingoVoice() {
     [showNotice],
   );
 
-  /** done 후 링고 응답 낭독(ko-KR). 실패는 조용히 무시 — 텍스트는 이미 화면에 있음. */
+  /** done 후 링고 응답 낭독(ko-KR). 실패는 조용히 무시 — 텍스트는 이미 화면에 있음.
+   *  FIX-48 — onDone additive: 낭독 종료(성공·오류·TTS off 즉시) 콜백 — 대화 모드 재청취
+   *  트리거(에코 차단: 낭독이 끝난 뒤에만 호출됨). 기존 호출부(1인자) 동작 무변경. */
   const speak = useCallback(
-    (text: string) => {
-      if (!ttsOn || typeof window === "undefined" || !window.speechSynthesis) return;
+    (text: string, onDone?: () => void) => {
+      if (!ttsOn || typeof window === "undefined" || !window.speechSynthesis) {
+        onDone?.();
+        return;
+      }
       try {
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         u.lang = "ko-KR";
         u.onstart = () => setSpeaking(true);
-        u.onend = () => setSpeaking(false);
-        u.onerror = () => setSpeaking(false);
+        u.onend = () => {
+          setSpeaking(false);
+          onDone?.();
+        };
+        u.onerror = () => {
+          setSpeaking(false);
+          onDone?.();
+        };
         window.speechSynthesis.speak(u);
       } catch {
         setSpeaking(false);
+        onDone?.();
       }
     },
     [ttsOn],

@@ -190,7 +190,9 @@ const CARD_BASE = "#FFFFFF";
 const GATED_BLOCK_IDS = new Set(["delivery", "review", "top", "boost", "marketing"]);
 const GATE_NOTICE = "이 기능은 오픈 준비 중이에요. 곧 열려요.";
 // LINGO-V2 — 확인어 정본 상수(정확 일치·클라 판정 — LLM 재해석 금지). trim 후 일치만 적용.
-const LINGO_CONFIRM_WORDS = new Set(["확인", "응", "좋아", "해줘"]);
+const LINGO_CONFIRM_WORDS = new Set(["확인", "응", "좋아", "해줘", "네", "어", "그래"]);
+// FIX-48(41창 ② 회신) — 판정 = trim + 끝 구두점 strip 후 정확 일치(LLM 재해석 금지 유지).
+const normalizeConfirmWord = (t: string) => t.trim().replace(/[.,!?~…。、！？]+$/u, "").trim();
 // LINGO-V2 — 모드 라벨(액션 요약 표기용 — 탭 라벨과 동일 어휘).
 const LINGO_MODE_LABELS: Record<string, string> = {
   general: "퍼블릭",
@@ -2346,26 +2348,104 @@ export function CardStudioPage45({
   lingoCloseRef.current = chat.close;
   useEffect(() => () => lingoCloseRef.current(), []);
 
+  // ── FIX-48 — 연속 대화 모드(청취→자동 전송→낭독→재청취 루프). 기본 off — 기존
+  //    1회 모드 무변경. 액션 게이트 유지: 자동 전송돼도 적용은 확인어/[적용]만(덱 불변).
+  const [convMode, setConvMode] = useState(false);
+  const [convPaused, setConvPaused] = useState(false);
+  const [convPreview, setConvPreview] = useState<string | null>(null);
+  const convActiveRef = useRef(false);
+  const convFinalRef = useRef<string | null>(null);
+  const convBusyRef = useRef(false); // 프리뷰~전송~낭독 동안 재청취 금지(중복·에코 차단).
+  const convIdleAtRef = useRef(0); // 마지막 실발화 시각 — 무음 2분 자동 대기 기준.
+  const CONV_IDLE_MS = 120_000;
+
+  function convListen() {
+    if (!convActiveRef.current || convBusyRef.current) return;
+    // 에코 차단 필수 — TTS 낭독 중 STT 완전 정지(speechSynthesis 종료 후에만 청취).
+    if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
+      setTimeout(convListen, 300);
+      return;
+    }
+    if (Date.now() - convIdleAtRef.current > CONV_IDLE_MS) {
+      setConvPaused(true); // 무음 2분 → 자동 대기(안내는 패널이 표시).
+      return;
+    }
+    convFinalRef.current = null;
+    setVoiceInterim("");
+    voice.startListening(
+      (t) => {
+        convFinalRef.current = t;
+      },
+      { onInterim: setVoiceInterim },
+    );
+  }
+
+  function startConvMode() {
+    setConvMode(true);
+    convActiveRef.current = true;
+    setConvPaused(false);
+    convIdleAtRef.current = Date.now();
+    if (!voice.listening) convListen();
+  }
+
+  // [대화 끝내기]/패널 닫기/이탈 — STT·TTS 전체 정지(AudioContext 는 패널 언마운트가 정리).
+  function endConvMode() {
+    convActiveRef.current = false;
+    convBusyRef.current = false;
+    convFinalRef.current = null;
+    setConvMode(false);
+    setConvPaused(false);
+    setConvPreview(null);
+    voice.stopListening();
+    voice.stopSpeaking();
+    setVoiceOpen(false);
+    setVoiceInterim("");
+  }
+
+  function resumeConvMode() {
+    convIdleAtRef.current = Date.now();
+    setConvPaused(false);
+    convListen();
+  }
+
+  // 공통 전송(1회 모드·대화 모드 공용) — 확인어 게이트(정본 상수 + FIX-48 구두점 strip) 포함.
+  async function sendChatText(text: string, channel: "text" | "voice", conv = false) {
+    if (!text || chat.streaming) return;
+    if (chat.proposal && LINGO_CONFIRM_WORDS.has(normalizeConfirmWord(text))) {
+      const p = chat.proposal;
+      consumeLingoProposal(p); // LINGO-V2b E2 — 버튼과 동일 소비 함수(재진입 가드 공유).
+      if (conv && convActiveRef.current) {
+        convBusyRef.current = false;
+        convListen();
+      }
+      return;
+    }
+    voice.stopSpeaking(); // 새 입력 시작 = 낭독 즉시 중단.
+    const finalText = await chat.send(text, channel, buildLingoContext());
+    if (conv && convActiveRef.current) {
+      if (finalText) {
+        // 낭독 종료(onDone) 후에만 재청취 — 링고가 자기 말을 듣는 루프 금지.
+        voice.speak(finalText, () => {
+          convBusyRef.current = false;
+          convListen();
+        });
+      } else {
+        convBusyRef.current = false;
+        convListen();
+      }
+    } else if (finalText) {
+      voice.speak(finalText);
+    }
+  }
+
   // T5 — 전송(반이중): 낭독 중단 → 스트림 완주 → done 텍스트 낭독. 실패해도 제작 흐름 비차단.
   async function handleChatSend() {
     const text = chatInput.trim();
     if (!text || chat.streaming || voice.listening) return;
-    // LINGO-V2 — 확인어 게이트(정본 상수·정확 일치·클라 판정): 제안 대기 중 확인어면 서버
-    //   왕복 없이 적용. 음성도 같은 경로(STT→입력창→[전송] 반이중) — 동일 판정.
-    //   그 외 입력은 일반 대화로 전송(send 시작 시 제안 만료 — 스테일 적용 금지).
-    if (chat.proposal && LINGO_CONFIRM_WORDS.has(text)) {
-      const p = chat.proposal;
-      setChatInput("");
-      chatChannelRef.current = "text";
-      consumeLingoProposal(p); // LINGO-V2b E2 — 버튼과 동일 소비 함수(재진입 가드 공유).
-      return;
-    }
-    voice.stopSpeaking(); // 새 입력 시작 = 낭독 즉시 중단.
     const channel = chatChannelRef.current;
     setChatInput("");
     chatChannelRef.current = "text";
-    const finalText = await chat.send(text, channel, buildLingoContext());
-    if (finalText) voice.speak(finalText);
+    await sendChatText(text, channel);
   }
 
   // T5 — 마이크(반이중): 듣기 시작 → 결과를 입력창에 채움(자동 전송 금지 — [전송]으로 확인).
@@ -2387,6 +2467,11 @@ export function CardStudioPage45({
   //   (channel 'voice' 는 기존 onText 경로 그대로).
   function handleOrbTap() {
     if (chat.streaming) return;
+    // FIX-48 — 무음 대기 중 마이크 탭 = 대화 재개("계속하려면 마이크를 눌러 주세요").
+    if (convActiveRef.current && convPaused) {
+      resumeConvMode();
+      return;
+    }
     voice.stopSpeaking();
     if (voice.listening) {
       voice.stopListening();
@@ -2405,7 +2490,12 @@ export function CardStudioPage45({
     );
   }
   // [취소] — 인식 텍스트 폐기 + STT 즉시 종료(파형 AudioContext 는 패널 언마운트가 정리).
+  //   FIX-48 — 대화 모드 중이면 전체 정지(endConvMode 동일 경로).
   function handleVoiceCancel() {
+    if (convActiveRef.current) {
+      endConvMode();
+      return;
+    }
     voice.stopListening();
     setVoiceInterim("");
     setVoiceOpen(false);
@@ -2418,14 +2508,33 @@ export function CardStudioPage45({
     setVoiceInterim("");
     openPanelAt();
   }
-  // 자연 종료(말 멈춤 → 인식 엔진 스스로 종료) — 파형 패널을 닫고 확인 단계(패널 뷰)로.
+  // 자연 종료(말 멈춤 → 인식 엔진 스스로 종료) — 1회 모드: 패널 닫고 확인 단계(무변경).
+  //   FIX-48 대화 모드: 최종 인식분 = 1초 프리뷰(오인식 방어 — 취소는 [대화 끝내기]) 후
+  //   자동 전송 / 무음 세그먼트 = 재청취(무음 2분 누적 시 자동 대기).
   useEffect(() => {
-    if (voiceOpen && !voice.listening) {
-      setVoiceOpen(false);
-      setVoiceInterim("");
-      openPanelAt();
+    if (!voiceOpen || voice.listening) return;
+    if (convActiveRef.current) {
+      if (convPaused || convBusyRef.current || chat.streaming) return;
+      const t = (convFinalRef.current ?? "").trim();
+      convFinalRef.current = null;
+      if (t) {
+        convBusyRef.current = true;
+        convIdleAtRef.current = Date.now();
+        setConvPreview(t);
+        const timer = setTimeout(() => {
+          setConvPreview(null);
+          void sendChatText(t, "voice", true);
+        }, 1000);
+        return () => clearTimeout(timer);
+      }
+      convListen();
+      return;
     }
-  }, [voiceOpen, voice.listening]);
+    setVoiceOpen(false);
+    setVoiceInterim("");
+    openPanelAt();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceOpen, voice.listening, convPaused, chat.streaming]);
 
   return (
     // FIX-16 — 하단 스트립 폐지: 본문 패딩은 전송 CTA 기준 원복(pb-[120px]).
@@ -4741,6 +4850,15 @@ export function CardStudioPage45({
                 accent={accent}
                 onCancel={handleVoiceCancel}
                 onDone={handleVoiceDone}
+                // FIX-48 — 연속 대화 모드(인앱 게이트 환경은 orb 미렌더라 진입 불가 — 토글도
+                //   이중 가드 미노출).
+                convMode={convMode}
+                speaking={voice.speaking}
+                paused={convPaused}
+                previewText={convPreview}
+                onToggleConv={inAppNoMic ? undefined : startConvMode}
+                onEndConv={endConvMode}
+                onResume={resumeConvMode}
               />
             </div>
           )}
