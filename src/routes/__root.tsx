@@ -169,7 +169,7 @@ function InAppBrowserBanner() {
   }, []);
   if (!inApp) return null;
   return (
-    <div className="flex items-start gap-2 bg-[#0F172A] px-4 py-2.5 text-white">
+    <div className="flex items-start gap-2 bg-[#0F172A] px-4 py-2 text-white">
       <p className="min-w-0 flex-1 text-xs font-medium leading-relaxed tracking-ko [word-break:keep-all]">
         {inApp === "kakao"
           ? "카카오톡 브라우저예요. 오른쪽 위 메뉴 → '다른 브라우저로 열기'를 누르면 로그인과 음성까지 전부 쓸 수 있어요"
@@ -186,7 +186,7 @@ function InAppBrowserBanner() {
           }
           setInApp(null);
         }}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/70 hover:text-white"
+        className="-my-2 -mr-3 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-white/70 hover:text-white"
       >
         <X className="h-4 w-4" strokeWidth={2.5} />
       </button>
