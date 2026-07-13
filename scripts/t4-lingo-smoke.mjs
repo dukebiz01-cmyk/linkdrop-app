@@ -163,7 +163,9 @@ const mode =
         ? "actions"
         : process.argv[2] === "home"
           ? "home"
-          : "single";
+          : process.argv[2] === "perf"
+            ? "perf"
+            : "single";
 
 if (mode === "home") {
   // ── T-B 실측 — surface:"home" 새 세션 2발(context.studio 미포함). 판정 없음(원문만). ──
@@ -182,6 +184,25 @@ if (mode === "home") {
     }
     if (r.error) console.log(`[error 전문] ${JSON.stringify(r.error)}`);
   }
+  await client.auth.signOut();
+  console.log(`\n[secure] 토큰·키·비밀번호 미출력 확인 (계정: ${usedLabel})`);
+  process.exit(0);
+}
+
+if (mode === "perf") {
+  // ── T-D 실측 — surface:"home" + context.performance:true 1발(BLOCK_P 성과 진단).
+  //    home 모드 복제·최소 수정: context 에 performance:true 주입 + done 원문 출력.
+  const SHOT = "내 카드 성과 요즘 어때?";
+  console.log(`\n════ "${SHOT}" (새 세션 · surface:"home" · performance:true) ════`);
+  const r = await runChat(SHOT, null, { performance: true }, "home");
+  console.log(`[http] status=${r.status} stage=${r.stage ?? "-"}`);
+  if (r.nonSse) console.log("[non-sse body]", r.nonSse);
+  console.log(`[meta.surface] ${r.surface ?? "(미포함)"}`);
+  console.log(`[event: intent] ${r.intent ? `수신 — ${JSON.stringify(r.intent)}` : "미수신"}`);
+  console.log("[answer 전문]");
+  console.log(r.answer || "(빈 응답)");
+  if (r.done) console.log("[done 원문]", JSON.stringify(r.done));
+  if (r.error) console.log(`[error 전문] ${JSON.stringify(r.error)}`);
   await client.auth.signOut();
   console.log(`\n[secure] 토큰·키·비밀번호 미출력 확인 (계정: ${usedLabel})`);
   process.exit(0);
@@ -216,6 +237,7 @@ if (mode === "actions") {
     console.log(r.answer || "(빈 응답)");
     if (r.done) {
       console.log(`[done] tokens_used=${r.done.tokens_used} cost_krw=${r.done.cost_krw}`);
+      console.log("[done 원문]", JSON.stringify(r.done)); // T-C — actions_sent/intent_sent 확인
     }
     if (r.error) console.log(`[error 전문] ${JSON.stringify(r.error)}`);
   }
