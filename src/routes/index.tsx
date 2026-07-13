@@ -20,6 +20,14 @@ const setRootNoStore = createIsomorphicFn()
     }
   });
 
+// S3-B — 로그인 흔적 동기 판별. @supabase/ssr createBrowserClient 는 세션을
+//   sb-<project-ref>-auth-token 쿠키(용량 초과 시 .0/.1… 청크)에 저장(supabase.ts 주석 근거).
+//   흔적만 판별 — 유효성은 getSession 재확인이 담당. SSR(document 없음)에서는 false.
+function hasAuthCookieTrace(): boolean {
+  if (typeof document === "undefined") return false;
+  return /(?:^|;\s*)sb-[a-z0-9-]+-auth-token(?:\.\d+)?=/i.test(document.cookie);
+}
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -58,10 +66,15 @@ function IndexHomePage() {
   // BUG-3B — SSR 세션 판정이 쿠키 레이스로 미스했을 때 로그인 유저에게 구 메인(HomePageV3)이
   //   노출되는 것을 클라 마운트 후 세션 재확인 1회로 차단. 세션 있으면 현 홈으로 replace 이동.
   //   재확인 완료 전에는 로딩만 렌더(구 메인 깜빡임 최소화). 비로그인은 재확인 후 즉시 랜딩.
-  const [checking, setChecking] = useState(isSupabaseConfigured);
+  // S3-B — 초기값 false(SSR·hydration 동일 = 랜딩). 스피너는 "로그인 흔적 있음"일 때만
+  //   effect 가 켠다. 흔적 없음(신규/로그아웃 손님) = 스피너 0, 랜딩 즉시.
+  const [checking, setChecking] = useState(false);
   useEffect(() => {
     if (!isSupabaseConfigured) return;
+    // S3-B — 로그인 흔적 없으면 재확인·스피너 생략(랜딩 즉시). 흔적 있을 때만 세션 재확인.
+    if (!hasAuthCookieTrace()) return;
     let alive = true;
+    setChecking(true);
     void (async () => {
       try {
         const { data } = await getSupabase().auth.getSession();
