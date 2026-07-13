@@ -190,7 +190,7 @@ const CARD_BASE = "#FFFFFF";
 const GATED_BLOCK_IDS = new Set(["delivery", "review", "top", "boost", "marketing"]);
 const GATE_NOTICE = "이 기능은 오픈 준비 중이에요. 곧 열려요.";
 // LINGO-V2 — 확인어 정본 상수(정확 일치·클라 판정 — LLM 재해석 금지). trim 후 일치만 적용.
-const LINGO_CONFIRM_WORDS = new Set(["확인", "응", "좋아", "해줘", "네", "어", "그래"]);
+const LINGO_CONFIRM_WORDS = new Set(["확인", "응", "좋아", "해줘", "네", "그래"]);
 // FIX-48(41창 ② 회신) — 판정 = trim + 끝 구두점 strip 후 정확 일치(LLM 재해석 금지 유지).
 const normalizeConfirmWord = (t: string) => t.trim().replace(/[.,!?~…。、！？]+$/u, "").trim();
 // LINGO-V2 — 모드 라벨(액션 요약 표기용 — 탭 라벨과 동일 어휘).
