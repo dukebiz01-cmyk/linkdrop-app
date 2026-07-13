@@ -22,7 +22,14 @@ export const Route = createFileRoute("/_user")({
         .eq("id", data.session.user.id)
         .maybeSingle();
       if (!profile?.onboarding_completed_at) {
-        throw redirect({ to: "/start" });
+        // BUG-3A — 온보딩 게이트가 삼키던 복귀 주소 보존(쿠폰 수령 등 funnel 복귀). 오픈
+        //   리다이렉트 방지: 같은 오리진 경로("/..." 시작·"//" 차단)만 next 로 부착, 아니면 미부착.
+        const back = location.href;
+        const safeNext = back.startsWith("/") && !back.startsWith("//") ? back : undefined;
+        throw redirect({
+          to: "/start",
+          search: (safeNext ? { next: safeNext } : {}) as never,
+        });
       }
     }
   },
