@@ -8,11 +8,18 @@ type AuthMode = "signin" | "signup" | "forgot";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "로그인" }] }),
+  // BUG-4 — 복귀 주소(redirect). _user 게이트가 ?redirect=%2Fhome 형식으로 보내는 파라미터명
+  //   그대로 소비. 오픈 리다이렉트 방지: 같은-오리진 경로("/..." 시작·"//" 차단)만 통과.
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
+    const r = search.redirect;
+    return typeof r === "string" && r.startsWith("/") && !r.startsWith("//") ? { redirect: r } : {};
+  },
   component: LoginRoute,
 });
 
 function LoginRoute() {
   const navigate = useNavigate();
+  const { redirect: redirectParam } = Route.useSearch();
   const [mode, setMode] = useState<AuthMode>("signin");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +50,13 @@ function LoginRoute() {
       });
       if (authError) throw authError;
       setFailedAttempts(0);
-      navigate({ to: "/home" });
+      // BUG-4 — 복귀 주소(redirectParam, 같은-오리진 경로) 소비. 없으면 현행 /home.
+      //   쿼리 보존 위해 하드 내비게이션(예: /me?claimed=…, /create-wizard?url=…).
+      if (redirectParam) {
+        window.location.assign(redirectParam);
+      } else {
+        navigate({ to: "/home" });
+      }
     } catch (err) {
       console.error("[login] signInWithPassword failed:", err);
       const newCount = failedAttempts + 1;
@@ -76,8 +89,9 @@ function LoginRoute() {
     }
     if (typeof window === "undefined") return;
     if (provider === "kakao") {
-      // /login 진입 흐름은 next 미지정 → auth.callback 이 기본 /home 복귀 (회귀 0).
-      const result = await startKakaoLogin();
+      // BUG-4 — 복귀 주소(redirectParam)를 OAuth next 로 전달(startKakaoLogin 이 같은-오리진
+      //   가드 재적용). redirect 없으면 undefined → auth.callback 기본 /home 복귀(현행).
+      const result = await startKakaoLogin(redirectParam);
       if (!result.ok) {
         if (result.reason !== "no_config") {
           setError("카카오 로그인 중 문제가 발생했어요. 다시 시도해 주세요.");
