@@ -826,6 +826,27 @@ export function CardStudioPage() {
         shareableUrl = json.shareable_url ?? null;
       }
 
+      // BUG-1 — 커머스 재사용 발행: 폼 제출로 만든 드롭 A 는 is_public=false(서버 기본)로
+      //   생성됐고 이 분기는 /api/drops 를 재호출하지 않아 body.is_public(발행바 토글)이
+      //   반영되지 않는다. 발행 성공 후 발행바 토글값(isPublic)을 드롭 A 에 best-effort 반영
+      //   (쿠폰/카드색 패턴 동일 — 실패해도 발행 유지). RLS info_drops UPDATE(owner) 기존 정책 커버.
+      //   else(신규 생성) 분기는 body 에 is_public 이 실려 나가므로 여기 대상 아님(reusedProduct 게이트).
+      if (reusedProduct && dropId) {
+        try {
+          const { getSupabase } = await import("@/lib/supabase");
+          const supabase = getSupabase();
+          if (supabase) {
+            const { error: pubErr } = await supabase
+              .from("info_drops")
+              .update({ is_public: isPublic })
+              .eq("id", dropId);
+            if (pubErr) console.warn("[studio-build] 공개 토글 반영 실패:", pubErr.message);
+          }
+        } catch (e) {
+          console.warn("[studio-build] is_public update exception:", e);
+        }
+      }
+
       // S2-b 쿠폰 연결 — purpose 결정과 동일 조건(hasCoupon). create-wizard 패턴: 저장 후
       //   별도 RPC. best-effort(실패해도 저장/URL 진행).
       if (dropId && hasCoupon) {
