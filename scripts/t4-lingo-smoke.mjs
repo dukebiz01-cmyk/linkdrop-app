@@ -249,23 +249,20 @@ if (mode === "actions") {
 }
 
 if (mode === "interview") {
-  // ── FIX-48+50 P2 실측 — 확장 setField(origin/gbTargetPrice) + interview 컨텍스트 발사.
-  //    ⚠️ Edge 미배포면 신규 필드가 화이트리스트 밖이라 actions 에서 제거됨(정상) — 배포 후 재실측.
-  const STUDIO = {
+  // ── FIX-48+50 P2 실측 — 확장 setField 4종 전수 + N<2 검증 게이트 + 번호 발화 일치.
+  //    per-shot 컨텍스트(full/groupBuy). 공동구매 shot 은 sales_method:"groupBuy" 로 모드혼동 제거.
+  const DECK = [
+    { id: "product", label: "상품", applied: true, locked: false },
+    { id: "seasonal", label: "발송기준", applied: false, locked: false },
+  ];
+  const studioFull = { mode: "commerce", deck: DECK, fields: { productName: "괴산 사과", productPrice: "35000" } };
+  const studioGb = {
     mode: "commerce",
-    deck: [
-      { id: "product", label: "상품", applied: true, locked: false },
-      { id: "seasonal", label: "발송기준", applied: false, locked: false },
-    ],
-    fields: { productName: "괴산 사과", productPrice: "35000" },
+    deck: DECK,
+    fields: { productName: "괴산 사과", productPrice: "35000", gbTargetCount: "", gbTargetPrice: "" },
   };
-  const INTERVIEW = {
-    version: "2.1",
-    mode: "commerce",
-    sales_method: "full",
-    total: 7,
-    current_no: 3,
-    current_label: "원산지",
+  const ivFull = (current_no, current_label) => ({
+    version: "2.1", mode: "commerce", sales_method: "full", total: 7, current_no, current_label,
     steps: [
       { no: 1, label: "사진", done: true, can_set: false },
       { no: 2, label: "상품명", done: true, can_set: true },
@@ -275,28 +272,44 @@ if (mode === "interview") {
       { no: 6, label: "도킹", done: false, can_set: false, skippable: true },
       { no: 7, label: "발행", done: false, can_set: false, publish: true },
     ],
-  };
+  });
+  const ivGb = (current_no, current_label) => ({
+    version: "2.1", mode: "commerce", sales_method: "groupBuy", total: 9, current_no, current_label,
+    steps: [
+      { no: 1, label: "사진", done: true, can_set: false },
+      { no: 2, label: "상품명", done: true, can_set: true },
+      { no: 3, label: "원산지", done: true, can_set: true },
+      { no: 4, label: "기본가", done: true, can_set: true },
+      { no: 5, label: "목표인원", done: false, can_set: true },
+      { no: 6, label: "달성가", done: false, can_set: true },
+      { no: 7, label: "발송기준", done: false, can_set: false },
+      { no: 8, label: "모집마감", done: false, can_set: false, skippable: true },
+      { no: 9, label: "발행", done: false, can_set: false, publish: true },
+    ],
+  });
+  // shot = { msg, studio, interview, expect }
   const SHOTS = [
-    "원산지는 충북 괴산이야", // → setField origin
-    "공동구매로 바꾸고 달성가는 3만원으로", // → setField gbTargetPrice (기본가 35000 미만 = 통과)
+    { msg: "원산지는 충북 괴산이야", studio: studioFull, interview: ivFull(3, "원산지"), expect: "setField origin" },
+    { msg: "수량은 100개 한정으로 넣어줘", studio: studioFull, interview: ivFull(3, "원산지"), expect: "setField stockQty" },
+    { msg: "5번 목표 인원 10명으로 넣어줘", studio: studioGb, interview: ivGb(5, "목표인원"), expect: "setField gbTargetCount=10" },
+    { msg: "목표 인원 1명으로 해줘", studio: studioGb, interview: ivGb(5, "목표인원"), expect: "N<2 위반 → 부착 대신 정직 안내(발화)" },
+    { msg: "6번 달성가는 3만원으로 넣어줘", studio: studioGb, interview: ivGb(6, "달성가"), expect: "setField gbTargetPrice=30000 (기본가 35000 미만)" },
   ];
   for (let i = 0; i < SHOTS.length; i++) {
-    console.log(`\n════ [${i + 1}/${SHOTS.length}] "${SHOTS[i]}" (studio+interview) ════`);
-    const r = await runChat(SHOTS[i], null, { studio: STUDIO, interview: INTERVIEW });
-    console.log(`[http] status=${r.status} stage=${r.stage ?? "-"}`);
+    const s = SHOTS[i];
+    console.log(`\n════ [${i + 1}/${SHOTS.length}] "${s.msg}"  (기대: ${s.expect}) ════`);
+    const r = await runChat(s.msg, null, { studio: s.studio, interview: s.interview });
+    console.log(`[http] status=${r.status} stage=${r.stage ?? "-"} | 현재번호(context)=${s.interview.current_no} ${s.interview.current_label}`);
     if (r.nonSse) console.log("[non-sse body]", r.nonSse);
     console.log(`[event: actions] ${r.actions ? "수신" : "미수신"}`);
     if (r.actions) console.log(JSON.stringify(r.actions, null, 2));
     console.log("[answer 전문]");
     console.log(r.answer || "(빈 응답)");
-    if (r.done) console.log("[done 원문]", JSON.stringify(r.done));
+    if (r.done) console.log(`[done] actions_sent=${r.done.actions_sent} tokens=${r.done.tokens_used}`);
     if (r.error) console.log(`[error 전문] ${JSON.stringify(r.error)}`);
   }
   await client.auth.signOut();
   console.log(`\n[secure] 토큰·키·비밀번호 미출력 확인 (계정: ${usedLabel})`);
-  console.log(
-    "[주의] Edge 미배포면 신규 필드(origin/gbTargetPrice)는 화이트리스트 밖 = actions 에서 제거됨. 배포 후 재실측.",
-  );
   process.exit(0);
 }
 
