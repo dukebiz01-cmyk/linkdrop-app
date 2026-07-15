@@ -576,5 +576,7 @@ export function buildProductWidget(props: InfoDropPageProps): ProductWidgetProps
     buyUrl: c.buyUrl,
     // BADGE-ⓑ(4b) — Droppy 예상 보상 관통(buildCommerce 산출 → 위젯 표기).
     dropyReward: c.dropyReward,
+    // BUG-2 T2 — 재고 단위 라벨 관통(FIX-45c): 한정 배지 단위 동기화(미주입=위젯에서 '개' 폴백).
+    stockUnitLabel: c.stockUnitLabel,
   };
 }

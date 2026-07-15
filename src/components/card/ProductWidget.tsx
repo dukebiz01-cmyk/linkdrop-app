@@ -31,6 +31,8 @@ export interface ProductWidgetProps {
   isFresh?: boolean;
   harvestDate?: string | null;
   stockLimit?: number | null;
+  /** BUG-2 T2 — 재고 단위 라벨(FIX-45c: '박스'/'망'/'kg' 등). 미주입 = '개' 폴백. 한정 배지 단위 동기화. */
+  stockUnitLabel?: string;
   local?: { name?: string; address?: string; distance?: string };
   /** 자체업로드 상품 → 1차 버튼 "선주문하기"(onPreorder). false/미지정이면 "구매하기"(buyUrl). */
   selfUpload?: boolean;
@@ -56,6 +58,7 @@ export function ProductWidget({
   isFresh,
   harvestDate,
   stockLimit,
+  stockUnitLabel,
   local,
   selfUpload,
   buyUrl,
@@ -131,7 +134,8 @@ export function ProductWidget({
               ) : null}
               {stockLimit != null ? (
                 <span className="inline-flex w-fit items-center rounded-md border border-border bg-bg px-2 py-0.5 text-xs font-semibold tracking-ko text-text-strong">
-                  {stockLimit}개 한정
+                  {stockLimit}
+                  {stockUnitLabel ?? "개"} 한정
                 </span>
               ) : null}
             </div>

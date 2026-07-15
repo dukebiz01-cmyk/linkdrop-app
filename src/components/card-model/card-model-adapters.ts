@@ -80,6 +80,8 @@ export type DropDetailInput = {
     headline?: string;
     sellingPoints?: string[];
     stockLimit?: number | null;
+    /** BUG-2 T2 — 재고 단위 라벨(FIX-45c). productQtyUnit 관통용. 미주입 = CardModelBody '개' 폴백. */
+    stockUnitLabel?: string;
   };
   /** ← InfoDropPageProps.remainingStock (get_drop_detail v8.1 파생 재고). */
   remainingStock?: number | null;
@@ -181,6 +183,8 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
     clip: clipLabel(input.videoDurationSec),
     priceText: isCommerce ? won(input.commerce?.priceKrw) : undefined,
     productQty: qty != null && qty > 0 ? String(qty) : undefined,
+    // BUG-2 T2 — 한정 배지 단위 라벨(FIX-45c): commerce 재고 단위 관통(미주입 = CardModelBody '개' 폴백).
+    productQtyUnit: isCommerce ? input.commerce?.stockUnitLabel : undefined,
     productPoints: isCommerce
       ? (input.commerce?.sellingPoints?.length ? input.commerce.sellingPoints : input.keyPoints)
       : input.keyPoints,

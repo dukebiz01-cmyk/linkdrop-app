@@ -429,7 +429,8 @@ export function CardModelBody({
                 <span className="flex items-baseline gap-1.5">
                   {model.productQty && (
                     <span className="text-[10px] font-semibold text-[#8A8A8A]">
-                      한정 {model.productQty}개
+                      한정 {model.productQty}
+                      {model.productQtyUnit ?? "개"}
                     </span>
                   )}
                   <span className="text-[18px] font-bold tabular-nums text-[#0A0A0A]">

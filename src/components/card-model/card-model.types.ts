@@ -79,6 +79,8 @@ export type CardModel = {
   productDateRangeLabel?: string;
   /** 한정 수량 라벨(숫자 문자열) ← stockLimit/remaining_stock. */
   productQty?: string;
+  /** BUG-2 T2 — 한정 수량 단위 라벨(FIX-45c: '박스'/'망'/'kg' 등). 미주입 = '개' 폴백. /d 위젯과 단위 동기화. */
+  productQtyUnit?: string;
   /** 셀링포인트 ← selling_points/ai_key_points. */
   productPoints?: string[];
   /** FIX-39 — 판매 부스터 칩(전부 실값 · 빈 배열/미주입 = 미렌더).
