@@ -119,13 +119,15 @@ export function StockMeta({ remaining, unitLabel }: { remaining: number; unitLab
 // ── v0 그래프트: 🎁 드로피 배지(블루 솔리드 강조, 비현금 기여보상 +N P) ──────────
 //   Phase 0 편입 — live 슬레이트 인라인 → v0 솔리드 블루(잘 보이게). 코드명 dropy 유지.
 //   모집·수익 뉘앙스 문안 금지(값 점등 + aria 만).
-function DropyBadge({ reward }: { reward: number }) {
+// 락 §드로피 — 소비자 표면 드로피는 항상 "준비중", 숫자 금지. reward 값 미표시(배지 형태·위치 유지).
+//   prop 시그니처는 유지(호출부 :275/:390 무변경).
+function DropyBadge({ reward: _reward }: { reward: number }) {
   return (
     <span
       aria-label="판매 성사 시 적립"
       className="inline-flex items-center gap-0.5 rounded-md bg-[#2563EB] px-1.5 py-1 text-[10px] font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]"
     >
-      <Diamond className="size-3 fill-white/30" strokeWidth={2.5} />+{reward.toLocaleString()}P
+      <Diamond className="size-3 fill-white/30" strokeWidth={2.5} />적립 (준비중)
     </span>
   );
 }

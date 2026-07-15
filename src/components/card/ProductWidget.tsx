@@ -181,11 +181,13 @@ export function ProductWidget({
           {/* BADGE-ⓑ(4b) — Droppy 예상 보상 정적 1줄(주문 버튼 인접). 값은 rate×가격 실측만,
               조건 문구 상시 동반("판매 성사 시 적립" — 모집·수익 뉘앙스 금지, §0). 미주입=미렌더. */}
           {dropyReward != null && dropyReward > 0 ? (
+            // 락 §드로피 — 소비자 표면 드로피는 항상 "준비중", 숫자 금지(dropyReward 값 미표시).
+            //   prop 시그니처는 유지(레거시 studio-build:1218 동일 컴포넌트 소비).
             <p className="flex items-center justify-center gap-1 text-[12px] tracking-ko">
-              <span className="inline-flex items-center gap-0.5 font-bold tabular-nums text-[#2563EB]">
-                <Diamond className="size-3" strokeWidth={2.5} />+{dropyReward.toLocaleString()} Droppy
+              <span className="inline-flex items-center gap-0.5 font-bold text-[#2563EB]">
+                <Diamond className="size-3" strokeWidth={2.5} />Droppy
               </span>
-              <span className="font-medium text-text-subtle">· 판매 성사 시 적립</span>
+              <span className="font-medium text-text-subtle">· 판매 성사 시 적립 (준비중)</span>
             </p>
           ) : null}
           {selfUpload ? (
