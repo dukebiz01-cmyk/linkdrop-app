@@ -242,6 +242,13 @@ export type ProductFormProgress45 = {
   priceSet: boolean;
   photoSet: boolean;
   name: string;
+  // FIX-48+50 — 커머스 번호 인터뷰 신호(스텝퍼·번호 배지 done 매핑용). 미주입 = 미완.
+  //   판정 로직 복제 아님 — 폼이 이미 계산한 파생값을 그대로 방출만.
+  salesMethod?: "quick" | "full" | "groupBuy";
+  originSet?: boolean;
+  gbTargetSet?: boolean;
+  gbPriceSet?: boolean;
+  gbDeadlineSet?: boolean;
 };
 
 export function ProductRegisterForm45({
@@ -568,6 +575,12 @@ export function ProductRegisterForm45({
       priceSet: priceNum > 0,
       photoSet: !!imageUrl,
       name: name.trim(),
+      // FIX-48+50 — 번호 인터뷰 신호(파생값 재사용 · 신규 판정 0): 방식·원산지·공동구매 유효성.
+      salesMethod: quickMode ? "quick" : groupBuyOn ? "groupBuy" : "full",
+      originSet: !!origin.trim(),
+      gbTargetSet: gbTargetN != null && gbTargetN >= 2,
+      gbPriceSet: gbPriceNum != null && gbPriceNum > 0 && priceNum > 0 && gbPriceNum < priceNum,
+      gbDeadlineSet: !!groupBuyDeadline.trim(),
       ...over,
     });
   // 마운트 시 1회 동기화 — 폼 재마운트(패널 접힘/재장착) 후 호스트의 낡은 진행 상태 초기화.
@@ -575,6 +588,12 @@ export function ProductRegisterForm45({
     emitProgress();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // FIX-48+50 — 번호 인터뷰 신호(방식·원산지·공동구매·사진·이름·가격) 변경 시 진행신호 재방출.
+  //   스텝퍼가 필드 입력을 라이브로 따라오게 함. handleFormProgress 등가 가드로 루프 없음.
+  useEffect(() => {
+    emitProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickMode, groupBuyOn, origin, groupBuyN, groupBuyPrice, groupBuyDeadline, price, imageUrl, name, nameConfirmed]);
   const isBundle = type !== "fresh" && BUNDLE_UNITS.has(saleUnit);
 
   // FIX-45c — 판매 수량 라벨·단위(판매 구성 동기화) + 환산 확인 1줄.

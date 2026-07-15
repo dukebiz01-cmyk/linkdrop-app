@@ -72,6 +72,15 @@ import {
 import { CARD_MODEL_ACCENTS, fromStudioState } from "./card-model-adapters";
 // FIX-42 — 발행 게이트 발화 정본 + 결정 로직(순수 — stage·1상태1발화 dedupe 실측 가능).
 import { decideGateUtterance } from "./gate-notes45";
+// FIX-48+50 — 번호 인터뷰 좌표계 단일 정본(순서·번호·라벨·앵커 · done 매핑만).
+import {
+  getInterviewJourney,
+  computeInterviewStates,
+  blockBadge,
+  type InterviewMode,
+  type SalesMethod,
+  type InterviewSignals,
+} from "./interview-steps45";
 // FIX-43 — 링고 음성 공용 모듈(홈 재사용 대비): 마이크 56px 분리 버튼 + 듣는 중 파형 패널.
 import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
 // FIX-47 — 인앱 WebView 음성 정직 게이트(pwa-install 공용 판정 재사용 — 중복 정의 0).
@@ -742,7 +751,16 @@ export function CardStudioPage45({
   });
   const handleFormProgress = (p: ProductFormProgress45) =>
     setFormProgress((prev) =>
-      prev.nameSet === p.nameSet && prev.priceSet === p.priceSet && prev.photoSet === p.photoSet && prev.name === p.name
+      prev.nameSet === p.nameSet &&
+      prev.priceSet === p.priceSet &&
+      prev.photoSet === p.photoSet &&
+      prev.name === p.name &&
+      // FIX-48+50 — 번호 인터뷰 신호도 등가 비교(누락 시 원산지·공동구매 변경이 스텝퍼에 안 옴).
+      prev.salesMethod === p.salesMethod &&
+      prev.originSet === p.originSet &&
+      prev.gbTargetSet === p.gbTargetSet &&
+      prev.gbPriceSet === p.gbPriceSet &&
+      prev.gbDeadlineSet === p.gbDeadlineSet
         ? prev
         : p,
     );
@@ -1077,19 +1095,54 @@ export function CardStudioPage45({
   const canPublish = !firstRequiredStep;
   const gateMsg = firstRequiredStep?.gate ?? null;
 
-  // FIX-42 — [필수] 배지 파생(steps 정본 단일 소스 — 배지용 목록 복제 금지). key = step.block.
-  //   같은 블록에 필수 단계 복수(일반 모드 영상+한마디 → content)면: 전부 done 이어야 done,
-  //   사유는 첫 미충족 단계 것(방향등 순서와 동일).
-  const requiredBadges = useMemo(() => {
-    const m: Record<string, { done: boolean; missing: string | null }> = {};
-    for (const s of steps) {
-      if (!s.required || !s.block) continue;
-      const prev = m[s.block];
-      if (!prev) m[s.block] = { done: s.done, missing: s.done ? null : s.missing };
-      else if (prev.done && !s.done) m[s.block] = { done: false, missing: s.missing };
-    }
-    return m;
-  }, [steps]);
+  // FIX-48+50 — 번호 인터뷰 좌표계(interview-steps45 단일 정본). 판매방식 = 폼 신호(quick/full/groupBuy).
+  //   signals = 기존 steps done·formProgress 재사용(신규 판정 0). 스텝퍼·덱 번호 배지·(P2)폼 마커 공용.
+  const interviewMethod: SalesMethod = formProgress.salesMethod ?? "full";
+  const interviewJourney = useMemo(
+    () => getInterviewJourney(mode as InterviewMode, interviewMethod),
+    [mode, interviewMethod],
+  );
+  const interviewSignals: InterviewSignals = useMemo(
+    () => ({
+      photoSet: formProgress.photoSet,
+      nameSet: formProgress.nameSet,
+      priceSet: formProgress.priceSet,
+      originSet: formProgress.originSet,
+      gbTargetSet: formProgress.gbTargetSet,
+      gbPriceSet: formProgress.gbPriceSet,
+      gbDeadlineSet: formProgress.gbDeadlineSet,
+      shipBasisDone: !!applied["seasonal"] || productShipDateSet,
+      dockDone: dockedProducts.length > 0 || dockSkipped,
+      videoDone: !!selectedVideo,
+      taglineDone: !!cfgSubtitle.trim(),
+      couponDone: !!(applied["coupon"] && selectedCouponId),
+      calendarDone: !!(applied["calendar"] && cfgDates.length > 0),
+      storeAddrDone: savedStoreInfo.hasAddress,
+      facilitiesDone: savedStoreInfo.facilities > 0,
+      publishDone: dropped,
+    }),
+    [
+      formProgress,
+      applied,
+      productShipDateSet,
+      dockedProducts.length,
+      dockSkipped,
+      selectedVideo,
+      cfgSubtitle,
+      selectedCouponId,
+      cfgDates.length,
+      savedStoreInfo,
+      dropped,
+    ],
+  );
+  const interviewStates = useMemo(
+    () => computeInterviewStates(interviewJourney, interviewSignals),
+    [interviewJourney, interviewSignals],
+  );
+
+  // FIX-48+50 — [필수] 배지 파생(requiredBadges) 폐지: 덱 번호 배지는 interview-steps45
+  //   blockBadge(interviewJourney, ...) 단일 정본으로 대체(위 render). steps 는 발행 게이트
+  //   (firstRequiredStep/canPublish/gateMsg)·방향등·링고 발화 정본으로 계속 사용.
 
   // FIX-23/25/28/33 — 단일 타깃: 단계 순회(필수 → 도킹(비필수 정식 단계) → 발행)로 통일.
   //   필수는 거절 쿨다운 제외(계속 안내), 비필수(도킹)는 쿨다운/[건너뛰기] 허용.
@@ -2618,6 +2671,50 @@ export function CardStudioPage45({
         </div>
       </header>
 
+      {/* FIX-48+50 — 번호 인터뷰 스텝퍼(헤더 하단 · interview-steps45 단일 정본). 3상태:
+          완료 ✓(액센트 채움) / 현재 테두리+펄스(1.6s) / 대기 회색. 탭 = 해당 덱 섹션 점프. */}
+      <style>{`@keyframes sl-num-pulse{0%{box-shadow:inset 0 0 0 2px ${accent},0 0 0 0 ${accent}59}70%{box-shadow:inset 0 0 0 2px ${accent},0 0 0 7px ${accent}00}100%{box-shadow:inset 0 0 0 2px ${accent},0 0 0 0 ${accent}00}}`}</style>
+      <div className="border-b border-[#EDEDED] bg-white">
+        <div className="mx-auto max-w-md overflow-x-auto px-3 py-2">
+          <div className="flex min-w-max items-start gap-0.5">
+            {interviewStates.map((x) => (
+              <button
+                key={x.step.key}
+                type="button"
+                onClick={() => {
+                  if (x.step.publish)
+                    document.getElementById("sl-publish-cta")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  else if (x.step.deckBlock) jumpToBlock(x.step.deckBlock);
+                  else scrollToDeck();
+                }}
+                className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-1 px-1"
+                aria-label={`${x.step.no}. ${x.step.label}${x.done ? " 완료" : x.state === "current" ? " 현재 단계" : " 대기"}`}
+              >
+                <span
+                  className="flex h-[26px] w-[26px] items-center justify-center rounded-full text-[12px] font-extrabold tabular-nums"
+                  style={
+                    x.done
+                      ? { backgroundColor: accent, color: "#fff" }
+                      : x.state === "current"
+                        ? { color: accent, animation: "sl-num-pulse 1.6s ease-out infinite" }
+                        : { color: "#94A3B8", boxShadow: "inset 0 0 0 1.5px #E2E8F0" }
+                  }
+                >
+                  {x.done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : x.step.no}
+                </span>
+                <span
+                  className="whitespace-nowrap text-[10px] font-semibold leading-none"
+                  style={{ color: x.done ? accent : x.state === "current" ? "#0A0A0A" : "#94A3B8" }}
+                >
+                  {x.step.label}
+                  {x.step.skippable ? " (+)" : ""}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* 스티키 조립 미니 미리보기 (히어로 카드가 화면 밖일 때 등장)
           FIX-2 — 모드 토글이 스티키 스택(헤더 아래)에 통합돼 미니 미리보기는 그 아래(top-[134px])
           에서 시작 — 스크롤 전 구간에서 두 요소 비겹침. */}
@@ -2922,22 +3019,28 @@ export function CardStudioPage45({
                       {gated && (
                         <span className="rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[9px] font-bold text-[#64748B]">준비 중</span>
                       )}
-                      {/* FIX-42 — [필수] 배지(steps 정본 파생 — requiredBadges 단일 소스).
-                          미충족 = 붉은 [필수] / 충족 = 체크 배지 전환(기존 체크 문법 재사용). */}
-                      {requiredBadges[block.id] &&
-                        (requiredBadges[block.id].done ? (
+                      {/* FIX-48+50 — 번호 배지(interview-steps45 단일 정본). 충족 = ✓+번호(액센트 채움) /
+                          미충족 = 번호 테두리. 붉은 [필수] 폐지 · 3상태 펄스는 상단 스텝퍼가 담당. */}
+                      {(() => {
+                        const bb = blockBadge(interviewJourney, block.id, interviewSignals);
+                        if (!bb) return null;
+                        return bb.done ? (
                           <span
-                            className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold"
-                            style={{ backgroundColor: `${accent}14`, color: accent }}
+                            className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
+                            style={{ backgroundColor: accent, color: "#fff" }}
                           >
                             <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                            필수
+                            {bb.no}
                           </span>
                         ) : (
-                          <span className="rounded-full bg-[#FEF2F2] px-1.5 py-0.5 text-[9px] font-bold text-[#DC2626]">
-                            필수
+                          <span
+                            className="flex h-5 min-w-5 items-center justify-center rounded-full border-[1.5px] px-1 text-[10px] font-bold tabular-nums"
+                            style={{ borderColor: accent, color: accent }}
+                          >
+                            {bb.no}
                           </span>
-                        ))}
+                        );
+                      })()}
                       {/* FIX-9 — 도킹 가용 수 배지(실카운트, 0장이면 미표기 — 가짜 숫자 금지). */}
                       {block.id === "dock" && dockCount > 0 && (
                         <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums" style={{ backgroundColor: `${accent}14`, color: accent }}>
@@ -2946,14 +3049,7 @@ export function CardStudioPage45({
                       )}
                     </p>
                     <p className="mt-1 text-[12px] leading-[1.45] text-[#5C5C5C]">{block.desc}</p>
-                    {/* FIX-42 — 누락 사유 1줄(실필드명 — steps.missing 그대로, 창작 금지). */}
-                    {requiredBadges[block.id] &&
-                      !requiredBadges[block.id].done &&
-                      requiredBadges[block.id].missing && (
-                        <p className="mt-0.5 text-[11px] font-semibold text-[#DC2626]">
-                          {requiredBadges[block.id].missing}
-                        </p>
-                      )}
+                    {/* FIX-48+50 — 붉은 누락 사유 1줄 제거: 상단 번호 스텝퍼 + 발행바 회색 gateMsg 가 대체. */}
                   </div>
 
                   {/* 잠금 / 장착 상태 */}
@@ -4382,6 +4478,7 @@ export function CardStudioPage45({
                     FIX-42 — 잠금 클릭 시도 = 링고 능동 안내 트리거 ①: disabled 버튼은 클릭이
                     죽으므로 pointer-events-none + 래퍼 onClick 으로 시도를 감지(게이트 무변경). */}
                 <div
+                  id="sl-publish-cta"
                   onClick={() => {
                     if (!canPublish) handleGateBlockedClick();
                   }}
