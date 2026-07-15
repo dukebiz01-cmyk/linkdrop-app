@@ -219,10 +219,25 @@ const LINGO_FIELD_LABELS: Record<string, string> = {
   coupon: "쿠폰",
   productName: "상품명",
   productPrice: "가격",
+  // FIX-48+50 P2 — 인터뷰 setField 확장(승인 6종).
+  origin: "원산지",
+  stockQty: "수량",
+  gbTargetCount: "공동구매 목표인원",
+  gbTargetPrice: "공동구매 달성가",
   dock: "도킹",
   phone: "전화",
   map: "지도",
 };
+// FIX-48+50 P2 — 상품 폼(ProductRegisterForm45) 내부 필드로 부착되는 setField 키(스튜디오 직접
+//   소유가 아님 → fieldPatch 브리지로 폼에 전달·폼이 최종 검증·부착). title/subtitle 은 스튜디오 직접.
+const LINGO_PRODUCT_FIELDS = new Set([
+  "productName",
+  "productPrice",
+  "origin",
+  "stockQty",
+  "gbTargetCount",
+  "gbTargetPrice",
+]);
 // FIX-28 — 카드 배경색 UI 스위치(재도입 스위치 1개). false = 덱 카드·팔레트 숨김 +
 //   cardColor 기본값 고정 + 게시 시 색 저장 스킵. set_drop_card_color RPC·cardColor
 //   상태·팔레트 코드는 삭제 금지(보존) — true 로 되돌리면 그대로 재활성.
@@ -2288,8 +2303,17 @@ export function CardStudioPage45({
   //   (기존 정본 헬퍼 lingoUndo()[규칙 기반 장착 되돌리기]와 별개 — 이름 충돌 회피 lingoActUndo.)
   const [lingoActUndo, setLingoActUndo] = useState<{
     blocks: { id: string; prev: boolean }[];
-    fields: { field: "title" | "subtitle"; prev: string }[];
+    // FIX-48+50 P2 — field 일반화(title/subtitle = 스튜디오 직접 / 상품 필드 = fieldPatch 복원).
+    fields: { field: string; prev: string }[];
   } | null>(null);
+  // FIX-48+50 P2 — 상품 폼 setField 브리지: 확인 게이트 통과 값을 폼에 부착 요청(패치). restore =
+  //   undo 복원(검증 우회·prev 그대로). 결과(부착 성공 prev / 검증 실패 reason)는 폼이 회신.
+  const [productFieldPatch, setProductFieldPatch] = useState<{
+    seq: number;
+    fields: { field: string; value: string }[];
+    restore?: boolean;
+  } | null>(null);
+  const productPatchSeq = useRef(0);
   // LINGO-V2b E2 — [적용] 연타 재진입 가드: 같은 제안 객체는 1회만 소비(동기 ref —
   //   clearProposal 의 setState 비동기 공백을 막는다). 확인어 경로도 동일 소비 함수 경유.
   const lingoConsumedRef = useRef<object | null>(null);
@@ -2342,7 +2366,10 @@ export function CardStudioPage45({
     const cur: Record<string, boolean> = { ...applied };
     // LINGO-V2b D2 — 정밀 undo 수집: 실제 바꾼 키의 이전 값만(전체 스냅샷 금지).
     const undoBlocks: { id: string; prev: boolean }[] = [];
-    const undoFields: { field: "title" | "subtitle"; prev: string }[] = [];
+    const undoFields: { field: string; prev: string }[] = [];
+    // FIX-48+50 P2 — 상품 폼 필드는 스튜디오가 직접 못 만짐 → 배치 수집 후 fieldPatch 로 폼에 부착
+    //   요청(폼이 최종 검증·prev 회신). done 요약과 별개(비동기 결과 = handleFieldPatchResult).
+    const productBatch: { field: string; value: string }[] = [];
     for (const a of actions) {
       if (a.type === "equip" || a.type === "detach") {
         const b = DECK.find((d) => d.id === a.blockId);
@@ -2380,13 +2407,17 @@ export function CardStudioPage45({
                 ? ` (${LINGO_FIELD_LABELS[a.field]}이 길어 ${LINGO_FIELD_MAX}자로 줄였어요)`
                 : ""),
           );
+        } else if (LINGO_PRODUCT_FIELDS.has(a.field ?? "")) {
+          // FIX-48+50 P2 — 상품 폼 필드: 배치 수집(폼이 마운트돼 있어야 부착됨 — 미마운트 시
+          //   폼 미수신 = 무동작, 인터뷰 persona 가 상품 블록으로 먼저 이동시킴).
+          productBatch.push({ field: a.field as string, value: a.value ?? "" });
         } else {
           // 클라 실행 경로가 없는 필드 — 임의 실행 금지(§13), 화면 조작으로 정직 안내.
           manual.push(lingoActionLabel(a));
         }
       }
     }
-    if (done.length === 0) {
+    if (done.length === 0 && productBatch.length === 0) {
       chat.notify(
         stale.length > 0
           ? "그 사이 바뀌었네요, 다시 볼까요?"
@@ -2394,13 +2425,42 @@ export function CardStudioPage45({
       );
       return;
     }
+    // 동기 부분(블록·title/subtitle) undo 확정(새 제안 = undo 리셋). 상품 배치는 결과 회신 시 append.
     setLingoActUndo({ blocks: undoBlocks, fields: undoFields });
-    // 적용 결과 요약 — 실적용 값만(§13). 방향등(currentTarget)은 applied 파생이라 자연 이동.
-    chat.notify(
-      `적용했어요: ${done.join(" · ")}` +
-        (stale.length > 0 ? `\n그 사이 바뀐 건 그대로 두었어요: ${stale.join(" · ")}` : "") +
-        (manual.length > 0 ? `\n직접 해주셔야 해요: ${manual.join(" · ")}` : ""),
-    );
+    if (done.length > 0) {
+      // 적용 결과 요약 — 실적용 값만(§13). 방향등(currentTarget)은 applied 파생이라 자연 이동.
+      chat.notify(
+        `적용했어요: ${done.join(" · ")}` +
+          (stale.length > 0 ? `\n그 사이 바뀐 건 그대로 두었어요: ${stale.join(" · ")}` : "") +
+          (manual.length > 0 ? `\n직접 해주셔야 해요: ${manual.join(" · ")}` : ""),
+      );
+    }
+    // FIX-48+50 P2 — 상품 배치 부착 요청(폼 fieldPatch). 성공/실패 알림은 handleFieldPatchResult.
+    if (productBatch.length > 0) {
+      setProductFieldPatch({ seq: ++productPatchSeq.current, fields: productBatch });
+    }
+  }
+
+  // FIX-48+50 P2 — 폼 부착 결과 회신 처리: 성공 = undo append + 적용 알림 / 실패 = 정직 안내 발화
+  //   (검증 실패 사유 원문 — "달성가는 기본가보다 낮아야 해요" 등). restore(undo 복원)는 폼이 미회신.
+  function handleFieldPatchResult(r: {
+    seq: number;
+    results: { field: string; ok: boolean; prev: string; reason?: string }[];
+  }) {
+    const ok = r.results.filter((x) => x.ok);
+    const bad = r.results.filter((x) => !x.ok);
+    if (ok.length > 0) {
+      setLingoActUndo((prev) => ({
+        blocks: prev?.blocks ?? [],
+        fields: [...(prev?.fields ?? []), ...ok.map((x) => ({ field: x.field, prev: x.prev }))],
+      }));
+      chat.notify(`적용했어요: ${ok.map((x) => LINGO_FIELD_LABELS[x.field] ?? x.field).join(" · ")}`);
+    }
+    if (bad.length > 0) {
+      chat.notify(
+        bad.map((x) => x.reason ?? `${LINGO_FIELD_LABELS[x.field] ?? x.field}는 지금 넣을 수 없어요`).join("\n"),
+      );
+    }
   }
 
   function undoLingoActions() {
@@ -2413,8 +2473,20 @@ export function CardStudioPage45({
         return next;
       });
     }
+    // title/subtitle = 스튜디오 직접 복원.
     for (const f of lingoActUndo.fields) {
-      (f.field === "title" ? setCfgTitle : setCfgSubtitle)(f.prev);
+      if (f.field === "title" || f.field === "subtitle") {
+        (f.field === "title" ? setCfgTitle : setCfgSubtitle)(f.prev);
+      }
+    }
+    // FIX-48+50 P2 — 상품 폼 필드는 restore 패치로 prev 그대로 복원(검증 우회 · 폼 미회신).
+    const productUndo = lingoActUndo.fields.filter((f) => LINGO_PRODUCT_FIELDS.has(f.field));
+    if (productUndo.length > 0) {
+      setProductFieldPatch({
+        seq: ++productPatchSeq.current,
+        fields: productUndo.map((f) => ({ field: f.field, value: f.prev })),
+        restore: true,
+      });
     }
     setLingoActUndo(null);
     chat.notify("방금 적용한 걸 되돌렸어요.");
@@ -3511,6 +3583,9 @@ export function CardStudioPage45({
                     onImageChange={(url) => setProductImageUrl(url)}
                     onBusyChange={setFormBusy}
                     onProgress={handleFormProgress}
+                    // FIX-48+50 P2 — 링고 인터뷰 setField 브리지(상품 필드 부착·검증·prev 회신).
+                    fieldPatch={productFieldPatch ?? undefined}
+                    onFieldPatchResult={handleFieldPatchResult}
                     // FIX-37 — 고시표 소비자상담 전화 자동 채움(partners.contact_phone 읽기전용).
                     contactPhone={store?.contact_phone ?? null}
                   />

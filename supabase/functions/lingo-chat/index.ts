@@ -138,6 +138,11 @@ const APPLY_STUDIO_ACTIONS_TOOL = {
                 "coupon",
                 "productName",
                 "productPrice",
+                // FIX-48+50 P2 — 인터뷰 setField 확장(승인 6종 중 신규 4종).
+                "origin",
+                "stockQty",
+                "gbTargetCount",
+                "gbTargetPrice",
                 "dock",
                 "phone",
                 "map",
@@ -187,10 +192,18 @@ const ACTION_FIELDS = new Set([
   "coupon",
   "productName",
   "productPrice",
+  // FIX-48+50 P2 — 인터뷰 setField 확장(승인 6종 중 신규 4종).
+  "origin",
+  "stockQty",
+  "gbTargetCount",
+  "gbTargetPrice",
   "dock",
   "phone",
   "map",
 ]);
+// FIX-48+50 P2 — 숫자 setField(빈 값 = 액션 제거). 상세 규칙(N≥2 · 달성가<기본가)은
+//   클라 폼 최종 가드(handleSubmit 정본)가 판정 — Edge 는 숫자화·경량 게이트만(중복 판정 회피).
+const NUMERIC_FIELDS = new Set(["productPrice", "stockQty", "gbTargetCount", "gbTargetPrice"]);
 
 type StudioAction = { type: string; mode?: string; blockId?: string; field?: string; value?: string };
 type StudioStep = { label: string; note?: string };
@@ -225,12 +238,14 @@ function validateStudioActions(
     } else {
       // setField
       const field = typeof a.field === "string" ? a.field : "";
-      if (!ACTION_FIELDS.has(field)) continue; // field 11종 외 제거
+      if (!ACTION_FIELDS.has(field)) continue; // field 화이트리스트 외 제거
       let value =
         typeof a.value === "string" ? a.value : typeof a.value === "number" ? String(a.value) : "";
-      if (field === "productPrice") {
-        value = value.replace(/[^0-9,]/g, ""); // v0 클라이언트와 동일 규칙
+      if (NUMERIC_FIELDS.has(field)) {
+        value = value.replace(/[^0-9,]/g, ""); // v0 클라이언트와 동일 규칙(숫자만)
         if (!value) continue; // 빈 값이 되면 해당 액션 제거
+        // FIX-48+50 P2 — 목표인원 경량 게이트(N≥2). 달성가<기본가 등 상세 = 클라 폼 최종 가드.
+        if (field === "gbTargetCount" && Number(value.replace(/,/g, "")) < 2) continue;
       }
       actions.push({ type: "setField", field, value });
     }

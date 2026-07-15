@@ -259,6 +259,8 @@ export function ProductRegisterForm45({
   onImageChange,
   onBusyChange,
   onProgress,
+  fieldPatch,
+  onFieldPatchResult,
   contactPhone = null,
 }: {
   accent: string;
@@ -269,6 +271,13 @@ export function ProductRegisterForm45({
   onBusyChange?: (busy: string | null) => void;
   /** FIX-34 — 단계 내 세부 진행 신호(이름 확정·가격·사진) — 호스트 마이크로 안내 결합. */
   onProgress?: (p: ProductFormProgress45) => void;
+  /** FIX-48+50 P2 — 링고 인터뷰 setField 부착 요청(확인 게이트 통과분). restore = undo 복원(검증 우회). */
+  fieldPatch?: { seq: number; fields: { field: string; value: string }[]; restore?: boolean };
+  /** 부착 결과 회신(성공 = ok+prev(undo용) / 검증 실패 = ok:false+reason(정직 안내)). restore 는 미회신. */
+  onFieldPatchResult?: (r: {
+    seq: number;
+    results: { field: string; ok: boolean; prev: string; reason?: string }[];
+  }) => void;
   /** FIX-37 — partners.contact_phone(읽기전용). 고시표 소비자상담 전화 자동 채움 — 쓰기 금지,
    *  수정은 매장정보 블록에서 유도. 미주입/null = "미등록" 정직 표기. */
   contactPhone?: string | null;
@@ -596,6 +605,85 @@ export function ProductRegisterForm45({
     emitProgress();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quickMode, groupBuyOn, origin, groupBuyN, groupBuyPrice, groupBuyDeadline, price, imageUrl, name, nameConfirmed]);
+
+  // FIX-48+50 P2 — 링고 인터뷰 setField 부착: 스튜디오 fieldPatch 수신 → 필드별 검증·부착·prev 회신.
+  //   검증 = 폼 handleSubmit 규칙 준용(가격>0 / 목표인원 N≥2 / 달성가 0<x<기본가). restore(undo)는
+  //   검증 우회·prev 그대로·미회신. 안전장치 무접촉: 부착은 상태 세팅만(발행·사진·결제·삭제 불가).
+  const patchSeqRef = useRef(0);
+  useEffect(() => {
+    if (!fieldPatch || fieldPatch.seq === patchSeqRef.current) return;
+    patchSeqRef.current = fieldPatch.seq;
+    if (fieldPatch.restore) {
+      // undo 복원 — prev 그대로 세팅(검증 우회, 회신 없음).
+      for (const { field, value } of fieldPatch.fields) {
+        if (field === "productName") {
+          setName(value);
+          setNameConfirmed(!!value.trim());
+        } else if (field === "productPrice") setPrice(value);
+        else if (field === "origin") setOrigin(value);
+        else if (field === "stockQty") setQuantity(value);
+        else if (field === "gbTargetCount") setGroupBuyN(value);
+        else if (field === "gbTargetPrice") setGroupBuyPrice(value);
+      }
+      return;
+    }
+    const results = fieldPatch.fields.map(({ field, value }) => {
+      const v = (value ?? "").trim();
+      switch (field) {
+        case "productName": {
+          const prev = name;
+          if (!v) return { field, ok: false, prev, reason: "상품명을 알려주세요." };
+          setName(v);
+          setNameConfirmed(true);
+          return { field, ok: true, prev };
+        }
+        case "productPrice": {
+          const prev = price;
+          const d = onlyDigits(v);
+          if (!d || Number(d) <= 0) return { field, ok: false, prev, reason: "가격은 0보다 커야 해요." };
+          setPrice(d);
+          return { field, ok: true, prev };
+        }
+        case "origin": {
+          const prev = origin;
+          if (!v) return { field, ok: false, prev, reason: `${copy.originLabel}을(를) 알려주세요.` };
+          setOrigin(v);
+          return { field, ok: true, prev };
+        }
+        case "stockQty": {
+          const prev = quantity;
+          const d = onlyDigits(v);
+          if (!d || Number(d) < 1) return { field, ok: false, prev, reason: "수량은 1개 이상이어야 해요." };
+          setQuantity(d);
+          return { field, ok: true, prev };
+        }
+        case "gbTargetCount": {
+          const prev = groupBuyN;
+          const d = onlyDigits(v);
+          if (!d || Number(d) < 2)
+            return { field, ok: false, prev, reason: "공동구매 목표 인원은 2명 이상이어야 해요." };
+          setGroupBuyOn(true);
+          setGroupBuyN(d);
+          return { field, ok: true, prev };
+        }
+        case "gbTargetPrice": {
+          const prev = groupBuyPrice;
+          const d = onlyDigits(v);
+          const n = Number(d);
+          if (!d || n <= 0) return { field, ok: false, prev, reason: "달성 할인가는 0보다 커야 해요." };
+          if (priceNum > 0 && n >= priceNum)
+            return { field, ok: false, prev, reason: "달성 할인가는 기본 판매가보다 낮아야 해요." };
+          setGroupBuyOn(true);
+          setGroupBuyPrice(d);
+          return { field, ok: true, prev };
+        }
+        default:
+          return { field, ok: false, prev: "", reason: "지원하지 않는 항목이에요." };
+      }
+    });
+    onFieldPatchResult?.({ seq: fieldPatch.seq, results });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldPatch]);
   const isBundle = type !== "fresh" && BUNDLE_UNITS.has(saleUnit);
 
   // FIX-45c — 판매 수량 라벨·단위(판매 구성 동기화) + 환산 확인 1줄.
