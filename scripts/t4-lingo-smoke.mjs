@@ -161,7 +161,9 @@ const mode =
       ? "close"
       : process.argv[2] === "actions"
         ? "actions"
-        : process.argv[2] === "home"
+        : process.argv[2] === "interview"
+          ? "interview"
+          : process.argv[2] === "home"
           ? "home"
           : process.argv[2] === "perf"
             ? "perf"
@@ -243,6 +245,58 @@ if (mode === "actions") {
   }
   await client.auth.signOut();
   console.log(`\n[secure] 토큰·키·비밀번호 미출력 확인 (계정: ${usedLabel})`);
+  process.exit(0);
+}
+
+if (mode === "interview") {
+  // ── FIX-48+50 P2 실측 — 확장 setField(origin/gbTargetPrice) + interview 컨텍스트 발사.
+  //    ⚠️ Edge 미배포면 신규 필드가 화이트리스트 밖이라 actions 에서 제거됨(정상) — 배포 후 재실측.
+  const STUDIO = {
+    mode: "commerce",
+    deck: [
+      { id: "product", label: "상품", applied: true, locked: false },
+      { id: "seasonal", label: "발송기준", applied: false, locked: false },
+    ],
+    fields: { productName: "괴산 사과", productPrice: "35000" },
+  };
+  const INTERVIEW = {
+    version: "2.1",
+    mode: "commerce",
+    sales_method: "full",
+    total: 7,
+    current_no: 3,
+    current_label: "원산지",
+    steps: [
+      { no: 1, label: "사진", done: true, can_set: false },
+      { no: 2, label: "상품명", done: true, can_set: true },
+      { no: 3, label: "원산지", done: false, can_set: true },
+      { no: 4, label: "가격", done: true, can_set: true },
+      { no: 5, label: "발송기준", done: false, can_set: false },
+      { no: 6, label: "도킹", done: false, can_set: false, skippable: true },
+      { no: 7, label: "발행", done: false, can_set: false, publish: true },
+    ],
+  };
+  const SHOTS = [
+    "원산지는 충북 괴산이야", // → setField origin
+    "공동구매로 바꾸고 달성가는 3만원으로", // → setField gbTargetPrice (기본가 35000 미만 = 통과)
+  ];
+  for (let i = 0; i < SHOTS.length; i++) {
+    console.log(`\n════ [${i + 1}/${SHOTS.length}] "${SHOTS[i]}" (studio+interview) ════`);
+    const r = await runChat(SHOTS[i], null, { studio: STUDIO, interview: INTERVIEW });
+    console.log(`[http] status=${r.status} stage=${r.stage ?? "-"}`);
+    if (r.nonSse) console.log("[non-sse body]", r.nonSse);
+    console.log(`[event: actions] ${r.actions ? "수신" : "미수신"}`);
+    if (r.actions) console.log(JSON.stringify(r.actions, null, 2));
+    console.log("[answer 전문]");
+    console.log(r.answer || "(빈 응답)");
+    if (r.done) console.log("[done 원문]", JSON.stringify(r.done));
+    if (r.error) console.log(`[error 전문] ${JSON.stringify(r.error)}`);
+  }
+  await client.auth.signOut();
+  console.log(`\n[secure] 토큰·키·비밀번호 미출력 확인 (계정: ${usedLabel})`);
+  console.log(
+    "[주의] Edge 미배포면 신규 필드(origin/gbTargetPrice)는 화이트리스트 밖 = actions 에서 제거됨. 배포 후 재실측.",
+  );
   process.exit(0);
 }
 
