@@ -81,8 +81,6 @@ import {
   type SalesMethod,
   type InterviewSignals,
 } from "./interview-steps45";
-// FIX-43 — 링고 음성 공용 모듈(홈 재사용 대비): 마이크 56px 분리 버튼 + 듣는 중 파형 패널.
-import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
 // FIX-47 — 인앱 WebView 음성 정직 게이트(pwa-install 공용 판정 재사용 — 중복 정의 0).
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
@@ -5093,19 +5091,9 @@ export function CardStudioPage45({
                   <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
                 </button>
               )}
-              {/* FIX-43 — 마이크 분리 orb(56px): 캡슐의 absolute 자식 = 드래그 시 한 몸 이동
-                  (fabPos 그대로 — 별도 저장 키 0). 탭 = 듣는 중 파형 패널로 펼침.
-                  FIX-47 — 인앱 WebView(카톡 등)에선 미렌더(음성 정직 게이트). */}
-              {!inAppNoMic && (
-                <span className="absolute -top-16 right-0">
-                  <VoiceOrb45
-                    listening={voice.listening}
-                    disabled={chat.streaming}
-                    accent={accent}
-                    onTap={handleOrbTap}
-                  />
-                </span>
-              )}
+              {/* FIX-48+50 작업5 — 미리보기를 가리던 부유 마이크 orb(absolute -top-16) 제거.
+                  마이크 진입점은 링고 패널 입력줄(handleMicTap, !inAppNoMic)로 단일화.
+                  strip 캡슐 탭 → openPanelAt(패널) / closed 점 탭 → strip → 패널 = 진입점 상시 도달. */}
             </div>
           )}
 
