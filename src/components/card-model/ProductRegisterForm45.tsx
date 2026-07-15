@@ -27,6 +27,8 @@ import { buildNoticeRows45 } from "./product-notice45";
 import { PriceBandAdvisor, type PriceBandResult } from "@/components/commerce/PriceBandAdvisor";
 // FIX-45 보완 b — 내 가격 위치 1줄(순수 모듈 · 정규화 실패 = 미렌더).
 import { buildPricePositionLines } from "./price-position45";
+// FIX-48+50 — 번호 인터뷰 좌표계(폼 필수 마커 번호 = 판매방식별 단일 정본).
+import { getInterviewJourney, type SalesMethod } from "./interview-steps45";
 
 /**
  * ProductRegisterForm45 — v0-45 정본 3유형(신선/가공/공산품) 상품 등록 폼 실배선 이식.
@@ -939,6 +941,13 @@ export function ProductRegisterForm45({
   const inputCls =
     "w-full rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white";
 
+  // FIX-48+50 작업4 — 폼 필수 마커 번호(interview-steps45 단일 정본 · 하드코딩 금지). 판매방식 =
+  //   빠른등록/일반/공동구매. quickMode·groupBuyOn 변경 시 번호 즉시 갱신(state 파생).
+  const interviewMethod45: SalesMethod = quickMode ? "quick" : groupBuyOn ? "groupBuy" : "full";
+  const interviewJourney45 = getInterviewJourney("commerce", interviewMethod45);
+  const stepNoOf = (formField: string) =>
+    interviewJourney45.find((s) => s.formField === formField)?.no;
+
   return (
     <div className="space-y-4">
       {/* FIX-38 — 등록 방법 토글: 원포토(빠른 등록)는 기존 자세히 등록의 대체가 아닌 공존 경로. */}
@@ -959,7 +968,7 @@ export function ProductRegisterForm45({
       </Field>
 
       {/* 상품 사진 — 실 업로더 */}
-      <Field label="상품 사진" required>
+      <Field label="상품 사진" stepNo={stepNoOf("photo")} accent={accent}>
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -980,7 +989,7 @@ export function ProductRegisterForm45({
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
       </Field>
 
-      <Field label="상품명" required>
+      <Field label="상품명" stepNo={stepNoOf("name")} accent={accent}>
         {/* FIX-34 — blur 확정 고리: 확정 시 체크 표시 + 진행 신호(링고 마이크로 안내 결합). */}
         <div className="relative">
           <input
@@ -1120,7 +1129,7 @@ export function ProductRegisterForm45({
       </Field>
       )}
 
-      <Field label={copy.originLabel} required hint="상품정보제공고시">
+      <Field label={copy.originLabel} stepNo={stepNoOf("origin")} accent={accent} hint="상품정보제공고시">
         <input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder={copy.originPh} className={inputCls} style={{ boxShadow: "inset 0 0 0 1px transparent" }} onFocus={focusRing} onBlur={blurRing} />
       </Field>
 
@@ -1353,7 +1362,7 @@ export function ProductRegisterForm45({
       )}
 
       {/* FIX-36c ③ — 가격(시세 블록·내 가격 위치 = 판매가 위 유지). 공동구매 = "기본 판매가". */}
-      <Field label={groupBuyOn ? "기본 판매가" : "가격"} required>
+      <Field label={groupBuyOn ? "기본 판매가" : "가격"} stepNo={stepNoOf("price")} accent={accent}>
         {/* FIX-45 — 구 폼 P1.5: 시세 데이터(status ok) 있을 때만 참고 문구. */}
         {priceBand?.status === "ok" && (
           <p className="mb-1.5 text-[11px] font-medium text-[#A3A3A3]">
@@ -1967,12 +1976,17 @@ export function ProductRegisterForm45({
 function Field({
   label,
   required,
+  stepNo,
+  accent,
   hint,
   hidden,
   children,
 }: {
   label: string;
   required?: boolean;
+  /** FIX-48+50 — 번호 인터뷰 마커(interview-steps45 판매방식별 번호). 있으면 붉은 "필수" 대신 번호. */
+  stepNo?: number;
+  accent?: string;
   hint?: string;
   hidden?: boolean;
   children: React.ReactNode;
@@ -1980,9 +1994,17 @@ function Field({
   if (hidden) return null;
   return (
     <div>
-      <div className="mb-1.5 flex items-baseline gap-1.5">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        {stepNo != null && (
+          <span
+            className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-extrabold tabular-nums text-white"
+            style={{ backgroundColor: accent ?? "#2563EB" }}
+          >
+            {stepNo}
+          </span>
+        )}
         <span className="text-[12px] font-bold text-[#0A0A0A]">{label}</span>
-        {required && <span className="text-[11px] font-bold text-[#EF4444]">필수</span>}
+        {stepNo == null && required && <span className="text-[11px] font-bold text-[#EF4444]">필수</span>}
         {hint && <span className="text-[10.5px] font-medium text-[#A3A3A3]">{hint}</span>}
       </div>
       {children}
