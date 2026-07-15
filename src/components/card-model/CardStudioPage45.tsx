@@ -1905,6 +1905,22 @@ export function CardStudioPage45({
           console.warn("[studio-lab] is_public update exception:", e);
         }
       }
+      // S1-b(2) — 발행 시각 기록: 등록 시 생성된 드롭은 published_at NULL(status=published
+      //   인데 발행시각 미기록)이라 D-day·정렬 등 발행시각 의존 로직이 빈다. 발행 성공 후
+      //   NULL 인 경우만 now() 기록(.is('published_at', null) 게이트 — 기존 값 보존).
+      //   best-effort(실패해도 발행 유지). RLS drops_owner_modify 커버.
+      if (reusedProduct && dropId && supabase) {
+        try {
+          const { error: pubAtErr } = await supabase
+            .from("info_drops")
+            .update({ published_at: new Date().toISOString() })
+            .eq("id", dropId)
+            .is("published_at", null);
+          if (pubAtErr) console.warn("[studio-lab] published_at 기록 실패:", pubAtErr.message);
+        } catch (e) {
+          console.warn("[studio-lab] published_at update exception:", e);
+        }
+      }
       // ① 쿠폰 연결 — best-effort.
       if (dropId && hasCoupon && supabase) {
         try {
