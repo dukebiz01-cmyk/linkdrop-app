@@ -73,6 +73,26 @@ export type LingoContext = {
   key_points?: string[];
   /** LINGO-V2 — 계약 v2 §1: 실제 덱 스냅샷(전송 시점 실상태). 스튜디오 표면에서만 동봉. */
   studio?: LingoStudioSnapshot;
+  /** FIX-48+50 P2 — 계약 v2.1 additive: 번호 인터뷰 상태(interview-steps45 정본). 스튜디오 전용. */
+  interview?: LingoInterviewContext;
+};
+
+/** FIX-48+50 P2 — 번호 인터뷰 컨텍스트(스텝퍼와 동일 번호 — 발화 번호 강제 일치용). */
+export type LingoInterviewContext = {
+  version: string; // "2.1"
+  mode: string;
+  sales_method?: string; // commerce 전용(quick/full/groupBuy)
+  total: number;
+  current_no: number | null;
+  current_label: string | null;
+  steps: {
+    no: number;
+    label: string;
+    done: boolean;
+    can_set: boolean; // 대화로 부착 가능(setField) 여부 — false = "직접 해주셔야" 단계
+    skippable?: boolean;
+    publish?: boolean;
+  }[];
 };
 
 const FALLBACK_FRIENDLY = "죄송해요, 지금 답을 만들지 못했어요. 잠시 후 다시 물어봐 주세요.";

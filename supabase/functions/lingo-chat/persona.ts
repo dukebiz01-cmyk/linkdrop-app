@@ -22,6 +22,25 @@ export interface LingoStudioContext {
   fields?: Record<string, string | null | undefined>;
 }
 
+// FIX-48+50 P2 — 번호 인터뷰 컨텍스트(계약 v2.1 additive · 클라 interview-steps45 정본과 동일 번호).
+export interface LingoInterviewStep {
+  no: number;
+  label: string;
+  done: boolean;
+  can_set: boolean;
+  skippable?: boolean;
+  publish?: boolean;
+}
+export interface LingoInterviewContext {
+  version?: string;
+  mode?: string;
+  sales_method?: string;
+  total?: number;
+  current_no?: number | null;
+  current_label?: string | null;
+  steps?: LingoInterviewStep[];
+}
+
 export interface LingoContext {
   drop_id?: string | null;
   video_summary?: string | null;
@@ -29,6 +48,8 @@ export interface LingoContext {
   studio_state?: Record<string, unknown> | null;
   /** T-A §1 — 스튜디오 액션 모드 컨텍스트(선택). */
   studio?: LingoStudioContext | null;
+  /** FIX-48+50 P2 — 번호 인터뷰 상태(계약 v2.1 additive · 스튜디오 전용). */
+  interview?: LingoInterviewContext | null;
   /** T-D — 홈 성과 진단 요청 플래그(surface=home 전용 — index 가 RPC 집계 주입). */
   performance?: boolean;
 }
@@ -142,6 +163,32 @@ function buildMemoryBlock(facts: string[]): string | null {
   );
 }
 
+// ── [블록 I — 번호 인터뷰 진행 (FIX-48+50 P2, interview 주입 시에만)] ──────
+const BLOCK_I = `[번호 인터뷰 규칙]
+- 카드는 번호 순서로 완성한다. 아래 [인터뷰 진행]의 번호·라벨·값만 인용한다(번호·필드값 창작 금지).
+- 지금 할 일은 [인터뷰 진행]의 '현재 번호'다. 번호를 입으로도 말한다. 예: "3번 가격이에요. 얼마로 할까요?"
+- 사용자가 값을 말하면 그 값으로 setField 를 제안한다(가격·원산지·목표인원 등). 값을 안 말했으면 지어내지 말고 되묻는다.
+- 부착이 확정되면(적용 완료) 바로 다음 미완 번호를 이어서 묻는다. 끊지 않는다. 마지막은 발행 번호다.
+- can_set: false 단계(사진·영상·쿠폰·캘린더·매장·발송기준 등)는 네가 못 만진다. "이건 화면에서 직접 해주셔야 해요"라고 정직히 말하고 그 자리를 누르도록 안내한 뒤, 완료되면 다음 번호로 넘어간다.
+- 사용자가 다른 번호를 요청하면 그 번호부터 처리하고, 끝나면 남은 번호로 돌아온다("아까 3번이 남았어요").
+- 검증에 걸리면(예: 달성가가 기본가보다 높음) 지적하고 올바른 값을 다시 묻는다. 임의로 고쳐 넣지 않는다.
+- 전부 끝나면: "다 됐어요. 발행 버튼은 직접 눌러 확인해 주세요." (발행은 네가 대신 못 누른다 — 락)`;
+
+// [인터뷰 진행] 동적 블록 — 번호·라벨·완료·부착가능을 그대로 주입(창작 재료 아님).
+function buildInterviewBlock(iv: LingoInterviewContext): string {
+  const steps = (iv.steps ?? [])
+    .filter((s) => s && typeof s.no === "number")
+    .map((s) => {
+      const state = s.publish ? "발행" : s.done ? "완료" : "미완";
+      const tag = s.can_set ? "" : s.skippable ? " (건너뛰기 가능)" : " (직접 입력)";
+      return `- ${s.no}. ${(s.label ?? "").trim()} [${state}]${tag}`;
+    });
+  const head =
+    `[인터뷰 진행]${iv.mode ? ` (모드: ${iv.mode}${iv.sales_method ? `/${iv.sales_method}` : ""})` : ""}` +
+    (iv.current_no != null ? ` · 현재 = ${iv.current_no}번 ${(iv.current_label ?? "").trim()}` : " · 현재 없음(완주)");
+  return `${BLOCK_I}\n\n${head}\n${steps.length > 0 ? steps.join("\n") : "- (단계 없음)"}`;
+}
+
 // ── [블록 F — 현재 작업 정보 (동적)] ─────────────────────────────────────
 function buildContextBlock(context: LingoContext | null | undefined): string {
   const lines: string[] = [];
@@ -191,6 +238,8 @@ export function buildSystemPrompt({
   if (memory) blocks.push(memory);
   blocks.push(buildContextBlock(context));
   if (studio) blocks.push(buildStudioBlock(studio));
+  // FIX-48+50 P2 — 번호 인터뷰 블록(studio 액션 모드에서 interview 주입 시에만 · 하위호환).
+  if (studio && context?.interview) blocks.push(buildInterviewBlock(context.interview));
   // T-D — 성과 진단 블록(P): performance 주입 시에만(홈 인텐트 안내와 병존).
   if (performance) blocks.push(buildPerformanceBlock(performance));
   blocks.push(BLOCK_G);

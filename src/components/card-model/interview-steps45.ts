@@ -160,6 +160,27 @@ export function computeInterviewStates(
   }));
 }
 
+/** 단계 → 링고 setField 필드명(있으면 대화로 부착 가능 · 없으면 "직접 해주셔야" 단계).
+ *   photo/video/shipBasis/dock/coupon/calendar/storeAddr/facilities/gbDeadline/publish = null. */
+export function interviewSetFieldKey(key: string): string | null {
+  switch (key) {
+    case "name":
+      return "productName";
+    case "price":
+      return "productPrice";
+    case "origin":
+      return "origin";
+    case "gbTarget":
+      return "gbTargetCount";
+    case "gbPrice":
+      return "gbTargetPrice";
+    case "tagline":
+      return "subtitle";
+    default:
+      return null;
+  }
+}
+
 /** 덱 블록 배지용 — 해당 블록에 걸린 첫 번호 + 그 블록 전 단계 done 여부. */
 export function blockBadge(
   steps: InterviewStep[],

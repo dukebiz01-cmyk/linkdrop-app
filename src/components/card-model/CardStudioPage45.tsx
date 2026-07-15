@@ -77,6 +77,8 @@ import {
   getInterviewJourney,
   computeInterviewStates,
   blockBadge,
+  resolveInterviewDone,
+  interviewSetFieldKey,
   type InterviewMode,
   type SalesMethod,
   type InterviewSignals,
@@ -2290,6 +2292,24 @@ export function CardStudioPage45({
             : {}),
           ...(selectedCoupon?.title ? { coupon: selectedCoupon.title } : {}),
         },
+      },
+      // FIX-48+50 P2 — 번호 인터뷰 상태(계약 v2.1 additive). 스텝퍼와 동일 번호 = 발화 번호 강제
+      //   일치. 번호·라벨·done·can_set 은 interview-steps45 정본 파생(창작 금지 재료).
+      interview: {
+        version: "2.1",
+        mode,
+        ...(mode === "commerce" ? { sales_method: interviewMethod } : {}),
+        total: interviewJourney.length,
+        current_no: interviewStates.find((x) => x.state === "current")?.step.no ?? null,
+        current_label: interviewStates.find((x) => x.state === "current")?.step.label ?? null,
+        steps: interviewJourney.map((s) => ({
+          no: s.no,
+          label: s.label,
+          done: resolveInterviewDone(s.key, interviewSignals),
+          can_set: interviewSetFieldKey(s.key) != null,
+          ...(s.skippable ? { skippable: true } : {}),
+          ...(s.publish ? { publish: true } : {}),
+        })),
       },
     };
   }
