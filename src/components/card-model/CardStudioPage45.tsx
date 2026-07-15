@@ -400,10 +400,8 @@ const SL_KEYFRAMES = `
    레이어(.sl-led-clip, inset 0 + rounded 26px + overflow hidden)가 담당 — conic 은 그 안에서만
    회전하고 카드 본체·배지는 클리핑 밖(뒤 형제, 위 페인트)이라 무접촉. */
 .sl-led-wrap { position: relative; isolation: isolate; margin: -2px; padding: 2px; border-radius: 26px; }
-.sl-led-clip { position: absolute; inset: 0; border-radius: 26px; overflow: hidden; pointer-events: none; }
-.sl-led-wrap-spin { position: absolute; left: 50%; top: 50%; width: 800px; height: 800px; margin: -400px 0 0 -400px;
-  background: conic-gradient(transparent 0deg 290deg, rgba(255,138,0,0.25) 308deg, rgba(255,138,0,0.9) 338deg, #FFC46B 352deg, #FFF3E0 358deg, transparent 360deg);
-  animation: sl-led-rotate 2s linear infinite; }
+/* FIX-48+50 조정A — 덱 카드 노란 회전 글로우(.sl-led-clip / .sl-led-wrap-spin) 제거.
+   링고 busy 러닝라이트(.sl-led-ring* · sl-led-rotate keyframe)는 다른 용도라 보존. */
 `;
 
 type ProductCopy45 = { headline: string; sellingPoints: string[] };
@@ -1198,10 +1196,8 @@ export function CardStudioPage45({
   // FIX-19→23 — 방향등 = 단일 타깃 그 자체(캡슐 기본 문구=해당 단계 티칭과 상시 동행).
   //   단계 완료 시 타깃이 다음 단계 블록으로 넘어가며 불도 즉시 이동(순서대로 켜짐).
   //   busy/flash 중엔 기존처럼 잠시 소등, 수렴·발행 후 = 타깃 null → 전체 소등(기존 계약).
-  const suggestLitId = !stripBusy && !stripFlash && currentTarget ? currentTarget.id : null;
-  // FIX-21 — 디버그 강제 점등도 '중앙 자리'가 아니라 특정 카드 1장(덱 첫 블록 id)으로 고정.
-  //   실사용(suggestLitId)과 동일한 block.id 판정 규칙 — 스와이프해도 그 카드에만 불이 붙는다.
-  const debugLitId = ledDebug ? (DECK[0]?.id ?? null) : null;
+  // FIX-48+50 조정A — 덱 카드 방향등(노란 회전 글로우) 폐지: "지금 차례"는 번호 배지 3상태로만
+  //   (글로우·회전·네온 0). suggestLitId/debugLitId·lit 판정 제거. 링고 busy LED(ledOn)는 무접촉.
 
   // FIX-32 — 영상 길이(초). 파싱 가능 + 10초 이상이면 범위 슬라이더, 아니면 스텝퍼 폴백.
   const clipDurSec = selectedVideo?.durationLabel ? parseClock(selectedVideo.durationLabel) : null;
@@ -2921,9 +2917,6 @@ export function CardStudioPage45({
             const gated = GATED_BLOCK_IDS.has(block.id);
             const locked = (!!block.isPaid && score < ENHANCE_UNLOCK) || gated;
             const isCenter = offset === 0;
-            // FIX-20/21 — 방향등 점등 판정: 제안 동기(suggestLitId)와 디버그(debugLitId,
-            //   ?led=1 = 덱 첫 블록 고정) 모두 block.id 기준 — 자리(슬롯) 기반 판정 금지.
-            const lit = suggestLitId === block.id || debugLitId === block.id;
             return (
               <button
                 key={block.id}
@@ -2955,26 +2948,16 @@ export function CardStudioPage45({
                 {/* FIX-20 — 방향등 래퍼: 상시 유지(레이아웃 점프 0), 점등 시 회전 레이어만 렌더.
                     카드(positioned·불투명 bg)가 뒤 형제라 중앙을 덮고 패딩 2px 띠만 노출.
                     스와이프로 화면 밖이어도 lit 은 파생 상태 — 복귀 시 점등(FIX-19 계약 유지). */}
+                {/* FIX-48+50 조정A — 덱 방향등(노란 회전 글로우) 렌더 제거: 지금 차례는 번호 배지로만. */}
                 <div className="sl-led-wrap">
-                  {/* FIX-22 — 클리핑은 링 전용 레이어에서만: 배지·카드 무접촉. */}
-                  {lit && (
-                    <span className="sl-led-clip" aria-hidden="true">
-                      <span className="sl-led-wrap-spin" />
-                    </span>
-                  )}
                 <div
                   className="relative flex h-[240px] flex-col rounded-3xl bg-white p-5 text-left"
                   style={{
-                    // 점등 중엔 회색 아웃라인(0 0 0 1px)만 제거 — 2px 앰버 띠 전폭 노출(드롭 섀도는 유지).
-                    boxShadow: lit
-                      ? isCenter
-                        ? "0 16px 36px -14px rgba(15,23,42,0.22)"
-                        : "0 8px 20px -12px rgba(15,23,42,0.18)"
-                      : isCenter
-                        ? isOn
-                          ? `0 16px 36px -14px rgba(15,23,42,0.28), 0 0 0 2px ${accent}`
-                          : "0 16px 36px -14px rgba(15,23,42,0.22), 0 0 0 1px #EDEDED"
-                        : "0 8px 20px -12px rgba(15,23,42,0.18), 0 0 0 1px #EDEDED",
+                    boxShadow: isCenter
+                      ? isOn
+                        ? `0 16px 36px -14px rgba(15,23,42,0.28), 0 0 0 2px ${accent}`
+                        : "0 16px 36px -14px rgba(15,23,42,0.22), 0 0 0 1px #EDEDED"
+                      : "0 8px 20px -12px rgba(15,23,42,0.18), 0 0 0 1px #EDEDED",
                   }}
                 >
                   {/* 상단: 파워 + 카테고리 */}
@@ -3015,32 +2998,28 @@ export function CardStudioPage45({
                   {/* 라벨/설명 */}
                   <div>
                     <p className="flex items-center gap-1.5 text-[16px] font-bold leading-tight text-[#0A0A0A]">
-                      {block.label}
-                      {gated && (
-                        <span className="rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[9px] font-bold text-[#64748B]">준비 중</span>
-                      )}
-                      {/* FIX-48+50 — 번호 배지(interview-steps45 단일 정본). 충족 = ✓+번호(액센트 채움) /
+                      {/* FIX-48+50 — 번호 배지 맨 앞 고정(스텝퍼와 동일 26px). 충족 = ✓+번호(액센트 채움) /
                           미충족 = 번호 테두리. 붉은 [필수] 폐지 · 3상태 펄스는 상단 스텝퍼가 담당. */}
                       {(() => {
                         const bb = blockBadge(interviewJourney, block.id, interviewSignals);
                         if (!bb) return null;
-                        return bb.done ? (
+                        return (
                           <span
-                            className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
-                            style={{ backgroundColor: accent, color: "#fff" }}
+                            className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold tabular-nums"
+                            style={
+                              bb.done
+                                ? { backgroundColor: accent, color: "#fff" }
+                                : { color: accent, boxShadow: `inset 0 0 0 1.5px ${accent}` }
+                            }
                           >
-                            <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                            {bb.no}
-                          </span>
-                        ) : (
-                          <span
-                            className="flex h-5 min-w-5 items-center justify-center rounded-full border-[1.5px] px-1 text-[10px] font-bold tabular-nums"
-                            style={{ borderColor: accent, color: accent }}
-                          >
-                            {bb.no}
+                            {bb.done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : bb.no}
                           </span>
                         );
                       })()}
+                      {block.label}
+                      {gated && (
+                        <span className="rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[9px] font-bold text-[#64748B]">준비 중</span>
+                      )}
                       {/* FIX-9 — 도킹 가용 수 배지(실카운트, 0장이면 미표기 — 가짜 숫자 금지). */}
                       {block.id === "dock" && dockCount > 0 && (
                         <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums" style={{ backgroundColor: `${accent}14`, color: accent }}>
