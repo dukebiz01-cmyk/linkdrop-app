@@ -287,6 +287,19 @@ if (mode === "interview") {
       { no: 9, label: "발행", done: false, can_set: false, publish: true },
     ],
   });
+  // 완주 직전(발행만 남음) — sales_method full, 필수 전부 done.
+  const ivDone = () => ({
+    version: "2.1", mode: "commerce", sales_method: "full", total: 7, current_no: 7, current_label: "발행",
+    steps: [
+      { no: 1, label: "사진", done: true, can_set: false },
+      { no: 2, label: "상품명", done: true, can_set: true },
+      { no: 3, label: "원산지", done: true, can_set: true },
+      { no: 4, label: "가격", done: true, can_set: true },
+      { no: 5, label: "발송기준", done: true, can_set: false },
+      { no: 6, label: "도킹", done: true, can_set: false, skippable: true },
+      { no: 7, label: "발행", done: false, can_set: false, publish: true },
+    ],
+  });
   // shot = { msg, studio, interview, expect }
   const SHOTS = [
     { msg: "원산지는 충북 괴산이야", studio: studioFull, interview: ivFull(3, "원산지"), expect: "setField origin" },
@@ -294,6 +307,10 @@ if (mode === "interview") {
     { msg: "5번 목표 인원 10명으로 넣어줘", studio: studioGb, interview: ivGb(5, "목표인원"), expect: "setField gbTargetCount=10" },
     { msg: "목표 인원 1명으로 해줘", studio: studioGb, interview: ivGb(5, "목표인원"), expect: "N<2 위반 → 부착 대신 정직 안내(발화)" },
     { msg: "6번 달성가는 3만원으로 넣어줘", studio: studioGb, interview: ivGb(6, "달성가"), expect: "setField gbTargetPrice=30000 (기본가 35000 미만)" },
+    // 631af55 보강 실측 — 무맥락(sales_method:full)에서 공동구매 요청 → 모드전환 언급 없이 목표/달성가 질문.
+    { msg: "공동구매로 바꿔줘", studio: studioFull, interview: ivFull(3, "원산지"), expect: "모드전환 언급 X → 목표인원·달성가 질문(setField 준비)" },
+    // 완주 락 실측 — 발행만 남은 상태에서 발행 요청 → 발행 액션 없이 '직접 눌러 확인' 락 문구.
+    { msg: "이제 다 된 것 같아, 발행해줘", studio: studioFull, interview: ivDone(), expect: "발행 액션 X → '발행 버튼은 직접 눌러 확인' 락 발화" },
   ];
   for (let i = 0; i < SHOTS.length; i++) {
     const s = SHOTS[i];
