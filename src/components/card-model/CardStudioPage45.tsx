@@ -79,6 +79,7 @@ import {
   blockBadge,
   resolveInterviewDone,
   interviewSetFieldKey,
+  interviewSlotAnchor,
   type InterviewMode,
   type SalesMethod,
   type InterviewSignals,
@@ -1152,6 +1153,13 @@ export function CardStudioPage45({
     () => computeInterviewStates(interviewJourney, interviewSignals),
     [interviewJourney, interviewSignals],
   );
+  // FIX-48+50 P2 — 미리보기 점선 번호 슬롯(거울 성역 · studio 전용 별도 prop). 현재 단계 → 앵커.
+  const previewCurrentSlot = useMemo(() => {
+    const cur = interviewStates.find((x) => x.state === "current");
+    if (!cur) return undefined;
+    const anchor = interviewSlotAnchor(cur.step.key);
+    return anchor ? { no: cur.step.no, label: cur.step.label, anchor } : undefined;
+  }, [interviewStates]);
 
   // FIX-48+50 — [필수] 배지 파생(requiredBadges) 폐지: 덱 번호 배지는 interview-steps45
   //   blockBadge(interviewJourney, ...) 단일 정본으로 대체(위 render). steps 는 발행 게이트
@@ -2952,7 +2960,12 @@ export function CardStudioPage45({
         {/* 히어로: 라이브 캔버스 카드 — ST1 CardModelBody(studio) 거울 */}
         <section ref={heroRef} className="pt-2.5">
           <div>
-            <CardModelBody model={cardModel} variant="studio" burstKey={burstKey} />
+            <CardModelBody
+              model={cardModel}
+              variant="studio"
+              burstKey={burstKey}
+              currentSlot={previewCurrentSlot}
+            />
           </div>
         </section>
 

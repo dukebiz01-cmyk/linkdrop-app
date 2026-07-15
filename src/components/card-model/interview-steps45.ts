@@ -181,6 +181,27 @@ export function interviewSetFieldKey(key: string): string | null {
   }
 }
 
+/** 단계 → CardModelBody 미리보기 점선 슬롯 앵커(현재 단계 위치 표시용). 없으면 미리보기 슬롯 없음. */
+export function interviewSlotAnchor(key: string): string | null {
+  switch (key) {
+    case "photo":
+      return "hero";
+    case "name":
+      return "title";
+    case "tagline":
+      return "subtitle";
+    case "price":
+      return "price";
+    case "origin":
+      return "origin";
+    case "gbTarget":
+    case "gbPrice":
+      return "gb";
+    default:
+      return null;
+  }
+}
+
 /** 덱 블록 배지용 — 해당 블록에 걸린 첫 번호 + 그 블록 전 단계 done 여부. */
 export function blockBadge(
   steps: InterviewStep[],

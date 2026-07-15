@@ -71,14 +71,21 @@ export function CardModelBody({
   burstKey = 0,
   showJourney = true,
   actions,
+  currentSlot,
 }: {
   model: CardModel;
   variant?: CardModelVariant;
   burstKey?: number;
   showJourney?: boolean;
   actions?: CardModelActions;
+  /** FIX-48+50 P2 — 번호 인터뷰 현재 슬롯(별도 prop · 모델 타입 무오염). variant==="studio" 에서만
+   *  점선 번호 슬롯("③ 가격이 여기 붙어요")으로 현재 단계 위치를 미리보기에 표시. /d 미전달 = 렌더 무영향. */
+  currentSlot?: { no: number; label: string; anchor: string };
 }) {
   const { accent, cardColor, pageBg, applied } = model;
+  // FIX-48+50 P2 — 점선 슬롯 게이트: studio 미리보기 + 현재 앵커 일치 + 해당 값 비어있을 때만.
+  const slotFor = (anchor: string) =>
+    variant === "studio" && currentSlot?.anchor === anchor ? currentSlot : null;
   const [journeyOpen, setJourneyOpen] = useState(false);
 
   const CategoryIcon: LucideIcon = model.categoryIcon ?? Tag;
@@ -292,6 +299,15 @@ export function CardModelBody({
           <p className="mt-1 text-pretty text-[13px] leading-relaxed text-[#525252]">
             {model.subtitleText}
           </p>
+          {(slotFor("title") || slotFor("subtitle")) && (
+            // FIX-48+50 P2 — 점선 번호 슬롯(studio 전용): 현재 단계가 제목/한마디면 위치 힌트.
+            <span
+              className="mt-1.5 inline-flex items-center gap-1 rounded-full border-[1.5px] border-dashed px-2 py-0.5 text-[10px] font-bold"
+              style={{ borderColor: accent, color: accent }}
+            >
+              {currentSlot!.no}. {currentSlot!.label} 여기에 붙어요
+            </span>
+          )}
 
           {/* 브랜드 소개 */}
           {applied["brand"] && !!model.brandText && (
@@ -388,7 +404,11 @@ export function CardModelBody({
                 </div>
               )}
               {/* 유형 · 원산지 · 판매 단위 메타 */}
-              {(model.productType || model.productOrigin || model.productUnitLabel || model.productDateRangeLabel) && (
+              {(model.productType ||
+                model.productOrigin ||
+                model.productUnitLabel ||
+                model.productDateRangeLabel ||
+                (slotFor("origin") && !model.productOrigin)) && (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {model.productType && (
                     <span className="rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-bold text-[#525252]">
@@ -409,6 +429,15 @@ export function CardModelBody({
                   {model.productOrigin && (
                     <span className="rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-bold text-[#525252]">
                       원산지 {model.productOrigin}
+                    </span>
+                  )}
+                  {slotFor("origin") && !model.productOrigin && (
+                    // FIX-48+50 P2 — 점선 번호 슬롯(studio 전용): "④ 원산지가 여기 붙어요".
+                    <span
+                      className="flex items-center gap-1 rounded-full border-[1.5px] border-dashed px-2 py-0.5 text-[10px] font-bold"
+                      style={{ borderColor: accent, color: accent }}
+                    >
+                      {currentSlot!.no}. {currentSlot!.label}
                     </span>
                   )}
                 </div>
@@ -433,9 +462,25 @@ export function CardModelBody({
                       {model.productQtyUnit ?? "개"}
                     </span>
                   )}
-                  <span className="text-[18px] font-bold tabular-nums text-[#0A0A0A]">
-                    {model.priceText || "가격 미정"}
-                  </span>
+                  {slotFor("price") && !model.priceText ? (
+                    // FIX-48+50 P2 — 점선 번호 슬롯(studio 전용): "③ 가격이 여기 붙어요".
+                    <span
+                      className="flex items-center gap-1 rounded-lg border-[1.5px] border-dashed px-2 py-1 text-[11px] font-bold"
+                      style={{ borderColor: accent, color: accent }}
+                    >
+                      <span
+                        className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] tabular-nums text-white"
+                        style={{ backgroundColor: accent }}
+                      >
+                        {currentSlot!.no}
+                      </span>
+                      {currentSlot!.label}이 여기 붙어요
+                    </span>
+                  ) : (
+                    <span className="text-[18px] font-bold tabular-nums text-[#0A0A0A]">
+                      {model.priceText || "가격 미정"}
+                    </span>
+                  )}
                 </span>
               </div>
 
