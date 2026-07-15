@@ -826,6 +826,9 @@ export function CardStudioPage() {
         shareableUrl = json.shareable_url ?? null;
       }
 
+      // S1-b로 이관됨 — 이 CardStudioPage(legacy)는 `?legacy=1` 전용(StudioBuildSwitch 기본은
+      //   CardStudioPage45)이라 이 블록은 실경로 미도달 죽은 코드. 라이브 등가물은
+      //   CardStudioPage45.handlePublish 의 S1-b 블록. 존치(제거는 별도 승인).
       // BUG-1 — 커머스 재사용 발행: 폼 제출로 만든 드롭 A 는 is_public=false(서버 기본)로
       //   생성됐고 이 분기는 /api/drops 를 재호출하지 않아 body.is_public(발행바 토글)이
       //   반영되지 않는다. 발행 성공 후 발행바 토글값(isPublic)을 드롭 A 에 best-effort 반영

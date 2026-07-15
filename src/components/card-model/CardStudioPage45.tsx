@@ -1889,6 +1889,22 @@ export function CardStudioPage45({
       }
 
       const supabase = getSupabase();
+      // S1-b — 커머스 재사용 발행: 폼 등록으로 만든 상품 드롭은 is_public=false(서버 기본 —
+      //   /api/drops self_upload `p_is_public ?? false`)로 생성됐고, 이 재사용 분기는 /api/drops
+      //   를 재호출하지 않아 발행바 토글(isPublic)이 드롭에 반영되지 않는다. 발행 성공 후
+      //   best-effort 반영(쿠폰 연결 패턴 동일 — 실패해도 발행 유지). RLS drops_owner_modify
+      //   (auth.uid()=owner_user_id) 커버. else(신규 생성)는 body.is_public 로 실려나가 대상 아님.
+      if (reusedProduct && dropId && supabase) {
+        try {
+          const { error: pubErr } = await supabase
+            .from("info_drops")
+            .update({ is_public: isPublic })
+            .eq("id", dropId);
+          if (pubErr) console.warn("[studio-lab] 공개 토글 반영 실패:", pubErr.message);
+        } catch (e) {
+          console.warn("[studio-lab] is_public update exception:", e);
+        }
+      }
       // ① 쿠폰 연결 — best-effort.
       if (dropId && hasCoupon && supabase) {
         try {
