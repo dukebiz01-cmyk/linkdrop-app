@@ -732,7 +732,8 @@ export function CardStudioPage45({
   // FIX-16 — 링고 표면 통합(하단 스트립 폐지 · 단일 플로팅 캡슐): 상태 리터럴은 승계하되 의미 재정의
   //   "strip" = 캡슐(드래그 플로팅, 기본) / "panel" = 캡슐 자리 기준 확장 패널 / "closed" = 최소 아바타 점.
   //   완전 소멸 없음 — X 는 점까지만, 점 탭 = 캡슐 복귀. FIX-3 계약(자동 사라짐 없음·실상태 결합) 유지.
-  const [lingoView, setLingoView] = useState<"strip" | "panel" | "closed">("strip");
+  // FIX-48+50 P1.5 — 링고 단일 박스 2상태: strip(접힘 캡슐) ↔ panel(펼침). closed(점) 폐지.
+  const [lingoView, setLingoView] = useState<"strip" | "panel">("strip");
   // T5 — 링고 대화 실배선(41창 백엔드 계약): SSE 채팅 + 음성 반이중 v1.
   const chat = useLingoChat();
   const voice = useLingoVoice();
@@ -4692,25 +4693,26 @@ export function CardStudioPage45({
                       <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">링고AI</p>
                       <p className="flex items-center gap-1 text-[11px] font-medium text-[#9A9A9A]">
                         <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
-                        {chat.streaming ? "생각 중…" : voice.speaking ? "말하는 중…" : "전환 코칭 · 대화 — 무엇이든 물어보세요"}
+                        {/* FIX-48+50 P1.5 — 헤더 현재 번호 1줄(interview-steps45 정본 번호·라벨 인용, 창작 0). */}
+                        {chat.streaming
+                          ? "생각 중…"
+                          : voice.speaking
+                            ? "말하는 중…"
+                            : (() => {
+                                const cur = interviewStates.find((x) => x.state === "current");
+                                return cur ? `지금 ${cur.step.no}번 · ${cur.step.label}` : "전환 코칭 · 대화 — 무엇이든 물어보세요";
+                              })()}
                       </p>
                     </div>
-                    {/* FIX-3 — 접기(→스트립) / X(완전 닫기, FAB 은 남음) 분리. */}
+                    {/* FIX-48+50 P1.5 — 링고 단일 박스: 접힘(캡슐)↔펼침(패널) 2상태만. 완전닫기(closed
+                        점) 폐지 → 접기(캡슐)로 일원화(별도 플로팅 개체 0). */}
                     <button
                       type="button"
-                      aria-label="스트립으로 접기"
+                      aria-label="캡슐로 접기"
                       onClick={() => setLingoView("strip")}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] transition-transform active:scale-90"
                     >
                       <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="닫기"
-                      onClick={() => setLingoView("closed")}
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] transition-transform active:scale-90"
-                    >
-                      <X className="h-4 w-4" strokeWidth={2.5} />
                     </button>
                   </div>
 
@@ -4815,20 +4817,8 @@ export function CardStudioPage45({
                     </div>
                   </div>
 
-                  {/* 추천 장착 — 한 줄 제안(블록 고유 아이콘) */}
-                  {lingo.action && !applied[lingo.action] && (() => {
-                    const SuggestIcon = blockById(lingo.action).icon;
-                    return (
-                      <button
-                        type="button"
-                        onClick={lingoEquipSuggestion}
-                        className="mt-3 flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl bg-[#F4F4F5] text-[13px] font-bold text-[#0A0A0A] transition-transform [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-[0.98]"
-                      >
-                        <SuggestIcon className="h-4 w-4 text-[#525252]" strokeWidth={2.25} />
-                        {blockById(lingo.action).label} 바로 장착
-                      </button>
-                    );
-                  })()}
+                  {/* FIX-48+50 P1.5 — 중복 "바로 장착" 대형 CTA 제거: 장착 기능은 행동 칩("블록 담기"→덱)
+                      + 캡슐 접힘 시 [장착] 제안 칩으로 일원화(코치 칩과 기능 중복 해소). */}
 
                   {/* T5 — 링고 대화 실배선: 말풍선 리스트(가이드 아래 공존, 내부 스크롤) + 입력행
                       (텍스트·낭독 토글·마이크·전송/중지). 반이중 — 스트리밍/듣기 중 입력 잠금,
@@ -5205,37 +5195,8 @@ export function CardStudioPage45({
             </div>
           )}
 
-          {/* FIX-16 — 최소화(아바타 점): X 로 도달하는 최소 상태. 완전 소멸 없음 — 탭 = 캡슐 복귀.
-              같은 fabPos 공유(드래그·스냅 동일). */}
-          {lingoView === "closed" && !mirrorOpen && (
-            <div
-              ref={fabRef}
-              role="button"
-              aria-label="링고AI 캡슐 열기 · 끌면 옮기기"
-              onPointerDown={onFabPointerDown}
-              onPointerMove={onFabPointerMove}
-              onPointerUp={() => onFabPointerUp(() => setLingoView("strip"))}
-              onPointerCancel={() => onFabPointerUp(() => setLingoView("strip"))}
-              className={`fixed z-40 flex h-10 w-10 touch-none select-none items-center justify-center rounded-full text-white ring-2 ring-white ${
-                fabDragging ? "scale-110 cursor-grabbing" : "cursor-grab transition-all duration-300 ease-out active:scale-90"
-              }`}
-              style={
-                fabPos
-                  ? { left: fabPos.x, top: fabPos.y, backgroundColor: accent, boxShadow: `0 10px 24px -8px ${accent}, 0 4px 12px rgba(15,23,42,0.18)` }
-                  : { right: 20, bottom: 196, backgroundColor: accent, boxShadow: `0 10px 24px -8px ${accent}, 0 4px 12px rgba(15,23,42,0.18)` }
-              }
-            >
-              <MessageCircle className="h-5 w-5" strokeWidth={2} />
-              {lingo.action && !applied[lingo.action] && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
-                  <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold" style={{ color: accent }}>
-                    !
-                  </span>
-                </span>
-              )}
-            </div>
-          )}
+          {/* FIX-48+50 P1.5 — 최소화(closed 아바타 점) 상태 폐지: 링고 박스는 캡슐(접힘)↔패널(펼침)
+              2상태만. 캡슐이 곧 최소 상태 — 별도 플로팅 점 개체 제거(closed·캡슐 동시 표시 조합 0). */}
         </>
       )}
     </div>
