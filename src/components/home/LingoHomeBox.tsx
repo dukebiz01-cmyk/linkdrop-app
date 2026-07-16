@@ -19,6 +19,7 @@ export function LingoHomeBox({
   cardCount,
   onGoStudio,
   openSignal,
+  onOpenChange,
 }: {
   /** 내 발행 카드 수(user.myCreatedDrops.length). 0=스타터 / 1+=메이커. */
   cardCount: number;
@@ -26,6 +27,8 @@ export function LingoHomeBox({
   onGoStudio: (purpose?: string) => void;
   /** 작업5 — 외부(마케팅 배너 "시작해 볼까요") 개시 신호. 값이 바뀌면 패널 펼침. */
   openSignal?: number;
+  /** 작업5c — 패널 열림 상태 보고(배너 세모 방향 동기 ▲접힘/▼펼침). */
+  onOpenChange?: (open: boolean) => void;
 }) {
   const chat = useLingoChat();
   const voice = useLingoVoice();
@@ -116,6 +119,9 @@ export function LingoHomeBox({
     if (openSignal && openSignal > 0) openPanel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openSignal]);
+
+  // 작업5c — 패널 열림 상태를 배너로 보고(세모 방향 ▲/▼ 동기).
+  useEffect(() => { onOpenChange?.(view === "panel"); }, [view, onOpenChange]);
 
   // 채팅 전송 — surface='home'(T-B 홈 인텐트). 메이커면 context.performance=true(T-D 성과 진단 재료).
   const sendChat = async (text: string) => {

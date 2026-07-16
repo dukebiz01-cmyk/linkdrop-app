@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, ArrowRight, Play, Link2, Ticket, Calendar, Check, Store, Video, ShoppingBag } from "lucide-react";
+import { Sparkles, ArrowRight, ChevronUp, Play, Link2, Ticket, Calendar, Check, Store, Video, ShoppingBag } from "lucide-react";
 
 /**
  * HomeMarketingBanner — 홈 상단 마케팅 배너(라이브 모핑 히어로).
@@ -82,7 +82,7 @@ const SCENES: Scene[] = [
   },
 ];
 
-export function HomeMarketingBanner({ onStart }: { onStart?: () => void }) {
+export function HomeMarketingBanner({ onStart, open = false }: { onStart?: () => void; open?: boolean }) {
   const [sceneIdx, setSceneIdx] = useState(0);
   const [built, setBuilt] = useState(false);
   const scene = SCENES[sceneIdx];
@@ -230,15 +230,17 @@ export function HomeMarketingBanner({ onStart }: { onStart?: () => void }) {
       </div>
 
       {/* 작업5 — "시작해 볼까요" → 홈 링고 캡슐 펼침 연결. 정본 §3(한 화면 한 주인공):
-          목적색 채움은 링고 캡슐 1계열 → 배너 CTA는 보조(흰 배경+보더). 44px 터치. */}
+          목적색 채움은 링고 캡슐 1계열 → 배너 CTA는 보조(흰 배경+보더). 44px 터치.
+          작업5c — → 화살표 제거, 열 방향 세모: 접힘=▲(패널 위로 열림) / 펼침=▼. 180ms 회전(정본 §4). */}
       {onStart ? (
         <button
           type="button"
           onClick={onStart}
+          aria-expanded={open}
           className="mt-3.5 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border border-[#D8D6CE] bg-white text-[13.5px] font-bold text-[#1A1A2E] transition-colors hover:border-[#94A3B8] active:scale-[0.99]"
         >
           시작해 볼까요
-          <ArrowRight className="h-4 w-4" strokeWidth={2.25} />
+          <ChevronUp className={`h-4 w-4 transition-transform duration-[180ms] ${open ? "rotate-180" : ""}`} strokeWidth={2.5} />
         </button>
       ) : null}
     </section>

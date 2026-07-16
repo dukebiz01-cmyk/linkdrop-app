@@ -302,6 +302,8 @@ export function RoleHome({
   const [eventOpen, setEventOpen] = useState(false);
   // 작업5 — 마케팅 배너 "시작해 볼까요" → 홈 링고 캡슐 펼침 개시 신호(증가마다 1회 펼침).
   const [lingoOpenSignal, setLingoOpenSignal] = useState(0);
+  // 작업5c — 링고 패널 열림 상태(배너 CTA 세모 방향 ▲접힘/▼펼침 동기).
+  const [lingoOpen, setLingoOpen] = useState(false);
   // HOME-LINGO — 스타터 라우팅은 홈 링고 박스로 이관(onGoStudio). 기존 onStartPurpose/onWallet/
   //   onExplore 는 LingoStarter 흡수로 소비처 소멸 → 제거. 제작 진입 = /studio-build.
   const openDrop = (shareUuid: string) =>
@@ -339,10 +341,10 @@ export function RoleHome({
 
         {/* Duke 락 복원 — 홈 상단 마케팅 배너(구 LingoStarter LiveMorphHero). fb5a946 흡수 시 유실 → 독립 복원.
             작업5 — "시작해 볼까요" → 링고 캡슐 펼침 연결. */}
-        <HomeMarketingBanner onStart={() => setLingoOpenSignal((s) => s + 1)} />
+        <HomeMarketingBanner onStart={() => setLingoOpenSignal((s) => s + 1)} open={lingoOpen} />
 
         {/* HOME-LINGO — 링고 스타터 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합. 0장=스타터 분기. */}
-        <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} />
+        <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
 
         {/* 성과 2셀 — 전환(get_creator_performance 30d 자체 fetch) / 적립(준비중 락). v0 룩. */}
         <div className="pb-1">
@@ -416,11 +418,11 @@ export function RoleHome({
 
       {/* Duke 락 복원 — 홈 상단 마케팅 배너(구 LingoStarter LiveMorphHero). fb5a946 흡수 시 유실 → 독립 복원.
           작업5 — "시작해 볼까요" → 링고 캡슐 펼침 연결. */}
-      <HomeMarketingBanner onStart={() => setLingoOpenSignal((s) => s + 1)} />
+      <HomeMarketingBanner onStart={() => setLingoOpenSignal((s) => s + 1)} open={lingoOpen} />
 
       {/* HOME-LINGO — 링고 스타터·성과진단 셸 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합.
           1장+ = 메이커 분기("성과 볼까요?" → surface:home + performance 발화). 1층 실값 카드·3층 칩 = 커밋2. */}
-      <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} />
+      <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
 
       {/* 성과 3셀 — 전환(get_creator_performance 30d 자체 fetch)·적립(준비중 락)·구독자(실값). */}
       <div className="pb-1">
