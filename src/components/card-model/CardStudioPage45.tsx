@@ -1192,6 +1192,31 @@ export function CardStudioPage45({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // FIX-48+50 P1.5 커밋1g — 링고 박스 헤더/캡슐의 현재 번호 = 원형 배지(26px, 목적색, 스텝퍼와 동일
+  //   sl-num-pulse 리듬 공유). 부착 순간 마이크로 연출: 번호 전진 시 배지 ✓ 잠깐 표시 → 다음 번호.
+  //   번호·라벨 = interview-steps45 정본(창작 0).
+  const interviewCurrent = interviewStates.find((x) => x.state === "current");
+  const interviewCurNo = interviewCurrent?.step.no ?? null;
+  const prevInterviewNoRef = useRef<number | null>(interviewCurNo);
+  const [interviewAdvanceFlash, setInterviewAdvanceFlash] = useState(false);
+  useEffect(() => {
+    if (prevInterviewNoRef.current != null && interviewCurNo != null && interviewCurNo > prevInterviewNoRef.current) {
+      setInterviewAdvanceFlash(true);
+      const t = setTimeout(() => setInterviewAdvanceFlash(false), 700);
+      prevInterviewNoRef.current = interviewCurNo;
+      return () => clearTimeout(t);
+    }
+    prevInterviewNoRef.current = interviewCurNo;
+  }, [interviewCurNo]);
+  const renderNumBadge = (no: number) => (
+    <span
+      className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold tabular-nums text-white transition-all duration-300"
+      style={{ backgroundColor: accent, animation: "sl-num-pulse 1.6s ease-out infinite" }}
+    >
+      {interviewAdvanceFlash ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : no}
+    </span>
+  );
+
   // FIX-48+50 — [필수] 배지 파생(requiredBadges) 폐지: 덱 번호 배지는 interview-steps45
   //   blockBadge(interviewJourney, ...) 단일 정본으로 대체(위 render). steps 는 발행 게이트
   //   (firstRequiredStep/canPublish/gateMsg)·방향등·링고 발화 정본으로 계속 사용.
@@ -4727,18 +4752,21 @@ export function CardStudioPage45({
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">링고AI</p>
-                      <p className="flex items-center gap-1 text-[11px] font-medium text-[#9A9A9A]">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
-                        {/* FIX-48+50 P1.5 — 헤더 현재 번호 1줄(interview-steps45 정본 번호·라벨 인용, 창작 0). */}
-                        {chat.streaming
-                          ? "생각 중…"
-                          : voice.speaking
-                            ? "말하는 중…"
-                            : (() => {
-                                const cur = interviewStates.find((x) => x.state === "current");
-                                return cur ? `지금 ${cur.step.no}번 · ${cur.step.label}` : "전환 코칭 · 대화 — 무엇이든 물어보세요";
-                              })()}
-                      </p>
+                      {/* FIX-48+50 P1.5 커밋1g — 현재 번호 = 원형 배지(펄스) + 라벨(정본 인용, 창작 0). */}
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        {chat.streaming ? (
+                          <span className="text-[11px] font-medium text-[#9A9A9A]">생각 중…</span>
+                        ) : voice.speaking ? (
+                          <span className="text-[11px] font-medium text-[#9A9A9A]">말하는 중…</span>
+                        ) : interviewCurrent ? (
+                          <>
+                            {renderNumBadge(interviewCurrent.step.no)}
+                            <span className="truncate text-[12px] font-bold text-[#0A0A0A]">{interviewCurrent.step.label}</span>
+                          </>
+                        ) : (
+                          <span className="text-[11px] font-medium text-[#9A9A9A]">전환 코칭 · 대화 — 무엇이든 물어보세요</span>
+                        )}
+                      </div>
                     </div>
                     {/* FIX-48+50 P1.5 — 링고 단일 박스: 접힘(캡슐)↔펼침(패널) 2상태만. 완전닫기(closed
                         점) 폐지 → 접기(캡슐)로 일원화(별도 플로팅 개체 0). */}
@@ -5135,16 +5163,20 @@ export function CardStudioPage45({
               {ledOn && <span className="sl-led-ring sl-led-ring--pill" aria-hidden="true" />}
               {/* FIX-48+50 P1.5 커밋1b — 드래그 손잡이(⠿) 시각 표시(캡슐 전체가 드래그 대상). */}
               <GripVertical className="h-4 w-4 shrink-0 text-[#C4C4C4]" strokeWidth={2} aria-hidden="true" />
-              <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
-                {stripBusy ? (
+              {/* FIX-48+50 P1.5 커밋1g — 캡슐 아바타 자리에 현재 번호 배지(패널과 동일 배지·펄스로 통일).
+                  busy=스피너 / 현재 단계 있음=번호 배지 / 없음(완주)=기존 아바타. */}
+              {stripBusy ? (
+                <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
                   <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
-                ) : (
-                  <>
-                    <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
-                    <Sparkles className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px]" strokeWidth={2.5} fill="currentColor" />
-                  </>
-                )}
-              </span>
+                </span>
+              ) : interviewCurrent ? (
+                renderNumBadge(interviewCurrent.step.no)
+              ) : (
+                <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
+                  <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
+                  <Sparkles className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px]" strokeWidth={2.5} fill="currentColor" />
+                </span>
+              )}
               <span className="relative min-w-0 flex-1">
                 <span className="block truncate text-[11px] font-semibold leading-tight text-[#0A0A0A]">
                   {/* FIX-18→23→28→31 — 필수 구간 = step.teach / 권장 구간 = 제안 문구(칩 노출 시) /
