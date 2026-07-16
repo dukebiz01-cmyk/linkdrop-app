@@ -545,11 +545,11 @@ export function LoginPage({
         <footer className="pb-8 pt-4 text-center">
           <p className="text-xs font-medium leading-relaxed tracking-ko text-[#94A3B8]">
             {mode === "signin" ? "로그인" : "가입"} 시 LinkDrop의{" "}
-            <a href="#" className="text-[#525252] underline hover:text-[#0A0A0A]">
+            <a href="/tos" className="text-[#525252] underline hover:text-[#0A0A0A]">
               이용약관
             </a>
             과{" "}
-            <a href="#" className="text-[#525252] underline hover:text-[#0A0A0A]">
+            <a href="/privacy" className="text-[#525252] underline hover:text-[#0A0A0A]">
               개인정보처리방침
             </a>
             에 동의하게 됩니다.
