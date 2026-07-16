@@ -729,6 +729,9 @@ export function CardStudioPage45({
   const [colorCandidate, setColorCandidate] = useState<string | null>(null);
   // 적용 후 접힘(적용됨 · 변경) 패널 — coupon/calendar/seasonal/dock.
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
+  // FIX-48+50 P1.5 커밋3 — 집중모드 2층: 비필수 강화 지표(전환력 점수·레버 스트립)를 "✨ 카드 더
+  //   강하게" 접힘 섹션 1개로. 기본 접힘, 인라인 펼침(Radix 금지). 점수·레버 로직 무변경 — 표시만.
+  const [focusMoreOpen, setFocusMoreOpen] = useState(false);
   // FIX-16 — 링고 표면 통합(하단 스트립 폐지 · 단일 플로팅 캡슐): 상태 리터럴은 승계하되 의미 재정의
   //   "strip" = 캡슐(드래그 플로팅, 기본) / "panel" = 캡슐 자리 기준 확장 패널 / "closed" = 최소 아바타 점.
   //   완전 소멸 없음 — X 는 점까지만, 점 탭 = 캡슐 복귀. FIX-3 계약(자동 사라짐 없음·실상태 결합) 유지.
@@ -2911,29 +2914,49 @@ export function CardStudioPage45({
           </div>
         </section>
 
-        {/* 전환력 게이지 */}
-        <section className="mt-5 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F4F4F5] text-[#525252]">
-                <TrendingUp className="h-[18px] w-[18px]" strokeWidth={2.25} />
+        {/* FIX-48+50 P1.5 커밋3 — 집중모드 2층: 전환력 점수·레버 스트립을 "✨ 카드 더 강하게"
+            접힘 섹션으로(기본 접힘, 인라인 펼침 — Radix 금지). 용어 순화는 이 헤더 한정. */}
+        <section className="mt-5">
+          <button
+            type="button"
+            onClick={() => setFocusMoreOpen((v) => !v)}
+            aria-expanded={focusMoreOpen}
+            className="flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)] active:scale-[0.995]"
+          >
+            <span className="flex items-center gap-2 text-[13px] font-bold text-[#0A0A0A]">
+              <Sparkles className="h-4 w-4" strokeWidth={2.25} style={{ color: accent }} />
+              카드 더 강하게
+              <span className="text-[11px] font-semibold tabular-nums" style={{ color: accent }}>
+                {score}/100
               </span>
-              <div className="flex flex-col">
-                <span className="text-[14px] font-bold text-[#0A0A0A]">{stage.label}</span>
-                <span className="text-[11px] text-[#8A8A8A]">전환력 · {stage.tone}</span>
-              </div>
-            </div>
-            <span className="text-[22px] font-bold tabular-nums" style={{ color: accent }}>
-              {score}
-              <span className="text-[13px] font-semibold text-[#A3A3A3]">/100</span>
             </span>
-          </div>
-          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#F0F0F0]">
-            <div className="h-full rounded-full transition-all duration-500 ease-out" style={{ width: `${score}%`, backgroundColor: accent }} />
-          </div>
-          <p className="mt-2 text-[11px] text-[#8A8A8A]">
-            레버 {appliedCount}개 장착 · 강화는 {ENHANCE_UNLOCK}점부터 열려요
-          </p>
+            <ChevronDown className={`h-4 w-4 text-[#8A8A8A] transition-transform ${focusMoreOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
+          </button>
+          {focusMoreOpen && (
+            <div className="mt-2 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F4F4F5] text-[#525252]">
+                    <TrendingUp className="h-[18px] w-[18px]" strokeWidth={2.25} />
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-[14px] font-bold text-[#0A0A0A]">{stage.label}</span>
+                    <span className="text-[11px] text-[#8A8A8A]">전환력 · {stage.tone}</span>
+                  </div>
+                </div>
+                <span className="text-[22px] font-bold tabular-nums" style={{ color: accent }}>
+                  {score}
+                  <span className="text-[13px] font-semibold text-[#A3A3A3]">/100</span>
+                </span>
+              </div>
+              <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#F0F0F0]">
+                <div className="h-full rounded-full transition-all duration-500 ease-out" style={{ width: `${score}%`, backgroundColor: accent }} />
+              </div>
+              <p className="mt-2 text-[11px] text-[#8A8A8A]">
+                레버 {appliedCount}개 장착 · 강화는 {ENHANCE_UNLOCK}점부터 열려요
+              </p>
+            </div>
+          )}
         </section>
         {/* FIX-18 — 본문 링고 코칭 카드 폐지: 티칭(lingo.text)·패널 진입은 플로팅 캡슐이
             단일 창구(캡슐 한줄 안내 + 탭=패널). 정보 소실 0 — 표면만 이동. */}

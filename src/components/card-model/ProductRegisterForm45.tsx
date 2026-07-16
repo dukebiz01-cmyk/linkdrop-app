@@ -343,6 +343,8 @@ export function ProductRegisterForm45({
   //   READ 판정: 사진→이름·분류 탐지 Edge 는 부재(detect-product 는 영상 텍스트 전용) → 그
   //   부분은 "준비 중" 정직 표기. AI 카피는 실존 generate-promo-copy(image_url 비전) 재사용.
   const [quickMode, setQuickMode] = useState(false);
+  // FIX-48+50 P1.5 커밋3 — 비필수 비용·보상 필드 "(+) 더 입력" 접힘 그룹(시각 그룹핑만 · 로직 무변경).
+  const [moreFieldsOpen, setMoreFieldsOpen] = useState(false);
   // FIX-37 — 상품 상세정보 고시(상품정보제공고시) 직접 입력분. 폼 기존 입력(상품명·원산지·
   //   분류·소비기한·보관방법·브랜드)은 자동 미러라 여기 중복 입력 없음. 미입력 = "" 스냅샷.
   const [noticeOpen, setNoticeOpen] = useState(false);
@@ -1615,6 +1617,22 @@ export function ProductRegisterForm45({
         )}
       </Field>
 
+      {/* FIX-48+50 P1.5 커밋3 — 비필수 비용·보상 필드 "(+) 더 입력" 접힘 그룹(기본 접힘, 인라인 —
+          Radix 금지). 필수(번호) 필드는 위에서 펼침 유지 · quick/full hidden 토글 로직 무변경. */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setMoreFieldsOpen((v) => !v)}
+          aria-expanded={moreFieldsOpen}
+          className="flex w-full items-center justify-between rounded-xl bg-[#F4F4F5] px-3 py-2.5"
+        >
+          <span className="flex items-center gap-1 text-[12px] font-bold text-[#525252]">
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />더 입력 (원가·배송·보상)
+          </span>
+          <ChevronDown className={`h-4 w-4 text-[#8A8A8A] transition-transform ${moreFieldsOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
+        </button>
+        {moreFieldsOpen && (
+          <div className="mt-3 space-y-4">
       {/* FIX-36c ⑤ — 비용(원가→배송→드로피→기타잡비). 원가·잡비 = 빠른등록에도 기존대로 노출. */}
       <Field label="원가" hint="선택 · 저장하지 않아요">
         <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
@@ -1724,6 +1742,9 @@ export function ProductRegisterForm45({
           포장비, 부자재비 등 이 상품에 드는 잡비를 더해 주세요
         </p>
       </Field>
+          </div>
+        )}
+      </div>
 
       {/* FIX-36c ⑥ — 고시표(FIX-37 원문 이동 · 매장정보 미러는 고시표 내 소비자상담 전화가 담당).
           위 폼 입력(상품명·원산지·분류·소비기한·보관방법·브랜드)은 자동 미러(중복 입력 0),
