@@ -74,11 +74,40 @@ export function LingoHomeBox({
     } else onTap();
   };
   const openPanel = () => {
-    if (!fabPos) {
+    const vh = window.innerHeight;
+    let base = fabPos;
+    if (!base) {
       const r = fabRef.current?.getBoundingClientRect();
-      setFabPos(r ? clampPos(r.left, r.top, FAB_SIZE, FAB_SIZE) : { x: FAB_MARGIN, y: window.innerHeight - FAB_BOTTOM_RESERVE - FAB_SIZE });
+      base = r ? clampPos(r.left, r.top, FAB_SIZE, FAB_SIZE) : { x: FAB_MARGIN, y: vh - FAB_BOTTOM_RESERVE - FAB_SIZE };
+      setFabPos(base);
     }
+    // 작업8 — 펼침 방향(위/아래)을 열 때 1회 고정(드래그 중 중점 교차로 튀는 것 방지).
+    setOpenUp(base.y > vh * 0.5);
     setView("panel");
+  };
+
+  // 작업8 — 패널 헤더 ⠿ 드래그 = fabPos 공유(캡슐과 같은 좌표 이동 + 경계 스냅). 홈 유실분 복구.
+  const [openUp, setOpenUp] = useState(false);
+  const [panelDragging, setPanelDragging] = useState(false);
+  const panelDrag = useRef({ active: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  const onPanelDown = (e: React.PointerEvent) => {
+    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+    const base = fabPos ?? { x: FAB_MARGIN, y: vh - FAB_BOTTOM_RESERVE - FAB_SIZE };
+    panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: base.x, oy: base.y };
+    setPanelDragging(true);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+  const onPanelMove = (e: React.PointerEvent) => {
+    if (!panelDrag.current.active) return;
+    const nx = panelDrag.current.ox + (e.clientX - panelDrag.current.sx);
+    const ny = panelDrag.current.oy + (e.clientY - panelDrag.current.sy);
+    setFabPos(clampPos(nx, ny, FAB_SIZE, FAB_SIZE));
+  };
+  const onPanelUp = () => {
+    if (!panelDrag.current.active) return;
+    panelDrag.current.active = false;
+    setPanelDragging(false);
+    setFabPos((p) => { if (!p) return p; const snapX = p.x + FAB_SIZE / 2 < window.innerWidth / 2 ? FAB_MARGIN : window.innerWidth - FAB_SIZE - FAB_MARGIN; return clampPos(snapX, p.y, FAB_SIZE, FAB_SIZE); });
   };
 
   // 작업5 — 마케팅 배너 "시작해 볼까요" 개시 신호 → 패널 펼침(캡슐 자리 앵커). 최초 0 은 무시.
@@ -114,7 +143,6 @@ export function LingoHomeBox({
       {view === "panel" && (() => {
         const vh = typeof window !== "undefined" ? window.innerHeight : 800;
         const fy = fabPos?.y ?? vh - 200;
-        const openUp = fy > vh * 0.5;
         const posStyle = openUp ? { bottom: Math.max(FAB_MARGIN, vh - fy + 8) } : { top: fy + FAB_SIZE + 8 };
         return (
           <>
@@ -122,8 +150,27 @@ export function LingoHomeBox({
             <div className="sl-slide-up fixed inset-x-0 z-40 px-5" style={posStyle}>
               <div className="relative mx-auto max-w-md rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)]">
                 <div className="relative max-h-[58vh] overflow-y-auto">
-                  <div className="mx-auto mb-2 flex h-4 w-full max-w-[120px] items-center justify-center"><span className="h-1.5 w-10 rounded-full bg-[#E0E0E0]" /></div>
+                  {/* 작업8 — 패널 헤더 ⠿ 드래그 핸들(그래버 바) = fabPos 공유 이동. */}
+                  <div
+                    className={`mx-auto mb-2 flex h-4 w-full max-w-[120px] touch-none items-center justify-center ${panelDragging ? "cursor-grabbing" : "cursor-grab"}`}
+                    onPointerDown={onPanelDown}
+                    onPointerMove={onPanelMove}
+                    onPointerUp={onPanelUp}
+                    onPointerCancel={onPanelUp}
+                  >
+                    <span className="h-1.5 w-10 rounded-full bg-[#D8D6CE]" />
+                  </div>
                   <div className="flex items-center gap-2.5">
+                    <span
+                      className={`flex h-9 shrink-0 touch-none items-center justify-center ${panelDragging ? "cursor-grabbing" : "cursor-grab"}`}
+                      onPointerDown={onPanelDown}
+                      onPointerMove={onPanelMove}
+                      onPointerUp={onPanelUp}
+                      onPointerCancel={onPanelUp}
+                      aria-hidden="true"
+                    >
+                      <GripVertical className="h-4 w-4 text-[#C4C2B9]" strokeWidth={2} />
+                    </span>
                     <span className="relative flex h-9 w-9 items-center justify-center rounded-full text-white" style={{ backgroundColor: ACCENT }}>
                       <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2.25} />
                       <Sparkles className="absolute -right-0.5 -top-0.5 h-[11px] w-[11px]" strokeWidth={2.5} fill="currentColor" />
