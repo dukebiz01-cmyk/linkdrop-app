@@ -543,6 +543,15 @@ export function LoginPage({
 
         {/* F. Footer */}
         <footer className="pb-8 pt-4 text-center">
+          {/* FIX-52 커밋3 — 세션 전 이탈 경로. BottomNav 은 _user(로그인) 셸 전용이라 /login 엔
+              구조상 미렌더(의도). 탭바 전체 노출 대신 홈(공개 랜딩)으로 돌아가는 링크 1개만. */}
+          <a
+            href="/"
+            className="mb-4 inline-flex min-h-[44px] items-center gap-1 text-sm font-medium tracking-ko text-[#64748B] transition-colors hover:text-[#0F172A]"
+          >
+            <ArrowLeft className="size-4" strokeWidth={2} />
+            홈으로
+          </a>
           <p className="text-xs font-medium leading-relaxed tracking-ko text-[#94A3B8]">
             {mode === "signin" ? "로그인" : "가입"} 시 LinkDrop의{" "}
             <a href="/tos" className="text-[#525252] underline hover:text-[#0A0A0A]">
