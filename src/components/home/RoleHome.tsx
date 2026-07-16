@@ -341,9 +341,11 @@ export function RoleHome({
         {/* HOME-LINGO — 링고 스타터 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합. 0장=스타터 분기. */}
         <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} />
 
-        {/* 성과 2셀 — 전환·적립(placeholder 0, 데이터 배선 추후). v0 룩. */}
+        {/* 성과 2셀 — 전환(실값=내 카드 확정전환 합) / 적립(준비중 락). v0 룩. */}
         <div className="pb-1">
-          <PerformanceBanner conversionCount={0} dropyAmount={0} />
+          <PerformanceBanner
+            conversionCount={myCreatedDrops.reduce((s, d) => s + (d.stats?.conversions ?? 0), 0)}
+          />
         </div>
 
         {/* 오늘 공유하기 좋은 — 추천 영상(있을 때만) 가로 스와이프. 빈 박스 방지(L12) — 없으면 숨김. */}
@@ -418,9 +420,12 @@ export function RoleHome({
           1장+ = 메이커 분기("성과 볼까요?" → surface:home + performance 발화). 1층 실값 카드·3층 칩 = 커밋2. */}
       <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} />
 
-      {/* 성과 3셀 — 전환·적립·구독자(데이터 스트립 · 링고 소속 아님 → 존치). */}
+      {/* 성과 3셀 — 전환(실값=내 카드 확정전환 합)·적립(준비중 락)·구독자(실값). 데이터 스트립. */}
       <div className="pb-1">
-        <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />
+        <PerformanceBanner
+          conversionCount={myCreatedDrops.reduce((s, d) => s + (d.stats?.conversions ?? 0), 0)}
+          subscriberCount={merchant.subscriberCount}
+        />
       </div>
 
       {/* ✅ 새 제안 보존 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. */}

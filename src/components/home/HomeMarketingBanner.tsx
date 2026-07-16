@@ -134,10 +134,11 @@ export function HomeMarketingBanner() {
         </span>
       </div>
 
-      {/* 결과 카드(컬러풀) */}
+      {/* 결과 카드(컬러풀) — 작업7: 그림자(그라데이션) 하단 번짐이 성과 스트립 상단을 가리던 문제 →
+          그림자를 카드 자기 footprint 안으로 억제(offset·blur·alpha 축소). 아래 스트립과 명확히 분리. */}
       <div
         className="relative overflow-hidden rounded-[22px] p-5 transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)]"
-        style={{ backgroundColor: scene.bg, boxShadow: "0 20px 44px -16px rgba(15,23,42,0.4)" }}
+        style={{ backgroundColor: scene.bg, boxShadow: "0 10px 20px -12px rgba(15,23,42,0.28)" }}
       >
         <span className="holo-sweep pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
