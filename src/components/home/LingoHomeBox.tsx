@@ -3,9 +3,10 @@
 //   분기(발행 카드 수): 0장=스타터("시작해 볼까요?"→카드 만들기) / 1장+=메이커("성과 볼까요?"→성과 진단).
 //   자동 펼침 없음 — 홈은 사용자 개시(스튜디오 자동 인사와 구분). surface='home'(T-B/T-D 기존 배선 소비).
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, Sparkles, ChevronDown, GripVertical, ArrowUp, Square, Loader2, Volume2, VolumeX, Rocket, TrendingUp } from "lucide-react";
+import { MessageCircle, Sparkles, ChevronDown, GripVertical, ArrowUp, Square, Loader2, Rocket, TrendingUp } from "lucide-react";
 import { useLingoChat, useLingoVoice } from "@/components/card-model/useLingoChat";
 import { SlideToMic } from "@/components/lingo/SlideToMic";
+import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 import { HomePerformanceFacts } from "@/components/home/HomePerformanceFacts";
 import { getInAppBrowser } from "@/lib/pwa-install";
 
@@ -179,25 +180,8 @@ export function LingoHomeBox({
                       <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">링고AI</p>
                       <p className="text-[11px] font-medium text-[#9A9A9A]">{statusLine}</p>
                     </div>
-                    {/* 작업10 — 스피커 헤더 토글(소리 계열 = 목적색 스위치). 34px 원·44px 터치.
-                        OFF=서피스+보더+회색 / ON=목적색 12~15% 배경+목적색 아이콘. 재생 중에만 음파 호 점멸. */}
-                    <button
-                      type="button"
-                      aria-label={voice.ttsOn ? "응답 낭독 끄기" : "응답 낭독 켜기"}
-                      aria-pressed={voice.ttsOn}
-                      onClick={voice.toggleTts}
-                      className="relative flex h-11 w-11 items-center justify-center rounded-full active:scale-90"
-                    >
-                      {voice.ttsOn && voice.speaking && (
-                        <span className="absolute inset-1.5 animate-ping rounded-full" style={{ boxShadow: `0 0 0 2px ${ACCENT}55` }} aria-hidden="true" />
-                      )}
-                      <span
-                        className="relative flex h-[34px] w-[34px] items-center justify-center rounded-full"
-                        style={voice.ttsOn ? { backgroundColor: `${ACCENT}22`, color: ACCENT } : { backgroundColor: "#F7F6F2", boxShadow: "inset 0 0 0 1px #D8D6CE", color: "#9A988F" }}
-                      >
-                        {voice.ttsOn ? <Volume2 className="h-[18px] w-[18px]" strokeWidth={2.25} /> : <VolumeX className="h-[18px] w-[18px]" strokeWidth={2.25} />}
-                      </span>
-                    </button>
+                    {/* 작업10 — 스피커 헤더 토글(공용 부품 SpeakerToggle). */}
+                    <SpeakerToggle ttsOn={voice.ttsOn} speaking={voice.speaking} onToggle={voice.toggleTts} accent={ACCENT} />
                     <button type="button" aria-label="캡슐로 접기" onClick={() => setView("strip")} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] active:scale-90">
                       <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
                     </button>
