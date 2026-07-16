@@ -82,7 +82,7 @@ const SCENES: Scene[] = [
   },
 ];
 
-export function HomeMarketingBanner() {
+export function HomeMarketingBanner({ onStart }: { onStart?: () => void }) {
   const [sceneIdx, setSceneIdx] = useState(0);
   const [built, setBuilt] = useState(false);
   const scene = SCENES[sceneIdx];
@@ -143,12 +143,21 @@ export function HomeMarketingBanner() {
         <span className="holo-sweep pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
         <div className="relative flex items-center justify-between">
-          <span
-            className="rounded-full px-2.5 py-1 text-[11px] font-bold backdrop-blur"
-            style={{ backgroundColor: "rgba(255,255,255,0.16)", color: scene.fg }}
-          >
-            {scene.badge}
-          </span>
+          <div className="flex items-center gap-1.5">
+            {/* 작업5 — 정본 §1(가짜 숫자 0): 데모 카드는 "예시" 라벨 명시. */}
+            <span
+              className="rounded-full px-2 py-0.5 text-[11px] font-bold backdrop-blur"
+              style={{ backgroundColor: "rgba(255,255,255,0.28)", color: scene.fg }}
+            >
+              예시
+            </span>
+            <span
+              className="rounded-full px-2.5 py-1 text-[11px] font-bold backdrop-blur"
+              style={{ backgroundColor: "rgba(255,255,255,0.16)", color: scene.fg }}
+            >
+              {scene.badge}
+            </span>
+          </div>
           <span
             className={`flex items-center gap-1 text-[11px] font-bold transition-opacity duration-300 ${built ? "opacity-100" : "opacity-0"}`}
             style={{ color: scene.fg }}
@@ -219,6 +228,19 @@ export function HomeMarketingBanner() {
           />
         ))}
       </div>
+
+      {/* 작업5 — "시작해 볼까요" → 홈 링고 캡슐 펼침 연결. 정본 §3(한 화면 한 주인공):
+          목적색 채움은 링고 캡슐 1계열 → 배너 CTA는 보조(흰 배경+보더). 44px 터치. */}
+      {onStart ? (
+        <button
+          type="button"
+          onClick={onStart}
+          className="mt-3.5 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border border-[#D8D6CE] bg-white text-[13.5px] font-bold text-[#1A1A2E] transition-colors hover:border-[#94A3B8] active:scale-[0.99]"
+        >
+          시작해 볼까요
+          <ArrowRight className="h-4 w-4" strokeWidth={2.25} />
+        </button>
+      ) : null}
     </section>
   );
 }

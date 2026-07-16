@@ -17,11 +17,14 @@ const FAB_BOTTOM_RESERVE = 96; // 홈 하단(탭바 등) 예약.
 export function LingoHomeBox({
   cardCount,
   onGoStudio,
+  openSignal,
 }: {
   /** 내 발행 카드 수(user.myCreatedDrops.length). 0=스타터 / 1+=메이커. */
   cardCount: number;
   /** 스튜디오 배웅(카드 만들기 · 3층 행동 칩). purpose 선택. */
   onGoStudio: (purpose?: string) => void;
+  /** 작업5 — 외부(마케팅 배너 "시작해 볼까요") 개시 신호. 값이 바뀌면 패널 펼침. */
+  openSignal?: number;
 }) {
   const chat = useLingoChat();
   const voice = useLingoVoice();
@@ -77,6 +80,12 @@ export function LingoHomeBox({
     }
     setView("panel");
   };
+
+  // 작업5 — 마케팅 배너 "시작해 볼까요" 개시 신호 → 패널 펼침(캡슐 자리 앵커). 최초 0 은 무시.
+  useEffect(() => {
+    if (openSignal && openSignal > 0) openPanel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal]);
 
   // 채팅 전송 — surface='home'(T-B 홈 인텐트). 메이커면 context.performance=true(T-D 성과 진단 재료).
   const sendChat = async (text: string) => {
