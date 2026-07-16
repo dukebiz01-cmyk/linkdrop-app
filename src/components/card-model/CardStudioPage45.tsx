@@ -85,6 +85,8 @@ import {
   type SalesMethod,
   type InterviewSignals,
 } from "./interview-steps45";
+// FIX-43/48+50 P1.5 — 링고 음성 마이크(56px 파형 orb 표준). 캡슐·패널 마이크 A안 재사용.
+import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
 // FIX-47 — 인앱 WebView 음성 정직 게이트(pwa-install 공용 판정 재사용 — 중복 정의 0).
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
@@ -4982,72 +4984,70 @@ export function CardStudioPage45({
                         방금 적용 되돌리기
                       </button>
                     )}
-                    <div className="mt-2 flex items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5">
-                      <input
-                        value={chatInput}
-                        maxLength={2000}
-                        disabled={chat.streaming || voice.listening}
-                        placeholder={chat.streaming ? "링고가 생각 중…" : voice.listening ? "듣고 있어요…" : "링고AI에게 물어보기"}
-                        onChange={(e) => {
-                          setChatInput(e.target.value);
-                          chatChannelRef.current = "text"; // 손으로 고치면 텍스트 채널로 복귀.
-                        }}
-                        onFocus={() => voice.stopSpeaking()}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                            e.preventDefault();
-                            void handleChatSend();
-                          }
-                        }}
-                        className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#9A9A9A] disabled:opacity-60"
-                      />
-                      <button
-                        type="button"
-                        aria-label={voice.ttsOn ? "응답 낭독 끄기" : "응답 낭독 켜기"}
-                        onClick={voice.toggleTts}
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
-                      >
-                        {voice.ttsOn ? (
-                          <Volume2 className="h-4 w-4" strokeWidth={2.25} />
+                    {/* FIX-48+50 P1.5 커밋1c — 마이크 A안: 56px VoiceOrb 주 버튼(오른쪽 크게) +
+                        텍스트 입력칸(왼쪽 보조 pill: 입력·낭독·전송). !inAppNoMic 게이트 유지. */}
+                    <div className="mt-2 flex items-end gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5">
+                        <input
+                          value={chatInput}
+                          maxLength={2000}
+                          disabled={chat.streaming || voice.listening}
+                          placeholder={chat.streaming ? "링고가 생각 중…" : voice.listening ? "듣고 있어요…" : "링고AI에게 물어보기"}
+                          onChange={(e) => {
+                            setChatInput(e.target.value);
+                            chatChannelRef.current = "text"; // 손으로 고치면 텍스트 채널로 복귀.
+                          }}
+                          onFocus={() => voice.stopSpeaking()}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                              e.preventDefault();
+                              void handleChatSend();
+                            }
+                          }}
+                          className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#9A9A9A] disabled:opacity-60"
+                        />
+                        <button
+                          type="button"
+                          aria-label={voice.ttsOn ? "응답 낭독 끄기" : "응답 낭독 켜기"}
+                          onClick={voice.toggleTts}
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                        >
+                          {voice.ttsOn ? (
+                            <Volume2 className="h-4 w-4" strokeWidth={2.25} />
+                          ) : (
+                            <VolumeX className="h-4 w-4 text-[#A3A3A3]" strokeWidth={2.25} />
+                          )}
+                        </button>
+                        {chat.streaming ? (
+                          <button
+                            type="button"
+                            aria-label="응답 중지"
+                            onClick={chat.stop}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#404040] text-white active:scale-95"
+                          >
+                            <Square className="h-3.5 w-3.5" strokeWidth={2.5} fill="currentColor" />
+                          </button>
                         ) : (
-                          <VolumeX className="h-4 w-4 text-[#A3A3A3]" strokeWidth={2.25} />
+                          <button
+                            type="button"
+                            aria-label="전송"
+                            onClick={() => void handleChatSend()}
+                            disabled={!chatInput.trim() || voice.listening}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white active:scale-95 disabled:opacity-40"
+                            style={{ backgroundColor: accent }}
+                          >
+                            <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
+                          </button>
                         )}
-                      </button>
-                      {/* FIX-47 — 인앱 WebView 음성 게이트: 마이크 버튼 미렌더(권한 루프 차단). */}
+                      </div>
+                      {/* FIX-47 게이트 유지 — 인앱 WebView 는 마이크 미렌더(권한 루프 차단). */}
                       {!inAppNoMic && (
-                        <button
-                          type="button"
-                          aria-label={voice.listening ? "듣기 중지" : "음성으로 말하기"}
-                          onClick={handleMicTap}
+                        <VoiceOrb45
+                          listening={voice.listening}
                           disabled={chat.streaming}
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full active:scale-95 disabled:opacity-40 ${
-                            voice.listening ? "animate-pulse text-white" : "bg-white text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5]"
-                          }`}
-                          style={voice.listening ? { backgroundColor: accent } : undefined}
-                        >
-                          <Mic className="h-4 w-4" strokeWidth={2.25} />
-                        </button>
-                      )}
-                      {chat.streaming ? (
-                        <button
-                          type="button"
-                          aria-label="응답 중지"
-                          onClick={chat.stop}
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#404040] text-white active:scale-95"
-                        >
-                          <Square className="h-3.5 w-3.5" strokeWidth={2.5} fill="currentColor" />
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          aria-label="전송"
-                          onClick={() => void handleChatSend()}
-                          disabled={!chatInput.trim() || voice.listening}
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white active:scale-95 disabled:opacity-40"
-                          style={{ backgroundColor: accent }}
-                        >
-                          <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
-                        </button>
+                          accent={accent}
+                          onTap={handleMicTap}
+                        />
                       )}
                     </div>
                   </div>
@@ -5122,7 +5122,7 @@ export function CardStudioPage45({
               onPointerMove={onFabPointerMove}
               onPointerUp={() => onFabPointerUp(openPanelAt)}
               onPointerCancel={() => onFabPointerUp(openPanelAt)}
-              className={`fixed z-40 flex h-12 w-[240px] max-w-[70vw] touch-none select-none items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white pl-1.5 pr-1.5 shadow-[0_14px_30px_-10px_rgba(15,23,42,0.35)] ${
+              className={`fixed z-40 flex h-14 w-[300px] max-w-[86vw] touch-none select-none items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white pl-2 pr-1 shadow-[0_14px_30px_-10px_rgba(15,23,42,0.35)] ${
                 fabDragging ? "scale-[1.03] cursor-grabbing" : "cursor-grab transition-transform duration-200"
               }`}
               style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
@@ -5238,9 +5238,21 @@ export function CardStudioPage45({
                   <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
                 </button>
               )}
-              {/* FIX-48+50 작업5 — 미리보기를 가리던 부유 마이크 orb(absolute -top-16) 제거.
-                  마이크 진입점은 링고 패널 입력줄(handleMicTap, !inAppNoMic)로 단일화.
-                  strip 캡슐 탭 → openPanelAt(패널) / closed 점 탭 → strip → 패널 = 진입점 상시 도달. */}
+              {/* FIX-48+50 P1.5 커밋1c — 캡슐 오른쪽 끝 56px 마이크 상시 노출. 탭=패널 펼침+즉시 듣기.
+                  드래그와 분리(stopPropagation) — 캡슐 이동 중에도 마이크 탭 가능. */}
+              {!inAppNoMic && (
+                <span onPointerDown={(e) => e.stopPropagation()} className="shrink-0">
+                  <VoiceOrb45
+                    listening={voice.listening}
+                    disabled={chat.streaming}
+                    accent={accent}
+                    onTap={() => {
+                      openPanelAt();
+                      if (!voice.listening) handleMicTap();
+                    }}
+                  />
+                </span>
+              )}
             </div>
           )}
 
