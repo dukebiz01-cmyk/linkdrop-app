@@ -1568,35 +1568,41 @@ export function CardStudioPage45({
       onTap();
     }
   }
-  // 캡슐 탭 = 그 자리 기준 패널 확장(화면 경계 클램프 — 캡슐 아래변 높이를 패널 bottom 으로).
+  // FIX-48+50 P1.5 커밋1e — 패널은 캡슐 위치(fabPos)를 앵커로 그 자리에서 펼친다(고정 좌표 금지).
+  //   fabPos 미설정이면 현재 캡슐 실측 위치로 초기화 → 접으면 같은 자리 캡슐로 복귀.
   function openPanelAt() {
-    const rect = fabRef.current?.getBoundingClientRect();
-    if (rect && typeof window !== "undefined") {
-      const fromCapsule = window.innerHeight - rect.bottom;
-      setPanelBottom(Math.max(16, Math.min(window.innerHeight - 420, fromCapsule)));
-    } else {
-      setPanelBottom(188);
+    if (!fabPos) {
+      const rect = fabRef.current?.getBoundingClientRect();
+      setFabPos(
+        rect
+          ? clampPos(rect.left, rect.top, FAB_SIZE, FAB_SIZE)
+          : { x: FAB_MARGIN, y: window.innerHeight - FAB_BOTTOM_RESERVE - FAB_SIZE },
+      );
     }
-    setPanelOffset({ x: 0, y: 0 });
     setLingoView("panel");
   }
-  // 링고AI 패널 드래그 (정본).
+  // FIX-48+50 P1.5 커밋1e — 패널 드래그 = 캡슐과 동일한 fabPos 공유(패널에서 옮기면 캡슐도 그 자리).
+  //   경계 스냅·발행바 예약(clampPos)도 캡슐과 공유 — 항상 뷰포트 완전 수납.
   function onPanelPointerDown(e: React.PointerEvent) {
-    panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: panelOffset.x, oy: panelOffset.y };
+    panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: fabPos?.x ?? 0, oy: fabPos?.y ?? 0 };
     setPanelDragging(true);
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   }
   function onPanelPointerMove(e: React.PointerEvent) {
     if (!panelDrag.current.active) return;
-    const dx = panelDrag.current.ox + (e.clientX - panelDrag.current.sx);
-    const dy = panelDrag.current.oy + (e.clientY - panelDrag.current.sy);
-    const maxX = window.innerWidth * 0.4;
-    const maxY = window.innerHeight * 0.5;
-    setPanelOffset({ x: Math.min(Math.max(-maxX, dx), maxX), y: Math.min(Math.max(-maxY, dy), maxY) });
+    const nx = panelDrag.current.ox + (e.clientX - panelDrag.current.sx);
+    const ny = panelDrag.current.oy + (e.clientY - panelDrag.current.sy);
+    setFabPos(clampPos(nx, ny, FAB_SIZE, FAB_SIZE));
   }
   function onPanelPointerUp() {
     panelDrag.current.active = false;
     setPanelDragging(false);
+    // 좌우 엣지 스냅(캡슐과 동일 규칙).
+    setFabPos((prev) => {
+      if (!prev) return prev;
+      const snapX = prev.x + FAB_SIZE / 2 < window.innerWidth / 2 ? FAB_MARGIN : window.innerWidth - FAB_SIZE - FAB_MARGIN;
+      return clampPos(snapX, prev.y, FAB_SIZE, FAB_SIZE);
+    });
   }
 
   // ── 영상 검색 — 실배선 /api/discover. ST2b 스위치 시 원본 제거(studio-build :606-634 발췌). ──
@@ -4711,19 +4717,23 @@ export function CardStudioPage45({
           {lingoView === "panel" && (
             <>
               <div className="sl-fade-in fixed inset-0 z-40 bg-black/25" onClick={() => setLingoView("strip")} />
-              {/* FIX-16 — 캡슐 자리 기준 확장(panelBottom, 화면 경계 클램프). 접기 = 같은 자리 캡슐로. */}
-              <div className="sl-slide-up fixed inset-x-0 z-40 px-5" style={{ bottom: panelBottom }}>
-                <div
-                  className={`relative mx-auto max-w-md rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)] ${
-                    panelDragging ? "" : "transition-transform duration-200 ease-out"
-                  }`}
-                  style={{ transform: `translate(${panelOffset.x}px, ${panelOffset.y}px)` }}
-                >
+              {/* FIX-48+50 P1.5 커밋1e — 패널을 캡슐(fabPos)에서 펼침: 캡슐이 하단이면 위로, 상단이면
+                  아래로 펼쳐 항상 뷰포트 완전 수납(상단 가림 방지). 접으면 같은 자리 캡슐로. */}
+              {(() => {
+                const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+                const fy = fabPos?.y ?? vh - 200;
+                const openUp = fy > vh * 0.5;
+                const posStyle = openUp
+                  ? { bottom: Math.max(FAB_MARGIN, vh - fy + 8) } // 패널 하단 = 캡슐 위 8px
+                  : { top: fy + FAB_SIZE + 8 }; // 패널 상단 = 캡슐 아래 8px
+                return (
+              <div className="sl-slide-up fixed inset-x-0 z-40 px-5" style={posStyle}>
+                <div className="relative mx-auto max-w-md rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)]">
                   {/* FIX-17 — LED 러닝 라이트(패널 동일, 안쪽 밴드·명시 radius 재구현).
                       콘텐츠는 아래 relative 레이어 — 흰 덮개 위에 그려지도록(페인트 순서). */}
                   {ledOn && <span className="sl-led-ring sl-led-ring--panel" aria-hidden="true" />}
-                  {/* T5 — 대화 추가로 패널이 길어질 수 있어 내부 스크롤(가이드·대화·도구 공존). */}
-                  <div className="relative max-h-[70vh] overflow-y-auto">
+                  {/* T5 — 대화 추가로 패널이 길어질 수 있어 내부 스크롤(뷰포트 55~60% 상한 · 키 안 넘겨받음). */}
+                  <div className="relative max-h-[58vh] overflow-y-auto">
                   {/* 드래그 핸들 */}
                   <div
                     onPointerDown={onPanelPointerDown}
@@ -5100,6 +5110,8 @@ export function CardStudioPage45({
                   </div>
                 </div>
               </div>
+                );
+              })()}
             </>
           )}
 
