@@ -795,15 +795,8 @@ export function CardStudioPage45({
   const [productDateRangeLabel, setProductDateRangeLabel] = useState<string | null>(null);
   const [lastEquipped, setLastEquipped] = useState<string | null>(null);
   const deckRef = useRef<HTMLElement>(null);
-  const FAB_SIZE = 56;
-  const FAB_MARGIN = 12;
-  const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(null);
-  const [fabDragging, setFabDragging] = useState(false);
-  const fabRef = useRef<HTMLDivElement>(null);
-  const fabDrag = useRef({ active: false, moved: false, dx: 0, dy: 0 });
-  const [panelOffset, setPanelOffset] = useState({ x: 0, y: 0 });
-  const [panelDragging, setPanelDragging] = useState(false);
-  const panelDrag = useRef({ active: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  // FIX-48+50 P1.5b — 링고 박스 하단중앙 고정: fab/panel 드래그 상태(fabPos·fabDragging·fabRef·
+  //   fabDrag·panelOffset·panelDragging·panelDrag) + FAB_SIZE/MARGIN 폐지(배치 코드 한정 제거).
 
   // 발행 — 기존 체인 재사용. ST2b 스위치 시 원본 제거(studio-build :398-405 동형).
   const [saving, setSaving] = useState(false);
@@ -1489,83 +1482,11 @@ export function CardStudioPage45({
   }
   const canEdit = DECK.some((b) => CONFIGURABLE.includes(b.id) && !GATED_BLOCK_IDS.has(b.id));
 
-  // FIX-16 — 캡슐/점 공용 드래그(정본 FAB 로직 승격): 실측 폭 기준 클램프 + 엣지 스냅.
-  //   위치(fabPos)는 세션 state 로 기억 — 리렌더·액션·상태 전환(점↔캡슐↔패널) 후에도 그 자리.
-  function clampPos(x: number, y: number, w: number, h: number) {
-    const maxX = window.innerWidth - w - FAB_MARGIN;
-    const maxY = window.innerHeight - h - FAB_MARGIN;
-    return { x: Math.min(Math.max(FAB_MARGIN, x), maxX), y: Math.min(Math.max(FAB_MARGIN, y), maxY) };
-  }
-  function onFabPointerDown(e: React.PointerEvent<HTMLElement>) {
-    const rect = fabRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    fabDrag.current = { active: true, moved: false, dx: e.clientX - rect.left, dy: e.clientY - rect.top };
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-  }
-  function onFabPointerMove(e: React.PointerEvent<HTMLElement>) {
-    if (!fabDrag.current.active) return;
-    const nx = e.clientX - fabDrag.current.dx;
-    const ny = e.clientY - fabDrag.current.dy;
-    const rect = fabRef.current?.getBoundingClientRect();
-    if (rect && !fabDrag.current.moved) {
-      const dist = Math.hypot(e.clientX - (rect.left + fabDrag.current.dx), e.clientY - (rect.top + fabDrag.current.dy));
-      if (dist > 6) {
-        fabDrag.current.moved = true;
-        setFabDragging(true);
-      }
-    }
-    if (fabDrag.current.moved && rect) setFabPos(clampPos(nx, ny, rect.width, rect.height));
-  }
-  // 탭(무이동) 동작은 표면별로 다름 — onTap 콜백 주입(점 → 캡슐 / 캡슐 → 패널).
-  function onFabPointerUp(onTap: () => void) {
-    if (!fabDrag.current.active) return;
-    const wasDrag = fabDrag.current.moved;
-    fabDrag.current.active = false;
-    fabDrag.current.moved = false;
-    setFabDragging(false);
-    if (wasDrag) {
-      const rect = fabRef.current?.getBoundingClientRect();
-      const w = rect?.width ?? FAB_SIZE;
-      const h = rect?.height ?? FAB_SIZE;
-      setFabPos((prev) => {
-        if (!prev) return prev;
-        const mid = window.innerWidth / 2;
-        const snapX = prev.x + w / 2 < mid ? FAB_MARGIN : window.innerWidth - w - FAB_MARGIN;
-        return clampPos(snapX, prev.y, w, h);
-      });
-    } else {
-      onTap();
-    }
-  }
-  // 캡슐 탭 = 그 자리 기준 패널 확장(화면 경계 클램프 — 캡슐 아래변 높이를 패널 bottom 으로).
+  // FIX-48+50 P1.5b — 링고 박스 하단중앙 고정: 캡슐/패널 드래그(fab·panel 포인터) 전면 폐지.
+  //   캡슐 탭 = 패널 열기(고정 bottom). 배치 코드만 제거 — 대화·음성·액션·점수 로직 무접촉.
   function openPanelAt() {
-    const rect = fabRef.current?.getBoundingClientRect();
-    if (rect && typeof window !== "undefined") {
-      const fromCapsule = window.innerHeight - rect.bottom;
-      setPanelBottom(Math.max(16, Math.min(window.innerHeight - 420, fromCapsule)));
-    } else {
-      setPanelBottom(188);
-    }
-    setPanelOffset({ x: 0, y: 0 });
+    setPanelBottom(188);
     setLingoView("panel");
-  }
-  // 링고AI 패널 드래그 (정본).
-  function onPanelPointerDown(e: React.PointerEvent) {
-    panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: panelOffset.x, oy: panelOffset.y };
-    setPanelDragging(true);
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-  }
-  function onPanelPointerMove(e: React.PointerEvent) {
-    if (!panelDrag.current.active) return;
-    const dx = panelDrag.current.ox + (e.clientX - panelDrag.current.sx);
-    const dy = panelDrag.current.oy + (e.clientY - panelDrag.current.sy);
-    const maxX = window.innerWidth * 0.4;
-    const maxY = window.innerHeight * 0.5;
-    setPanelOffset({ x: Math.min(Math.max(-maxX, dx), maxX), y: Math.min(Math.max(-maxY, dy), maxY) });
-  }
-  function onPanelPointerUp() {
-    panelDrag.current.active = false;
-    setPanelDragging(false);
   }
 
   // ── 영상 검색 — 실배선 /api/discover. ST2b 스위치 시 원본 제거(studio-build :606-634 발췌). ──
@@ -4661,27 +4582,16 @@ export function CardStudioPage45({
             <>
               <div className="sl-fade-in fixed inset-0 z-40 bg-black/25" onClick={() => setLingoView("strip")} />
               {/* FIX-16 — 캡슐 자리 기준 확장(panelBottom, 화면 경계 클램프). 접기 = 같은 자리 캡슐로. */}
+              {/* FIX-48+50 P1.5b — 패널 하단 고정(드래그 제거 · panelOffset transform 폐지). */}
               <div className="sl-slide-up fixed inset-x-0 z-40 px-5" style={{ bottom: panelBottom }}>
-                <div
-                  className={`relative mx-auto max-w-md rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)] ${
-                    panelDragging ? "" : "transition-transform duration-200 ease-out"
-                  }`}
-                  style={{ transform: `translate(${panelOffset.x}px, ${panelOffset.y}px)` }}
-                >
+                <div className="relative mx-auto max-w-md rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)]">
                   {/* FIX-17 — LED 러닝 라이트(패널 동일, 안쪽 밴드·명시 radius 재구현).
                       콘텐츠는 아래 relative 레이어 — 흰 덮개 위에 그려지도록(페인트 순서). */}
                   {ledOn && <span className="sl-led-ring sl-led-ring--panel" aria-hidden="true" />}
                   {/* T5 — 대화 추가로 패널이 길어질 수 있어 내부 스크롤(가이드·대화·도구 공존). */}
                   <div className="relative max-h-[70vh] overflow-y-auto">
-                  {/* 드래그 핸들 */}
-                  <div
-                    onPointerDown={onPanelPointerDown}
-                    onPointerMove={onPanelPointerMove}
-                    onPointerUp={onPanelPointerUp}
-                    onPointerCancel={onPanelPointerUp}
-                    className="mx-auto mb-2 flex h-4 w-full max-w-[120px] cursor-grab touch-none items-center justify-center active:cursor-grabbing"
-                    aria-label="패널 옮기기"
-                  >
+                  {/* 정적 그립(드래그 폐지 — 시각 캡만). */}
+                  <div className="mx-auto mb-2 flex h-4 w-full max-w-[120px] items-center justify-center">
                     <span className="h-1.5 w-10 rounded-full bg-[#E0E0E0]" />
                   </div>
                   <div className="flex items-center gap-2.5">
@@ -5044,10 +4954,7 @@ export function CardStudioPage45({
           {/* FIX-43 — 듣는 중: 캡슐이 파형 패널로 펼쳐짐(같은 fixed 좌표 = 위치 기억 그대로,
               별도 저장 키 0). 파형 AudioContext 는 패널 언마운트가 정리. */}
           {lingoView === "strip" && !mirrorOpen && voiceOpen && (
-            <div
-              className="fixed z-40"
-              style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
-            >
+            <div className="fixed inset-x-0 z-40 flex justify-center px-5" style={{ bottom: 196 }}>
               <VoiceWavePanel45
                 listening={voice.listening}
                 interimText={voiceInterim}
@@ -5067,20 +4974,16 @@ export function CardStudioPage45({
             </div>
           )}
           {lingoView === "strip" && !mirrorOpen && !voiceOpen && (
-            <div
-              ref={fabRef}
-              role="button"
-              aria-label="링고AI — 탭하면 패널이 열려요 · 끌면 옮겨요"
-              onPointerDown={onFabPointerDown}
-              onPointerMove={onFabPointerMove}
-              onPointerUp={() => onFabPointerUp(openPanelAt)}
-              onPointerCancel={() => onFabPointerUp(openPanelAt)}
-              className={`fixed z-40 flex h-12 w-[240px] max-w-[70vw] touch-none select-none items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white pl-1.5 pr-1.5 shadow-[0_14px_30px_-10px_rgba(15,23,42,0.35)] ${
-                fabDragging ? "scale-[1.03] cursor-grabbing" : "cursor-grab transition-transform duration-200"
-              }`}
-              style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
-            >
+            // FIX-48+50 P1.5b — 캡슐 하단중앙 고정(드래그 제거). 탭(아바타+텍스트)=패널 열기, 칩은 분리.
+            <div className="fixed inset-x-0 z-40 flex justify-center px-5" style={{ bottom: 196 }}>
+            <div className="relative flex h-12 w-[300px] max-w-[86vw] items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white pl-1.5 pr-1.5 shadow-[0_14px_30px_-10px_rgba(15,23,42,0.35)]">
               {ledOn && <span className="sl-led-ring sl-led-ring--pill" aria-hidden="true" />}
+              <button
+                type="button"
+                onClick={openPanelAt}
+                aria-label="링고AI 열기"
+                className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+              >
               <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
                 {stripBusy ? (
                   <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
@@ -5122,7 +5025,8 @@ export function CardStudioPage45({
                   ))}
                 </span>
               </span>
-              {/* FIX-9 — 제안 중엔 [장착]+거절(쿨다운), 아니면 [계속]. 드래그와 충돌 방지(전파 차단). */}
+              </button>
+              {/* FIX-9 — 제안 중엔 [장착]+거절(쿨다운), 아니면 [계속]. */}
               {showSuggest && suggestion ? (
                 <>
                   <button
@@ -5189,9 +5093,7 @@ export function CardStudioPage45({
                   <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
                 </button>
               )}
-              {/* FIX-48+50 작업5 — 미리보기를 가리던 부유 마이크 orb(absolute -top-16) 제거.
-                  마이크 진입점은 링고 패널 입력줄(handleMicTap, !inAppNoMic)로 단일화.
-                  strip 캡슐 탭 → openPanelAt(패널) / closed 점 탭 → strip → 패널 = 진입점 상시 도달. */}
+            </div>
             </div>
           )}
 
