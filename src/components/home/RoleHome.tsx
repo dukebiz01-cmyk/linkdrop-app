@@ -6,6 +6,8 @@ import { PerformanceBanner } from "@/components/home/PerformanceBanner";
 //   P6-7 이식분(CreatorCoachCard)은 셸 내부로 수렴 — 이 파일 직접 import 제거.
 // HOME-LINGO — 홈 링고 박스(P1.5 셸 재사용 패턴 · 스타터/메이커 분기). LingoStarter·LingoAiHomeCard 흡수.
 import { LingoHomeBox } from "@/components/home/LingoHomeBox";
+// Duke 락 복원 — 홈 상단 마케팅 배너(구 LingoStarter LiveMorphHero, fb5a946 유실분 독립 복원).
+import { HomeMarketingBanner } from "@/components/home/HomeMarketingBanner";
 import { HomePlayZone } from "@/components/home/HomePlayZone";
 import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
@@ -333,6 +335,9 @@ export function RoleHome({
           {eventOpen ? <DropyEventScreen onClose={() => setEventOpen(false)} /> : null}
         </div>
 
+        {/* Duke 락 복원 — 홈 상단 마케팅 배너(구 LingoStarter LiveMorphHero). fb5a946 흡수 시 유실 → 독립 복원. */}
+        <HomeMarketingBanner />
+
         {/* HOME-LINGO — 링고 스타터 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합. 0장=스타터 분기. */}
         <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} />
 
@@ -405,6 +410,9 @@ export function RoleHome({
       </header>
       {eventOpen ? <DropyEventScreen onClose={() => setEventOpen(false)} /> : null}
       </div>
+
+      {/* Duke 락 복원 — 홈 상단 마케팅 배너(구 LingoStarter LiveMorphHero). fb5a946 흡수 시 유실 → 독립 복원. */}
+      <HomeMarketingBanner />
 
       {/* HOME-LINGO — 링고 스타터·성과진단 셸 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합.
           1장+ = 메이커 분기("성과 볼까요?" → surface:home + performance 발화). 1층 실값 카드·3층 칩 = 커밋2. */}
