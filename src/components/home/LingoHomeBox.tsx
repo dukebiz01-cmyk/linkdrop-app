@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { MessageCircle, Sparkles, ChevronDown, GripVertical, ArrowUp, Square, Loader2, Volume2, VolumeX, Rocket, TrendingUp } from "lucide-react";
 import { useLingoChat, useLingoVoice } from "@/components/card-model/useLingoChat";
 import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
+import { HomePerformanceFacts } from "@/components/home/HomePerformanceFacts";
 import { getInAppBrowser } from "@/lib/pwa-install";
 
 const ACCENT = "#2563EB"; // 홈 링고 목적색(스튜디오 mode accent 없음 — 브랜드 블루 고정).
@@ -28,6 +29,7 @@ export function LingoHomeBox({
   const inAppNoMic = typeof window !== "undefined" ? getInAppBrowser() : null;
 
   const [view, setView] = useState<"strip" | "panel">("strip");
+  const [perfOpen, setPerfOpen] = useState(false); // 커밋2 — 메이커 성과 진단(1층 사실+3층 칩) 개시 여부.
   const [chatInput, setChatInput] = useState("");
   const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(null);
   const [fabDragging, setFabDragging] = useState(false);
@@ -89,9 +91,10 @@ export function LingoHomeBox({
     voice.startListening((final) => { void sendChat(final); });
   };
 
-  // 성과 진단 발화 트리거(메이커): 캡슐/CTA 탭 시 1회 발화(빈 대화면).
+  // 성과 진단 개시(메이커): 1층 사실(RPC 실값) 노출 + 2층 링고 해석 발화 1회(빈 대화면).
   const askPerformance = () => {
     openPanel();
+    setPerfOpen(true);
     if (chat.messages.length === 0) void chat.send("내 카드 성과 어때?", "text", { performance: true }, "home");
   };
 
@@ -127,26 +130,31 @@ export function LingoHomeBox({
                     </button>
                   </div>
 
-                  {/* 분기 안내 1문장 + 배웅 칩 */}
-                  <div className="mt-3 rounded-2xl bg-[#F7F7F8] p-3.5">
-                    <p className="flex items-start gap-1.5 text-[13px] font-medium leading-relaxed text-[#404040] [word-break:keep-all]">
-                      <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} fill="currentColor" />
-                      <span>{isMaker ? "지금까지 성과를 같이 볼까요? 다음 행동도 제안해 드릴게요." : "첫 카드를 같이 만들어 볼까요? 무엇을 알리고 싶은지 알려주세요."}</span>
-                    </p>
-                    <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {isMaker ? (
-                        <button type="button" onClick={askPerformance} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95" style={{ backgroundColor: ACCENT }}>
-                          <TrendingUp className="h-4 w-4" strokeWidth={2.25} /> 성과 볼까요?
-                        </button>
-                      ) : (
-                        <button type="button" onClick={() => onGoStudio()} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95" style={{ backgroundColor: ACCENT }}>
-                          <Rocket className="h-4 w-4" strokeWidth={2.25} /> 카드 만들기
-                        </button>
-                      )}
+                  {/* 분기 안내 1문장 + 배웅 칩 (성과 진단 개시 전에만 — 개시 후엔 1층 사실이 대체) */}
+                  {!(isMaker && perfOpen) && (
+                    <div className="mt-3 rounded-2xl bg-[#F7F7F8] p-3.5">
+                      <p className="flex items-start gap-1.5 text-[13px] font-medium leading-relaxed text-[#404040] [word-break:keep-all]">
+                        <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} fill="currentColor" />
+                        <span>{isMaker ? "지금까지 성과를 같이 볼까요? 실제 숫자부터 보여드릴게요." : "첫 카드를 같이 만들어 볼까요? 무엇을 알리고 싶은지 알려주세요."}</span>
+                      </p>
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {isMaker ? (
+                          <button type="button" onClick={askPerformance} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95" style={{ backgroundColor: ACCENT }}>
+                            <TrendingUp className="h-4 w-4" strokeWidth={2.25} /> 성과 볼까요?
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => onGoStudio()} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95" style={{ backgroundColor: ACCENT }}>
+                            <Rocket className="h-4 w-4" strokeWidth={2.25} /> 카드 만들기
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* 대화 스트림 */}
+                  {/* 1층 사실 — 메이커 성과 개시 시 server 실값(LLM 0). 데이터 0 = 정직 안내 내장. */}
+                  {isMaker && perfOpen && <HomePerformanceFacts />}
+
+                  {/* 2층 링고 해석 — 대화 스트림(실숫자 서술만, BLOCK_P 라이브) */}
                   {chat.messages.length > 0 && (
                     <div ref={listRef} className="mt-3 max-h-[220px] space-y-2 overflow-y-auto rounded-2xl bg-[#FAFAFA] p-3 [box-shadow:inset_0_0_0_1px_#EFEFEF]">
                       {chat.messages.map((m) => (
@@ -156,6 +164,15 @@ export function LingoHomeBox({
                           </p>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* 3층 다음 행동 — 스튜디오 배웅 칩(이동만). 메이커 성과 개시 시. */}
+                  {isMaker && perfOpen && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <button type="button" onClick={() => onGoStudio()} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95" style={{ backgroundColor: ACCENT }}>
+                        <Rocket className="h-4 w-4" strokeWidth={2.25} /> 새 카드 만들기
+                      </button>
                     </div>
                   )}
 
