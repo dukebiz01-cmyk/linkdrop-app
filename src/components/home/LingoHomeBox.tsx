@@ -181,7 +181,7 @@ export function LingoHomeBox({
                         value={chatInput}
                         maxLength={2000}
                         disabled={chat.streaming || voice.listening}
-                        placeholder={chat.streaming ? "링고가 생각 중…" : voice.listening ? "듣고 있어요…" : "링고AI에게 물어보기"}
+                        placeholder={chat.streaming ? "링고가 생각 중…" : "링고AI에게 물어보기"}
                         onChange={(e) => setChatInput(e.target.value)}
                         onFocus={() => voice.stopSpeaking()}
                         onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); void sendChat(chatInput); } }}
