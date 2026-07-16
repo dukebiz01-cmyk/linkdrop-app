@@ -42,8 +42,6 @@ import {
   Undo2,
   Users,
   Video,
-  Volume2,
-  VolumeX,
   X,
   Zap,
 } from "lucide-react";
@@ -86,7 +84,9 @@ import {
   type InterviewSignals,
 } from "./interview-steps45";
 // FIX-43/48+50 P1.5 — 링고 음성 마이크(56px 파형 orb 표준). 캡슐·패널 마이크 A안 재사용.
-import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
+// B-lite(작업9) — 공용 소리 스위치 부품 장착(마이크 슬라이드 레일 + 스피커 헤더 토글). 홈과 동일.
+import { SlideToMic } from "@/components/lingo/SlideToMic";
+import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 // FIX-47 — 인앱 WebView 음성 정직 게이트(pwa-install 공용 판정 재사용 — 중복 정의 0).
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
@@ -4768,6 +4768,8 @@ export function CardStudioPage45({
                         )}
                       </div>
                     </div>
+                    {/* B-lite 작업10 — 스피커 헤더 토글(공용 부품, 입력줄 낭독 pill 대체). */}
+                    <SpeakerToggle ttsOn={voice.ttsOn} speaking={voice.speaking} onToggle={voice.toggleTts} accent={accent} />
                     {/* FIX-48+50 P1.5 — 링고 단일 박스: 접힘(캡슐)↔펼침(패널) 2상태만. 완전닫기(closed
                         점) 폐지 → 접기(캡슐)로 일원화(별도 플로팅 개체 0). */}
                     <button
@@ -5016,7 +5018,7 @@ export function CardStudioPage45({
                           value={chatInput}
                           maxLength={2000}
                           disabled={chat.streaming || voice.listening}
-                          placeholder={chat.streaming ? "링고가 생각 중…" : voice.listening ? "듣고 있어요…" : "링고AI에게 물어보기"}
+                          placeholder={chat.streaming ? "링고가 생각 중…" : "링고AI에게 물어보기"}
                           onChange={(e) => {
                             setChatInput(e.target.value);
                             chatChannelRef.current = "text"; // 손으로 고치면 텍스트 채널로 복귀.
@@ -5030,18 +5032,7 @@ export function CardStudioPage45({
                           }}
                           className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#9A9A9A] disabled:opacity-60"
                         />
-                        <button
-                          type="button"
-                          aria-label={voice.ttsOn ? "응답 낭독 끄기" : "응답 낭독 켜기"}
-                          onClick={voice.toggleTts}
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
-                        >
-                          {voice.ttsOn ? (
-                            <Volume2 className="h-4 w-4" strokeWidth={2.25} />
-                          ) : (
-                            <VolumeX className="h-4 w-4 text-[#A3A3A3]" strokeWidth={2.25} />
-                          )}
-                        </button>
+                        {/* B-lite 작업10 — 낭독 pill 제거(헤더 스피커 토글로 이동). */}
                         {chat.streaming ? (
                           <button
                             type="button"
@@ -5064,13 +5055,15 @@ export function CardStudioPage45({
                           </button>
                         )}
                       </div>
-                      {/* FIX-47 게이트 유지 — 인앱 WebView 는 마이크 미렌더(권한 루프 차단). */}
+                      {/* FIX-47 게이트 유지 — 인앱 WebView 는 마이크 미렌더(권한 루프 차단).
+                          B-lite 작업11 — 슬라이드 레일(ON/OFF 각인). handleMicTap 시작/종료 재사용. */}
                       {!inAppNoMic && (
-                        <VoiceOrb45
+                        <SlideToMic
                           listening={voice.listening}
                           disabled={chat.streaming}
                           accent={accent}
-                          onTap={handleMicTap}
+                          onStart={() => { if (!voice.listening) handleMicTap(); }}
+                          onStop={() => { if (voice.listening) handleMicTap(); }}
                         />
                       )}
                     </div>
@@ -5155,7 +5148,7 @@ export function CardStudioPage45({
               onPointerMove={onFabPointerMove}
               onPointerUp={() => onFabPointerUp(openPanelAt)}
               onPointerCancel={() => onFabPointerUp(openPanelAt)}
-              className={`fixed z-40 flex h-14 w-[300px] max-w-[86vw] touch-none select-none items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white pl-2 pr-1 shadow-[0_14px_30px_-10px_rgba(15,23,42,0.35)] ${
+              className={`fixed z-40 flex h-[72px] w-[300px] max-w-[86vw] touch-none select-none items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white pl-2 pr-2 shadow-[0_14px_30px_-10px_rgba(15,23,42,0.35)] ${
                 fabDragging ? "scale-[1.03] cursor-grabbing" : "cursor-grab transition-transform duration-200"
               }`}
               style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
@@ -5252,17 +5245,13 @@ export function CardStudioPage45({
               {/* FIX-48+50 P1.5 커밋1c — 캡슐 오른쪽 끝 56px 마이크 상시 노출. 탭=패널 펼침+즉시 듣기.
                   드래그와 분리(stopPropagation) — 캡슐 이동 중에도 마이크 탭 가능. */}
               {!inAppNoMic && (
-                <span onPointerDown={(e) => e.stopPropagation()} className="shrink-0">
-                  <VoiceOrb45
-                    listening={voice.listening}
-                    disabled={chat.streaming}
-                    accent={accent}
-                    onTap={() => {
-                      openPanelAt();
-                      if (!voice.listening) handleMicTap();
-                    }}
-                  />
-                </span>
+                <SlideToMic
+                  listening={voice.listening}
+                  disabled={chat.streaming}
+                  accent={accent}
+                  onStart={() => { openPanelAt(); if (!voice.listening) handleMicTap(); }}
+                  onStop={() => { if (voice.listening) handleMicTap(); }}
+                />
               )}
             </div>
           )}
