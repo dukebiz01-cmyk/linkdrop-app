@@ -2881,7 +2881,7 @@ export function CardStudioPage45({
                     )}
                   </>
                 ) : (
-                  <span className="text-[11px] font-medium text-[#8A8A8A]">덱에서 블록을 장착하면 여기 조립돼요</span>
+                  <span className="text-[11px] font-medium text-[#A3A3A3]">담긴 블록 없음</span>
                 )}
               </div>
             </div>
@@ -2955,33 +2955,8 @@ export function CardStudioPage45({
         )}
         </div>
 
-        {/* AI 빌더 — 정본 UI 유지 + T5 게이트(LLM 배선 금지): 입력·예시 비활성 + 준비 중 칩.
-            T5 트랙 예약석 — 오픈 시 sendToLingo(한 줄 → 카드 통구성) 재배선. */}
-        <section className="mt-4 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white" style={{ backgroundColor: accent }}>
-              <MessageCircle className="h-[17px] w-[17px]" strokeWidth={2.25} />
-              <Sparkles className="absolute -right-0.5 -top-0.5 h-3 w-3" strokeWidth={2.5} fill="currentColor" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-1.5 text-[14px] font-bold leading-tight text-[#0A0A0A]">
-                AI로 카드 만들기
-                <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-bold text-[#64748B]">오픈 준비 중</span>
-              </p>
-              <p className="text-[11px] font-medium text-[#8A8A8A]">한 줄로 설명하면 카드를 통째로 구성해드려요</p>
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5 opacity-60">
-            <input
-              disabled
-              placeholder="곧 열려요 — 지금은 아래 덱에서 직접 만들 수 있어요"
-              className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#9A9A9A]"
-            />
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white" style={{ backgroundColor: accent }}>
-              <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
-            </span>
-          </div>
-        </section>
+        {/* FIX-48+50 P1.5 커밋1f — 제2 AI 입구 잔재 제거: "AI로 카드 만들기(오픈 준비 중)" 한줄 입력
+            위젯 폐지. 기능은 링고 인터뷰+setField로 구현 완료(중복 입구 · 죽은 placeholder). */}
 
         {/* 라이브 프리뷰 라벨 (WYSIWYG 캔버스 안내) */}
         <div className="mt-5 flex items-center justify-between px-0.5">
