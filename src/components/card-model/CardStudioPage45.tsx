@@ -6,6 +6,7 @@ import {
   Calendar,
   Check,
   ChevronDown,
+  GripVertical,
   ChevronRight,
   Clapperboard,
   Copy,
@@ -800,6 +801,8 @@ export function CardStudioPage45({
   const deckRef = useRef<HTMLElement>(null);
   const FAB_SIZE = 56;
   const FAB_MARGIN = 12;
+  // FIX-48+50 P1.5 커밋1b — 드래그 놓을 때 하단 발행바(고정 CTA) 겹침 방지 예약 높이.
+  const FAB_BOTTOM_RESERVE = 140;
   const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(null);
   const [fabDragging, setFabDragging] = useState(false);
   const fabRef = useRef<HTMLDivElement>(null);
@@ -1516,7 +1519,8 @@ export function CardStudioPage45({
   //   위치(fabPos)는 세션 state 로 기억 — 리렌더·액션·상태 전환(점↔캡슐↔패널) 후에도 그 자리.
   function clampPos(x: number, y: number, w: number, h: number) {
     const maxX = window.innerWidth - w - FAB_MARGIN;
-    const maxY = window.innerHeight - h - FAB_MARGIN;
+    // FIX-48+50 P1.5 커밋1b — 하단은 발행바 예약(FAB_BOTTOM_RESERVE)만큼 위로 클램프(겹침 방지).
+    const maxY = window.innerHeight - h - FAB_BOTTOM_RESERVE;
     return { x: Math.min(Math.max(FAB_MARGIN, x), maxX), y: Math.min(Math.max(FAB_MARGIN, y), maxY) };
   }
   function onFabPointerDown(e: React.PointerEvent<HTMLElement>) {
@@ -5124,6 +5128,8 @@ export function CardStudioPage45({
               style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
             >
               {ledOn && <span className="sl-led-ring sl-led-ring--pill" aria-hidden="true" />}
+              {/* FIX-48+50 P1.5 커밋1b — 드래그 손잡이(⠿) 시각 표시(캡슐 전체가 드래그 대상). */}
+              <GripVertical className="h-4 w-4 shrink-0 text-[#C4C4C4]" strokeWidth={2} aria-hidden="true" />
               <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
                 {stripBusy ? (
                   <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
