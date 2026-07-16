@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MessageCircle, Sparkles, ChevronDown, GripVertical, ArrowUp, Square, Loader2, Volume2, VolumeX, Rocket, TrendingUp } from "lucide-react";
 import { useLingoChat, useLingoVoice } from "@/components/card-model/useLingoChat";
-import { VoiceOrb45 } from "@/components/lingo/VoiceOrb45";
+import { SlideToMic } from "@/components/lingo/SlideToMic";
 import { HomePerformanceFacts } from "@/components/home/HomePerformanceFacts";
 import { getInAppBrowser } from "@/lib/pwa-install";
 
@@ -85,11 +85,9 @@ export function LingoHomeBox({
     setChatInput("");
     await chat.send(t, "text", isMaker ? { performance: true } : {}, "home");
   };
-  const handleMicTap = () => {
-    voice.stopSpeaking();
-    if (voice.listening) { voice.stopListening(); return; }
-    voice.startListening((final) => { void sendChat(final); });
-  };
+  // 작업6 — 슬라이드 토글 트리거(로직 무변경, 시작/종료만 분리 노출).
+  const startMic = () => { voice.stopSpeaking(); if (!voice.listening) voice.startListening((final) => { void sendChat(final); }); };
+  const stopMic = () => voice.stopListening();
 
   // 성과 진단 개시(메이커): 1층 사실(RPC 실값) 노출 + 2층 링고 해석 발화 1회(빈 대화면).
   const askPerformance = () => {
@@ -198,7 +196,7 @@ export function LingoHomeBox({
                         <button type="button" aria-label="전송" onClick={() => void sendChat(chatInput)} disabled={!chatInput.trim() || voice.listening} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white active:scale-95 disabled:opacity-40" style={{ backgroundColor: ACCENT }}><ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} /></button>
                       )}
                     </div>
-                    {!inAppNoMic && <VoiceOrb45 listening={voice.listening} disabled={chat.streaming} accent={ACCENT} onTap={handleMicTap} />}
+                    {!inAppNoMic && <SlideToMic listening={voice.listening} disabled={chat.streaming} accent={ACCENT} onStart={startMic} onStop={stopMic} />}
                   </div>
                 </div>
               </div>
@@ -216,7 +214,9 @@ export function LingoHomeBox({
           onPointerMove={onMove}
           onPointerUp={() => onUp(openPanel)}
           onPointerCancel={() => onUp(openPanel)}
-          className={`fixed z-40 flex h-14 w-[300px] max-w-[86vw] touch-none select-none items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white pl-2 pr-1 shadow-[0_14px_30px_-10px_rgba(15,23,42,0.35)] ${fabDragging ? "scale-[1.03] cursor-grabbing" : "cursor-grab transition-transform duration-200"}`}
+          // 작업4(A안 목업) — 56px 마이크 완전 수납: 캡슐 h-[72px](56+8·8 상하패딩) + pr-2(우 8px)로
+          //   마이크가 라운드 박스 안에 여백 두고 완전히 들어오게(구 h-14=56px는 마이크와 동일 높이 → 모서리 붙음).
+          className={`fixed z-40 flex h-[72px] w-[300px] max-w-[86vw] touch-none select-none items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white pl-2 pr-2 shadow-[0_14px_30px_-10px_rgba(15,23,42,0.35)] ${fabDragging ? "scale-[1.03] cursor-grabbing" : "cursor-grab transition-transform duration-200"}`}
           style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 96 }}
         >
           <GripVertical className="h-4 w-4 shrink-0 text-[#C4C4C4]" strokeWidth={2} aria-hidden="true" />
@@ -229,9 +229,13 @@ export function LingoHomeBox({
             <span className="block truncate text-[11px] font-medium text-[#8A8A8A]">{isMaker ? "성과 볼까요?" : "시작해 볼까요?"}</span>
           </span>
           {!inAppNoMic && (
-            <span onPointerDown={(e) => e.stopPropagation()} className="shrink-0">
-              <VoiceOrb45 listening={voice.listening} disabled={chat.streaming} accent={ACCENT} onTap={() => { openPanel(); if (!voice.listening) handleMicTap(); }} />
-            </span>
+            <SlideToMic
+              listening={voice.listening}
+              disabled={chat.streaming}
+              accent={ACCENT}
+              onStart={() => { openPanel(); startMic(); }}
+              onStop={stopMic}
+            />
           )}
         </div>
       )}
