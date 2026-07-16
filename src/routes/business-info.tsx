@@ -12,7 +12,7 @@ const BUSINESS_INFO: InfoRow[] = [
   { label: "사업자등록번호", value: "125-86-19781" },
   { label: "사업장 주소", value: "경기도 평택시 용죽2로 30, 상가동 지하1층 B04호" },
   { label: "이메일", value: "dukebiz01@gmail.com" },
-  { label: "고객문의", value: "010-8605-1108" },
+  { label: "고객문의", value: "031-8094-0012" },
 ];
 
 export const Route = createFileRoute("/business-info")({
