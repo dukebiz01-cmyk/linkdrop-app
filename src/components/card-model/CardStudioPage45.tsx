@@ -735,6 +735,8 @@ export function CardStudioPage45({
   // FIX-48+50 P1.5 커밋3 — 집중모드 2층: 비필수 강화 지표(전환력 점수·레버 스트립)를 "✨ 카드 더
   //   강하게" 접힘 섹션 1개로. 기본 접힘, 인라인 펼침(Radix 금지). 점수·레버 로직 무변경 — 표시만.
   const [focusMoreOpen, setFocusMoreOpen] = useState(false);
+  // FIX-48+50 P1.5 커밋1d — 코치 부가설명(왜 좋냐면/효과)은 "왜요?" 탭 시 인라인 펼침(기본 접힘).
+  const [coachWhyOpen, setCoachWhyOpen] = useState(false);
   // FIX-16 — 링고 표면 통합(하단 스트립 폐지 · 단일 플로팅 캡슐): 상태 리터럴은 승계하되 의미 재정의
   //   "strip" = 캡슐(드래그 플로팅, 기본) / "panel" = 캡슐 자리 기준 확장 패널 / "closed" = 최소 아바타 점.
   //   완전 소멸 없음 — X 는 점까지만, 점 탭 = 캡슐 복귀. FIX-3 계약(자동 사라짐 없음·실상태 결합) 유지.
@@ -4775,12 +4777,21 @@ export function CardStudioPage45({
                       )}
                       <span>{stripBusy ?? stripFlash ?? lingo.text}</span>
                     </p>
-                    {/* FIX-29 — 전략 층(뭘→왜→효과): 현재 타깃의 why/effect 상시 노출(정본 카피,
-                        {N}=실보유 숫자 치환 — 진실 경계). */}
+                    {/* FIX-48+50 P1.5 커밋1d — 코치 = 안내 1문장 기본. 왜/효과 부가설명은 "왜요?" 인라인
+                        펼침(문구 무변경 — 접힘만). {N}=실보유 숫자 치환(진실 경계) 유지. */}
                     {!stripBusy && !dropped && currentCoachKey && COACH_NOTES[currentCoachKey] && (
                       <div className="mt-2 space-y-0.5 text-[12px] font-medium leading-relaxed text-[#6B6B6B] [word-break:keep-all]">
-                        <p>왜 좋냐면: {COACH_NOTES[currentCoachKey].why}</p>
-                        <p>{coachEffect(currentCoachKey)}</p>
+                        <button
+                          type="button"
+                          onClick={() => setCoachWhyOpen((v) => !v)}
+                          aria-expanded={coachWhyOpen}
+                          className="flex items-center gap-1 text-[11px] font-bold" style={{ color: accent }}
+                        >
+                          왜요?
+                          <ChevronDown className={`h-3 w-3 transition-transform ${coachWhyOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
+                        </button>
+                        {coachWhyOpen && <p>왜 좋냐면: {COACH_NOTES[currentCoachKey].why}</p>}
+                        {coachWhyOpen && <p>{coachEffect(currentCoachKey)}</p>}
                         {/* FIX-33 — 도킹 단계(비필수) 건너뛰기: 캡슐 칩이 닫힌 상태(블록만 장착
                             후 미연결 등)에서도 항상 도달 가능한 두 번째 창구. */}
                         {currentCoachKey === "dock" && !dockSkipped && dockedProducts.length === 0 && (
@@ -5052,13 +5063,18 @@ export function CardStudioPage45({
                     </div>
                   </div>
 
-                  {/* 보조 도구 — 담기·편집·되돌리기 (규칙 기반 액션 헬퍼) */}
-                  <div className="mt-2.5 grid grid-cols-3 gap-1.5">
-                    {[
-                      { key: "add", icon: Plus, label: "블록 담기", onClick: () => { scrollToDeck(); setLingoView("strip"); }, disabled: false },
-                      { key: "edit", icon: Pencil, label: "내용 편집", onClick: lingoEdit, disabled: !canEdit },
-                      { key: "undo", icon: Undo2, label: "되돌리기", onClick: lingoUndo, disabled: !lastEquipped },
-                    ].map((tool) => {
+                  {/* FIX-48+50 P1.5 커밋1d — 행동 칩 = 최대 2개(담기·편집) + 되돌리기(undo 가능 시에만 렌더). */}
+                  {(() => {
+                  const tools = [
+                    { key: "add", icon: Plus, label: "블록 담기", onClick: () => { scrollToDeck(); setLingoView("strip"); }, disabled: false },
+                    { key: "edit", icon: Pencil, label: "내용 편집", onClick: lingoEdit, disabled: !canEdit },
+                  ];
+                  if (lastEquipped || lingoActUndo) {
+                    tools.push({ key: "undo", icon: Undo2, label: "되돌리기", onClick: lingoUndo, disabled: false });
+                  }
+                  return (
+                  <div className="mt-2.5 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${tools.length}, minmax(0, 1fr))` }}>
+                    {tools.map((tool) => {
                       const Icon = tool.icon;
                       return (
                         <button
@@ -5079,6 +5095,8 @@ export function CardStudioPage45({
                       );
                     })}
                   </div>
+                  );
+                  })()}
                   </div>
                 </div>
               </div>
@@ -5154,25 +5172,10 @@ export function CardStudioPage45({
                           ? "이제 발행할 수 있어요"
                           : lingo.text)}
                 </span>
-                {/* 단계 점 축약 — 점만(라벨 없음). done=accent · current=링 · 대기=회색 */}
-                <span className="mt-1 flex items-center gap-1">
-                  {steps.map((s, i) => (
-                    <span
-                      key={s.label}
-                      className="h-1.5 w-1.5 rounded-full"
-                      style={
-                        s.done
-                          ? { backgroundColor: accent }
-                          : i === currentStepIdx
-                            ? { backgroundColor: "#fff", boxShadow: `0 0 0 1.5px ${accent}` }
-                            : { backgroundColor: "#D4D4D4" }
-                      }
-                    />
-                  ))}
-                </span>
               </span>
-              {/* FIX-9 — 제안 중엔 [장착]+거절(쿨다운), 아니면 [계속]. 드래그와 충돌 방지(전파 차단). */}
-              {showSuggest && suggestion ? (
+              {/* FIX-48+50 P1.5 커밋1d — 캡슐 점 진행표시·"계속" 버튼 삭제(진행=화면 스텝퍼 단독).
+                  제안 칩([장착]/[연결하기])만 조건부 유지(현재 단계 맞춤). */}
+              {showSuggest && suggestion && (
                 <>
                   <button
                     type="button"
@@ -5226,17 +5229,6 @@ export function CardStudioPage45({
                       </button>
                     ))}
                 </>
-              ) : (
-                <button
-                  type="button"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={continueFlow}
-                  className="relative flex h-8 shrink-0 items-center gap-0.5 rounded-full px-2.5 text-[11px] font-bold text-white active:scale-95"
-                  style={{ backgroundColor: accent }}
-                >
-                  계속
-                  <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
-                </button>
               )}
               {/* FIX-48+50 P1.5 커밋1c — 캡슐 오른쪽 끝 56px 마이크 상시 노출. 탭=패널 펼침+즉시 듣기.
                   드래그와 분리(stopPropagation) — 캡슐 이동 중에도 마이크 탭 가능. */}
