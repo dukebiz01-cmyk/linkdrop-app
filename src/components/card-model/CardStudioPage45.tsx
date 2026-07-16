@@ -1155,6 +1155,26 @@ export function CardStudioPage45({
     return anchor ? { no: cur.step.no, label: cur.step.label, anchor } : undefined;
   }, [interviewStates]);
 
+  // FIX-48+50 P1.5 커밋2 — 첫 진입 자동 인사: 모드 확정 후 링고 박스를 1회 펼쳐 현재 번호 질문을 시드.
+  //   문구 창작 금지 — interview-steps45 정본 번호·라벨 인용. TTS 자동재생 절대 금지(텍스트 seed만 —
+  //   voice.speak 미호출). 세션 1회 가드(sessionStorage + ref): 재접힘·재진입 후 자동 재펼침 금지.
+  const autoGreetedRef = useRef(false);
+  useEffect(() => {
+    if (autoGreetedRef.current) return;
+    autoGreetedRef.current = true;
+    const key = "sl-lingo-greeted";
+    try {
+      if (typeof window !== "undefined" && window.sessionStorage.getItem(key) === "1") return;
+      window.sessionStorage.setItem(key, "1");
+    } catch {
+      // sessionStorage 접근 불가(프라이빗 모드 등) — ref 가드만으로 1회 보장.
+    }
+    const cur = interviewStates.find((x) => x.state === "current");
+    chat.seed(cur ? `${cur.step.no}번 ${cur.step.label}부터 시작해 볼까요?` : "카드를 같이 완성해 볼까요? 뭐든 물어보세요.");
+    setLingoView("panel");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // FIX-48+50 — [필수] 배지 파생(requiredBadges) 폐지: 덱 번호 배지는 interview-steps45
   //   blockBadge(interviewJourney, ...) 단일 정본으로 대체(위 render). steps 는 발행 게이트
   //   (firstRequiredStep/canPublish/gateMsg)·방향등·링고 발화 정본으로 계속 사용.
