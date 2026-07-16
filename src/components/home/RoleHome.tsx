@@ -4,12 +4,12 @@ import { Sparkles, Users, ChevronRight, ArrowRight, TrendingUp, Bell, Gift, X } 
 import { PerformanceBanner } from "@/components/home/PerformanceBanner";
 // P6-8(형님 확정 A안) — 홈 AI 표면 1개: 링고AI 셸(가이드 상시 + 성과 진단 접힘·lazy).
 //   P6-7 이식분(CreatorCoachCard)은 셸 내부로 수렴 — 이 파일 직접 import 제거.
-import { LingoAiHomeCard } from "@/components/home/LingoAiHomeCard";
+// HOME-LINGO — 홈 링고 박스(P1.5 셸 재사용 패턴 · 스타터/메이커 분기). LingoStarter·LingoAiHomeCard 흡수.
+import { LingoHomeBox } from "@/components/home/LingoHomeBox";
 import { HomePlayZone } from "@/components/home/HomePlayZone";
 import { HomeActivitySegment } from "@/components/home/HomeActivitySegment";
 import { ShareCardTile } from "@/components/home/ShareCardTile";
 // STEP 3 — v0(home-v5) 링고 스타터(모핑 히어로 + 4목적 아코디언 + 정적 CTA). 양 분기 최상단.
-import { LingoStarter, type StarterPurpose } from "@/components/home/LingoStarter";
 import { SectionHeader } from "@/components/home/v4-bits";
 import type { DropFeedItem } from "@/components/home-page";
 import { reshareDrop } from "@/lib/reshare-drop";
@@ -298,12 +298,8 @@ export function RoleHome({
   const navigate = useNavigate();
   // v0-45 — DROPY 이벤트 풀스크린 열림 상태(로컬, 양 분기 중 렌더되는 쪽에서 사용).
   const [eventOpen, setEventOpen] = useState(false);
-  // 링고 스타터 라우팅 — 제작 진입 단일화(create-wizard 폐기 → studio-build?purpose=).
-  //   목적형(①②③) → studio-build 목적 프리셋 / ④ → 내 지갑(/me) / ⑤ → 탐색(/explore).
-  const onStartPurpose = (purpose: StarterPurpose) =>
-    void navigate({ to: "/studio-build", search: { purpose } });
-  const onWallet = () => void navigate({ to: "/me" });
-  const onExplore = () => void navigate({ to: "/explore" });
+  // HOME-LINGO — 스타터 라우팅은 홈 링고 박스로 이관(onGoStudio). 기존 onStartPurpose/onWallet/
+  //   onExplore 는 LingoStarter 흡수로 소비처 소멸 → 제거. 제작 진입 = /studio-build.
   const openDrop = (shareUuid: string) =>
     void navigate({ to: "/d/$shareUuid", params: { shareUuid } });
 
@@ -337,16 +333,10 @@ export function RoleHome({
           {eventOpen ? <DropyEventScreen onClose={() => setEventOpen(false)} /> : null}
         </div>
 
-        {/* 🆕 링고 스타터 — 모핑 히어로 + 4목적 아코디언 + 정적 CTA. 모두에게. */}
-        <LingoStarter
-          isBusiness={isBusiness}
-          onStartPurpose={onStartPurpose}
-          onWallet={onWallet}
-          onExplore={onExplore}
-        />
+        {/* HOME-LINGO — 링고 스타터 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합. 0장=스타터 분기. */}
+        <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} />
 
-        {/* 성과 2셀 — 전환·적립(placeholder 0, 데이터 배선 추후). v0 룩.
-            v0-45 폴리시 — 하단 여백 mb-6→mb-7 상당: space-y-6(24px) + pb-1(4px) = 28px. */}
+        {/* 성과 2셀 — 전환·적립(placeholder 0, 데이터 배선 추후). v0 룩. */}
         <div className="pb-1">
           <PerformanceBanner conversionCount={0} dropyAmount={0} />
         </div>
@@ -416,23 +406,14 @@ export function RoleHome({
       {eventOpen ? <DropyEventScreen onClose={() => setEventOpen(false)} /> : null}
       </div>
 
-      {/* 🆕 링고 스타터 — 유저홈과 동일(+CTA 알약). */}
-      <LingoStarter
-        isBusiness={isBusiness}
-        onStartPurpose={onStartPurpose}
-        onWallet={onWallet}
-        onExplore={onExplore}
-      />
+      {/* HOME-LINGO — 링고 스타터·성과진단 셸 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합.
+          1장+ = 메이커 분기("성과 볼까요?" → surface:home + performance 발화). 1층 실값 카드·3층 칩 = 커밋2. */}
+      <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} />
 
-      {/* 성과 3셀 — 전환·적립·구독자.
-          v0-45 폴리시 — 하단 여백 mb-6→mb-7 상당: space-y-6(24px) + pb-1(4px) = 28px. */}
+      {/* 성과 3셀 — 전환·적립·구독자(데이터 스트립 · 링고 소속 아님 → 존치). */}
       <div className="pb-1">
         <PerformanceBanner conversionCount={0} dropyAmount={0} subscriberCount={merchant.subscriberCount} />
       </div>
-
-      {/* ✅ 성과진단 보존 — 링고AI 셸: 즉석 진단(TodayAiCard) 제거, "성과 진단 보기" 진입만 유지.
-          guideSlot 미주입 → 상단 슬롯·디바이더 미렌더(헤더 + 성과 진단 아코디언만). */}
-      <LingoAiHomeCard />
 
       {/* ✅ 새 제안 보존 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. */}
       {merchant.proposals.length > 0 ? (

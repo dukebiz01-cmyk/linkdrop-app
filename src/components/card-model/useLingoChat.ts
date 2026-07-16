@@ -58,7 +58,8 @@ export type LingoActionProposal = {
 };
 
 export type LingoContext = {
-  studio_state: {
+  /** 스튜디오 표면 상태. surface='home'(성과 진단)에는 없음 → optional. Edge 는 optional 처리. */
+  studio_state?: {
     mode: string;
     applied_blocks: string[];
     score: number;
@@ -75,6 +76,8 @@ export type LingoContext = {
   studio?: LingoStudioSnapshot;
   /** FIX-48+50 P2 — 계약 v2.1 additive: 번호 인터뷰 상태(interview-steps45 정본). 스튜디오 전용. */
   interview?: LingoInterviewContext;
+  /** T-D — 홈 성과 진단 요청 플래그(surface='home' 전용, Edge 가 RPC 집계 주입). additive. */
+  performance?: boolean;
 };
 
 /** FIX-48+50 P2 — 번호 인터뷰 컨텍스트(스텝퍼와 동일 번호 — 발화 번호 강제 일치용). */
@@ -149,7 +152,13 @@ export function useLingoChat() {
 
   /** 전송 → 스트림 완주 시 최종 답변 텍스트 반환(낭독용), 오류·중지 시 null. */
   const send = useCallback(
-    async (message: string, channel: "text" | "voice", context: LingoContext): Promise<string | null> => {
+    async (
+      message: string,
+      channel: "text" | "voice",
+      context: LingoContext,
+      // HOME-LINGO — surface 선택 인자(미지정=서버 기본 'studio'. 홈 박스는 'home' 전달 = T-B/T-D).
+      surface?: "studio" | "home",
+    ): Promise<string | null> => {
       if (streamingRef.current) return null;
       setProposal(null); // LINGO-V2 — 새 대화 시작 = 미확인 제안 만료(스테일 적용 금지).
       const botId = nextId();
@@ -183,6 +192,7 @@ export function useLingoChat() {
             message,
             context,
             input_channel: ch,
+            ...(surface ? { surface } : {}),
           }),
         });
 
