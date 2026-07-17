@@ -65,7 +65,8 @@ import {
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 // S3-2 — CouponPreview·CardBody·TimerBadge 소비 소멸(수렴 3종의 쿠폰·본체는 CardModelBody 정본).
-import { StockMeta } from "@/components/home/ShareCardTile";
+// S4 — StockMeta 소비 소멸(재고 = 카드 v2 productQty). ProductWidget/buildProductWidget 소비도
+//   소멸(purchase 본체 = CardModelBody) — 컴포넌트 자체는 보존(레거시 studio-build 소비 잔존).
 // ST2b-2a A2 — 판매기간 D-day 라벨(FIX-39 booster45 순수 모듈 재사용 — 조회 시점 계산).
 import { ddayLabel, buildGroupBuyView } from "@/components/card-model/booster45";
 // ST2b-2b B1 — 재입고 알림(FIX-41) 실배선 — 락 문구 정본 사용.
@@ -80,10 +81,9 @@ import { ShareJourneyTimeline, type ShareJourneyRpcNode } from "@/components/sha
 // S3-4e — 사업자 정보 단일 소스(하드코딩 중복 금지) — 법정 푸터 펼침이 재사용.
 import { BUSINESS_INFO } from "@/components/business-footer";
 import { PurchaseCardBody } from "@/components/card/PurchaseCardBody";
-import { ProductWidget } from "@/components/card/ProductWidget";
 import { CardActionButton } from "@/components/card/CardActionButton";
 import { ButtonBlock } from "@/components/card/ButtonBlock";
-import { buildProductWidget, toDropDetailInput } from "@/lib/adapters";
+import { toDropDetailInput } from "@/lib/adapters";
 // 거울 수렴 S1 — info 분기만 CardModel 정본 렌더로 마운트(fromDropDetail). 타 variant 무접촉.
 import { CardModelBody } from "@/components/card-model/CardModelBody";
 import { fromDropDetail } from "@/components/card-model/card-model-adapters";
@@ -650,6 +650,42 @@ export function InfoDropPage({
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   // S3-4e — 법정 푸터 사업자 정보 인라인 펼침(Radix 0).
   const [bizOpen, setBizOpen] = useState(false);
+  // S4 — 재입고 알림: 카드 v2 내 버튼(boosterChips 품절 게이트) → 페이지 액션. 구
+  //   RestockAlertButton 의 신청 로직·4상태 문구를 페이지 소관으로 승계(정의는 하단 보존).
+  const [restockPhase, setRestockPhase] = useState<
+    "idle" | "busy" | "created" | "duplicate" | "unauthenticated" | "error"
+  >("idle");
+  const handleRestockAlert = () => {
+    if (restockPhase === "busy" || restockPhase === "created" || restockPhase === "duplicate")
+      return;
+    setRestockPhase("busy");
+    void requestRestockAlert(dropId).then((r) =>
+      setRestockPhase(
+        r === "created"
+          ? "created"
+          : r === "duplicate"
+            ? "duplicate"
+            : r === "unauthenticated"
+              ? "unauthenticated"
+              : "error",
+      ),
+    );
+  };
+  // 4상태 문구(RestockAlertButton 동일 카피) — idle/busy = 미렌더. 콘텐츠 존(슬립 뒤)에 표시.
+  const restockFeedback =
+    restockPhase === "created" || restockPhase === "duplicate" ? (
+      <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium leading-relaxed tracking-ko text-text-muted [word-break:keep-all]">
+        {restockPhase === "duplicate" ? RESTOCK_ALERT_DUPLICATE_COPY : RESTOCK_ALERT_CONFIRM_COPY}
+      </p>
+    ) : restockPhase === "unauthenticated" ? (
+      <p className="text-xs font-medium tracking-ko text-text-subtle">
+        로그인하면 재입고 알림을 받을 수 있어요.
+      </p>
+    ) : restockPhase === "error" ? (
+      <p className="text-xs font-medium tracking-ko text-text-subtle">
+        지금은 신청이 안 됐어요 — 잠시 후 다시 시도해 주세요.
+      </p>
+    ) : null;
   // 트랙 D §50 — 매장(partnerId) 구독. me.tsx handleSubscribe 패턴 재사용(maker_follows, 스키마 0).
   const [subscriberUserId, setSubscriberUserId] = useState<string | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -823,13 +859,14 @@ export function InfoDropPage({
   // C5 — 흰 셸 미러: 메이커가 흰 카드(#FFFFFF) 저장 시 손님도 라이트 텍스트로(스튜디오 C4b와 동일 판정).
   //   기존 카드(cardColor null/navy 등) → false → 비-info 다크 셸 기존 흰 텍스트 그대로(회귀 0).
   const isLightCard = cardColor === "#FFFFFF";
-  // 거울 수렴 S2·S3-1 — 라이트 셸 판정 단일화: info(S1)·coupon(S2)·reservation(S3-1)은
-  //   CardModelBody 흰 카드(FIX-56 정본) 위라 페이지 크롬 텍스트도 항상 다크. 잔존
-  //   variant(purchase·lead)는 기존 isLightCard 판정 그대로(무접촉) — S4 수렴 때 흡수.
+  // 거울 수렴 S2·S3-1·S4 — 라이트 셸 판정 단일화: info(S1)·coupon(S2)·reservation(S3-1)·
+  //   purchase(S4)는 CardModelBody 흰 카드(FIX-56 정본) 위라 페이지 크롬 텍스트도 항상 다크.
+  //   잔존 variant(lead)는 기존 isLightCard 판정 그대로(무접촉) — S5 몫.
   const isLightShell =
     resolvedVariant === "info" ||
     resolvedVariant === "coupon" ||
     resolvedVariant === "reservation" ||
+    resolvedVariant === "purchase" ||
     isLightCard;
   // C13 S4b — 목적색(스튜디오 MODE_ACCENT 와 단일 소스). 1차 CTA(Wand2·sticky 쿠폰받기·주문예약) 배경에 전파.
   //   미매핑 변형이면 검정(#0A0A0A) 폴백 = 기존 색 유지(회귀 0).
@@ -1508,13 +1545,14 @@ export function InfoDropPage({
         // sticky 없는 드롭(정보/구매/상담) = pb-8 만으로 충분.
         hasStickyBar ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "pb-8",
       )}
-      // 셸 배경 — info(S1)·coupon(S2)·reservation(S3-1)은 회색(흰 CardModelBody 카드 =
-      //   스튜디오 parity · FIX-56 저장색 무시). 잔존 variant(purchase·lead)는 navy 유지 — S4 몫.
+      // 셸 배경 — info(S1)·coupon(S2)·reservation(S3-1)·purchase(S4)는 회색(흰 CardModelBody
+      //   카드 = 스튜디오 parity · FIX-56 저장색 무시 = navy 소멸). 잔존 variant(lead)는 기존 유지 — S5 몫.
       style={{
         backgroundColor:
           resolvedVariant === "info" ||
           resolvedVariant === "coupon" ||
-          resolvedVariant === "reservation"
+          resolvedVariant === "reservation" ||
+          resolvedVariant === "purchase"
             ? "#F5F5F5"
             : (cardColor ?? "#1E3A8A"),
       }}
@@ -1898,17 +1936,79 @@ export function InfoDropPage({
 
         {resolvedVariant === "purchase" &&
           (commerce ? (
-            // C2: commerce 있으면 공유 ProductWidget(스튜디오와 동일 위젯). 흰 카드 현행 유지.
-            //   buildProductWidget 은 commerce/title/local 만 읽음 → 필요한 필드로 재구성해 전달.
-            <ProductWidget
-              {...buildProductWidget({ commerce, title: safeTitle, local } as InfoDropPageProps)}
-              accent={accent}
-              onPreorder={onPreorder}
-              onSellerClick={() => handleCtaClick("seller")}
-              // S17(P4) — 공유 푸터를 카드 프레임 안 최하단으로 인입(페이지레벨 렌더 제거).
-              //   흰 카드 내부라 light 강제(페이지 navy 배경과 무관).
-              footerSlot={renderShareFooter(true)}
-            />
+            // S4 — purchase 거울 수렴: CardModelBody(카드 v2) 마운트 — info/coupon/reservation
+            //   A방식 동형(toDropDetailInput → fromDropDetail → receiver). navy 소멸(FIX-56 흰 정본).
+            //   · CTA 분기 = selfUpload 우선(합성 buyUrl 공존 시 주문예약이 이김): 주문예약 =
+            //     기존 onPreorder 경로 / 외부 상품 = buyUrl 새 탭(구 ProductWidget 자기완결 동형).
+            //   · 재입고 = 카드 내 버튼(boosterChips 품절 게이트) + 페이지 액션(4상태 문구 콘텐츠 존).
+            //   · funnelCoupon·initialSlots 미주입 — 구 purchase 표면에 없던 존(쿠폰·캘린더) 신설
+            //     금지(스코프 밖). local·attachedProducts 는 관통(그리드 매장정보·도킹 포토 셀).
+            //   · 구 footerSlot 인입 소멸 — 전달 슬립 + 법정 푸터 v2(수렴 3 variant 동일 존).
+            <>
+              <CardModelBody
+                variant="receiver"
+                showJourney={false}
+                actions={{
+                  onShare,
+                  onCopyLink,
+                  onPreorder: commerce.selfUpload
+                    ? onPreorder
+                    : () => {
+                        if (
+                          typeof window !== "undefined" &&
+                          commerce.buyUrl &&
+                          commerce.buyUrl !== "#"
+                        ) {
+                          window.open(commerce.buyUrl, "_blank", "noopener,noreferrer");
+                        }
+                      },
+                  onRestockAlert: handleRestockAlert,
+                  // S3-4 §2 — 매장 정보 펼침 3버튼(기존 handleCtaClick 체인).
+                  onPhone: () => handleCtaClick("phone"),
+                  onSms: () => handleCtaClick("sms"),
+                  onDirections: () => handleCtaClick("directions"),
+                }}
+                model={fromDropDetail({
+                  ...toDropDetailInput({
+                    videoSourceUrl,
+                    videoThumbnailUrl,
+                    videoDurationSec,
+                    videoSourceLabel,
+                    title,
+                    makerMessage,
+                    keyPoints,
+                    cardColor,
+                    variant,
+                    maker,
+                    commerce,
+                    remainingStock,
+                    serverNow,
+                    attachedProducts,
+                    local,
+                  } as unknown as InfoDropPageProps),
+                  remakeHref,
+                  remakeLabel,
+                })}
+              />
+              {/* S4 — v2 헌법 순서: 카드(마감 요소 아래 렌더 금지) → 전달 슬립(꼬리표 연결) →
+                  콘텐츠(고시·한마디·영상요약·재입고 문구) → 법정 푸터. */}
+              {deliverySlip}
+              {restockFeedback}
+              {/* ST2b-2a A1 — 상품정보제공고시(전자상거래 필수 — 삭제 절대 금지). 페이지 존 유지. */}
+              {commerce.noticeRows && commerce.noticeRows.length > 0 ? (
+                <NoticeRowsSection rows={commerce.noticeRows} />
+              ) : null}
+              {/* C13 S3(🅱) — purchase 한마디(콘텐츠 존 유지). */}
+              {makerMessage && (
+                <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium italic leading-relaxed tracking-ko text-text-muted">
+                  &quot;{makerMessage}&quot;
+                </p>
+              )}
+              {/* 영상요약(비selfUpload만 — aiSummaryAccordion 자체 게이트 유지). */}
+              {aiSummaryAccordion}
+              {/* 공유 3액션은 슬립이 담당 — 하단은 법정만(수렴 3 variant 동일). */}
+              {renderShareFooter(true, false)}
+            </>
           ) : (
             // commerce 없음(외부 스크랩·mock) → 기존 PurchaseCardBody = AiPriceComparisonCard 시세 fallback 보존.
             <PurchaseCardBody
@@ -1923,46 +2023,17 @@ export function InfoDropPage({
             />
           ))}
 
-        {/* Phase 1-C — 파생 재고(1-B remaining_stock, L4: 공급값 표시만·가공 금지).
-            [보정2] 게이트: selfUpload 커머스 variant 에서만. 흰 필 래퍼 = navy 배경 대비용(배지 무수정). */}
-        {/* BADGE-ⓑ(S24) — 이중 래퍼 정리: 뱃지 자체가 고대비 필(다크)로 승격돼 흰 필 래퍼 불요. */}
-        {resolvedVariant === "purchase" && commerce?.selfUpload && remainingStock != null ? (
-          <div className="flex items-center justify-end gap-1.5">
-            {/* ST2b-2a A2 — 판매기간 D-day 칩(booster45 ddayLabel · 조회 시점 계산, 박제 금지).
-                saleEndIso 미주입(구 발행분) = 미렌더. */}
-            {commerce?.saleEndIso ? <SaleDdayBadge saleEndIso={commerce.saleEndIso} /> : null}
-            {/* ST2b-2a A4 — 단위 라벨(FIX-45c) additive: 미주입 = 기존 '개' 렌더 동일. */}
-            <StockMeta remaining={remainingStock} unitLabel={commerce?.stockUnitLabel} />
-          </div>
-        ) : null}
+        {/* S4 — 구 페이지 크롬(StockMeta·SaleDdayBadge·RestockAlertButton·GroupBuySection) 렌더
+            제거: 카드 v2 가 흡수(한정 수량 = productQty · D-day/품절 = boosterChips · 재입고 =
+            카드 버튼+restockFeedback · 공동구매 = model.groupBuy). 정의는 하단 보존(가역).
+            고시·한마디·영상요약은 위 purchase 분기 콘텐츠 존으로 이동. */}
 
-        {/* ST2b-2b B1 — 재입고 알림(FIX-41 실배선): 품절(remaining_stock 0)일 때만.
-            비로그인 = 로그인 유도 정직 문구 · 완료 카피 = restock-alerts 락 문구. */}
-        {resolvedVariant === "purchase" &&
-        commerce?.selfUpload &&
-        remainingStock != null &&
-        remainingStock <= 0 ? (
-          <RestockAlertButton dropId={dropId} />
-        ) : null}
-
-        {/* ST2b-2b B2 — 공동구매(FIX-40 순수 모듈 buildGroupBuyView 소비): groupBuy 저장분만.
-            진행률 = 실집계 입력 부재 → 미렌더(가짜 집계 금지) · 마감 = 조회 시점 D-day. */}
-        {resolvedVariant === "purchase" && commerce?.groupBuy ? (
-          <GroupBuySection groupBuy={commerce.groupBuy} />
-        ) : null}
-
-        {/* C13 S3(🅱) — purchase 한마디는 위젯 아래(스튜디오 tagline 슬롯=위젯 아래와 정합). */}
-        {resolvedVariant === "purchase" && makerMessage && (
+        {/* C13 S3(🅱) — 폴백(commerce 없음) purchase 한마디만 기존 위치 유지(무접촉). */}
+        {resolvedVariant === "purchase" && !commerce && makerMessage && (
           <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium italic leading-relaxed tracking-ko text-text-muted">
             &quot;{makerMessage}&quot;
           </p>
         )}
-
-        {/* ST2b-2a A1 — 상품정보제공고시(FIX-37 스냅샷 표시형 그대로) 인라인 펼침.
-            noticeRows 미주입(구 발행분) = 미렌더(회귀 0). Radix 0 — useState 펼침. */}
-        {resolvedVariant === "purchase" && commerce?.noticeRows && commerce.noticeRows.length > 0 ? (
-          <NoticeRowsSection rows={commerce.noticeRows} />
-        ) : null}
 
         {/* B 상품 홍보 카드 — 리치(큰 이미지 + 헤드라인 + 셀링포인트 + 구매버튼). "관련 상품"보다 상단·강조.
             업주 1인칭 홍보물. 탭/구매 → 그 상품 카드(/d/{refShareUuid}). 없으면 미표시. */}
@@ -2030,12 +2101,13 @@ export function InfoDropPage({
 
         {/* ③ 관련 상품 — 담은 상품(attached). 본체 커머스/영상 렌더와 독립.
             탭 → 그 상품 자체 카드(/d/{refShareUuid}) 인앱 이동. 없으면 미표시.
-            S3-3 ⑥ — coupon·reservation 수렴 분기는 카드 내 도킹 존(함께 받는 카드)이 담당
-            → 이중 렌더 금지로 크롬 미렌더. */}
+            S3-3 ⑥·S4 — coupon·reservation·purchase(commerce) 수렴 분기는 카드 내 도킹 존
+            (함께 받는 카드)이 담당 → 이중 렌더 금지로 크롬 미렌더. */}
         {attachedProducts &&
           attachedProducts.length > 0 &&
           resolvedVariant !== "coupon" &&
-          resolvedVariant !== "reservation" && (
+          resolvedVariant !== "reservation" &&
+          !(resolvedVariant === "purchase" && commerce) && (
           <section data-testid="related-products">
             <h2
               className={cn(
@@ -2241,9 +2313,10 @@ export function InfoDropPage({
         </section>
       ) : null}
 
-      {/* S16r — S7 이동 회귀 복원: CardBody 미사용 변형(purchase/lead)은 페이지레벨 렌더(위젯 아래·푸터 위).
-            selfUpload 게이트 유지(aiSummaryAccordion 이 null 이면 미표시). info/coupon 은 preFooterSlot 담당이라 이중 렌더 없음. */}
-      {(resolvedVariant === "purchase" || resolvedVariant === "lead") && aiSummaryAccordion ? (
+      {/* S16r — S7 이동 회귀 복원: CardBody 미사용 변형은 페이지레벨 렌더(위젯 아래·푸터 위).
+            S4 — purchase(commerce) 수렴 분기는 콘텐츠 존이 담당 → 폴백(commerce 없음)·lead 만. */}
+      {((resolvedVariant === "purchase" && !commerce) || resolvedVariant === "lead") &&
+      aiSummaryAccordion ? (
         <section className="mx-auto w-full max-w-[480px] px-6 pt-4">{aiSummaryAccordion}</section>
       ) : null}
 
