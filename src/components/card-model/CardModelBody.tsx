@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
 import type { LucideIcon } from "lucide-react";
 // 거울 수렴 S1 — 영상 인플레이스 임베드는 공용 부품 재사용(신규 임베드 구현 금지 · 중복 3벌 방지).
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
@@ -10,6 +10,7 @@ import {
   Clock,
   Copy,
   Crown,
+  Gift,
   ImageIcon,
   Lock,
   MapPin,
@@ -80,6 +81,7 @@ export function CardModelBody({
   showShareFooter = true,
   actions,
   currentSlot,
+  couponCtaRef,
 }: {
   model: CardModel;
   variant?: CardModelVariant;
@@ -92,6 +94,10 @@ export function CardModelBody({
   /** FIX-48+50 P2 — 번호 인터뷰 현재 슬롯(별도 prop · 모델 타입 무오염). variant==="studio" 에서만
    *  점선 번호 슬롯("③ 가격이 여기 붙어요")으로 현재 단계 위치를 미리보기에 표시. /d 미전달 = 렌더 무영향. */
   currentSlot?: { no: number; label: string; anchor: string };
+  /** S2 — 인카드 "쿠폰 받기" CTA 래퍼 ref 슬롯(옵셔널·additive). /d 페이지 크롬의 IO
+   *  (보이면 sticky 숨김 · S18-A)가 관찰 대상으로 쓴다 — IO·숨김 로직은 페이지 소관(여기선 배선만).
+   *  미주입 = 동작 불변(스튜디오·타 variant 영향 0). */
+  couponCtaRef?: Ref<HTMLDivElement>;
 }) {
   const { accent, cardColor, pageBg, applied } = model;
   // FIX-48+50 P2 — 점선 슬롯 게이트: studio 미리보기 + 현재 앵커 일치 + 해당 값 비어있을 때만.
@@ -1059,7 +1065,8 @@ export function CardModelBody({
                 couponExpiresAt 미주입 = 미렌더. 만료 = TimerBadge 자체 "마감" 고정 표기(L2). */}
             {model.couponExpiresAt ? (
               <div className="relative mt-3 h-7">
-                <TimerBadge expiresAt={model.couponExpiresAt} />
+                {/* S2 — serverNow 관통(L6 offset 보정 · 라우트 loader 공급). 미주입 = 클라 시계 폴백. */}
+                <TimerBadge expiresAt={model.couponExpiresAt} serverNow={model.serverNow} />
               </div>
             ) : null}
 
@@ -1078,15 +1085,34 @@ export function CardModelBody({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={act.onClaimCoupon}
-              className="mt-3.5 flex h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold text-white transition-transform duration-150 active:translate-y-px"
-              style={{ backgroundColor: accent, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25)" }}
-            >
-              <Ticket className="h-4 w-4" strokeWidth={2.25} />
-              쿠폰 받기
-            </button>
+            {/* S2 — 구 CouponPreview 필드 커버리지(미주입 = 미렌더): 증정 칩 ↔ 조건 문구 상호배타 + 기한 표기. */}
+            {model.couponGift ? (
+              <p
+                className="mt-2.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold"
+                style={{ backgroundColor: `${accent}14`, color: accent }}
+              >
+                <Gift className="h-3.5 w-3.5" strokeWidth={2.25} />
+                {model.couponGift} 증정
+              </p>
+            ) : model.couponCondition ? (
+              <p className="mt-2.5 text-[12px] font-medium text-[#6E6E6E]">{model.couponCondition}</p>
+            ) : null}
+            {model.couponValidText ? (
+              <p className="mt-1 text-[12px] font-medium text-[#6E6E6E]">{model.couponValidText}</p>
+            ) : null}
+
+            {/* S2 — couponCtaRef 래퍼: 페이지 IO(sticky 숨김) 관찰 대상. 미주입 = 렌더 동일. */}
+            <div ref={couponCtaRef}>
+              <button
+                type="button"
+                onClick={act.onClaimCoupon}
+                className="mt-3.5 flex h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold text-white transition-transform duration-150 active:translate-y-px"
+                style={{ backgroundColor: accent, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25)" }}
+              >
+                <Ticket className="h-4 w-4" strokeWidth={2.25} />
+                쿠폰 받기
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -98,8 +98,20 @@ export type DropDetailInput = {
   };
   /** ← InfoDropPageProps.remainingStock (get_drop_detail v8.1 파생 재고). */
   remainingStock?: number | null;
-  /** ← InfoDropPageProps.funnelCoupon (RPC coupon 객체). valid_until = 마감 타이머(2a 갭 수정). */
-  funnelCoupon?: { title: string; valid_until?: string | null } | null;
+  /** ← InfoDropPageProps.funnelCoupon (RPC coupon 객체). valid_until = 마감 타이머(2a 갭 수정).
+   *  S2 — 구 CouponPreview 렌더 필드 커버리지: coupon_type/gift_item(증정 칩)·conditions.min_amount(조건 문구). */
+  funnelCoupon?: {
+    title: string;
+    valid_until?: string | null;
+    coupon_type?: string | null;
+    gift_item?: string | null;
+    conditions?: { min_amount?: number; [k: string]: unknown } | null;
+  } | null;
+  /** S2 — 라우트 확정 마감시각(min(coupon.valid_until, share_events.expires_at)).
+   *  계산은 d.$shareUuid.tsx 라우트 존치 — 여기는 확정값 운반만. 미주입 = valid_until 폴백. */
+  couponExpiresAt?: string | null;
+  /** S2 — 서버 기준시각(라우트 loader serverNow). TimerBadge offset 보정 관통. */
+  serverNow?: string;
   /** ← InfoDropPageProps.local (RPC store). */
   local?: {
     name?: string;
@@ -212,7 +224,26 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
     couponShort: input.funnelCoupon?.title,
     // 거울 수렴 S0 — 쿠폰 마감 타이머(2a 갭): coupons.valid_until → couponExpiresAt(수신 타이머
     //   게이트). fromStudioState 와 동형(ST2b-2 몫이던 /d 방향을 여기서 채움).
-    ...(input.funnelCoupon?.valid_until ? { couponExpiresAt: input.funnelCoupon.valid_until } : {}),
+    //   S2 — 라우트 확정값(couponExpiresAt input) 우선, 없으면 valid_until 폴백. serverNow 관통.
+    ...(input.couponExpiresAt || input.funnelCoupon?.valid_until
+      ? { couponExpiresAt: input.couponExpiresAt ?? input.funnelCoupon?.valid_until }
+      : {}),
+    ...(input.serverNow ? { serverNow: input.serverNow } : {}),
+    // S2 — 구 CouponPreview 필드 커버리지(증정 칩 ↔ 조건 문구 상호배타 · 기한 표기 — 동일 로직 이식).
+    ...(input.funnelCoupon?.coupon_type === "gift" && input.funnelCoupon.gift_item?.trim()
+      ? { couponGift: input.funnelCoupon.gift_item.trim() }
+      : typeof input.funnelCoupon?.conditions?.min_amount === "number"
+        ? {
+            couponCondition: `${input.funnelCoupon.conditions.min_amount.toLocaleString("ko-KR")}원 이상 사용하실 때`,
+          }
+        : {}),
+    ...(input.funnelCoupon
+      ? {
+          couponValidText: input.funnelCoupon.valid_until
+            ? `${new Date(input.funnelCoupon.valid_until).toLocaleDateString("ko-KR")}까지`
+            : "기간 제한 없음",
+        }
+      : {}),
     // 거울 수렴 S0 — 드로피 적립 신호(수신 전용·숫자 미포함). 보상>0 일 때만 라인 렌더(락 §드로피).
     ...(isCommerce && (input.commerce?.dropyReward ?? 0) > 0 ? { dropyReady: true } : {}),
     phone: !!input.local?.phone,

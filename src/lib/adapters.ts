@@ -624,9 +624,17 @@ export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
           funnelCoupon: {
             title: props.funnelCoupon.title,
             valid_until: props.funnelCoupon.valid_until,
+            // S2 — 구 CouponPreview 커버리지(증정 칩·조건 문구) 관통.
+            coupon_type: props.funnelCoupon.coupon_type,
+            gift_item: props.funnelCoupon.gift_item,
+            conditions: props.funnelCoupon.conditions,
           },
         }
       : {}),
+    // S2 — 타이머 확정값 관통(계산은 d.$shareUuid 라우트 존치): expiresAt = min(valid_until,
+    //   share_events.expires_at) · serverNow = loader 1회 캡처(offset 보정).
+    ...(props.expiresAt ? { couponExpiresAt: props.expiresAt } : {}),
+    ...(props.serverNow ? { serverNow: props.serverNow } : {}),
     ...(props.local
       ? {
           local: {

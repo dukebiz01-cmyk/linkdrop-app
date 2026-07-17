@@ -142,8 +142,18 @@ export type CardModel = {
   couponLabel?: string;
   couponShort?: string;
   /** ST2b-0 — 쿠폰 마감 시각(ISO, coupons.valid_until). 미주입 = 타이머 미렌더
-   *  (수신카드 1-C couponTimer 게이트 동형 — 거울 원칙). */
+   *  (수신카드 1-C couponTimer 게이트 동형 — 거울 원칙). S2: 라우트 확정값
+   *  (min(coupon.valid_until, share_events.expires_at)) 우선 — 계산은 라우트 소관. */
   couponExpiresAt?: string | null;
+  /** S2 — 서버 기준시각(ISO, 라우트 loader 1회 캡처). TimerBadge offset 보정(L6).
+   *  미주입 = 클라 시계 폴백(스튜디오 미리보기 등). */
+  serverNow?: string;
+  /** S2 — 증정 품목(coupon_type="gift" 의 gift_item). 미주입 = 미렌더. */
+  couponGift?: string;
+  /** S2 — 사용 조건 문구(예: "30,000원 이상 사용하실 때"). gift 와 상호배타(구 CouponPreview 동형). */
+  couponCondition?: string;
+  /** S2 — 유효기간 표기 문자열(예: "2026. 8. 5.까지" / "기간 제한 없음"). 미주입 = 미렌더. */
+  couponValidText?: string;
 
   // ── 매장정보(link 블록) ──
   phone?: boolean;

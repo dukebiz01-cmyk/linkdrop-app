@@ -806,6 +806,10 @@ export function InfoDropPage({
   // C5 — 흰 셸 미러: 메이커가 흰 카드(#FFFFFF) 저장 시 손님도 라이트 텍스트로(스튜디오 C4b와 동일 판정).
   //   기존 카드(cardColor null/navy 등) → false → 비-info 다크 셸 기존 흰 텍스트 그대로(회귀 0).
   const isLightCard = cardColor === "#FFFFFF";
+  // 거울 수렴 S2 — 라이트 셸 판정 단일화: info(S1)·coupon(S2)은 CardModelBody 흰 카드(FIX-56 정본)
+  //   위라 페이지 크롬 텍스트도 항상 다크. 잔존 variant(reservation·purchase·lead)는 기존
+  //   isLightCard 판정 그대로(무접촉) — S3/S4 수렴 때 이 판정으로 흡수.
+  const isLightShell = resolvedVariant === "info" || resolvedVariant === "coupon" || isLightCard;
   // C13 S4b — 목적색(스튜디오 MODE_ACCENT 와 단일 소스). 1차 CTA(Wand2·sticky 쿠폰받기·주문예약) 배경에 전파.
   //   미매핑 변형이면 검정(#0A0A0A) 폴백 = 기존 색 유지(회귀 0).
   const accent = VARIANT_ACCENT[resolvedVariant] ?? "#0A0A0A";
@@ -1019,7 +1023,7 @@ export function InfoDropPage({
   const billingNotice = (
     <p
       data-testid="billing-notice"
-      className={`text-[12px] leading-relaxed tracking-ko ${isLightCard ? "text-text-muted" : "text-white/55"}`}
+      className={`text-[12px] leading-relaxed tracking-ko ${isLightShell ? "text-text-muted" : "text-white/55"}`}
     >
       결제는 매장에서 직접 진행돼요. 자세한 내용은 매장에 문의해 주세요.
     </p>
@@ -1055,6 +1059,31 @@ export function InfoDropPage({
   );
   const hasEvents = eventItems.length > 0;
 
+  // 거울 수렴 S2 — 진행 이벤트 요약 추출: coupon 신 경로는 카드 밖 크롬으로 단독 렌더(쿠폰부는
+  //   CardModelBody 내장 쿠폰 존이 대체), reservation 구 경로는 benefitEventSection 합성 그대로.
+  //   헤딩 색 = isLightShell(coupon 라이트 셸 다크 · reservation navy 흰색 유지).
+  const eventsSection = hasEvents ? (
+    <div className="space-y-2">
+      <h2 className={`text-sm font-bold tracking-ko ${isLightShell ? "text-text-strong" : "text-white"}`}>
+        진행 이벤트
+      </h2>
+      <ul className="space-y-2">
+        {eventItems.map((item) => (
+          <li key={item.id} className="rounded-2xl border border-[#E2E8F0] bg-white p-4">
+            {item.eventTitle?.trim() ? (
+              <p className="text-sm font-bold tracking-ko text-[#0F172A]">{item.eventTitle}</p>
+            ) : null}
+            {item.eventDescription?.trim() ? (
+              <p className="mt-1 text-xs font-medium tracking-ko text-[#64748B]">
+                {item.eventDescription}
+              </p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : null;
+
   // CC#2 (a) — "예약하면 받는 혜택 / 진행 이벤트" 합성 섹션.
   //   혜택 = funnelCoupon(기존 couponPanel 재사용) · 이벤트 = makerAvailableDates 요약.
   //   두 소스 독립 → 조건부 병치(쿠폰만/이벤트만/둘 다 모두 정상, 둘 다 없으면 미렌더).
@@ -1069,32 +1098,7 @@ export function InfoDropPage({
             {couponPanel}
           </div>
         ) : null}
-        {hasEvents ? (
-          <div className="space-y-2">
-            <h2 className={`text-sm font-bold tracking-ko ${isLightCard ? "text-text-strong" : "text-white"}`}>
-              진행 이벤트
-            </h2>
-            <ul className="space-y-2">
-              {eventItems.map((item) => (
-                <li
-                  key={item.id}
-                  className="rounded-2xl border border-[#E2E8F0] bg-white p-4"
-                >
-                  {item.eventTitle?.trim() ? (
-                    <p className="text-sm font-bold tracking-ko text-[#0F172A]">
-                      {item.eventTitle}
-                    </p>
-                  ) : null}
-                  {item.eventDescription?.trim() ? (
-                    <p className="mt-1 text-xs font-medium tracking-ko text-[#64748B]">
-                      {item.eventDescription}
-                    </p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        {eventsSection}
       </section>
     ) : null;
 
@@ -1298,9 +1302,13 @@ export function InfoDropPage({
         // sticky 없는 드롭(정보/구매/상담) = pb-8 만으로 충분.
         hasStickyBar ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "pb-8",
       )}
-      // 셸 배경 — info 만 회색(흰 배경 위 navy holo 카드 = 스튜디오 parity). 비-info 는 navy 유지(파일럿 보호).
+      // 셸 배경 — info(S1)·coupon(S2)은 회색(흰 CardModelBody 카드 = 스튜디오 parity · FIX-56 저장색 무시).
+      //   잔존 variant(reservation·purchase·lead)는 navy 유지(파일럿 보호) — S3/S4 몫.
       style={{
-        backgroundColor: resolvedVariant === "info" ? "#F5F5F5" : (cardColor ?? "#1E3A8A"),
+        backgroundColor:
+          resolvedVariant === "info" || resolvedVariant === "coupon"
+            ? "#F5F5F5"
+            : (cardColor ?? "#1E3A8A"),
       }}
       data-testid="public-drop-page"
       data-variant={resolvedVariant}
@@ -1318,14 +1326,14 @@ export function InfoDropPage({
             <p
               className={cn(
                 "text-sm font-bold tracking-ko",
-                resolvedVariant === "info" || isLightCard ? "text-text-strong" : "text-white",
+                isLightShell ? "text-text-strong" : "text-white",
               )}
             >
               {safeMaker.name}
               <span
                 className={cn(
                   "font-medium",
-                  resolvedVariant === "info" || isLightCard ? "text-text-muted" : "text-white/70",
+                  isLightShell ? "text-text-muted" : "text-white/70",
                 )}
               >
                 님이 보냈어요
@@ -1336,7 +1344,7 @@ export function InfoDropPage({
               <p
                 className={cn(
                   "text-xs font-medium tracking-ko",
-                  resolvedVariant === "info" || isLightCard ? "text-text-subtle" : "text-white/60",
+                  isLightShell ? "text-text-subtle" : "text-white/60",
                 )}
               >
                 LinkDrop으로 공유된 영상
@@ -1429,74 +1437,56 @@ export function InfoDropPage({
           </>
         )}
         {resolvedVariant === "coupon" && (
-          // 4c — 쿠폰 코어(영상·제목·한마디·셀링)도 동일 CardBody(A1: 코어만, navy 유지).
-          //   funnelCoupon 생략 → 어댑터 coupon=null → CardBody CouponPreview 미렌더 → 쿠폰 카드는 couponPanel(L1206) 담당(dedup).
-          //   contactSlot 생략 → 전화/길찾기는 기존 secondary-contact-row 담당(중복 회피).
-          <DropCardShell
-            cardColor={cardColor ?? "#1E3A8A"}
-            interactive={false}
-            holoOpacity={0.45}
-            boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
-          >
-            {/* C8② — 흰 카드 제목 흰-위-흰 방지(info 동일 패턴). navy면 undefined→회귀 0. */}
-            <div className={isLightCard ? "text-[#0F172A]" : undefined}>
-            <CardBody
-              light={isLightCard}
-              {...toCardBodyProps({
-                videoSourceUrl,
-                videoThumbnailUrl,
-                videoDurationSec,
-                videoSourceLabel,
-                title,
-                makerMessage,
-                keyPoints,
-                cardColor,
-                local,
-                variant,
-              } as unknown as InfoDropPageProps)}
-              couponBlock={
-                // S18-A(P4) — 카드 내부 "쿠폰 받기" CTA 병행: sticky 와 동일 핸들러(onReserveAndClaim)
-                //   재사용(복제 로직 0)·동일 게이트(hasStickyBar — 교집합(isCombined) 인라인 경로 0터치).
-                //   ref div = IO 관찰 대상(보이면 sticky 숨김).
-                hasStickyBar ? (
-                  <div className="space-y-3">
-                    {benefitEventSection}
-                    <div ref={inlineCouponCtaRef}>
-                      <button
-                        type="button"
-                        data-testid="cta-coupon-inline"
-                        onClick={onReserveAndClaim}
-                        className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-2xl px-4 text-base font-bold text-white"
-                        style={{ backgroundColor: accent }}
-                      >
-                        <span className="truncate">쿠폰 받기</span>
-                      </button>
-                    </div>
-                  </div>
-                  ) : combinedCouponOnlyCta ? (
-                    // S23 — 교집합(쿠폰+예약일): 보조 "쿠폰 받기"를 쿠폰 패널 아래 인카드 렌더.
-                    <div className="space-y-3">
-                      {benefitEventSection}
-                      {combinedCouponOnlyCta}
-                    </div>
-                ) : (
-                  benefitEventSection
-                )
-              }
-              reservationBlock={
-                showCalendar ? (
-                  <div className="space-y-3">
-                    {calendarPanel}
-                    {billingNotice}
-                  </div>
-                ) : null
-              }
-              contactBlock={contactRow}
-              shareFooter={shareFooter}
-              preFooterSlot={aiSummaryAccordion}
+          // 거울 수렴 S2 — coupon 분기 = CardModel 정본 렌더(info S1 동형 A방식). 프레임
+          //   navy(DropCardShell)→white(CardModelBody) = FIX-56 흰색 정본 이행.
+          //   · 쿠폰 존(타이머·혜택명·증정/조건·기한·쿠폰 받기)은 카드 내장 도킹 쿠폰 카드가 담당
+          //     — 구 benefitEventSection 쿠폰부(couponPanel) 대체. 타이머 확정값(expiresAt·serverNow)
+          //     은 라우트 계산 존치, toDropDetailInput 이 운반만.
+          //   · claim 상태(claim_coupon·OAuth ?coupon=1 복귀·claimInFlight)는 페이지 크롬 존치 —
+          //     본체는 onClaimCoupon(=onReserveAndClaim 동일 핸들러)만 받는 표시 계층.
+          //   · sticky "쿠폰 받기"(VARIANT_ACCENT) 크롬 존치. 진행 이벤트·캘린더·연락·영상요약·
+          //     shareFooter 는 카드 밖 크롬으로 이동(구 CardBody 슬롯 순서 보존).
+          //   · local 은 name 만 주입(쿠폰 존 발급처 표기) — phone/address 미주입 = 카드 내
+          //     매장정보 버튼 미렌더(contactRow 크롬과 중복 회피, S13 동형).
+          <>
+            <CardModelBody
+              variant="receiver"
+              showShareFooter={false}
+              showJourney={false}
+              couponCtaRef={inlineCouponCtaRef}
+              actions={{ onShare, onCopyLink, onClaimCoupon: onReserveAndClaim }}
+              model={fromDropDetail(
+                toDropDetailInput({
+                  videoSourceUrl,
+                  videoThumbnailUrl,
+                  videoDurationSec,
+                  videoSourceLabel,
+                  title,
+                  makerMessage,
+                  keyPoints,
+                  cardColor,
+                  variant,
+                  maker,
+                  funnelCoupon,
+                  expiresAt,
+                  serverNow,
+                  local: local?.name ? { name: local.name } : undefined,
+                } as unknown as InfoDropPageProps),
+              )}
             />
-            </div>
-          </DropCardShell>
+            {eventsSection}
+            {showCalendar ? (
+              <div className="space-y-3">
+                {calendarPanel}
+                {billingNotice}
+              </div>
+            ) : null}
+            {contactRow}
+            {aiSummaryAccordion}
+            {/* S2 — 라이트 셸 강제(lead S17 선례): 공용 shareFooter(isLightCard 판정)는 잔존
+                variant 몫이라 무접촉, coupon 은 항상 light. */}
+            {renderShareFooter(true)}
+          </>
         )}
         {isReservation && (
           <section className="space-y-2" data-testid="reservation-header">
@@ -1817,7 +1807,7 @@ export function InfoDropPage({
             <h2
               className={cn(
                 "text-sm font-bold tracking-ko",
-                resolvedVariant === "info" || isLightCard ? "text-text-strong" : "text-white",
+                isLightShell ? "text-text-strong" : "text-white",
               )}
             >
               관련 상품
@@ -1892,7 +1882,7 @@ export function InfoDropPage({
             <h2
               className={cn(
                 "text-sm font-bold tracking-ko",
-                resolvedVariant === "info" || isLightCard ? "text-text-strong" : "text-white",
+                isLightShell ? "text-text-strong" : "text-white",
               )}
             >
               {pageCopy.ctaHeading}
@@ -1936,7 +1926,7 @@ export function InfoDropPage({
             target="_blank"
             rel="noopener noreferrer"
             data-testid="coupon-naver-reservation"
-            className={`flex items-center justify-center gap-1.5 text-xs font-medium tracking-ko underline-offset-2 transition-colors ${isLightCard ? "text-text-muted hover:text-text-strong" : "text-white/60 hover:text-white/80"} hover:underline`}
+            className={`flex items-center justify-center gap-1.5 text-xs font-medium tracking-ko underline-offset-2 transition-colors ${isLightShell ? "text-text-muted hover:text-text-strong" : "text-white/60 hover:text-white/80"} hover:underline`}
           >
             <ExternalLink className="size-3.5" strokeWidth={2} />
             네이버에서 예약하기
