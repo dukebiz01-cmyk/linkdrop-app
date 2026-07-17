@@ -150,6 +150,12 @@ export type CardModel = {
   journey?: CardJourneyNode[];
   /** 확산 인원 — journey 렌더 시 0 폴백. */
   spreadCount?: number;
+
+  // ── 드로피(거울 수렴 S0) — 수신 전용 신호. ──
+  /** 드로피 적립 가능 카드 신호(수신 화면 전용). true = receiver variant 에서 "적립 (준비 중)"
+   *  라인 렌더. 락 §드로피: 금액은 담지 않는다(숫자 절대 미노출). studio/share 미사용 = 스튜디오
+   *  렌더 불변. 소비자 ProductWidget/피드 DropyBadge 의 "준비중" 락과 동형. */
+  dropyReady?: boolean;
 };
 
 /**

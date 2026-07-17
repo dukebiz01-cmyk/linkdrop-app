@@ -82,11 +82,14 @@ export type DropDetailInput = {
     stockLimit?: number | null;
     /** BUG-2 T2 — 재고 단위 라벨(FIX-45c). productQtyUnit 관통용. 미주입 = CardModelBody '개' 폴백. */
     stockUnitLabel?: string;
+    /** BADGE-ⓑ — 드로피 예상 보상(floor(dropy_rate×price)). 거울 수렴 S0: 값은 안 쓰고 존재
+     *  여부만 dropyReady 신호로 변환(숫자 미노출 락). 미주입 = 라인 미렌더. */
+    dropyReward?: number;
   };
   /** ← InfoDropPageProps.remainingStock (get_drop_detail v8.1 파생 재고). */
   remainingStock?: number | null;
-  /** ← InfoDropPageProps.funnelCoupon (RPC coupon 객체). */
-  funnelCoupon?: { title: string } | null;
+  /** ← InfoDropPageProps.funnelCoupon (RPC coupon 객체). valid_until = 마감 타이머(2a 갭 수정). */
+  funnelCoupon?: { title: string; valid_until?: string | null } | null;
   /** ← InfoDropPageProps.local (RPC store). */
   local?: {
     name?: string;
@@ -193,6 +196,11 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
     ...(times.length > 0 ? { times } : {}),
     couponLabel: input.funnelCoupon?.title,
     couponShort: input.funnelCoupon?.title,
+    // 거울 수렴 S0 — 쿠폰 마감 타이머(2a 갭): coupons.valid_until → couponExpiresAt(수신 타이머
+    //   게이트). fromStudioState 와 동형(ST2b-2 몫이던 /d 방향을 여기서 채움).
+    ...(input.funnelCoupon?.valid_until ? { couponExpiresAt: input.funnelCoupon.valid_until } : {}),
+    // 거울 수렴 S0 — 드로피 적립 신호(수신 전용·숫자 미포함). 보상>0 일 때만 라인 렌더(락 §드로피).
+    ...(isCommerce && (input.commerce?.dropyReward ?? 0) > 0 ? { dropyReady: true } : {}),
     phone: !!input.local?.phone,
     map: !!input.local?.address,
     ...(dock

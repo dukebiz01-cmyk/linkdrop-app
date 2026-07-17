@@ -530,6 +530,20 @@ export function CardModelBody({
                 </span>
               </div>
 
+              {/* 거울 수렴 S0 — 드로피 적립 라인(수신 전용). 락 §드로피: 항상 "준비 중", 숫자 절대
+                  미노출(dropyReady 불리언만 게이트 — 금액 필드 자체 없음). variant==="receiver" 게이트로
+                  studio/share 는 미렌더 → 스튜디오 렌더 불변. 소비자 ProductWidget 문구·락과 동형. */}
+              {variant === "receiver" && model.dropyReady && (
+                <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-[#F7F6F2] px-2.5 py-1.5 text-[11px] font-semibold text-[#6B6961]">
+                  <span
+                    className="h-2.5 w-2.5 rotate-45 rounded-[2px]"
+                    style={{ backgroundColor: `${accent}66` }}
+                    aria-hidden="true"
+                  />
+                  Droppy · 판매 성사 시 적립 <span className="text-[#9A988F]">(준비 중)</span>
+                </div>
+              )}
+
               {/* 셀링포인트 */}
               {model.productPoints && model.productPoints.length > 0 && (
                 <ul className="mt-2 space-y-1">
