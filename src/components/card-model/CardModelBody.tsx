@@ -190,8 +190,9 @@ export function CardModelBody({
     });
   const dockItems = model.dockItems ?? [];
   const gridItems: { id: string; label: string; icon: LucideIcon }[] = [];
+  // S3-4d — 셀 렌더 기준 = '캘린더 장착'(applied.calendar). 슬롯 유무는 펼침 분기로만.
   const hasReservationDataEarly = (model.dates?.length ?? 0) > 0 || !!model.date;
-  if (applied["calendar"] && hasReservationDataEarly)
+  if (applied["calendar"])
     gridItems.push({ id: "calendar", label: "예약 가능일", icon: Calendar });
   if (applied["link"] && (model.facilities?.length ?? 0) > 0)
     gridItems.push({ id: "facilities", label: "시설 정보", icon: Store });
@@ -877,7 +878,30 @@ export function CardModelBody({
               </div>
 
               {/* 인라인 펼침 — 그리드 바로 아래, 한 번에 하나만. */}
-              {openGrid === "calendar" && (
+              {/* S3-4d — 슬롯 0 = 정직 안내 + [매장 정보] 열기(기존 그리드 패널 핸들러).
+                  예약하기·인라인 실행기 미노출(빈 제출 방지). */}
+              {openGrid === "calendar" && !hasReservationDataEarly && (
+                <div
+                  className="cm-slide-up mt-2 rounded-xl bg-white px-3 py-3.5 text-center"
+                  style={{ boxShadow: "inset 0 0 0 1px #EDEDED" }}
+                >
+                  <p className="text-[12px] font-medium leading-relaxed text-[#525252] [word-break:keep-all]">
+                    지금 예약 가능한 날이 없어요 — 매장에 문의해 보세요
+                  </p>
+                  {applied["link"] && (model.phone || model.map) && (
+                    <button
+                      type="button"
+                      onClick={() => toggleGrid("store")}
+                      className="mt-2.5 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-4 text-[12px] font-semibold"
+                      style={{ backgroundColor: `${accent}12`, color: accent }}
+                    >
+                      <Store className="h-3.5 w-3.5" strokeWidth={2.25} />
+                      매장 정보 열기
+                    </button>
+                  )}
+                </div>
+              )}
+              {openGrid === "calendar" && hasReservationDataEarly && (
                 <div className="cm-slide-up">
                   <ReservationPreview model={model} accent={accent} />
                   {/* S3-4c — [예약하기] = 실행기 인라인 확장 토글(슬롯 주입 시 · 재탭 닫힘).

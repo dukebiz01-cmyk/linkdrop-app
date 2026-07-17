@@ -118,6 +118,9 @@ export type DropDetailInput = {
   /** S3-3 ⑦ — 내장 푸터 "나도 만들기" 실링크(수신 전용). 미주입(스튜디오) = 시각 stub. */
   remakeHref?: string;
   remakeLabel?: string;
+  /** S3-4d — 쿠폰 variant 캘린더 장착 신호(페이지 showCalendar = 파트너 캘린더 보유).
+   *  예약 variant 는 캘린더 필수 블록이라 신호 불요(항상 장착). */
+  calendarEquipped?: boolean;
   /** ← InfoDropPageProps.local (RPC store). */
   local?: {
     name?: string;
@@ -206,11 +209,12 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
       content: !isCommerce && !!input.videoThumbnailUrl,
       productimage: isCommerce && !!heroImageUrl,
       product: isCommerce,
-      // S3-2 — 스튜디오 동형: 카드 내 예약 존은 dates 있을 때만(스튜디오는 cfgDates 0이면
-      //   장착 불가 → 못 그리는 상태는 수신도 안 그림). reservationUrl 단독 폴백 제거 —
-      //   외부 예약 링크는 페이지 크롬(실행 카드) 몫.
-      //   S3-3 ③ — 결합(coupon+캘린더) 카드도 스튜디오 동형(예약·쿠폰 모드 = variant 2종 공용).
-      calendar: (isReservation || variant === "coupon") && dates.length > 0,
+      // S3-4d(A안) — applied.calendar = "장착 신호"로 재정: 예약 목적 = 캘린더 필수 블록(스튜디오
+      //   :1025 required)이라 항상 장착 / 쿠폰 = 파트너 캘린더 보유(calendarEquipped=페이지
+      //   showCalendar). dates 유무는 렌더러 펼침 분기(슬롯0 정직 안내)로만 — 스튜디오는
+      //   cfgDates 0이면 장착 자체가 disabled 라 "장착=dates 보유"가 항상 성립, 수신의 슬롯0
+      //   분기는 발행 후 시점 데이터 상태의 정직 표기(거울 상위집합·위반 아님).
+      calendar: isReservation || (variant === "coupon" && !!input.calendarEquipped),
       coupon: hasCoupon,
       link: !!(input.local?.phone || input.local?.address),
       dock: !!dock,

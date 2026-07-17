@@ -1651,6 +1651,8 @@ export function InfoDropPage({
                 } as unknown as InfoDropPageProps),
                 remakeHref,
                 remakeLabel,
+                // S3-4d — 쿠폰 variant 캘린더 장착 신호(파트너 캘린더 보유 = showCalendar).
+                calendarEquipped: showCalendar,
               })}
             />
             {/* S3-4c — 실행기 상시 노출 폐지: [예약 가능일]→[예약하기] 인라인 확장
