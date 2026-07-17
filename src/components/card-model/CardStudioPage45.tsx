@@ -813,6 +813,11 @@ export function CardStudioPage45({
   const fabDrag = useRef({ active: false, moved: false, dx: 0, dy: 0 });
   const [panelOffset, setPanelOffset] = useState({ x: 0, y: 0 });
   const [panelDragging, setPanelDragging] = useState(false);
+  // 작업8b — 펼침 방향(위/아래)을 열 때 1회 고정(홈 작업8 이식). 렌더 인라인 재계산 시 드래그 중
+  //   중점 교차로 앵커가 뒤집혀 "크게 펼쳤을 때 이동 안 됨" → 고정으로 해소.
+  //   기본값 true(위로 펼침): 캡슐 기본 위치가 하단(bottom:196)이라 자동인사 첫 펼침도
+  //   openPanelAt 미경유 시 위로 열려 뷰포트 수납(무접촉 자동인사 — 방향 배선만).
+  const [panelOpenUp, setPanelOpenUp] = useState(true);
   const panelDrag = useRef({ active: false, sx: 0, sy: 0, ox: 0, oy: 0 });
 
   // 발행 — 기존 체인 재사용. ST2b 스위치 시 원본 제거(studio-build :398-405 동형).
@@ -1596,20 +1601,28 @@ export function CardStudioPage45({
   // FIX-48+50 P1.5 커밋1e — 패널은 캡슐 위치(fabPos)를 앵커로 그 자리에서 펼친다(고정 좌표 금지).
   //   fabPos 미설정이면 현재 캡슐 실측 위치로 초기화 → 접으면 같은 자리 캡슐로 복귀.
   function openPanelAt() {
-    if (!fabPos) {
+    const vh = window.innerHeight;
+    let base = fabPos;
+    if (!base) {
       const rect = fabRef.current?.getBoundingClientRect();
-      setFabPos(
-        rect
-          ? clampPos(rect.left, rect.top, FAB_SIZE, FAB_SIZE)
-          : { x: FAB_MARGIN, y: window.innerHeight - FAB_BOTTOM_RESERVE - FAB_SIZE },
-      );
+      base = rect
+        ? clampPos(rect.left, rect.top, FAB_SIZE, FAB_SIZE)
+        : { x: FAB_MARGIN, y: vh - FAB_BOTTOM_RESERVE - FAB_SIZE };
+      setFabPos(base);
     }
+    // 작업8b — 펼침 방향 열 때 1회 고정(드래그 중 튐 방지). 홈 작업8 동일.
+    setPanelOpenUp(base.y > vh * 0.5);
     setLingoView("panel");
   }
   // FIX-48+50 P1.5 커밋1e — 패널 드래그 = 캡슐과 동일한 fabPos 공유(패널에서 옮기면 캡슐도 그 자리).
   //   경계 스냅·발행바 예약(clampPos)도 캡슐과 공유 — 항상 뷰포트 완전 수납.
   function onPanelPointerDown(e: React.PointerEvent) {
-    panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: fabPos?.x ?? 0, oy: fabPos?.y ?? 0 };
+    // 작업8b — fabPos 미설정(자동인사가 openPanelAt 미경유로 패널만 열었을 때) 드래그 원점을
+    //   렌더 앵커 폴백과 동일하게(fy = vh-200, x = 우하단 기본) 잡는다. 0 기준이면 첫 드래그가
+    //   델타-from-0 으로 캡슐이 순간이동 → "원하는 방향으로 안 감". 렌더(4730)와 좌표계 일치.
+    const ox = fabPos?.x ?? window.innerWidth - FAB_SIZE - 20;
+    const oy = fabPos?.y ?? window.innerHeight - 200;
+    panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox, oy };
     setPanelDragging(true);
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   }
@@ -4722,7 +4735,8 @@ export function CardStudioPage45({
               {(() => {
                 const vh = typeof window !== "undefined" ? window.innerHeight : 800;
                 const fy = fabPos?.y ?? vh - 200;
-                const openUp = fy > vh * 0.5;
+                // 작업8b — 열 때 고정한 방향 사용(드래그 중 인라인 재계산 금지 → 앵커 튐 해소).
+                const openUp = panelOpenUp;
                 const posStyle = openUp
                   ? { bottom: Math.max(FAB_MARGIN, vh - fy + 8) } // 패널 하단 = 캡슐 위 8px
                   : { top: fy + FAB_SIZE + 8 }; // 패널 상단 = 캡슐 아래 8px
