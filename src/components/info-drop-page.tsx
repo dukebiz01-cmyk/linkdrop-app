@@ -856,7 +856,10 @@ export function InfoDropPage({
   // Phase 1 통합 CTA — 쿠폰 있음 && 예약 컨텍스트 있음(교집합)일 때만 예약+쿠폰 단일 CTA.
   //   단일타입(쿠폰만 / 예약만)은 isCombined=false → 기존 흐름(sticky 쿠폰받기 / 예약하기) 그대로.
   const hasReservationDates = Array.isArray(reservationDates) && reservationDates.length > 0;
-  const isCombined = hasFunnelCoupon && (isReservation || hasReservationDates);
+  // S3-0 — 결합 판정 정합(Day20 락: 결합 = sticky 미표시): 파트너 캘린더 표시 카드
+  //   (coupon+partnerId, showReservationCalendar)도 결합으로 판정. isReservation 은
+  //   showReservationCalendar(:855)에 포함되어 승계.
+  const isCombined = hasFunnelCoupon && (hasReservationDates || showReservationCalendar);
   const reserveCtaLabel = isCombined ? "예약 문의하고 쿠폰 받기" : "예약하기";
   const reservationGuide = MOCK_RESERVATION_SECTION_GUIDE;
   const videoHeadline = isReservation ? safeTitle : pageCopy.sectionTitle;
