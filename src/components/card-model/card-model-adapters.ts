@@ -308,7 +308,9 @@ export function fromStudioState(input: StudioStateInput, preview?: Partial<CardM
       productimage: isCommerce && !!input.productImageUrl,
       product: isCommerce,
       coupon: !!input.selectedCoupon && (input.applied["coupon"] ?? true),
-      link: !!(input.storePhone || input.storeAddress) && (input.applied["link"] ?? true),
+      // FIX-54 — 매장정보 누수 수정: 기본값만 모드 의존(예약=ON 현행 유지 / general·commerce=OFF).
+      //   어느 모드든 사용자가 매장정보 블록 명시 장착(applied.link=true)하면 렌더(도킹 락 보존).
+      link: !!(input.storePhone || input.storeAddress) && (input.applied["link"] ?? (input.buildMode === "reserve")),
       dock: !!input.dockedProduct,
     },
     titleText: isCommerce
