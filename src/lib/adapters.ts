@@ -635,6 +635,8 @@ export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
     //   share_events.expires_at) · serverNow = loader 1회 캡처(offset 보정).
     ...(props.expiresAt ? { couponExpiresAt: props.expiresAt } : {}),
     ...(props.serverNow ? { serverNow: props.serverNow } : {}),
+    // S3-1 — 예약 슬롯 관통(SSR loader initialSlots → 카드 내 예약 존: 스튜디오 cfgDates 거울).
+    ...(props.initialSlots?.length ? { initialSlots: props.initialSlots } : {}),
     ...(props.local
       ? {
           local: {

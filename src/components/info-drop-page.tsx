@@ -806,10 +806,14 @@ export function InfoDropPage({
   // C5 — 흰 셸 미러: 메이커가 흰 카드(#FFFFFF) 저장 시 손님도 라이트 텍스트로(스튜디오 C4b와 동일 판정).
   //   기존 카드(cardColor null/navy 등) → false → 비-info 다크 셸 기존 흰 텍스트 그대로(회귀 0).
   const isLightCard = cardColor === "#FFFFFF";
-  // 거울 수렴 S2 — 라이트 셸 판정 단일화: info(S1)·coupon(S2)은 CardModelBody 흰 카드(FIX-56 정본)
-  //   위라 페이지 크롬 텍스트도 항상 다크. 잔존 variant(reservation·purchase·lead)는 기존
-  //   isLightCard 판정 그대로(무접촉) — S3/S4 수렴 때 이 판정으로 흡수.
-  const isLightShell = resolvedVariant === "info" || resolvedVariant === "coupon" || isLightCard;
+  // 거울 수렴 S2·S3-1 — 라이트 셸 판정 단일화: info(S1)·coupon(S2)·reservation(S3-1)은
+  //   CardModelBody 흰 카드(FIX-56 정본) 위라 페이지 크롬 텍스트도 항상 다크. 잔존
+  //   variant(purchase·lead)는 기존 isLightCard 판정 그대로(무접촉) — S4 수렴 때 흡수.
+  const isLightShell =
+    resolvedVariant === "info" ||
+    resolvedVariant === "coupon" ||
+    resolvedVariant === "reservation" ||
+    isLightCard;
   // C13 S4b — 목적색(스튜디오 MODE_ACCENT 와 단일 소스). 1차 CTA(Wand2·sticky 쿠폰받기·주문예약) 배경에 전파.
   //   미매핑 변형이면 검정(#0A0A0A) 폴백 = 기존 색 유지(회귀 0).
   const accent = VARIANT_ACCENT[resolvedVariant] ?? "#0A0A0A";
@@ -1305,11 +1309,13 @@ export function InfoDropPage({
         // sticky 없는 드롭(정보/구매/상담) = pb-8 만으로 충분.
         hasStickyBar ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "pb-8",
       )}
-      // 셸 배경 — info(S1)·coupon(S2)은 회색(흰 CardModelBody 카드 = 스튜디오 parity · FIX-56 저장색 무시).
-      //   잔존 variant(reservation·purchase·lead)는 navy 유지(파일럿 보호) — S3/S4 몫.
+      // 셸 배경 — info(S1)·coupon(S2)·reservation(S3-1)은 회색(흰 CardModelBody 카드 =
+      //   스튜디오 parity · FIX-56 저장색 무시). 잔존 variant(purchase·lead)는 navy 유지 — S4 몫.
       style={{
         backgroundColor:
-          resolvedVariant === "info" || resolvedVariant === "coupon"
+          resolvedVariant === "info" ||
+          resolvedVariant === "coupon" ||
+          resolvedVariant === "reservation"
             ? "#F5F5F5"
             : (cardColor ?? "#1E3A8A"),
       }}
@@ -1501,67 +1507,73 @@ export function InfoDropPage({
             >
               {pageCopy.label}
             </span>
-            <h2 className={`text-xl font-extrabold leading-snug tracking-ko ${isLightCard ? "text-text-strong" : "text-white"}`}>
+            <h2 className={`text-xl font-extrabold leading-snug tracking-ko ${isLightShell ? "text-text-strong" : "text-white"}`}>
               {pageCopy.sectionTitle}
             </h2>
-            <p className={`text-sm font-medium leading-relaxed tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}>
+            <p className={`text-sm font-medium leading-relaxed tracking-ko ${isLightShell ? "text-text-muted" : "text-white/70"}`}>
               {reservationGuide}
             </p>
-            <p className={`text-xs font-medium ${isLightCard ? "text-text-subtle" : "text-white/60"}`}>{safeLocal.name}</p>
+            <p className={`text-xs font-medium ${isLightShell ? "text-text-subtle" : "text-white/60"}`}>{safeLocal.name}</p>
           </section>
         )}
 
         {isReservation && (
-          // 4d — 예약 코어(영상·제목·한마디·셀링)도 동일 CardBody(A1: 코어만, navy 유지).
-          //   funnelCoupon 생략 → coupon=null → CouponPreview 미렌더(couponPanel 담당 dedup).
-          //   contactSlot 생략 → 전화/길찾기는 secondary-contact-row 담당. reservation-header/캘린더/reservePanel 0터치.
-          //   reservationBlock 무조건 렌더(showCalendar 게이트 X): 예약은 옛 IIFE 가 isReservation 이면
-          //   항상 렌더했고, showCalendar=false 시 calendarPanel 이 fallback("업주가 아직…")을 자체 렌더 → 옛 동작 보존.
-          <DropCardShell
-            cardColor={cardColor ?? "#1E3A8A"}
-            interactive={false}
-            holoOpacity={0.45}
-            boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
-          >
-            {/* C8② — 흰 카드 제목 흰-위-흰 방지(info 동일 패턴). navy면 undefined→회귀 0. */}
-            <div className={isLightCard ? "text-[#0F172A]" : undefined}>
-            <CardBody
-              light={isLightCard}
-              {...toCardBodyProps({
-                videoSourceUrl,
-                videoThumbnailUrl,
-                videoDurationSec,
-                videoSourceLabel,
-                title,
-                makerMessage,
-                keyPoints,
-                cardColor,
-                local,
-                variant,
-              } as unknown as InfoDropPageProps)}
-                couponBlock={
-                  // S23 — 예약+쿠폰 교집합: 보조 "쿠폰 받기"를 쿠폰 패널 아래 인카드 렌더
-                  //   (옛 IIFE 셸 하단 렌더 이동분). 쿠폰 없으면 benefitEventSection 그대로(회귀 0).
-                  combinedCouponOnlyCta ? (
-                    <div className="space-y-3">
-                      {benefitEventSection}
-                      {combinedCouponOnlyCta}
-                    </div>
-                  ) : (
-                    benefitEventSection
-                  )
-                }
-              reservationBlock={
-                <div className="space-y-3">
-                  {calendarPanel}
-                  {billingNotice}
-                </div>
-              }
-              contactBlock={contactRow}
-              shareFooter={shareFooter}
+          // 거울 수렴 S3-1 — reservation 분기 = CardModel 정본 렌더(S1/S2 A방식 동형). 프레임
+          //   navy(DropCardShell)→white(CardModelBody) = FIX-56 흰색 정본 이행.
+          //   · ★거울 게이트: 카드 내 예약 존 = 스튜디오 reserve 미리보기 실렌더와 동형 —
+          //     applied.calendar→"예약하기" 본체 버튼 + dates 있을 때 ReservationPreview(가능일).
+          //     dates 재료 = SSR initialSlots 관통(스튜디오 cfgDates 거울, adapters S3-1).
+          //   · 역할 분리(표시 vs 실행): 카드 내 존 = 스튜디오 동형 표시 + onReserve 는 실행기
+          //     (직접예약 시트, onReservationRequest) 열기만. 인터랙티브 실행기(캘린더·인원·
+          //     예약하기 CTA·결제고지) = 아래 크롬 존치(무조건 렌더 — 옛 reservationBlock 동작 보존).
+          //   · funnelCoupon 주입 = 결합 카드 인카드 쿠폰존(S3-0 isCombined 정합·sticky 미표시,
+          //     쿠폰 받기 = onReserveAndClaim). 구 combinedCouponOnlyCta/benefitEventSection 쿠폰부 대체.
+          //   · local 은 name·reservationUrl 만 주입(발급처 표기 + 슬롯 0 카드의 calendar 버튼
+          //     폴백) — phone/address 미주입 = 카드 내 매장정보 버튼 미렌더(contactRow 크롬 존치).
+          <>
+            <CardModelBody
+              variant="receiver"
+              showShareFooter={false}
+              showJourney={false}
+              actions={{
+                onShare,
+                onCopyLink,
+                onClaimCoupon: onReserveAndClaim,
+                onReserve: () => onReservationRequest?.(),
+              }}
+              model={fromDropDetail(
+                toDropDetailInput({
+                  videoSourceUrl,
+                  videoThumbnailUrl,
+                  videoDurationSec,
+                  videoSourceLabel,
+                  title,
+                  makerMessage,
+                  keyPoints,
+                  cardColor,
+                  variant,
+                  maker,
+                  funnelCoupon,
+                  expiresAt,
+                  serverNow,
+                  initialSlots,
+                  local:
+                    local?.name || local?.reservationUrl
+                      ? { name: local?.name, reservationUrl: local?.reservationUrl ?? null }
+                      : undefined,
+                } as unknown as InfoDropPageProps),
+              )}
             />
+            {eventsSection}
+            <div className="space-y-3">
+              {calendarPanel}
+              {billingNotice}
             </div>
-          </DropCardShell>
+            {contactRow}
+            {/* S3-1 — 라이트 셸 강제(S2 coupon 동형): 공용 shareFooter(isLightCard 판정)는
+                잔존 variant(purchase·lead) 몫. */}
+            {renderShareFooter(true)}
+          </>
         )}
 
         {/* 2. 영상 카드 — 유튜브: lite embed(facade→iframe), 그 외: 썸네일 + onWatchOriginal.
