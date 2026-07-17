@@ -64,6 +64,17 @@ export type CardModel = {
   heroImageUrl?: string;
   /** 핵심 클립 길이 라벨(예: "1:24") ← VideoSlot.durationLabel 발췌. */
   clip?: string;
+  /** 거울 수렴 S1 — 영상 인플레이스 임베드(공용 YouTubeLiteEmbed 재사용). 있으면 히어로가 재생
+   *  가능한 lite embed(썸네일 facade → 클릭 시 iframe)로 렌더. 주입은 fromDropDetail(수신 방향)
+   *  뿐 — fromStudioState 미설정 → 스튜디오 미리보기는 현행 썸네일 유지(렌더 불변). VideoSlot 미러. */
+  videoEmbed?: {
+    videoId: string;
+    thumbnailUrl: string;
+    title: string;
+    isShorts: boolean;
+    durationLabel?: string;
+    sourceLabel?: string;
+  };
 
   /** 브랜드(매장) 소개문 — applied["brand"] 게이트. */
   brandText?: string;

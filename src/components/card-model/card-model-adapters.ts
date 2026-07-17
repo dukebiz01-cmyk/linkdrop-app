@@ -68,6 +68,16 @@ export type DropDetailInput = {
   videoDurationSec?: number;
   /** ← InfoDropPageProps.videoSourceLabel ("YouTube" | "Instagram"). */
   videoSourceLabel?: string;
+  /** 거울 수렴 S1 — 재생 가능한 영상 슬롯(toVideoSlot 결과). 있으면 CardModelBody 히어로가
+   *  YouTubeLiteEmbed 로 렌더. 변환부(toDropDetailInput)가 parseVideoUrl 로 조립(어댑터는 무파싱). */
+  videoEmbed?: {
+    videoId: string;
+    thumbnailUrl: string;
+    title: string;
+    isShorts: boolean;
+    durationLabel?: string;
+    sourceLabel?: string;
+  };
   /** ← InfoDropPageProps.maker.name (public_profiles.display_name). */
   maker?: { name: string };
   /** ← InfoDropPageProps.keyPoints (drop.ai_key_points). */
@@ -184,6 +194,9 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
       : input.description,
     heroImageUrl,
     clip: clipLabel(input.videoDurationSec),
+    // 거울 수렴 S1 — 재생 임베드(수신 방향 전용). 미주입 = 현행 썸네일. 커머스는 상품이미지가
+    //   히어로라 영상 임베드 미적용(정보/쿠폰/예약 영상 카드에서만).
+    ...(!isCommerce && input.videoEmbed ? { videoEmbed: input.videoEmbed } : {}),
     priceText: isCommerce ? won(input.commerce?.priceKrw) : undefined,
     productQty: qty != null && qty > 0 ? String(qty) : undefined,
     // BUG-2 T2 — 한정 배지 단위 라벨(FIX-45c): commerce 재고 단위 관통(미주입 = CardModelBody '개' 폴백).

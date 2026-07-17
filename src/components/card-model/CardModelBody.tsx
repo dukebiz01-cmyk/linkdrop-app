@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
+// 거울 수렴 S1 — 영상 인플레이스 임베드는 공용 부품 재사용(신규 임베드 구현 금지 · 중복 3벌 방지).
+import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 import {
   Calendar,
   Check,
@@ -254,7 +256,13 @@ export function CardModelBody({
           )}
 
           {/* 히어로 미디어 — heroImageUrl 있으면 실이미지, 없으면 정본 placeholder */}
-          {hasHeroMedia ? (
+          {/* 거울 수렴 S1 — videoEmbed 주입 시 인플레이스 재생(공용 YouTubeLiteEmbed 재사용, 신규
+              임베드 구현 0). 미주입(스튜디오 등) = 아래 현행 썸네일 분기 그대로 = 렌더 불변. */}
+          {hasHeroMedia && model.videoEmbed ? (
+            <div className="cm-scale-in relative mt-3 overflow-hidden rounded-2xl ring-1 ring-[#EDEDED]">
+              <YouTubeLiteEmbed {...model.videoEmbed} />
+            </div>
+          ) : hasHeroMedia ? (
             <div className="cm-scale-in relative mt-3 aspect-video overflow-hidden rounded-2xl bg-[#F4F4F5] ring-1 ring-[#EDEDED]">
               {model.heroImageUrl ? (
                 <div className="relative h-full w-full">

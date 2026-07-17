@@ -13,6 +13,8 @@ import type { DropPurpose } from "@/lib/types";
 import { parseVideoUrl } from "@/lib/video-metadata";
 // ST2b-2 — 남은수량 단위 라벨 파생(FIX-45c 순수 모듈 재사용 — 스튜디오·/d 동일 번역).
 import { stockUnitLabelFrom } from "@/components/card-model/booster45";
+// 거울 수렴 S1 — /d → CardModel 마운트용 입력 타입(변환부 toDropDetailInput 반환형).
+import type { DropDetailInput } from "@/components/card-model/card-model-adapters";
 
 const PROD_BASE = "https://app.drop.how";
 
@@ -578,5 +580,62 @@ export function buildProductWidget(props: InfoDropPageProps): ProductWidgetProps
     dropyReward: c.dropyReward,
     // BUG-2 T2 — 재고 단위 라벨 관통(FIX-45c): 한정 배지 단위 동기화(미주입=위젯에서 '개' 폴백).
     stockUnitLabel: c.stockUnitLabel,
+  };
+}
+
+/**
+ * 거울 수렴 S1 — 손님 InfoDropPageProps → DropDetailInput(fromDropDetail 입력). 순수함수.
+ *   · 한글 purpose→영문 variant 는 상류 infoDropAdapter 가 이미 완료(props.variant = DropViewVariant).
+ *   · 영상 임베드 = 공용 toVideoSlot 재사용(parseVideoUrl · 신규 파싱 0).
+ *   · 부제 = makerMessage(구 CardBody info tagline 동일 소스).
+ *   · commerce 는 겹치는 필드만 관통(시그니처 자리) — 45필드(groupBuy/noticeRows/saleEnd) 완성은 S4.
+ *   · initialSlots/journey/shareCount 등 별도 조회 주입분은 호출부(라우트)가 채운다(미주입=미렌더).
+ */
+export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
+  const vs = toVideoSlot(props);
+  const c = props.commerce;
+  return {
+    title: props.title,
+    description: props.makerMessage ?? "",
+    variant: props.variant,
+    cardColor: props.cardColor,
+    videoThumbnailUrl: props.videoThumbnailUrl,
+    videoDurationSec: props.videoDurationSec,
+    videoSourceLabel: props.videoSourceLabel,
+    ...(vs ? { videoEmbed: vs } : {}),
+    ...(props.maker?.name ? { maker: { name: props.maker.name } } : {}),
+    keyPoints: props.keyPoints,
+    ...(c
+      ? {
+          commerce: {
+            name: c.name,
+            priceKrw: c.priceKrw,
+            imageUrl: c.imageUrl,
+            headline: c.headline,
+            sellingPoints: c.sellingPoints,
+            stockLimit: c.stockLimit,
+            stockUnitLabel: c.stockUnitLabel,
+            dropyReward: c.dropyReward,
+          },
+        }
+      : {}),
+    ...(props.funnelCoupon
+      ? {
+          funnelCoupon: {
+            title: props.funnelCoupon.title,
+            valid_until: props.funnelCoupon.valid_until,
+          },
+        }
+      : {}),
+    ...(props.local
+      ? {
+          local: {
+            name: props.local.name,
+            phone: props.local.phone,
+            address: props.local.address,
+            reservationUrl: props.local.reservationUrl ?? null,
+          },
+        }
+      : {}),
   };
 }
