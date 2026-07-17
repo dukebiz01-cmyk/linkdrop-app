@@ -68,6 +68,18 @@
 | 쿠폰 존 | 장착 시 카드 내 렌더 `[code]` (덱 12종 중 쿠폰 블록) | "예약하면 받는 혜택" + **D-day 타이머 배지(D-18 hh:mm:ss)** + 쿠폰 카드(혜택명·쿠폰 증정 chip·기한) | 필드누락(타이머 미리보기 부재 — S0 "쿠폰 타이머 갭" 잔존) |
 | CTA | (장착 전 자리표시) | [쿠폰 받기] **파란(#2563EB 계열) 채움 버튼** + [예약 날짜 선택] collapse | 컴포넌트상이 |
 
+#### S2 소거 기록 (2026-07-17 — /d coupon → CardModelBody 수렴)
+
+닫힘: **카드 프레임**(DropCardShell→CardModelBody, navy→white FIX-56 정본 이행) · **카드 chip**("쿠폰 카드") ·
+**셸 배경**(coupon도 `#F5F5F5`, isLightShell) · **쿠폰 존 거울**(타이머[라우트 확정 expiresAt·serverNow 관통]·
+혜택명·증정 칩·조건 문구·기한 표기 — fromStudioState 동형) · **CTA**(인카드 쿠폰 받기, accent 정본 + couponCtaRef
+IO 재배선으로 sticky 자동 숨김 체인 복원).
+이월(잔존): 제목 소스 상이(스튜디오=매장명 fallback — 스튜디오측 몫) · 쿠폰 캡션 문구 상이("받는 즉시 사용 가능"
+vs 구 "예약을 신청하면 쿠폰이 지갑에 담겨요") · G6 크롬 비대칭(보낸이 헤더·영상요약·문제신고·공유여정) ·
+G3 예약 인트로(S3 몫).
+발견 문제 1(sticky·인카드 CTA 중복 상시 노출) 해소: CardModelBody `couponCtaRef` 슬롯(additive·옵셔널) →
+페이지 크롬 IO(S18-A) 기존 로직에 그대로 재배선. 미주입 시 동작 불변.
+
 ### 1-3. 예약 (스튜디오 예약·쿠폰 ↔ /d reservation)
 
 | 항목 | 스튜디오 | /d | 격차 유형 |
@@ -151,7 +163,7 @@
 | # | 격차 | 소속 트랙 |
 |---|---|---|
 | G1 | 카드색 불일치 (스튜디오 항상 흰 ↔ /d 저장색/네이비) + 팔레트 정본 미기록 | **FIX-56** (선결 — S2~S4 프레임 색이 여기 걸림) |
-| G2 | 쿠폰 variant 본체: DropCardShell↔CardModelBody 프레임·chip·제목 소스·쿠폰 존·타이머 미리보기 부재 | **S2 (coupon)** |
+| G2 | 쿠폰 variant 본체: DropCardShell↔CardModelBody 프레임·chip·제목 소스·쿠폰 존·타이머 미리보기 부재 | **S2 (coupon)** — ✅ 수렴 완료(§1-2 S2 소거 기록). 제목 소스(스튜디오측)만 이월 |
 | G3 | 예약 variant: 인트로 헤더·CTA 색 상이·캘린더 크롬 경계 (본체만 교체, 캘린더 존치 원칙 준수) | **S3 (reservation)** |
 | G4 | 구매 variant: 상품 카드 프레임·재고 chip·발송 박스·주소 노출 재점검 | **S4 (purchase)** |
 | G5 | 키포인트 미리보기 부재 (전 variant, 발행 후에만 보임) | S2 편입 권고 (본체 필드) |
