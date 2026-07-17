@@ -768,8 +768,6 @@ export function CardStudioPage45({
   // 입력 채널 — 마이크 결과로 채워지면 "voice", 손으로 고치기 시작하면 "text"로 복귀.
   const chatChannelRef = useRef<"text" | "voice">("text");
   const chatListRef = useRef<HTMLDivElement>(null);
-  // 패널 확장 기준점 — 캡슐 위치(fabPos)에서 확장, 화면 경계 클램프.
-  const [panelBottom, setPanelBottom] = useState(188);
   const [stripFlash, setStripFlash] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // FIX-6 — 발행 후 카톡 전송 진행 상태(studio-build sending 동형).
@@ -815,24 +813,19 @@ export function CardStudioPage45({
   const [productDateRangeLabel, setProductDateRangeLabel] = useState<string | null>(null);
   const [lastEquipped, setLastEquipped] = useState<string | null>(null);
   const deckRef = useRef<HTMLElement>(null);
-  const FAB_SIZE = 56;
-  const FAB_MARGIN = 12;
-  // FIX-48+50 P1.5 커밋1b — 드래그 놓을 때 하단 발행바(고정 CTA) 겹침 방지 예약 높이.
-  const FAB_BOTTOM_RESERVE = 140;
-  // 작업8c — 패널 폭 ≈ 화면 85%(상한 332px @390). 좌우 이동 여백 확보(홈 동일 공식).
-  const PANEL_MAXW = 332;
-  const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(null);
-  const [fabDragging, setFabDragging] = useState(false);
-  const fabRef = useRef<HTMLDivElement>(null);
-  const fabDrag = useRef({ active: false, moved: false, dx: 0, dy: 0 });
-  const [panelOffset, setPanelOffset] = useState({ x: 0, y: 0 });
-  const [panelDragging, setPanelDragging] = useState(false);
-  // 작업8b — 펼침 방향(위/아래)을 열 때 1회 고정(홈 작업8 이식). 렌더 인라인 재계산 시 드래그 중
-  //   중점 교차로 앵커가 뒤집혀 "크게 펼쳤을 때 이동 안 됨" → 고정으로 해소.
-  //   기본값 true(위로 펼침): 캡슐 기본 위치가 하단(bottom:196)이라 자동인사 첫 펼침도
-  //   openPanelAt 미경유 시 위로 열려 뷰포트 수납(무접촉 자동인사 — 방향 배선만).
-  const [panelOpenUp, setPanelOpenUp] = useState(true);
-  const panelDrag = useRef({ active: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  // B전환 커밋1 — 스튜디오 링고 드래그 폐기: fabPos·⠿·패널 이동 상태 전량 제거(홈 LingoHomeBox 는
+  //   무접촉 — 자체 fabPos 유지). 하단 고정 독/캡슐만. 링고는 고정 발행바 위에 스택하므로 발행바
+  //   실측 높이(publishBarH)만큼 bottom 오프셋(가변 높이·safe-area·게이트 문구 대응).
+  const publishBarRef = useRef<HTMLDivElement>(null);
+  const [publishBarH, setPublishBarH] = useState(96);
+  useEffect(() => {
+    const el = publishBarRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setPublishBarH(el.offsetHeight));
+    ro.observe(el);
+    setPublishBarH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
 
   // 발행 — 기존 체인 재사용. ST2b 스위치 시 원본 제거(studio-build :398-405 동형).
   const [saving, setSaving] = useState(false);
@@ -1551,109 +1544,10 @@ export function CardStudioPage45({
   }
   const canEdit = DECK.some((b) => CONFIGURABLE.includes(b.id) && !GATED_BLOCK_IDS.has(b.id));
 
-  // FIX-16 — 캡슐/점 공용 드래그(정본 FAB 로직 승격): 실측 폭 기준 클램프 + 엣지 스냅.
-  //   위치(fabPos)는 세션 state 로 기억 — 리렌더·액션·상태 전환(점↔캡슐↔패널) 후에도 그 자리.
-  function clampPos(x: number, y: number, w: number, h: number) {
-    const maxX = window.innerWidth - w - FAB_MARGIN;
-    // FIX-48+50 P1.5 커밋1b — 하단은 발행바 예약(FAB_BOTTOM_RESERVE)만큼 위로 클램프(겹침 방지).
-    const maxY = window.innerHeight - h - FAB_BOTTOM_RESERVE;
-    return { x: Math.min(Math.max(FAB_MARGIN, x), maxX), y: Math.min(Math.max(FAB_MARGIN, y), maxY) };
-  }
-  // 작업8c — 패널 실폭(≈85vw, 상한 PANEL_MAXW). 좌우 이동 클램프·렌더·드래그 원점이 공유.
-  function panelWidth() {
-    return Math.min(PANEL_MAXW, Math.round(window.innerWidth * 0.85));
-  }
-  function onFabPointerDown(e: React.PointerEvent<HTMLElement>) {
-    const rect = fabRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    fabDrag.current = { active: true, moved: false, dx: e.clientX - rect.left, dy: e.clientY - rect.top };
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-  }
-  function onFabPointerMove(e: React.PointerEvent<HTMLElement>) {
-    if (!fabDrag.current.active) return;
-    const nx = e.clientX - fabDrag.current.dx;
-    const ny = e.clientY - fabDrag.current.dy;
-    const rect = fabRef.current?.getBoundingClientRect();
-    if (rect && !fabDrag.current.moved) {
-      const dist = Math.hypot(e.clientX - (rect.left + fabDrag.current.dx), e.clientY - (rect.top + fabDrag.current.dy));
-      if (dist > 6) {
-        fabDrag.current.moved = true;
-        setFabDragging(true);
-      }
-    }
-    if (fabDrag.current.moved && rect) setFabPos(clampPos(nx, ny, rect.width, rect.height));
-  }
-  // 탭(무이동) 동작은 표면별로 다름 — onTap 콜백 주입(점 → 캡슐 / 캡슐 → 패널).
-  function onFabPointerUp(onTap: () => void) {
-    if (!fabDrag.current.active) return;
-    const wasDrag = fabDrag.current.moved;
-    fabDrag.current.active = false;
-    fabDrag.current.moved = false;
-    setFabDragging(false);
-    if (wasDrag) {
-      const rect = fabRef.current?.getBoundingClientRect();
-      const w = rect?.width ?? FAB_SIZE;
-      const h = rect?.height ?? FAB_SIZE;
-      setFabPos((prev) => {
-        if (!prev) return prev;
-        const mid = window.innerWidth / 2;
-        const snapX = prev.x + w / 2 < mid ? FAB_MARGIN : window.innerWidth - w - FAB_MARGIN;
-        return clampPos(snapX, prev.y, w, h);
-      });
-    } else {
-      onTap();
-    }
-  }
-  // FIX-48+50 P1.5 커밋1e — 패널은 캡슐 위치(fabPos)를 앵커로 그 자리에서 펼친다(고정 좌표 금지).
-  //   fabPos 미설정이면 현재 캡슐 실측 위치로 초기화 → 접으면 같은 자리 캡슐로 복귀.
+  // B전환 커밋1 — 스튜디오 링고 드래그 폐기(fabPos·⠿·패널 이동 로직 전량 제거). 펼침 = 하단
+  //   고정 독으로 상태 전환만(위치 계산 없음). 호출부(캡슐 탭·마이크·[말 끝났어요])는 이 함수 유지.
   function openPanelAt() {
-    const vh = window.innerHeight;
-    let base = fabPos;
-    if (!base) {
-      const rect = fabRef.current?.getBoundingClientRect();
-      base = rect
-        ? clampPos(rect.left, rect.top, FAB_SIZE, FAB_SIZE)
-        : { x: FAB_MARGIN, y: vh - FAB_BOTTOM_RESERVE - FAB_SIZE };
-      setFabPos(base);
-    }
-    // 작업8b — 펼침 방향 열 때 1회 고정(드래그 중 튐 방지). 홈 작업8 동일.
-    setPanelOpenUp(base.y > vh * 0.5);
     setLingoView("panel");
-  }
-  // FIX-48+50 P1.5 커밋1e — 패널 드래그 = 캡슐과 동일한 fabPos 공유(패널에서 옮기면 캡슐도 그 자리).
-  //   경계 스냅·발행바 예약(clampPos)도 캡슐과 공유 — 항상 뷰포트 완전 수납.
-  function onPanelPointerDown(e: React.PointerEvent) {
-    // 작업8b — fabPos 미설정(자동인사가 openPanelAt 미경유로 패널만 열었을 때) 드래그 원점을
-    //   렌더 앵커 폴백과 동일하게 잡는다. 0 기준이면 첫 드래그가 델타-from-0 으로 순간이동.
-    // 재판정 수술 — x 원점을 렌더된(패널 폭 기준 클램프) left 와 일치시킨다. fabPos.x 는 캡슐
-    //   좌표계([12,vw-56-12])라, openPanelAt(캡슐 탭)로 연 패널은 그 값이 패널 범위([12,vw-pw-12])
-    //   밖(우측)이라 원점≠렌더 → 첫 ~268px 좌드래그가 클램프에 먹혀 "안 움직임". 클램프 후 1:1.
-    const pw = panelWidth();
-    const maxX = Math.max(FAB_MARGIN, window.innerWidth - pw - FAB_MARGIN);
-    const ox = Math.min(Math.max(FAB_MARGIN, fabPos?.x ?? Math.round((window.innerWidth - pw) / 2)), maxX);
-    const oy = fabPos?.y ?? window.innerHeight - 200;
-    panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox, oy };
-    setPanelDragging(true);
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-  }
-  function onPanelPointerMove(e: React.PointerEvent) {
-    if (!panelDrag.current.active) return;
-    const nx = panelDrag.current.ox + (e.clientX - panelDrag.current.sx);
-    const ny = panelDrag.current.oy + (e.clientY - panelDrag.current.sy);
-    // 작업8c — 자유 2축: x는 패널 폭 기준 클램프(패널 완전 수납), y는 캡슐 기준. 강제 스냅 없음.
-    const vw = window.innerWidth;
-    const maxX = Math.max(FAB_MARGIN, vw - panelWidth() - FAB_MARGIN);
-    const maxY = window.innerHeight - FAB_SIZE - FAB_BOTTOM_RESERVE;
-    setFabPos({
-      x: Math.min(Math.max(FAB_MARGIN, nx), maxX),
-      y: Math.min(Math.max(FAB_MARGIN, ny), maxY),
-    });
-  }
-  function onPanelPointerUp() {
-    panelDrag.current.active = false;
-    setPanelDragging(false);
-    // 작업8c — x 강제 엣지 스냅 해제(자유 2축): 옆으로 민 자리에 그대로 → 접으면 캡슐도 그 자리.
-    //   clampPos 는 이동 중 이미 적용(뷰포트 밖 방지). 놓을 때 재배치 없음.
   }
 
   // ── 영상 검색 — 실배선 /api/discover. ST2b 스위치 시 원본 제거(studio-build :606-634 발췌). ──
@@ -2903,7 +2797,18 @@ export function CardStudioPage45({
 
   return (
     // FIX-16 — 하단 스트립 폐지: 본문 패딩은 전송 CTA 기준 원복(pb-[120px]).
-    <div className="min-h-screen pb-[120px] transition-colors duration-300" style={{ backgroundColor: pageBg }}>
+    <div
+      className="min-h-screen transition-colors duration-300"
+      style={{
+        backgroundColor: pageBg,
+        // B전환 커밋1 — 하단 스택(발행바 + 링고 독/캡슐) 위로 콘텐츠(미리보기)가 스크롤되도록 예약.
+        //   펼침=발행바+독(≤52vh) / 접힘=발행바+캡슐(64px). 스텝퍼·미리보기는 독이 열려도 노출.
+        paddingBottom:
+          lingoView === "panel"
+            ? `calc(52vh + ${publishBarH + 16}px)`
+            : `${publishBarH + 80}px`,
+      }}
+    >
       <style>{SL_KEYFRAMES}</style>
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[#EDEDED] bg-white/90 backdrop-blur-lg">
@@ -4706,8 +4611,8 @@ export function CardStudioPage45({
         )}
       </div>
 
-      {/* 카드 드롭하기 (고정 CTA) */}
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#EDEDED] pb-[env(safe-area-inset-bottom)]" style={{ backgroundColor: pageBg }}>
+      {/* 카드 드롭하기 (고정 CTA) — B전환: 링고 독/캡슐은 이 발행바 위에 스택(publishBarH 실측). */}
+      <div ref={publishBarRef} className="fixed inset-x-0 bottom-0 z-50 border-t border-[#EDEDED] pb-[env(safe-area-inset-bottom)]" style={{ backgroundColor: pageBg }}>
         <div style={{ backgroundColor: pageBg }}>
           <div className="mx-auto flex max-w-md flex-col gap-2 px-5 pb-5 pt-4">
             {/* FIX-6 — 발행 성공 후: 기존 studio-build 미러(버튼식) — 카톡 전송(주) + 링크 복사(보조). */}
@@ -4839,52 +4744,15 @@ export function CardStudioPage45({
         <>
           {lingoView === "panel" && (
             <>
-              <div className="sl-fade-in fixed inset-0 z-40 bg-black/25" onClick={() => setLingoView("strip")} />
-              {/* FIX-48+50 P1.5 커밋1e — 패널을 캡슐(fabPos)에서 펼침: 캡슐이 하단이면 위로, 상단이면
-                  아래로 펼쳐 항상 뷰포트 완전 수납(상단 가림 방지). 접으면 같은 자리 캡슐로. */}
-              {(() => {
-                const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-                const vw = typeof window !== "undefined" ? window.innerWidth : 390;
-                const fy = fabPos?.y ?? vh - 200;
-                // 작업8b — 열 때 고정한 방향 사용(드래그 중 인라인 재계산 금지 → 앵커 튐 해소).
-                const openUp = panelOpenUp;
-                // 작업8c — 좌우 자유 이동: left = fabPos.x(패널 폭 기준 클램프), width = 85vw(≤332).
-                const pw = Math.min(PANEL_MAXW, Math.round(vw * 0.85));
-                const fx = fabPos?.x ?? Math.round((vw - pw) / 2);
-                let left = Math.min(Math.max(FAB_MARGIN, fx), Math.max(FAB_MARGIN, vw - pw - FAB_MARGIN));
-                // 3차 열림 보정 — 클램프 후에도 좌/우 여백이 12px 미만이면(초협폭) 중앙 수납. 정상
-                //   경로(여백 ≥12)에선 미개입 = fabPos 공유 계약 유지(과보정 금지).
-                if (left < FAB_MARGIN || vw - (left + pw) < FAB_MARGIN) left = Math.max(FAB_MARGIN, Math.round((vw - pw) / 2));
-                const vert = openUp
-                  ? { bottom: Math.max(FAB_MARGIN, vh - fy + 8) } // 패널 하단 = 캡슐 위 8px
-                  : { top: fy + FAB_SIZE + 8 }; // 패널 상단 = 캡슐 아래 8px
-                const posStyle = { left, width: pw, ...vert };
-                return (
-              <div className="sl-slide-up fixed z-40" style={posStyle}>
-                <div className="relative rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)]">
-                  {/* 작업12 — LED 러닝 라이트 렌더 제거(패널). */}
-                  {/* T5 — 대화 추가로 패널이 길어질 수 있어 내부 스크롤(뷰포트 55~60% 상한 · 키 안 넘겨받음). */}
-                  <div className="relative max-h-[58vh] overflow-y-auto">
-                  {/* 드래그 핸들 */}
-                  <div
-                    onPointerDown={onPanelPointerDown}
-                    onPointerMove={onPanelPointerMove}
-                    onPointerUp={onPanelPointerUp}
-                    onPointerCancel={onPanelPointerUp}
-                    className="mx-auto mb-2 flex h-4 w-full max-w-[120px] cursor-grab touch-none items-center justify-center active:cursor-grabbing"
-                    aria-label="패널 옮기기"
-                  >
-                    <span className="h-1.5 w-10 rounded-full bg-[#E0E0E0]" />
-                  </div>
-                  {/* 3차 히트영역 수술 — 드래그 시작 = 헤더 행 전체(그래버 한 점 → 행 전체).
-                      스피커·접기 버튼만 stopPropagation(그 위에선 드래그 대신 토글). */}
-                  <div
-                    className={`flex touch-none select-none items-center gap-2.5 ${panelDragging ? "cursor-grabbing" : "cursor-grab"}`}
-                    onPointerDown={onPanelPointerDown}
-                    onPointerMove={onPanelPointerMove}
-                    onPointerUp={onPanelPointerUp}
-                    onPointerCancel={onPanelPointerUp}
-                  >
+              {/* B전환 커밋1 — 펼침 = 하단 고정 독(dock). 부유 패널·백드롭·⠿ 드래그·fabPos 위치계산
+                  전량 폐기(스튜디오 한정). 화면 하단 고정, 위 영역(스텝퍼+미리보기)은 그대로 노출.
+                  내부 스크롤(대화가 길어져도 독 높이 ≤52vh). 접기=헤더 ChevronDown(백드롭 클릭 없음).
+                  시안 정본 .lingo: 흰 배경·상단 보더 #E3E1DA·상단 그림자·라운드 18px 상단만. */}
+              <div className="sl-slide-up fixed inset-x-0 z-40" style={{ bottom: publishBarH }}>
+                <div className="mx-auto w-full max-w-md rounded-t-[18px] border-t border-[#E3E1DA] bg-white [box-shadow:0_-3px_12px_rgba(0,0,0,0.05)]">
+                  <div className="relative max-h-[52vh] overflow-y-auto px-4 pb-4 pt-3">
+                  {/* 독 헤더 — 번호 배지(펄스)+지금 N번 라벨+스피커 토글(드래그 폐기 → 정적 행). */}
+                  <div className="flex items-center gap-2.5">
                     <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
                       <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2.25} />
                       <Sparkles className="absolute -right-0.5 -top-0.5 h-[11px] w-[11px]" strokeWidth={2.5} fill="currentColor" />
@@ -5248,21 +5116,15 @@ export function CardStudioPage45({
                   </div>
                 </div>
               </div>
-                );
-              })()}
             </>
           )}
 
-          {/* FIX-16 — 단일 플로팅 캡슐(하단 스트립 대체): 아바타 + 한줄 안내(truncate, 두 줄 금지)
-              + 단계 점 축약 + [계속] 미니 버튼. 드래그 이동(엣지 스냅)·위치 기억(fabPos state).
-              탭 = 그 자리 기준 패널 확장. LED 는 캡슐 테두리(rounded-full inherit). */}
-          {/* FIX-43 — 듣는 중: 캡슐이 파형 패널로 펼쳐짐(같은 fixed 좌표 = 위치 기억 그대로,
-              별도 저장 키 0). 파형 AudioContext 는 패널 언마운트가 정리. */}
+          {/* B전환 커밋1 — 접힘 = 하단 고정 캡슐(부유·드래그·⠿·fabPos·엣지스냅 폐기). 아바타/번호
+              배지 + 한줄 안내(truncate) + 제안 칩 + 마이크 레일. 탭 = 하단 독 펼침.
+              FIX-43 — 듣는 중: 파형 패널(VoiceWavePanel45)로 교체(발행바 위 동일 고정 위치). */}
           {lingoView === "strip" && !mirrorOpen && voiceOpen && (
-            <div
-              className="fixed z-40"
-              style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
-            >
+            <div className="fixed inset-x-0 z-40 flex justify-center px-3 pb-3" style={{ bottom: publishBarH }}>
+              {/* B전환 커밋1 — 듣는 중 파형 패널도 하단 중앙 고정(발행바 위 스택, fabPos 폐기). */}
               <VoiceWavePanel45
                 listening={voice.listening}
                 interimText={voiceInterim}
@@ -5294,21 +5156,21 @@ export function CardStudioPage45({
           )}
           {lingoView === "strip" && !mirrorOpen && !voiceOpen && (
             <div
-              ref={fabRef}
               role="button"
-              aria-label="링고AI — 탭하면 패널이 열려요 · 끌면 옮겨요"
-              onPointerDown={onFabPointerDown}
-              onPointerMove={onFabPointerMove}
-              onPointerUp={() => onFabPointerUp(openPanelAt)}
-              onPointerCancel={() => onFabPointerUp(openPanelAt)}
-              className={`fixed z-40 flex h-[72px] w-[300px] max-w-[86vw] touch-none select-none items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white pl-2 pr-2 shadow-[0_14px_30px_-10px_rgba(15,23,42,0.35)] ${
-                fabDragging ? "scale-[1.03] cursor-grabbing" : "cursor-grab transition-transform duration-200"
-              }`}
-              style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
+              tabIndex={0}
+              aria-label="링고AI — 탭하면 대화 독이 열려요"
+              onClick={() => openPanelAt()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openPanelAt();
+                }
+              }}
+              className="fixed inset-x-0 z-40 mx-auto flex h-[64px] w-full max-w-md cursor-pointer select-none items-center gap-2 rounded-t-[18px] border-t border-[#E3E1DA] bg-white px-3.5 [box-shadow:0_-3px_12px_rgba(0,0,0,0.05)]"
+              style={{ bottom: publishBarH }}
             >
-              {/* 작업12 — LED 러닝 라이트 렌더 제거(캡슐). busy = 아래 Loader2 스피너로 표시. */}
-              {/* FIX-48+50 P1.5 커밋1b — 드래그 손잡이(⠿) 시각 표시(캡슐 전체가 드래그 대상). */}
-              <GripVertical className="h-4 w-4 shrink-0 text-[#C4C4C4]" strokeWidth={2} aria-hidden="true" />
+              {/* B전환 커밋1 — 접힘 = 하단 고정 캡슐(부유·드래그·⠿·fabPos 폐기). 탭=독 펼침. 마이크
+                  레일 유지. 우측 칩/마이크는 stopPropagation 으로 바 탭(펼침)과 분리. */}
               {/* FIX-48+50 P1.5 커밋1g — 캡슐 아바타 자리에 현재 번호 배지(패널과 동일 배지·펄스로 통일).
                   busy=스피너 / 현재 단계 있음=번호 배지 / 없음(완주)=기존 아바타. */}
               {stripBusy ? (
@@ -5345,7 +5207,8 @@ export function CardStudioPage45({
                   <button
                     type="button"
                     onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       const idx = DECK.findIndex((b) => b.id === suggestion.id);
                       if (idx >= 0) setDeckIndex(idx);
                       equip(suggestion);
@@ -5370,7 +5233,8 @@ export function CardStudioPage45({
                       <button
                         type="button"
                         onPointerDown={(e) => e.stopPropagation()}
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setDockSkipped(true);
                           setSuggestVisible(false);
                           flashStrip("도킹은 건너뛰었어요 — 발행으로 마무리해요");
@@ -5384,7 +5248,8 @@ export function CardStudioPage45({
                         type="button"
                         aria-label="제안 닫기"
                         onPointerDown={(e) => e.stopPropagation()}
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setDismissedSuggests((d) => [...d, suggestion.id]);
                           setSuggestVisible(false);
                         }}
