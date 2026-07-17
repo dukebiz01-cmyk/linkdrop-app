@@ -212,6 +212,31 @@ const LINGO_MODE_LABELS: Record<string, string> = {
   reserve: "예약·쿠폰",
   commerce: "상품판매",
 };
+// P3 커밋2 — 0단계 목적 3종 정본 라벨(발화·칩 표기). 631af55 유지: 공동구매는 4번째 목적이 아니라
+//   commerce(상품 판매) 안의 판매방식 — 여기 매핑도 commerce 로 흡수(모드 전환 오해 차단).
+const PURPOSE_SPEAK_LABEL: Record<BuildMode, string> = {
+  general: "정보 알리기",
+  reserve: "예약·쿠폰",
+  commerce: "상품 판매",
+};
+// 발화 답 → 목적 매핑(정본만, LLM 재해석 0). 키워드 우선 → 번호 지목 폴백 → 애매('몰라' 등).
+const PURPOSE_NUM: Record<"1" | "2" | "3", BuildMode> = { "1": "general", "2": "reserve", "3": "commerce" };
+const PURPOSE_NUM_WORDS: Record<string, BuildMode> = {
+  "1": "general", "1번": "general", 일: "general", 일번: "general", 하나: "general", 첫번째: "general", 첫째: "general",
+  "2": "reserve", "2번": "reserve", 이: "reserve", 이번: "reserve", 둘: "reserve", 두번째: "reserve", 둘째: "reserve",
+  "3": "commerce", "3번": "commerce", 삼: "commerce", 삼번: "commerce", 셋: "commerce", 세번째: "commerce", 셋째: "commerce",
+};
+function mapSpokenPurpose(raw: string): BuildMode | "ambiguous" {
+  const t = raw.replace(/\s+/g, "").replace(/[.,!?~…。、！？]+$/u, "");
+  // 631af55 — 공동구매/공구 = commerce 판매방식(모드 아님). 판매 계열 최우선.
+  if (/(판매|팔|상품|커머스|쇼핑|주문|공동구매|공구|마켓|장사)/.test(t)) return "commerce";
+  if (/(예약|쿠폰|할인|방문|부킹|손님)/.test(t)) return "reserve";
+  if (/(정보|알리|소개|홍보|일반|링크|영상|공유|그냥)/.test(t)) return "general";
+  if (PURPOSE_NUM_WORDS[t]) return PURPOSE_NUM_WORDS[t];
+  const digit = t.match(/^([123])번?$/);
+  if (digit) return PURPOSE_NUM[digit[1] as "1" | "2" | "3"];
+  return "ambiguous";
+}
 // LINGO-V2b C2 — setField 값 상한. READ 판정: title(cfgTitle)·한마디(cfgSubtitle) 입력칸과
 //   저장측(curator_message) 모두 명시 상한 부재 → 스펙 지시 100자 채택(둘 동일 준용).
 const LINGO_FIELD_MAX = 100;
@@ -568,6 +593,9 @@ export function CardStudioPage45({
     initialPurpose === "구매" ? "commerce" : initialPurpose === "예약" || initialPurpose === "쿠폰" ? "reserve" : "general";
 
   const [mode, setMode] = useState<BuildMode>(initialMode);
+  // P3 커밋2 — 목적 확정 여부(연속 대화 0단계 게이트). ?purpose 진입 = 확정. 탭 전환(doSwitchMode)·
+  //   0단계 음성/칩 선택 시 확정. 미확정으로 마이크 ON = AI 가 먼저 '무엇을 만들지' 묻는다.
+  const purposeConfirmedRef = useRef(initialPurpose != null);
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [cardColor, setCardColor] = useState(CARD_BASE);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -848,6 +876,7 @@ export function CardStudioPage45({
   //   → 제작 중 스티키 탭 오터치가 즉시 전체 초기화로 이어지던 것이 원인 — 확인 1회 게이트.
   const [pendingMode, setPendingMode] = useState<BuildMode | null>(null);
   const doSwitchMode = (next: BuildMode) => {
+    purposeConfirmedRef.current = true; // P3 커밋2 — 명시 모드 선택 = 목적 확정(0단계 재발동 금지).
     setMode(next);
     setApplied({});
     setDeckIndex(0);
@@ -2592,6 +2621,10 @@ export function CardStudioPage45({
   const [convMode, setConvMode] = useState(false);
   const [convPaused, setConvPaused] = useState(false);
   const [convPreview, setConvPreview] = useState<string | null>(null);
+  // P3 커밋2 — 연속 대화 0단계(목적 선택). convPurposeRef=true 동안 답변은 서버 전송 대신 로컬
+  //   목적 매핑. convPurposeChips=칩(말/탭 병행) 노출.
+  const [convPurposeChips, setConvPurposeChips] = useState(false);
+  const convPurposeRef = useRef(false);
   const convActiveRef = useRef(false);
   const convFinalRef = useRef<string | null>(null);
   const convBusyRef = useRef(false); // 프리뷰~전송~낭독 동안 재청취 금지(중복·에코 차단).
@@ -2629,7 +2662,71 @@ export function CardStudioPage45({
     //   VoiceWavePanel 대화 토글 탭) 동기 경로에서 호출 — setTimeout/async 뒤로 미루면 브라우저
     //   자동재생 정책에 막혀 소리가 안 난다. 에코가드·재청취·무음대기·종료(OFF)는 기존 재사용.
     if (voice.listening) voice.stopListening(); // 발화 전 STT 정지(에코 차단).
+    // P3 커밋2 — 목적 미확정 진입이면 0단계(무엇을 만들지)부터. 확정이면 바로 번호 인터뷰 리드.
+    if (!purposeIsDecided()) {
+      startPurposeStage();
+      return;
+    }
     convLeadSpeak();
+  }
+  // P3 커밋2 — 목적 확정 판정: ?purpose 진입/탭 전환/0단계 선택으로 확정, 또는 이미 제작 흔적이
+  //   있으면(진행 중) 확정으로 간주 → 0단계 생략(과질문 금지).
+  function purposeIsDecided() {
+    return (
+      purposeConfirmedRef.current ||
+      !!selectedVideo ||
+      formProgress.nameSet ||
+      formProgress.photoSet ||
+      !!cfgSubtitle.trim() ||
+      Object.values(applied).some(Boolean)
+    );
+  }
+  // P3 커밋2 — 0단계 개시: AI 가 먼저 목적을 묻고 칩 노출. 발화는 자연어(①②③ 대신), 번호 선택지는
+  //   칩이 담당(말/탭 병행). 첫 speak 는 startConvMode(사용자 제스처) 동기 경로 유지.
+  function startPurposeStage() {
+    convPurposeRef.current = true;
+    setConvPurposeChips(true);
+    speakConv("어떤 걸 만들까요? 정보 알리기, 예약·쿠폰, 상품 판매 중에 말씀하거나 아래 버튼을 눌러 주세요.");
+  }
+  // P3 커밋2 — 목적 스테이지 공용 발화(텍스트 병행 + 낭독 종료 후 재청취). 에코가드 동일.
+  function speakConv(text: string) {
+    chat.notify(text);
+    convBusyRef.current = true;
+    voice.speak(text, () => {
+      convBusyRef.current = false;
+      convListen();
+    });
+  }
+  // P3 커밋2 — 발화 답 처리: 정본 매핑 → 애매면 예시로 되물음, 확정이면 pickPurpose.
+  function handleSpokenPurpose(raw: string) {
+    const m = mapSpokenPurpose(raw);
+    if (m === "ambiguous") {
+      speakConv("예를 들어 정보 알리기, 예약·쿠폰, 상품 판매처럼 말씀하거나 아래 버튼을 눌러 주세요. 어떤 걸 만들까요?");
+      return;
+    }
+    pickPurpose(m);
+  }
+  // P3 커밋2 — 목적 확정(발화·칩 공용). 사업자 전용(reserve/commerce) 권한 없으면 정직 안내 후
+  //   목적 스테이지 유지(재질문). 확정 시 모드 세팅(정본 전환) → "○○로 시작할게요 + 1번 질문" 발화 →
+  //   번호 인터뷰 진입. 631af55: 기본 판매방식 full(공동구매는 이후 폼 신호로 분기 — 모드 아님).
+  function pickPurpose(key: BuildMode) {
+    if (voice.listening) voice.stopListening();
+    if (key !== "general" && !isBusiness) {
+      speakConv("예약·판매 카드는 사업자 인증을 받은 분만 만들 수 있어요. 지금은 정보 알리기로 만들 수 있어요. 정보로 시작할까요?");
+      return; // 목적 스테이지 유지(convPurposeRef true) — 재청취.
+    }
+    convPurposeRef.current = false;
+    setConvPurposeChips(false);
+    purposeConfirmedRef.current = true;
+    if (key !== mode) doSwitchMode(key);
+    const first = getInterviewJourney(key, "full")[0];
+    const lead = `${PURPOSE_SPEAK_LABEL[key]}로 시작할게요. ${first.no}번 ${first.label}부터 시작해 볼까요?`;
+    chat.notify(lead);
+    convBusyRef.current = true;
+    voice.speak(lead, () => {
+      convBusyRef.current = false;
+      convListen();
+    });
   }
   // P3 커밋1 — 현재 번호 질문 발화(창작 0 — interview-steps45 정본 인용 = 자동인사 seed 와 동일
   //   문구). 발화 동안 convBusyRef=true(재청취 금지) → 낭독 종료 후 convListen. TTS off/미지원이면
@@ -2653,6 +2750,8 @@ export function CardStudioPage45({
     convActiveRef.current = false;
     convBusyRef.current = false;
     convFinalRef.current = null;
+    convPurposeRef.current = false; // P3 커밋2 — 0단계 잔여 상태 정리(재진입 청결).
+    setConvPurposeChips(false);
     setConvMode(false);
     setConvPaused(false);
     setConvPreview(null);
@@ -2778,8 +2877,14 @@ export function CardStudioPage45({
       const t = (convFinalRef.current ?? "").trim();
       convFinalRef.current = null;
       if (t) {
-        convBusyRef.current = true;
         convIdleAtRef.current = Date.now();
+        // P3 커밋2 — 0단계(목적 선택) 답변은 서버 전송 X: 로컬 정본 매핑만(프리뷰·send 우회).
+        //   handleSpokenPurpose 가 자체적으로 busy/speak/재청취를 관리(에코가드 동일).
+        if (convPurposeRef.current) {
+          handleSpokenPurpose(t);
+          return;
+        }
+        convBusyRef.current = true;
         setConvPreview(t);
         const timer = setTimeout(() => {
           setConvPreview(null);
@@ -5173,6 +5278,17 @@ export function CardStudioPage45({
                 onToggleConv={inAppNoMic ? undefined : startConvMode}
                 onEndConv={endConvMode}
                 onResume={resumeConvMode}
+                // P3 커밋2 — 0단계 목적 칩(말/탭 병행). 사업자 아님이면 예약·판매는 잠금 안내로 흡수되나
+                //   칩은 3종 노출(탭 시 pickPurpose 가 권한 정직 안내). 정본 라벨(①②③)만.
+                purposeChoices={
+                  convPurposeChips
+                    ? [
+                        { key: "general", label: "① 정보 알리기", onPick: () => pickPurpose("general") },
+                        { key: "reserve", label: "② 예약·쿠폰", onPick: () => pickPurpose("reserve") },
+                        { key: "commerce", label: "③ 상품 판매", onPick: () => pickPurpose("commerce") },
+                      ]
+                    : undefined
+                }
               />
             </div>
           )}

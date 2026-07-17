@@ -42,6 +42,7 @@ export function VoiceWavePanel45({
   onToggleConv,
   onEndConv,
   onResume,
+  purposeChoices,
 }: {
   /** STT 실동작 여부 — "듣고 있어요" 라벨은 이때만(§0 정직 표기). */
   listening: boolean;
@@ -63,6 +64,8 @@ export function VoiceWavePanel45({
   onToggleConv?: () => void;
   onEndConv?: () => void;
   onResume?: () => void;
+  /** P3 커밋2 — 연속 대화 0단계(목적 선택) 칩. 말/탭 병행 — 있으면 [대화 끝내기] 위에 노출. */
+  purposeChoices?: { key: string; label: string; onPick: () => void }[];
 }) {
   const barsRef = useRef<Array<HTMLSpanElement | null>>([]);
   // null = 초기화 중(막대 바닥 상태) / true = 실입력 파형 / false = 폴백(점 3개).
@@ -188,6 +191,23 @@ export function VoiceWavePanel45({
 
       {/* FIX-48 — 버튼: 1회 모드 = [취소|말 끝났어요](무변경) / 대화 모드 = [대화 끝내기]
           (+대기 시 [계속하기]). [대화 모드] 토글은 1회 모드에서만 노출. */}
+      {/* P3 커밋2 — 목적 선택 칩(말/탭 병행). 발화가 어려운 사용자·오인식 대비 탭 경로. */}
+      {convMode && purposeChoices && purposeChoices.length > 0 ? (
+        <div className="mt-3 flex flex-col gap-1.5">
+          {purposeChoices.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={c.onPick}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="h-11 w-full rounded-xl text-[13px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-[0.98]"
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {convMode ? (
         <div className="mt-3 flex gap-1.5">
           {paused && onResume ? (
