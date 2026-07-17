@@ -807,6 +807,8 @@ export function CardStudioPage45({
   const FAB_MARGIN = 12;
   // FIX-48+50 P1.5 커밋1b — 드래그 놓을 때 하단 발행바(고정 CTA) 겹침 방지 예약 높이.
   const FAB_BOTTOM_RESERVE = 140;
+  // 작업8c — 패널 폭 ≈ 화면 85%(상한 332px @390). 좌우 이동 여백 확보(홈 동일 공식).
+  const PANEL_MAXW = 332;
   const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(null);
   const [fabDragging, setFabDragging] = useState(false);
   const fabRef = useRef<HTMLDivElement>(null);
@@ -1557,6 +1559,10 @@ export function CardStudioPage45({
     const maxY = window.innerHeight - h - FAB_BOTTOM_RESERVE;
     return { x: Math.min(Math.max(FAB_MARGIN, x), maxX), y: Math.min(Math.max(FAB_MARGIN, y), maxY) };
   }
+  // 작업8c — 패널 실폭(≈85vw, 상한 PANEL_MAXW). 좌우 이동 클램프·렌더·드래그 원점이 공유.
+  function panelWidth() {
+    return Math.min(PANEL_MAXW, Math.round(window.innerWidth * 0.85));
+  }
   function onFabPointerDown(e: React.PointerEvent<HTMLElement>) {
     const rect = fabRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -1618,9 +1624,9 @@ export function CardStudioPage45({
   //   경계 스냅·발행바 예약(clampPos)도 캡슐과 공유 — 항상 뷰포트 완전 수납.
   function onPanelPointerDown(e: React.PointerEvent) {
     // 작업8b — fabPos 미설정(자동인사가 openPanelAt 미경유로 패널만 열었을 때) 드래그 원점을
-    //   렌더 앵커 폴백과 동일하게(fy = vh-200, x = 우하단 기본) 잡는다. 0 기준이면 첫 드래그가
-    //   델타-from-0 으로 캡슐이 순간이동 → "원하는 방향으로 안 감". 렌더(4730)와 좌표계 일치.
-    const ox = fabPos?.x ?? window.innerWidth - FAB_SIZE - 20;
+    //   렌더 앵커 폴백과 동일하게 잡는다. 0 기준이면 첫 드래그가 델타-from-0 으로 순간이동.
+    //   작업8c — x 원점도 렌더 폴백(가운데)과 일치 → 좌우 드래그 1:1 비례.
+    const ox = fabPos?.x ?? Math.round((window.innerWidth - panelWidth()) / 2);
     const oy = fabPos?.y ?? window.innerHeight - 200;
     panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox, oy };
     setPanelDragging(true);
@@ -1630,17 +1636,20 @@ export function CardStudioPage45({
     if (!panelDrag.current.active) return;
     const nx = panelDrag.current.ox + (e.clientX - panelDrag.current.sx);
     const ny = panelDrag.current.oy + (e.clientY - panelDrag.current.sy);
-    setFabPos(clampPos(nx, ny, FAB_SIZE, FAB_SIZE));
+    // 작업8c — 자유 2축: x는 패널 폭 기준 클램프(패널 완전 수납), y는 캡슐 기준. 강제 스냅 없음.
+    const vw = window.innerWidth;
+    const maxX = Math.max(FAB_MARGIN, vw - panelWidth() - FAB_MARGIN);
+    const maxY = window.innerHeight - FAB_SIZE - FAB_BOTTOM_RESERVE;
+    setFabPos({
+      x: Math.min(Math.max(FAB_MARGIN, nx), maxX),
+      y: Math.min(Math.max(FAB_MARGIN, ny), maxY),
+    });
   }
   function onPanelPointerUp() {
     panelDrag.current.active = false;
     setPanelDragging(false);
-    // 좌우 엣지 스냅(캡슐과 동일 규칙).
-    setFabPos((prev) => {
-      if (!prev) return prev;
-      const snapX = prev.x + FAB_SIZE / 2 < window.innerWidth / 2 ? FAB_MARGIN : window.innerWidth - FAB_SIZE - FAB_MARGIN;
-      return clampPos(snapX, prev.y, FAB_SIZE, FAB_SIZE);
-    });
+    // 작업8c — x 강제 엣지 스냅 해제(자유 2축): 옆으로 민 자리에 그대로 → 접으면 캡슐도 그 자리.
+    //   clampPos 는 이동 중 이미 적용(뷰포트 밖 방지). 놓을 때 재배치 없음.
   }
 
   // ── 영상 검색 — 실배선 /api/discover. ST2b 스위치 시 원본 제거(studio-build :606-634 발췌). ──
@@ -4734,15 +4743,21 @@ export function CardStudioPage45({
                   아래로 펼쳐 항상 뷰포트 완전 수납(상단 가림 방지). 접으면 같은 자리 캡슐로. */}
               {(() => {
                 const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+                const vw = typeof window !== "undefined" ? window.innerWidth : 390;
                 const fy = fabPos?.y ?? vh - 200;
                 // 작업8b — 열 때 고정한 방향 사용(드래그 중 인라인 재계산 금지 → 앵커 튐 해소).
                 const openUp = panelOpenUp;
-                const posStyle = openUp
+                // 작업8c — 좌우 자유 이동: left = fabPos.x(패널 폭 기준 클램프), width = 85vw(≤332).
+                const pw = Math.min(PANEL_MAXW, Math.round(vw * 0.85));
+                const fx = fabPos?.x ?? Math.round((vw - pw) / 2);
+                const left = Math.min(Math.max(FAB_MARGIN, fx), Math.max(FAB_MARGIN, vw - pw - FAB_MARGIN));
+                const vert = openUp
                   ? { bottom: Math.max(FAB_MARGIN, vh - fy + 8) } // 패널 하단 = 캡슐 위 8px
                   : { top: fy + FAB_SIZE + 8 }; // 패널 상단 = 캡슐 아래 8px
+                const posStyle = { left, width: pw, ...vert };
                 return (
-              <div className="sl-slide-up fixed inset-x-0 z-40 px-5" style={posStyle}>
-                <div className="relative mx-auto max-w-md rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)]">
+              <div className="sl-slide-up fixed z-40" style={posStyle}>
+                <div className="relative rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)]">
                   {/* FIX-17 — LED 러닝 라이트(패널 동일, 안쪽 밴드·명시 radius 재구현).
                       콘텐츠는 아래 relative 레이어 — 흰 덮개 위에 그려지도록(페인트 순서). */}
                   {ledOn && <span className="sl-led-ring sl-led-ring--panel" aria-hidden="true" />}
