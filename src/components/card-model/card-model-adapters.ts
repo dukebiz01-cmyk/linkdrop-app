@@ -1,5 +1,7 @@
 import { Calendar, MessageCircle, Newspaper, ShoppingBag, Tag } from "lucide-react";
 import type { CardJourneyNode, CardModel } from "./card-model.types";
+// S4 — 부스터 칩·공동구매 산출은 스튜디오(CardStudioPage45 :2146·:2170)와 동일 순수 모듈 소비(거울 성립).
+import { buildBoosterChips, buildGroupBuyView } from "./booster45";
 
 /**
  * CardModel 어댑터 2방향 — READ 6항 매핑표 기준.
@@ -95,6 +97,17 @@ export type DropDetailInput = {
     /** BADGE-ⓑ — 드로피 예상 보상(floor(dropy_rate×price)). 거울 수렴 S0: 값은 안 쓰고 존재
      *  여부만 dropyReady 신호로 변환(숫자 미노출 락). 미주입 = 라인 미렌더. */
     dropyReward?: number;
+    /** S4 — 외부 구매 링크(자체업로드 합성 URL 포함). 모델에 URL 미운반 — CTA 액션은
+     *  페이지가 actions.onPreorder 분기로 주입(어댑터는 신호만). */
+    buyUrl?: string;
+    /** S4 — 자체업로드 상품(CTA "주문예약" 분기·품절 칩 게이트 신호). */
+    selfUpload?: boolean;
+    /** S4 — 수확·발송 예정일(yyyy-mm-dd, 신선 원물만). productDateRangeLabel 가공 재료. */
+    harvestDate?: string | null;
+    /** S4 — 판매기간 마감(yyyy-mm-dd). 부스터 D-day 근거(booster45 ddayLabel — 스튜디오 동일 모듈). */
+    saleEndIso?: string;
+    /** S4 — 공동구매 원시 키(buildGroupBuyView 입력 — 스튜디오 :2170 동일 빌더). */
+    groupBuy?: { targetN: number; priceKrw: number; deadline: string | null };
   };
   /** ← InfoDropPageProps.remainingStock (get_drop_detail v8.1 파생 재고). */
   remainingStock?: number | null;
@@ -194,6 +207,46 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
   const dock = input.attachedProducts?.[0];
   const qty = input.remainingStock ?? input.commerce?.stockLimit ?? null;
 
+  // ── S4 — purchase 거울 수렴(신규 매핑 · 렌더 신설 0, CardModelBody 기존 섹션 재사용) ──
+  // 품절 = 페이지 RestockAlert 게이트(:1941-1944)와 동형: selfUpload + 파생 재고 0 이하.
+  const soldOut =
+    isCommerce && !!input.commerce?.selfUpload && input.remainingStock != null && input.remainingStock <= 0;
+  // todayIso = serverNow(라우트 loader 고정값) KST 변환 — SSR/클라 동일 산출(하이드레이션 안전).
+  //   serverNow 미주입 = D-day 미산출(가짜 시계 금지 · placeholder 는 saleEndIso null 이라 미사용).
+  const todayIso = input.serverNow
+    ? new Date(Date.parse(input.serverNow) + 9 * 3600_000).toISOString().slice(0, 10)
+    : null;
+  // 부스터 칩 — 스튜디오(:2146)와 동일 모듈 buildBoosterChips 소비. 수량 칩은 미산출(stockLimit
+  //   null): 수량은 기존 productQty("한정 N개", 판매가 행)가 담당 — 이중 표기 방지.
+  //   orderCount·benefits = 수신 공급원 부재 → 미주입(가짜값 금지).
+  const boosterChips = isCommerce
+    ? buildBoosterChips({
+        stockLimit: null,
+        soldOut,
+        saleEndIso: todayIso ? (input.commerce?.saleEndIso ?? null) : null,
+        todayIso: todayIso ?? "1970-01-01",
+        groupBuyActive: !!input.commerce?.groupBuy,
+      })
+    : [];
+  // 공동구매 — 스튜디오(:2170)·페이지 GroupBuySection 과 동일 빌더. joinedCount 실집계 입력
+  //   부재 → null(진행률 미렌더 — 가짜 집계 금지).
+  const groupBuyView =
+    isCommerce && input.commerce?.groupBuy
+      ? buildGroupBuyView({
+          targetN: input.commerce.groupBuy.targetN,
+          achievedPriceKrw: input.commerce.groupBuy.priceKrw,
+          joinedCount: null,
+        })
+      : null;
+  // 수확·발송 칩 — 렌더 접두 "수확·발송 "(:522)과 합쳐 ProductWidget(:130) 문구 동형
+  //   ("M월 D일 수확·발송 예정" ↔ "수확·발송 M월 D일 예정"). 파싱 실패 = 원문 그대로(위젯 동일).
+  const harvestParts = input.commerce?.harvestDate ? String(input.commerce.harvestDate).split("-") : null;
+  const harvestChip = harvestParts
+    ? harvestParts[1] && harvestParts[2]
+      ? `${Number(harvestParts[1])}월 ${Number(harvestParts[2])}일 예정`
+      : String(input.commerce!.harvestDate)
+    : null;
+
   return {
     accent,
     // FIX-56(Day45 Duke 확정) — 수신 렌더는 저장색 무시, 흰색 정본 고정. DB 값은 보존(읽기만 차단).
@@ -266,6 +319,17 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
       : {}),
     // 거울 수렴 S0 — 드로피 적립 신호(수신 전용·숫자 미포함). 보상>0 일 때만 라인 렌더(락 §드로피).
     ...(isCommerce && (input.commerce?.dropyReward ?? 0) > 0 ? { dropyReady: true } : {}),
+    // S4 — 부스터 칩(D-day·품절)·공동구매·수확발송 칩(전부 기존 렌더 재사용 · 빈/미산출 = 미주입).
+    ...(boosterChips.length > 0 ? { boosterChips } : {}),
+    ...(groupBuyView ? { groupBuy: groupBuyView } : {}),
+    ...(harvestChip ? { productDateRangeLabel: harvestChip } : {}),
+    // S4 — CTA 라벨 분기(selfUpload 우선 — 합성 buyUrl 공존 시 "주문예약"이 이김. actions 동일).
+    //   그 외 미주입 = 렌더러 "구매" 폴백. 스튜디오(fromStudioState)는 미주입 = 렌더 불변.
+    ...(isCommerce && input.commerce?.selfUpload
+      ? { ctaLabel: "주문예약" }
+      : isCommerce && input.commerce?.buyUrl
+        ? { ctaLabel: "구매하기" }
+        : {}),
     phone: !!input.local?.phone,
     map: !!input.local?.address,
     // S3-3 ⑤·⑦ — 시설 태그·나도 만들기 관통(미주입 = 미렌더/스튜디오 stub).

@@ -52,6 +52,9 @@ export type CardModel = {
   source: string;
   /** 직렬화 예외 ② — 구매 버튼 아이콘. 미주입 시 렌더러 기본값(Tag). */
   ctaIcon?: LucideIcon;
+  /** S4 — 구매 버튼 라벨. selfUpload="주문예약" / 외부 buyUrl="구매하기"(fromDropDetail 분기).
+   *  미주입 = "구매" 폴백(스튜디오·기존 소비처 렌더 불변). */
+  ctaLabel?: string;
   /** 매장/메이커 이름 — 쿠폰 카드 발급처 표기 등. */
   store?: string;
   /** 블록 장착 맵 — studio-build applied 와 같은 시맨틱(키별 섹션 게이트). */

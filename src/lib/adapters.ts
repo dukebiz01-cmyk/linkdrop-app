@@ -594,7 +594,8 @@ export function buildProductWidget(props: InfoDropPageProps): ProductWidgetProps
  *   · 한글 purpose→영문 variant 는 상류 infoDropAdapter 가 이미 완료(props.variant = DropViewVariant).
  *   · 영상 임베드 = 공용 toVideoSlot 재사용(parseVideoUrl · 신규 파싱 0).
  *   · 부제 = makerMessage(구 CardBody info tagline 동일 소스).
- *   · commerce 는 겹치는 필드만 관통(시그니처 자리) — 45필드(groupBuy/noticeRows/saleEnd) 완성은 S4.
+ *   · commerce 관통 S4 완성 — buyUrl/selfUpload/harvestDate/saleEndIso/groupBuy + remainingStock.
+ *     noticeRows 는 모델 미운반(고시 콘텐츠 존 = 페이지 소관 · props.commerce 직접 소비).
  *   · initialSlots/journey/shareCount 등 별도 조회 주입분은 호출부(라우트)가 채운다(미주입=미렌더).
  */
 export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
@@ -622,9 +623,18 @@ export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
             stockLimit: c.stockLimit,
             stockUnitLabel: c.stockUnitLabel,
             dropyReward: c.dropyReward,
+            // S4 — 거울 수렴 나머지 관통(READ 격차표 이행): CTA 분기(selfUpload·buyUrl)·
+            //   부스터 D-day(saleEndIso)·공동구매(groupBuy)·수확·발송 칩(harvestDate) 재료.
+            buyUrl: c.buyUrl,
+            selfUpload: c.selfUpload,
+            harvestDate: c.harvestDate,
+            saleEndIso: c.saleEndIso,
+            groupBuy: c.groupBuy,
           },
         }
       : {}),
+    // S4 — 파생 재고 관통(fromDropDetail qty = remainingStock ?? stockLimit · 품절 칩 게이트 재료).
+    ...(props.remainingStock !== undefined ? { remainingStock: props.remainingStock } : {}),
     ...(props.funnelCoupon
       ? {
           funnelCoupon: {

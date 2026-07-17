@@ -167,7 +167,8 @@ export function CardModelBody({
   if (applied["seasonal"] || applied["product"])
     bodyButtons.push({
       id: "buy",
-      label: "구매",
+      // S4 — 라벨만 모델 분기(ctaLabel 미주입 = "구매" 폴백 — 스튜디오 렌더 불변).
+      label: model.ctaLabel ?? "구매",
       icon: CtaIcon,
       main: true,
       trailing: model.priceText || undefined,
