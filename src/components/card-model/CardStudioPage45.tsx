@@ -394,21 +394,8 @@ const SL_KEYFRAMES = `
 .sl-slide-up { animation: sl-slide-up 0.3s ease-out both; }
 @keyframes sl-pop { 0% { transform: scale(0.4); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
 .sl-pop { animation: sl-pop 0.25s ease-out both; }
-/* FIX-17 — LED 러닝라이트 재구현(2차). 미점등 원인(렌더): 기존 구조는 링 밴드가 캡슐
-   border-box "바깥" 2px 후광이었고(frame inset -2px + cover inset 2px = 밴드 전체가 박스 밖),
-   색도 크림~흰색(최대 white 0.95)이라 #FAFAFA 페이지 위에서 식별 불가. 게다가 radius 가
-   border-radius: inherit 로 rounded-full(calc(infinity*1px)) 계산값에 의존해 취약.
-   → 밴드를 캡슐 "안쪽" 2px(테두리 자리)로 이동 + radius 명시 + 고대비 앰버(흰 캡슐 위 상시 가시).
-   구조 단순화: span 1개 — ::before 정사각 conic 회전(순수 rotate), ::after 흰 덮개(inset 2px). */
-@keyframes sl-led-rotate { to { transform: rotate(360deg); } }
-.sl-led-ring { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.sl-led-ring::before { content: ""; position: absolute; left: 50%; top: 50%; width: 800px; height: 800px; margin: -400px 0 0 -400px;
-  background: conic-gradient(transparent 0deg 290deg, rgba(255,138,0,0.25) 308deg, rgba(255,138,0,0.9) 338deg, #FFC46B 352deg, #FFF3E0 358deg, transparent 360deg);
-  animation: sl-led-rotate 2s linear infinite; }
-.sl-led-ring::after { content: ""; position: absolute; inset: 2px; background: #FFFFFF; }
-.sl-led-ring--pill, .sl-led-ring--pill::after { border-radius: 9999px; }
-.sl-led-ring--panel { border-radius: 24px; } /* rounded-3xl 실측값 — inherit 미사용 */
-.sl-led-ring--panel::after { border-radius: 22px; }
+/* 작업12 — 링고 busy LED 러닝라이트(.sl-led-ring* · sl-led-rotate keyframe) 완전 제거
+   (Duke 지시: AI 카드 주변 도는 램프 삭제). busy 표시는 캡슐 스피너·헤더 텍스트가 대체. */
 /* FIX-20 — 카드 방향등 래퍼 패딩 방식(FIX-19 음수 z 폐기 — 카드 불투명 배경·풀사이즈
    자식(아크릴 패널 inset-0)에 가려질 수 있어 실기기 신뢰 불가):
    wrapper(-m 2px + p 2px, rounded 26px, overflow hidden)의 패딩 2px 가 곧 링 띠.
@@ -420,7 +407,7 @@ const SL_KEYFRAMES = `
    회전하고 카드 본체·배지는 클리핑 밖(뒤 형제, 위 페인트)이라 무접촉. */
 .sl-led-wrap { position: relative; isolation: isolate; margin: -2px; padding: 2px; border-radius: 26px; }
 /* FIX-48+50 조정A — 덱 카드 노란 회전 글로우(.sl-led-clip / .sl-led-wrap-spin) 제거.
-   링고 busy 러닝라이트(.sl-led-ring* · sl-led-rotate keyframe)는 다른 용도라 보존. */
+   .sl-led-wrap 래퍼(margin -2px/padding 2px)는 레이아웃 자리만 — 회전 레이어 없어 램프 없음. */
 `;
 
 type ProductCopy45 = { headline: string; sellingPoints: string[] };
@@ -563,7 +550,6 @@ export function CardStudioPage45({
   manageCoupons = [],
   dockCount = 0,
   initialPurpose,
-  ledDebug = false,
 }: {
   isBusiness: boolean;
   store: StudioLabStore | null;
@@ -575,8 +561,6 @@ export function CardStudioPage45({
   dockCount?: number;
   /** ?purpose 진입 프리셋 — studio-build validateSearch 와 동등(정보|쿠폰|예약|구매). */
   initialPurpose?: "정보" | "쿠폰" | "예약" | "구매";
-  /** FIX-17 a) 디버그 스위치(?led=1) — LED 상시 점등(배선/렌더 분리 진단). ST2b 때 제거. */
-  ledDebug?: boolean;
 }) {
   const router = useRouter();
   // 목적 진입 쿼리 → 초기 모드 (studio-build 프리셋 시맨틱 동등: 초기값만, switchMode 미호출).
@@ -1085,28 +1069,15 @@ export function CardStudioPage45({
             ? "AI가 영상 요약을 읽는 중…"
             : videoSearching
               ? "영상을 찾는 중…"
-              : voice.listening // T5 — 음성 인식 중에도 LED 점등(반이중 "듣는 중").
+              : voice.listening // T5 — 음성 인식 중 busy("듣는 중").
                 ? "듣고 있어요…"
-                : chat.streaming // T5 — 대화 스트리밍 중 LED 점등.
+                : chat.streaming // T5 — 대화 스트리밍 중 busy.
                   ? "링고가 생각 중…"
                   : null;
 
-  // FIX-11 — LED 러닝 라이트: 실작업 중에만 점등, 완료 시 한 바퀴(2초) 마무리 후 정지.
-  const [ledFinish, setLedFinish] = useState(false);
-  const prevBusyRef = useRef(false);
-  useEffect(() => {
-    const busy = !!stripBusy;
-    const wasBusy = prevBusyRef.current;
-    prevBusyRef.current = busy;
-    if (wasBusy && !busy) {
-      setLedFinish(true);
-      const t = setTimeout(() => setLedFinish(false), 2000);
-      return () => clearTimeout(t);
-    }
-  }, [stripBusy]);
-  // FIX-17 a) — ?led=1 이면 상시 점등(렌더 확인용). b) 렌더는 sl-led-ring 참고. ST2b 때 제거.
-  const ledOn = ledDebug || !!stripBusy || ledFinish;
-  // FIX-17 c) 배선 점검 — 개발 전용: 등록·업로드·AI·발행 때 busy 가 실제 true 가 되는지 확인.
+  // 작업12 — LED 러닝 라이트 제거(ledFinish/prevBusyRef/ledOn 폐지). busy 표시는 캡슐
+  //   스피너(Loader2)·헤더 텍스트("생각 중…"/"말하는 중…")가 담당(회전 링 없음).
+  // 배선 점검 — 개발 전용: 등록·업로드·AI·발행 때 busy 가 실제 true 가 되는지 확인.
   useEffect(() => {
     if (import.meta.env.DEV) console.debug("[studio-lab] stripBusy →", stripBusy ?? "(idle)");
   }, [stripBusy]);
@@ -1283,7 +1254,7 @@ export function CardStudioPage45({
   //   단계 완료 시 타깃이 다음 단계 블록으로 넘어가며 불도 즉시 이동(순서대로 켜짐).
   //   busy/flash 중엔 기존처럼 잠시 소등, 수렴·발행 후 = 타깃 null → 전체 소등(기존 계약).
   // FIX-48+50 조정A — 덱 카드 방향등(노란 회전 글로우) 폐지: "지금 차례"는 번호 배지 3상태로만
-  //   (글로우·회전·네온 0). suggestLitId/debugLitId·lit 판정 제거. 링고 busy LED(ledOn)는 무접촉.
+  //   (글로우·회전·네온 0). suggestLitId/debugLitId·lit 판정 제거. 링고 busy LED(ledOn)는 작업12에서 제거.
 
   // FIX-32 — 영상 길이(초). 파싱 가능 + 10초 이상이면 범위 슬라이더, 아니면 스텝퍼 폴백.
   const clipDurSec = selectedVideo?.durationLabel ? parseClock(selectedVideo.durationLabel) : null;
@@ -4758,9 +4729,7 @@ export function CardStudioPage45({
                 return (
               <div className="sl-slide-up fixed z-40" style={posStyle}>
                 <div className="relative rounded-3xl border border-[#E5E5E5] bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.45)]">
-                  {/* FIX-17 — LED 러닝 라이트(패널 동일, 안쪽 밴드·명시 radius 재구현).
-                      콘텐츠는 아래 relative 레이어 — 흰 덮개 위에 그려지도록(페인트 순서). */}
-                  {ledOn && <span className="sl-led-ring sl-led-ring--panel" aria-hidden="true" />}
+                  {/* 작업12 — LED 러닝 라이트 렌더 제거(패널). */}
                   {/* T5 — 대화 추가로 패널이 길어질 수 있어 내부 스크롤(뷰포트 55~60% 상한 · 키 안 넘겨받음). */}
                   <div className="relative max-h-[58vh] overflow-y-auto">
                   {/* 드래그 핸들 */}
@@ -5182,7 +5151,7 @@ export function CardStudioPage45({
               }`}
               style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
             >
-              {ledOn && <span className="sl-led-ring sl-led-ring--pill" aria-hidden="true" />}
+              {/* 작업12 — LED 러닝 라이트 렌더 제거(캡슐). busy = 아래 Loader2 스피너로 표시. */}
               {/* FIX-48+50 P1.5 커밋1b — 드래그 손잡이(⠿) 시각 표시(캡슐 전체가 드래그 대상). */}
               <GripVertical className="h-4 w-4 shrink-0 text-[#C4C4C4]" strokeWidth={2} aria-hidden="true" />
               {/* FIX-48+50 P1.5 커밋1g — 캡슐 아바타 자리에 현재 번호 배지(패널과 동일 배지·펄스로 통일).
