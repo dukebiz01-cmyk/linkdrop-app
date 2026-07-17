@@ -2624,7 +2624,28 @@ export function CardStudioPage45({
     convActiveRef.current = true;
     setConvPaused(false);
     convIdleAtRef.current = Date.now();
-    if (!voice.listening) convListen();
+    // P3 커밋1 — AI 선행 발화: 침묵을 AI 가 먼저 깬다(듣기부터 X). 현재 번호 질문을 음성+텍스트로
+    //   발화한 뒤, 낭독 종료(onDone)에서 청취 재개. 첫 voice.speak 는 이 핸들러(사용자 제스처:
+    //   VoiceWavePanel 대화 토글 탭) 동기 경로에서 호출 — setTimeout/async 뒤로 미루면 브라우저
+    //   자동재생 정책에 막혀 소리가 안 난다. 에코가드·재청취·무음대기·종료(OFF)는 기존 재사용.
+    if (voice.listening) voice.stopListening(); // 발화 전 STT 정지(에코 차단).
+    convLeadSpeak();
+  }
+  // P3 커밋1 — 현재 번호 질문 발화(창작 0 — interview-steps45 정본 인용 = 자동인사 seed 와 동일
+  //   문구). 발화 동안 convBusyRef=true(재청취 금지) → 낭독 종료 후 convListen. TTS off/미지원이면
+  //   speak 가 onDone 즉시 호출 → 듣기부터 시작으로 자연 degrade(계약 무변경).
+  function convLeadSpeak() {
+    const cur = interviewStates.find((x) => x.state === "current");
+    const lead = cur
+      ? `${cur.step.no}번 ${cur.step.label}부터 시작해 볼까요?`
+      : "카드를 같이 완성해 볼까요? 뭐든 물어보세요.";
+    const last = chat.messages[chat.messages.length - 1];
+    if (!last || last.role !== "lingo" || last.text !== lead) chat.notify(lead); // 텍스트 병행(중복 시드 방지).
+    convBusyRef.current = true;
+    voice.speak(lead, () => {
+      convBusyRef.current = false;
+      convListen();
+    });
   }
 
   // [대화 끝내기]/패널 닫기/이탈 — STT·TTS 전체 정지(AudioContext 는 패널 언마운트가 정리).
