@@ -169,7 +169,8 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
 
   return {
     accent,
-    cardColor: input.cardColor ?? DEFAULT_CARD_COLOR,
+    // FIX-56(Day45 Duke 확정) — 수신 렌더는 저장색 무시, 흰색 정본 고정. DB 값은 보존(읽기만 차단).
+    cardColor: DEFAULT_CARD_COLOR,
     pageBg: DEFAULT_PAGE_BG,
     category,
     categoryIcon,
