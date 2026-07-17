@@ -68,6 +68,8 @@ export type DropDetailRpc = {
     lng: number | null;
     phone: string | null;
     reservation_url: string | null;
+    /** v8.9 — partners.facilities(jsonb) additive. 구 RPC 응답엔 부재 가능 → optional. */
+    facilities?: unknown;
   } | null;
   ctas: unknown[];
   blocks: unknown[];
@@ -463,6 +465,10 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
       phone: d.store?.phone ?? "",
       // c-1: 네이버형 매장 식별 — 외부 예약 URL 보유 시 순수 쿠폰 카드에 보조 링크 노출.
       reservationUrl: d.store?.reservation_url ?? null,
+      // S3-4 보정(v8.9) — partners.facilities(jsonb 배열) → 그리드 [시설 정보] 공급. 문자열만 수용.
+      facilities: Array.isArray(d.store?.facilities)
+        ? d.store.facilities.filter((f): f is string => typeof f === "string")
+        : undefined,
     },
     creator: {
       // 커머스(구매): "원본 영상" 프레이밍 제거 — 판매자명(author_name) 없으면 생략(빈값).
@@ -637,13 +643,18 @@ export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
     ...(props.serverNow ? { serverNow: props.serverNow } : {}),
     // S3-1 — 예약 슬롯 관통(SSR loader initialSlots → 카드 내 예약 존: 스튜디오 cfgDates 거울).
     ...(props.initialSlots?.length ? { initialSlots: props.initialSlots } : {}),
-    // S3-3 ⑥ — 함께 받는 카드(도킹) 관통: 스튜디오 dockedProducts[0] 거울(CardModel dock 존 1개).
+    // S3-4 보정(v8.9) — 시설 태그 관통(partners.facilities → 그리드 [시설 정보], 스튜디오 cfgFacilities 거울).
+    ...(props.local?.facilities?.length ? { facilities: props.local.facilities } : {}),
+    // S3-3 ⑥ — 함께 받는 카드(도킹) 관통. S3-4 §3: imageUrl(포토 셀 실사진)·refShareUuid
+    //   (수신 새 탭 /d 이동) additive.
     ...(props.attachedProducts?.length
       ? {
           attachedProducts: props.attachedProducts.map((p) => ({
             name: p.name,
             priceKrw: p.priceKrw,
             producerName: p.producerName,
+            imageUrl: p.imageUrl,
+            refShareUuid: p.refShareUuid,
           })),
         }
       : {}),

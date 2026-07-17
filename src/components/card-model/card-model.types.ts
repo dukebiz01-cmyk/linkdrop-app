@@ -165,6 +165,9 @@ export type CardModel = {
   // ── 도킹(함께 받는 카드) — attached product 블록 스냅샷 발췌 ──
   dockTitle?: string;
   dockMeta?: string;
+  /** S3-4 §3 — 그리드 포토 셀 + 펼침 리스트용 전체 도킹 목록. [0]이 셀 대표(실사진 배경).
+   *  href = 수신 전용(/d/{refShareUuid}, 새 탭) — 미주입(스튜디오) = 시각 stub. */
+  dockItems?: Array<{ name: string; priceLabel?: string; imageUrl?: string; href?: string }>;
 
   // ── 여정·확산 — get_share_journey/share_count. 카드 단건 RPC 미포함이라 optional. ──
   /** 미주입 = 여정 섹션 미렌더. */
@@ -198,6 +201,10 @@ export type CardModelActions = {
   onPreorder?: () => void;
   /** 매장정보/전화/위치 버튼. */
   onContact?: () => void;
+  /** S3-4 §2 — 매장 정보 펼침 3버튼(전화/문자/길찾기, 기존 핸들러 배선). 미주입 = stub. */
+  onPhone?: () => void;
+  onSms?: () => void;
+  onDirections?: () => void;
   /** 공유 푸터 "카톡 공유". */
   onShare?: () => void | Promise<void>;
   /** 공유 푸터 "링크 복사". */

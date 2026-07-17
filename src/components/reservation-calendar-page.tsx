@@ -212,6 +212,10 @@ export interface ReservationCalendarPageProps {
   className?: string;
 }
 
+// S3-4c — 인원 선택 렌더 스위치(false = 미렌더 · 코드 보존). 기본 인원(성인 2)은 state
+//   초기값(MOCK_RESERVATION_DEFAULTS)으로 자동 주입 — 예약 제출 경로(시트 guestCount) 무접촉.
+const SHOW_GUEST_PICKER = false;
+
 const RESERVATION_PRIMARY_ENABLED = cn(
   "inline-flex h-14 min-h-[56px] w-full max-w-full items-center justify-center rounded-2xl border-0 px-6",
   "text-base font-bold tracking-ko text-white",
@@ -724,32 +728,37 @@ function EditableReservationCard({
         </div>
       )}
 
-      <div className="w-full max-w-full space-y-3 rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] p-4">
-        <p className="text-sm font-semibold tracking-ko text-text-strong">인원</p>
-        <GuestStepperRow
-          label="성인"
-          value={adults}
-          min={1}
-          max={GUEST_MAX}
-          onChange={setAdults}
-        />
-        <GuestStepperRow
-          label="소인"
-          value={children}
-          min={0}
-          max={GUEST_MAX}
-          onChange={setChildren}
-        />
-        <label className="flex min-h-[44px] items-center gap-2 border-t border-border pt-3 text-sm font-medium text-text-strong">
-          <input
-            type="checkbox"
-            checked={pets}
-            onChange={(e) => setPets(e.target.checked)}
-            className="size-4 shrink-0 rounded border-border accent-[#0A0A0A]"
+      {/* S3-4c — 인원 선택 렌더 제거(코드 보존·가역): adults 초기값 2가 selection 에 자동
+          주입되어 canCheck·prefill 유지, 실 인원 확정은 예약 시트(ReserveFunnelSheet 자체
+          guestCount 기본 "2") 몫 — create_reservation 스키마 무접촉. */}
+      {SHOW_GUEST_PICKER && (
+        <div className="w-full max-w-full space-y-3 rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] p-4">
+          <p className="text-sm font-semibold tracking-ko text-text-strong">인원</p>
+          <GuestStepperRow
+            label="성인"
+            value={adults}
+            min={1}
+            max={GUEST_MAX}
+            onChange={setAdults}
           />
-          반려견 동반
-        </label>
-      </div>
+          <GuestStepperRow
+            label="소인"
+            value={children}
+            min={0}
+            max={GUEST_MAX}
+            onChange={setChildren}
+          />
+          <label className="flex min-h-[44px] items-center gap-2 border-t border-border pt-3 text-sm font-medium text-text-strong">
+            <input
+              type="checkbox"
+              checked={pets}
+              onChange={(e) => setPets(e.target.checked)}
+              className="size-4 shrink-0 rounded border-border accent-[#0A0A0A]"
+            />
+            반려견 동반
+          </label>
+        </div>
+      )}
 
       {/* S3-2 지점② — 소박스 시각 언어 통일(제각각 진한 보더 제거 — 인원·가능일 박스와 동일 토큰). */}
       <div className="rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] px-4 py-4">
@@ -952,10 +961,13 @@ function ReadOnlyReservationCard({
         </div>
       )}
 
-      <div className="w-full max-w-full rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] p-4">
-        <p className="text-sm font-semibold tracking-ko text-text-strong">예약 인원</p>
-        <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">{guestSummary}</p>
-      </div>
+      {/* S3-4c — 인원 UI 렌더 제거(읽기 전용 요약 포함 · 코드 보존). */}
+      {SHOW_GUEST_PICKER && (
+        <div className="w-full max-w-full rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] p-4">
+          <p className="text-sm font-semibold tracking-ko text-text-strong">예약 인원</p>
+          <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">{guestSummary}</p>
+        </div>
+      )}
 
       <button
         type="button"

@@ -129,8 +129,15 @@ export type DropDetailInput = {
   initialSlots?: Array<{ slot_date: string; slot_time: string | null; available: number }>;
   /** ← InfoDropPageProps.calendarMode — 현재 date_range 만 구현(운반만). */
   calendarMode?: "date_range" | "date_time_slot";
-  /** ← attachedProducts[0] 스냅샷 (name/producerName/priceKrw) — 도킹 카드 표기. */
-  attachedProducts?: Array<{ name: string; priceKrw?: number | null; producerName?: string }>;
+  /** ← attachedProducts 스냅샷 — 도킹 카드 표기. S3-4: imageUrl(포토 셀 실사진)·refShareUuid
+   *  (수신 새 탭 이동) additive. */
+  attachedProducts?: Array<{
+    name: string;
+    priceKrw?: number | null;
+    producerName?: string;
+    imageUrl?: string | null;
+    refShareUuid?: string | null;
+  }>;
   /** 🟡 별도 조회 주입 — get_share_journey(카드 단건 RPC 미포함). 미주입 = 미렌더. */
   journey?: CardJourneyNode[];
   /** 🟡 별도 조회 주입 — share_count/SM-3 배치값. */
@@ -268,6 +275,13 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
             [dock.producerName, dock.priceKrw != null ? won(dock.priceKrw) : ""]
               .filter(Boolean)
               .join(" · ") || "함께 담긴 카드",
+          // S3-4 §3 — 포토 셀·펼침 리스트용 전체 목록(실사진·수신 새 탭 href).
+          dockItems: input.attachedProducts!.map((p) => ({
+            name: p.name,
+            ...(p.priceKrw != null ? { priceLabel: won(p.priceKrw) } : {}),
+            ...(p.imageUrl ? { imageUrl: p.imageUrl } : {}),
+            ...(p.refShareUuid ? { href: `/d/${p.refShareUuid}` } : {}),
+          })),
         }
       : {}),
     // 🟡 여정·확산 — 호출부 별도 조회 주입(미주입 = 미렌더).
@@ -317,8 +331,13 @@ export type StudioStateInput = {
   productImageUrl?: string;
   /** ← studio-build productCopy(388) — ProductCopyValue{headline, sellingPoints}. */
   productCopy?: { headline?: string; sellingPoints?: string[] };
-  /** ← studio-build dockedProducts(379) 첫 항목 스냅샷. */
-  dockedProduct?: { name: string; priceKrw?: number | null; producerName?: string } | null;
+  /** ← studio-build dockedProducts(379) 첫 항목 스냅샷. S3-4: imageUrl additive(포토 셀 거울). */
+  dockedProduct?: {
+    name: string;
+    priceKrw?: number | null;
+    producerName?: string;
+    imageUrl?: string | null;
+  } | null;
 };
 
 /**
@@ -390,6 +409,16 @@ export function fromStudioState(input: StudioStateInput, preview?: Partial<CardM
             ]
               .filter(Boolean)
               .join(" · ") || "함께 담긴 카드",
+          // S3-4 §3 — 포토 셀 거울(스튜디오 = 장착 1개, href 없음 = stub).
+          dockItems: [
+            {
+              name: input.dockedProduct.name,
+              ...(input.dockedProduct.priceKrw != null
+                ? { priceLabel: won(input.dockedProduct.priceKrw) }
+                : {}),
+              ...(input.dockedProduct.imageUrl ? { imageUrl: input.dockedProduct.imageUrl } : {}),
+            },
+          ],
         }
       : {}),
     // ❌ 백엔드 부재(배송·후기)·여정(스튜디오 무의미) — 미주입 = 미렌더.

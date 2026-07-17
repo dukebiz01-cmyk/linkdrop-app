@@ -851,8 +851,13 @@ export function CardStudioPage45({
   const wasHold = useRef(false);
 
   // FIX-28 — 배경색 카드 숨김(ENABLE_CARD_COLORS 스위치 — 로직 보존).
+  // S3-4c — 인원 블록 렌더 제거(코드 보존·가역): 인원 확정은 예약 시트 몫(기본 성인 2 자동).
   const DECK = useMemo(
-    () => DECK_IDS[mode].map(blockById).filter((b) => ENABLE_CARD_COLORS || b.id !== "bgcolor"),
+    () =>
+      DECK_IDS[mode]
+        .map(blockById)
+        .filter((b) => ENABLE_CARD_COLORS || b.id !== "bgcolor")
+        .filter((b) => b.id !== "party"),
     [mode],
   );
   const isMainBlock = (id: string) => MODE_MAIN_IDS[mode].includes(id);

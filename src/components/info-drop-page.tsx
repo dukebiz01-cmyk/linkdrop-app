@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { startKakaoLogin } from "@/lib/oauth-kakao";
 import {
@@ -182,6 +182,8 @@ export interface InfoDropPageProps {
     statusLabel: string;
     phone?: string; // phase1-3: partners.contact_phone 연결
     reservationUrl?: string | null; // c-1: 네이버형 매장 외부 예약 URL(순수 쿠폰 카드 보조 링크)
+    /** S3-4 보정(v8.9) — partners.facilities → 카드 그리드 [시설 정보] 공급. */
+    facilities?: string[];
     hoursLabel?: string;
     rating?: number;
     reviewCount?: number;
@@ -660,10 +662,10 @@ export function InfoDropPage({
   const [journeyRows, setJourneyRows] = useState<ShareJourneyRpcNode[] | null>(null);
   const [journeyLoading, setJourneyLoading] = useState(false);
   const [journeyError, setJourneyError] = useState(false);
-  async function toggleJourney() {
-    const next = !journeyOpen;
-    setJourneyOpen(next);
-    if (!next || journeyRows || journeyLoading) return; // 재펼침 = 캐시(RPC 재호출 0)
+  // S3-4 §5 — fetch 를 toggle 에서 분리(전달 슬립 지도의 접힌 홉 체인이 로드 시점 데이터 필요).
+  //   RPC·마스킹·캐시 원칙 무수정 — 호출 시점만 eager 로 앞당김(신규 RPC 0, 표시만).
+  async function loadJourney() {
+    if (journeyRows || journeyLoading) return; // 캐시(RPC 재호출 0)
     const m =
       typeof window !== "undefined"
         ? window.location.pathname.match(/\/d\/([0-9a-fA-F-]{36})/)
@@ -691,6 +693,19 @@ export function InfoDropPage({
       setJourneyLoading(false);
     }
   }
+  async function toggleJourney() {
+    const next = !journeyOpen;
+    setJourneyOpen(next);
+    if (next) await loadJourney();
+  }
+  // S3-4 §5 — 지도(접힌 홉 체인)용 eager 1회 로드. 마운트 시점 1회 — 재렌더 무발화(ref 가드).
+  const journeyEagerRef = useRef(false);
+  useEffect(() => {
+    if (journeyEagerRef.current) return;
+    journeyEagerRef.current = true;
+    void loadJourney();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 로그인 유저 + 현재 매장 구독 여부 로드. partnerId(=매장) 있을 때만 조회.
   useEffect(() => {
@@ -966,11 +981,6 @@ export function InfoDropPage({
   // S18-A(P4) — 카드 내부 "쿠폰 받기" CTA 가시성 관찰: 보이면(threshold 0.5) sticky 숨김, 벗어나면 복귀.
   //   IO 미지원·스크립트 미실행·SSR = visible=false 유지 → sticky 항상 표시(현행 동작 폴백).
   const inlineCouponCtaRef = useRef<HTMLDivElement | null>(null);
-  // S3-3 ④ — 카드 내 [예약하기]·[매장정보] = 표시 동형(스튜디오), 실행은 실행 카드로 스크롤 안내
-  //   (캘린더에서 날짜 선택 → 기존 예약 CTA 체인 / 연락 rows 도 실행 카드 편입분).
-  const executorRef = useRef<HTMLElement | null>(null);
-  const scrollToExecutor = () =>
-    executorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   const [inlineCouponCtaVisible, setInlineCouponCtaVisible] = useState(false);
   useEffect(() => {
     if (!hasStickyBar) return;
@@ -1167,8 +1177,152 @@ export function InfoDropPage({
       ? `/create-wizard?url=${encodeURIComponent(videoSourceUrl)}&purpose=${resolvedVariant}`
       : `/create-wizard?purpose=${resolvedVariant}`;
   const remakeLabel = videoSourceUrl && !commerce?.selfUpload ? "이 영상으로 나도 만들기" : "나도 만들기";
-  // S3-3 ⑦ — withActions=false: 공유 3액션·FTC 는 카드 내장 푸터(CardModelBody)가 담당하는
-  //   수렴 variant 용 법정-only 모드(문제신고·공유여정만). 기본 true = 기존 전체 푸터.
+  // ── S3-4 §5 — 공유 여정 지도(슬립 상단). 데이터 = 기존 get_share_journey 체인(신규 RPC 0,
+  //    마스킹 유지 · 조회수/현금 문구 금지). 접힘 = 헤더 + 홉 체인 1줄 · 탭 = 인라인 펼침(Radix 0).
+  const journeyViewerIdx = journeyRows?.findIndex((r) => r.is_viewer) ?? -1;
+  const journeyNodes = journeyRows ?? [];
+  const hopsBeforeMe = journeyViewerIdx >= 0 ? journeyViewerIdx : journeyNodes.length;
+  const journeyChain = (() => {
+    const before = journeyNodes.filter((_, i) => (journeyViewerIdx < 0 ? true : i < journeyViewerIdx));
+    let chain: Array<{ label: string; ellipsis?: boolean }> = before.map((_, i) => ({
+      label: String(i + 1),
+    }));
+    if (chain.length === 0) chain = [{ label: "1" }]; // 데이터 전 최소 체인(만든 곳)
+    // §5 — 홉 4개 초과 시 축약: 1 ··· N-1 → N → 나.
+    if (chain.length > 4)
+      chain = [chain[0], { label: "···", ellipsis: true }, chain[chain.length - 2], chain[chain.length - 1]];
+    return chain;
+  })();
+  const journeyMap = (
+    <div
+      data-testid="journey-map"
+      className="rounded-xl bg-[#F8FAFC] p-3"
+      style={{ boxShadow: "inset 0 0 0 1px #E8EDF3" }}
+    >
+      <button
+        type="button"
+        onClick={() => void toggleJourney()}
+        aria-expanded={journeyOpen}
+        className="w-full text-left"
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] font-bold tracking-ko text-text-strong">공유 여정</span>
+          <span className="flex items-center gap-1 text-[11px] font-medium tracking-ko text-text-muted">
+            {hopsBeforeMe > 0 ? `${hopsBeforeMe}명을 거쳐 도착` : "첫 번째로 도착"}
+            <ChevronDown
+              className={`size-3.5 transition-transform ${journeyOpen ? "rotate-180" : ""}`}
+              strokeWidth={2}
+            />
+          </span>
+        </div>
+        {/* 홉 체인 — 번호 원 26px 실선 연결, '나' 앞 구간만 점선(아직 안 이어진 길), 나 = 28px 진한 채움. */}
+        <div className="mt-2.5 flex items-center" aria-hidden>
+          {journeyChain.map((c, i) => (
+            <Fragment key={i}>
+              {i > 0 && <span className="h-[2px] min-w-3 flex-1 bg-[#CBD5E1]" />}
+              <span
+                className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                  c.ellipsis
+                    ? "text-[#94A3B8]"
+                    : "border border-[#CBD5E1] bg-white text-[#475569]"
+                }`}
+              >
+                {c.label}
+              </span>
+            </Fragment>
+          ))}
+          <span className="min-w-3 flex-1 border-t-2 border-dashed border-[#CBD5E1]" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0F172A] text-[11px] font-bold text-white">
+            나
+          </span>
+        </div>
+      </button>
+      {journeyOpen && (
+        <div className="mt-3 border-t border-[#E8EDF3] pt-2.5">
+          {journeyLoading ? (
+            <p className="text-[11px] font-medium tracking-ko text-text-subtle">여정을 불러오는 중…</p>
+          ) : journeyError ? (
+            <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+              여정을 불러오지 못했어요
+            </p>
+          ) : (
+            <>
+              <ol className="space-y-1.5">
+                {journeyNodes.map((n, i) => (
+                  <li key={n.position} className="flex items-center gap-2">
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                        n.is_viewer
+                          ? "bg-[#0F172A] text-white"
+                          : "border border-[#CBD5E1] bg-white text-[#475569]"
+                      }`}
+                    >
+                      {n.is_viewer ? "나" : i + 1}
+                    </span>
+                    <span className="text-[12px] font-semibold tracking-ko text-text-strong">
+                      {n.is_viewer
+                        ? "지금 보는 중 — 다음 번호는 내 친구"
+                        : i === 0
+                          ? `${n.masked_name} (만든 곳)`
+                          : `${n.masked_name}님이 전달`}
+                    </span>
+                  </li>
+                ))}
+                {journeyNodes.length === 0 && (
+                  <li className="text-[11px] font-medium tracking-ko text-text-subtle">
+                    아직 공유 여정이 없어요
+                  </li>
+                )}
+              </ol>
+              <p className="mt-2 text-[10px] font-medium leading-relaxed tracking-ko text-text-subtle">
+                다른 참여자는 개인정보 보호로 익명 표시 · 기여도만 집계
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // ── S3-4 §4 — 전달 슬립(수신 전용 페이지 존 — 스튜디오 거울 대상 아님. 카드는 쿠폰존 마감).
+  //    꼬리표(세로선→원→세로선)로 카드 하단과 연결. 슬립 = 흰 카드(radius 14 · 보더 0.5px).
+  const deliverySlip = (
+    <div data-testid="delivery-slip" className="-mt-3">
+      <div className="flex flex-col items-center" aria-hidden>
+        <span className="h-2.5 w-[2px] bg-[#CBD5E1]" />
+        <span className="h-2.5 w-2.5 rounded-full border-2 border-[#CBD5E1] bg-white" />
+        <span className="h-2.5 w-[2px] bg-[#CBD5E1]" />
+      </div>
+      <section className="space-y-3 rounded-[14px] border-[0.5px] border-[#E2E8F0] bg-white p-4">
+        {journeyMap}
+        <p className="text-center text-[13px] font-semibold tracking-ko text-text-muted">
+          다음 번호를 이어보세요
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={handleKakao}
+            className="flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl bg-[#FEE500] text-[13px] font-bold tracking-ko text-[#191919] transition-transform duration-150 active:translate-y-px"
+          >
+            <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
+            친구에게 보내기
+          </button>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl border border-[#D4D4D8] bg-white text-[13px] font-bold tracking-ko text-text-strong transition-transform duration-150 active:translate-y-px"
+          >
+            <Copy className="h-5 w-5" strokeWidth={2.25} />
+            링크 복사
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+
+  // S3-3 ⑦ — withActions=false: 공유 3액션은 카드/슬립이 담당하는 수렴 variant 용 법정-only
+  //   모드. S3-4 §4: 법정 뮤트 블록 = FTC 고지 + 문제 신고(11~12px 중앙). 공유 여정 링크는
+  //   슬립의 지도(§5)로 대체 — withActions=true(비수렴 variant)에서만 기존 버튼 유지.
   const renderShareFooter = (light: boolean, withActions = true) => (
     <div data-testid="share-footer">
       {!withActions ? null : light ? (
@@ -1239,11 +1393,10 @@ export function InfoDropPage({
           </button>
         </div>
       )}
-      {withActions ? (
-        <p className={`mt-3 text-center text-[10px] leading-relaxed ${light ? "text-text-subtle" : "text-white/45"}`}>
-          본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
-        </p>
-      ) : null}
+      {/* S3-4 §4 — 법정 뮤트 블록: FTC 는 카드 내장 푸터 제거에 따라 페이지 하단 상시 존치. */}
+      <p className={`mt-3 text-center text-[11px] leading-relaxed ${light ? "text-text-subtle" : "text-white/45"}`}>
+        본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
+      </p>
       <button
         type="button"
         onClick={() => setIsReportSheetOpen(true)}
@@ -1252,37 +1405,37 @@ export function InfoDropPage({
         문제 신고
       </button>
 
-      {/* SM-2 — 공유 여정 아코디언(기본 접힘·lazy). FTC 고지 하단·카드 프레임 푸터 영역.
-          [보정2] 역할 4종 락: 개척·전달·최고공헌·구매자 — 그 외 역할·인원수 과시("N명 모집" 류) 금지.
-          [보정3] 연출 = 색·정적 뱃지만(펄스·애니메이션 0 — 개폐 기본 트랜지션 외 모션 없음).
-          ⛔ 포인트 숫자 금지(Phase 3 소관) · 모집·초대·수익 언어 금지.
-          SM-4 — 렌더부는 공용 ShareJourneyTimeline 소비(로직·상태는 본 파일 SM-2 그대로).
-          SM-4 버튼 승격(fix 흡수) — GitBranch 칩형 풀폭 필(보더+틴트): FTC/신고 소자와 계층 분리. */}
-      <button
-        type="button"
-        onClick={() => void toggleJourney()}
-        aria-expanded={journeyOpen}
-        // BADGE-ⓑ(SM-5) — 승격: 13px + 틴트 한 단계 강화(44px·정적 유지).
-        className={`mt-3 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border px-4 text-[13px] font-semibold tracking-ko ${
-          light
-            ? "border-[#D9E2EC] bg-[#EFF3F8] text-[#1E293B]"
-            : "border-white/25 bg-white/15 text-white/95"
-        }`}
-      >
-        <GitBranch className="size-3.5" strokeWidth={2} />
-        공유 여정 보기
-        <ChevronDown
-          className={`size-3.5 transition-transform ${journeyOpen ? "rotate-180" : ""}`}
-          strokeWidth={2}
-        />
-      </button>
-      {journeyOpen ? (
-        <ShareJourneyTimeline
-          light={light}
-          loading={journeyLoading}
-          error={journeyError}
-          rows={journeyRows}
-        />
+      {/* SM-2 — 공유 여정 아코디언. S3-4 §5: 수렴 variant(withActions=false)는 슬립의 지도가
+          대체(중복 제거) — 비수렴(purchase 폴백 등)에서만 기존 버튼 유지. 락 전부 상속. */}
+      {withActions ? (
+        <>
+          <button
+            type="button"
+            onClick={() => void toggleJourney()}
+            aria-expanded={journeyOpen}
+            // BADGE-ⓑ(SM-5) — 승격: 13px + 틴트 한 단계 강화(44px·정적 유지).
+            className={`mt-3 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border px-4 text-[13px] font-semibold tracking-ko ${
+              light
+                ? "border-[#D9E2EC] bg-[#EFF3F8] text-[#1E293B]"
+                : "border-white/25 bg-white/15 text-white/95"
+            }`}
+          >
+            <GitBranch className="size-3.5" strokeWidth={2} />
+            공유 여정 보기
+            <ChevronDown
+              className={`size-3.5 transition-transform ${journeyOpen ? "rotate-180" : ""}`}
+              strokeWidth={2}
+            />
+          </button>
+          {journeyOpen ? (
+            <ShareJourneyTimeline
+              light={light}
+              loading={journeyLoading}
+              error={journeyError}
+              rows={journeyRows}
+            />
+          ) : null}
+        </>
       ) : null}
     </div>
   );
@@ -1434,7 +1587,9 @@ export function InfoDropPage({
                 remakeLabel,
               })}
             />
+            {/* S3-4c — 슬립 = 위치 B(콘텐츠 뒤·법정 직전). */}
             {aiSummaryAccordion}
+            {deliverySlip}
             {renderShareFooter(true, false)}
           </>
         )}
@@ -1459,10 +1614,20 @@ export function InfoDropPage({
                 onShare,
                 onCopyLink,
                 onClaimCoupon: onReserveAndClaim,
-                // S3-3 ④ — 표시 동형(스튜디오 stub 자리) + 실행 카드 스크롤 안내.
-                onReserve: scrollToExecutor,
-                onContact: scrollToExecutor,
+                // S3-4 §2 — 매장 정보 펼침 3버튼(기존 handleCtaClick 체인).
+                onPhone: () => handleCtaClick("phone"),
+                onSms: () => handleCtaClick("sms"),
+                onDirections: () => handleCtaClick("directions"),
               }}
+              // S3-4c — 예약 실행기 인라인 슬롯(상시 노출 폐지 — [예약하기] 탭 시 그 자리 확장).
+              reserveExecutorSlot={
+                showCalendar ? (
+                  <div data-testid="reserve-executor-inline" className="space-y-4">
+                    {calendarPanel}
+                    {billingNotice}
+                  </div>
+                ) : undefined
+              }
               model={fromDropDetail({
                 ...toDropDetailInput({
                   videoSourceUrl,
@@ -1488,24 +1653,12 @@ export function InfoDropPage({
                 remakeLabel,
               })}
             />
-            {/* S3-2 — 예약 실행 카드: 캘린더(캠핑장정보·인원·선택예약·CTA)·결제고지·연락을
-                본체와 동일 시각 언어(흰 카드·rounded-2xl·보더)의 카드 한 장으로 묶음 —
-                캘린더 내부 로직·RESERVATION_* 토큰 무수정(래핑+연락 편입만).
-                스택 정본: 본체 카드 → 실행 카드 → 콘텐츠(이벤트·요약) → 법정(푸터). */}
-            {(showCalendar || contactRow) && (
-              <section
-                ref={executorRef}
-                data-testid="reserve-executor-card"
-                className="space-y-4 rounded-2xl border border-[#E8EDF3] bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]"
-              >
-                {showCalendar ? calendarPanel : null}
-                {showCalendar ? billingNotice : null}
-                {contactRow}
-              </section>
-            )}
+            {/* S3-4c — 실행기 상시 노출 폐지: [예약 가능일]→[예약하기] 인라인 확장
+                (reserveExecutorSlot)으로 일원화. 슬립 = 위치 B(콘텐츠 뒤·법정 직전). */}
             {eventsSection}
             {aiSummaryAccordion}
-            {/* S3-3 ⑦ — 공유 3액션은 카드 내장 푸터로 이동. 하단은 법정만(신고·여정). */}
+            {deliverySlip}
+            {/* S3-3 ⑦ — 공유 3액션은 카드 내장 푸터로 이동. 하단은 법정만(신고). */}
             {renderShareFooter(true, false)}
           </>
         )}
@@ -1551,10 +1704,20 @@ export function InfoDropPage({
                 onShare,
                 onCopyLink,
                 onClaimCoupon: onReserveAndClaim,
-                // S3-3 ④ — 표시 동형 + 실행 카드 스크롤 안내(날짜 선택 → 기존 예약 CTA 체인).
-                onReserve: scrollToExecutor,
-                onContact: scrollToExecutor,
+                // S3-4 §2 — 매장 정보 펼침 3버튼(기존 handleCtaClick 체인).
+                onPhone: () => handleCtaClick("phone"),
+                onSms: () => handleCtaClick("sms"),
+                onDirections: () => handleCtaClick("directions"),
               }}
+              // S3-4c — 예약 실행기 인라인 슬롯(상시 노출 폐지). 예약 variant 는 무조건 주입
+              //   (calendarPanel 자체 fallback 보존 — 옛 reservationBlock 동작).
+              reserveExecutorSlot={
+                <div data-testid="reserve-executor-inline" className="space-y-4">
+                  {reserveNotice}
+                  {calendarPanel}
+                  {billingNotice}
+                </div>
+              }
               model={fromDropDetail({
                 ...toDropDetailInput({
                   videoSourceUrl,
@@ -1579,22 +1742,11 @@ export function InfoDropPage({
                 remakeLabel,
               })}
             />
-            {/* S3-2 — 예약 실행 카드(coupon 분기 동형): 캘린더·결제고지·연락을 라이트 카드
-                한 장으로 묶음(래핑+연락 편입만 — 내부 무수정). 캘린더는 예약 variant 정본대로
-                무조건 렌더(showCalendar false 시 calendarPanel 자체 fallback 보존).
-                스택 정본: 본체 카드 → 실행 카드 → 콘텐츠(이벤트) → 법정(푸터). */}
-            <section
-              ref={executorRef}
-              data-testid="reserve-executor-card"
-              className="space-y-4 rounded-2xl border border-[#E8EDF3] bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]"
-            >
-              {reserveNotice}
-              {calendarPanel}
-              {billingNotice}
-              {contactRow}
-            </section>
+            {/* S3-4c — 실행기 상시 노출 폐지: [예약 가능일]→[예약하기] 인라인 확장
+                (reserveExecutorSlot)으로 일원화. 슬립 = 위치 B(콘텐츠 뒤·법정 직전). */}
             {eventsSection}
-            {/* S3-3 ⑦ — 공유 3액션은 카드 내장 푸터로 이동. 하단은 법정만(신고·여정). */}
+            {deliverySlip}
+            {/* S3-3 ⑦ — 공유 3액션은 카드 내장 푸터로 이동. 하단은 법정만(신고). */}
             {renderShareFooter(true, false)}
           </>
         )}

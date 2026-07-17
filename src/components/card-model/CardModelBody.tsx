@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type Ref } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import type { LucideIcon } from "lucide-react";
 // 거울 수렴 S1 — 영상 인플레이스 임베드는 공용 부품 재사용(신규 임베드 구현 금지 · 중복 3벌 방지).
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
@@ -72,17 +72,23 @@ const CM_KEYFRAMES = `
    틴트색은 목적색(--cm-pop, 요소 인라인 주입). studio 미리보기 전용(수신 거울 무영향). */
 @keyframes cm-just-in { from { box-shadow: inset 0 0 0 200px var(--cm-pop, rgba(15,118,110,0.15)); } to { box-shadow: inset 0 0 0 200px rgba(255,255,255,0); } }
 .cm-just-in { animation: cm-just-in 0.5s ease; }
+/* S3-4 §3 — 포토 셀 첫 로드 1회 펄스(허용 모션 · 반복 금지). */
+@keyframes cm-pulse-once { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+.cm-pulse-once { animation: cm-pulse-once 0.6s ease-out 1 both; }
 `;
 
 export function CardModelBody({
   model,
   variant = "receiver",
   burstKey = 0,
-  showJourney = true,
+  // S3-4 §5 — 카드 내 여정 아코디언 기본 OFF(공유 여정 지도가 슬립[페이지 존]으로 이동).
+  //   렌더 코드는 보존(가역) — 소비처가 명시 true 를 주면 재활성.
+  showJourney = false,
   showShareFooter = true,
   actions,
   currentSlot,
   couponCtaRef,
+  reserveExecutorSlot,
 }: {
   model: CardModel;
   variant?: CardModelVariant;
@@ -99,6 +105,10 @@ export function CardModelBody({
    *  (보이면 sticky 숨김 · S18-A)가 관찰 대상으로 쓴다 — IO·숨김 로직은 페이지 소관(여기선 배선만).
    *  미주입 = 동작 불변(스튜디오·타 variant 영향 0). */
   couponCtaRef?: Ref<HTMLDivElement>;
+  /** S3-4c — 예약 실행기 인라인 슬롯(수신 전용·additive): [예약 가능일] 펼침 안 [예약하기]
+   *  탭 시 그 자리에서 확장(캘린더·선택예약·CTA·결제고지 — 페이지가 조립해 주입). 재탭 닫힘.
+   *  미주입(스튜디오) = 버튼은 시각 stub(act.onReserve 폴백) — 렌더 동일. Radix 0. */
+  reserveExecutorSlot?: ReactNode;
 }) {
   const { accent, cardColor, pageBg, applied } = model;
   // FIX-48+50 P2 — 점선 슬롯 게이트: studio 미리보기 + 현재 앵커 일치 + 해당 값 비어있을 때만.
@@ -144,7 +154,8 @@ export function CardModelBody({
   // receiver 실동작 — 미주입 콜백은 undefined 그대로(시각 stub, onClick 없음).
   const act = variant === "receiver" ? (actions ?? {}) : {};
 
-  // 행동 버튼 조립 (본체/배경/강화/쿠폰 제외 — 쿠폰은 아래 도킹 카드로 분리). 정본 그대로.
+  // 행동 버튼 조립 — S3-4 §2: calendar(예약하기)·link(매장정보)는 그리드 버튼존으로 이동.
+  //   여기엔 commerce 계열(구매·인원)만 잔존(상품판매 미리보기 무회귀 — S4 몫).
   const bodyButtons: {
     id: string;
     label: string;
@@ -153,14 +164,6 @@ export function CardModelBody({
     trailing?: string;
     onClick?: () => void;
   }[] = [];
-  if (applied["calendar"])
-    bodyButtons.push({
-      id: "calendar",
-      label: "예약하기",
-      icon: Calendar,
-      main: true,
-      onClick: act.onReserve,
-    });
   if (applied["seasonal"] || applied["product"])
     bodyButtons.push({
       id: "buy",
@@ -172,13 +175,30 @@ export function CardModelBody({
     });
   if (applied["party"] && model.party != null)
     bodyButtons.push({ id: "party", label: `${model.party}명`, icon: Users });
-  if (applied["link"] && (model.phone || model.map))
-    bodyButtons.push({
-      id: "link",
-      label: model.phone && model.map ? "매장정보" : model.phone ? "전화" : "위치",
-      icon: model.phone ? Phone : MapPin,
-      onClick: act.onContact,
+
+  // S3-4 §2 — 그리드 버튼존(장착 블록만 렌더 — 미장착 = 미렌더, 조립 원칙).
+  //   ①예약 가능일 ②시설 정보 ③매장 정보 ④함께 받는 카드(포토 셀 §3).
+  //   쿠폰 받기는 편입 금지 — 쿠폰존 전용. 인라인 펼침 = 한 번에 하나·재탭 닫힘·Radix 0.
+  const [openGrid, setOpenGrid] = useState<string | null>(null);
+  // S3-4c — 예약 실행기 인라인 확장 상태(재탭 닫힘). 다른 그리드로 이동 시 자동 닫힘.
+  const [reserveOpen, setReserveOpen] = useState(false);
+  const toggleGrid = (id: string) =>
+    setOpenGrid((v) => {
+      const next = v === id ? null : id;
+      if (next !== "calendar") setReserveOpen(false);
+      return next;
     });
+  const dockItems = model.dockItems ?? [];
+  const gridItems: { id: string; label: string; icon: LucideIcon }[] = [];
+  const hasReservationDataEarly = (model.dates?.length ?? 0) > 0 || !!model.date;
+  if (applied["calendar"] && hasReservationDataEarly)
+    gridItems.push({ id: "calendar", label: "예약 가능일", icon: Calendar });
+  if (applied["link"] && (model.facilities?.length ?? 0) > 0)
+    gridItems.push({ id: "facilities", label: "시설 정보", icon: Store });
+  if (applied["link"] && (model.phone || model.map))
+    gridItems.push({ id: "store", label: "매장 정보", icon: model.phone ? Phone : MapPin });
+  const hasDockCell = applied["dock"] && dockItems.length > 0;
+  const gridCount = gridItems.length + (hasDockCell ? 1 : 0);
 
   const hasHeroMedia = applied["content"] || applied["image"] || applied["productimage"];
   // 데이터 게이트 — 백엔드 부재 섹션은 model 에 실데이터 있을 때만(미주입 = 미렌더).
@@ -744,14 +764,9 @@ export function CardModelBody({
             </div>
           )}
 
-          {/* 예약 가능일 — 데이터 있을 때만 렌더(정본 접기 로직 그대로) */}
-          {applied["calendar"] && hasReservationData && (
-            <ReservationPreview model={model} accent={accent} />
-          )}
-
           {/* 행동 버튼 조립 — 거울 수렴 S1 보정2: 빈 상태("행동 버튼 준비 중")는 studio 제작 가이드
               에서만. receiver/share 는 액션 0이면 이 영역 렌더 0(빈 껍데기 노출 금지). */}
-          {bodyButtons.length === 0 && !applied["dock"] && variant === "studio" ? (
+          {bodyButtons.length === 0 && gridCount === 0 && variant === "studio" ? (
             <div className="mt-3.5 rounded-xl border border-dashed border-[#D6D6D6] px-3 py-3 text-center text-[12px] font-medium text-[#737373] [word-break:keep-all]">
               목적 카드를 장착하면 여기에 행동 버튼이 생겨요
             </div>
@@ -786,115 +801,209 @@ export function CardModelBody({
             </div>
           ) : null}
 
-          {/* 매장 시설 정보 (주차·와이파이 등) — 데이터 있을 때만(백엔드 부재, 미주입=미렌더) */}
-          {applied["link"] && (model.facilities?.length ?? 0) > 0 && (
-            <div className="cm-slide-up mt-3">
-              <div className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold text-[#6E6E6E]">
-                <Store className="h-3 w-3" strokeWidth={2.5} />
-                매장 시설
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {model.facilities!.map((f, i) => (
-                  <span
-                    key={`${f}-${i}`}
-                    className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#404040]"
-                    style={{ boxShadow: "inset 0 0 0 1px #EDEDED" }}
+          {/* S3-4 §2·§3 — 그리드 버튼존(카드 내 마지막 요소 — 이후 절취선→쿠폰존이 카드 마감).
+              2열 · gap 8px · 셀 min-h 52px · radius 10px · 아이콘+라벨 세로. 홀수 시 마지막 풀폭. */}
+          {gridCount > 0 && (
+            <>
+              <div className="mt-3.5 grid grid-cols-2 gap-2" data-testid="card-grid-zone">
+                {gridItems.map((it, idx) => {
+                  const GIcon = it.icon;
+                  const isLastOdd = !hasDockCell && gridCount % 2 === 1 && idx === gridItems.length - 1;
+                  const open = openGrid === it.id;
+                  return (
+                    <button
+                      key={it.id}
+                      type="button"
+                      onClick={() => toggleGrid(it.id)}
+                      aria-expanded={open}
+                      className={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[10px] bg-white px-2 py-2 transition-transform duration-150 active:translate-y-px ${isLastOdd ? "col-span-2" : ""}`}
+                      style={{
+                        boxShadow: open ? `inset 0 0 0 1.5px ${accent}` : "inset 0 0 0 1px #EDEDED",
+                      }}
+                    >
+                      <GIcon className="h-4 w-4" style={{ color: accent }} strokeWidth={2.25} />
+                      <span className="flex items-center gap-0.5 text-[12px] font-bold text-[#0A0A0A]">
+                        {it.label}
+                        <ChevronDown
+                          className={`h-3 w-3 text-[#9A9A9A] transition-transform ${open ? "rotate-180" : ""}`}
+                          strokeWidth={2.5}
+                        />
+                      </span>
+                    </button>
+                  );
+                })}
+                {hasDockCell && (
+                  <button
+                    type="button"
+                    onClick={() => toggleGrid("dock")}
+                    aria-expanded={openGrid === "dock"}
+                    className={`cm-pulse-once relative min-h-[52px] overflow-hidden rounded-[10px] text-left transition-transform duration-150 active:translate-y-px ${gridCount % 2 === 1 ? "col-span-2" : ""}`}
+                    style={{
+                      boxShadow:
+                        openGrid === "dock" ? `inset 0 0 0 1.5px ${accent}` : "inset 0 0 0 1px #EDEDED",
+                    }}
+                    data-testid="dock-photo-cell"
                   >
-                    <Check className="h-3 w-3 shrink-0" style={{ color: accent }} strokeWidth={2.75} />
-                    {f}
-                  </span>
-                ))}
+                    {/* §3 — 상품 실사진 배경(등록 실사진만 — AI 생성 금지). 사진 없으면 아이콘 폴백. */}
+                    {dockItems[0].imageUrl ? (
+                      <img
+                        src={dockItems[0].imageUrl}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span
+                        className="absolute inset-0 flex items-center justify-center"
+                        style={{ backgroundColor: `${accent}12`, color: accent }}
+                      >
+                        <ImageIcon className="h-5 w-5" strokeWidth={2} />
+                      </span>
+                    )}
+                    <span className="absolute left-1.5 top-1.5 rounded-full bg-white/95 px-2 py-0.5 text-[10px] font-bold text-[#0A0A0A]">
+                      함께 받는 카드 · {dockItems.length}
+                    </span>
+                    <span className="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-white/95 px-2 py-1">
+                      <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-[#0A0A0A]">
+                        {dockItems[0].name}
+                        {dockItems[0].priceLabel ? ` ${dockItems[0].priceLabel}` : ""}
+                      </span>
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 shrink-0 text-[#6E6E6E] transition-transform ${openGrid === "dock" ? "rotate-180" : ""}`}
+                        strokeWidth={2.5}
+                      />
+                    </span>
+                  </button>
+                )}
               </div>
-            </div>
-          )}
 
-          {/* 함께 받는 카드 (도킹된 참조 카드) */}
-          {applied["dock"] && !!model.dockTitle && (
-            <div className="cm-slide-up mt-3">
-              <div className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold text-[#6E6E6E]">
-                <Copy className="h-3 w-3" strokeWidth={2.5} />
-                함께 받는 카드
-              </div>
-              <button
-                type="button"
-                onClick={act.onDockOpen}
-                className="flex w-full items-center gap-2.5 rounded-xl bg-white p-2 pr-2.5 text-left transition-transform duration-150 active:translate-y-px"
-                style={{ boxShadow: "inset 0 0 0 1px #EDEDED" }}
-              >
-                <span
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: `${accent}12`, color: accent }}
-                >
-                  <Play className="ml-0.5 h-4 w-4 fill-current" strokeWidth={0} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-bold text-[#0A0A0A]">
-                    {model.dockTitle}
-                  </span>
-                  {model.dockMeta && (
-                    <span className="block text-[11px] text-[#6E6E6E]">{model.dockMeta}</span>
+              {/* 인라인 펼침 — 그리드 바로 아래, 한 번에 하나만. */}
+              {openGrid === "calendar" && (
+                <div className="cm-slide-up">
+                  <ReservationPreview model={model} accent={accent} />
+                  {/* S3-4c — [예약하기] = 실행기 인라인 확장 토글(슬롯 주입 시 · 재탭 닫힘).
+                      미주입(스튜디오) = act.onReserve 폴백(시각 stub). Radix 0. */}
+                  <button
+                    type="button"
+                    onClick={
+                      reserveExecutorSlot ? () => setReserveOpen((v) => !v) : act.onReserve
+                    }
+                    aria-expanded={reserveExecutorSlot ? reserveOpen : undefined}
+                    className="mt-2 flex h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-semibold text-white transition-transform duration-150 active:translate-y-px"
+                    style={{
+                      backgroundColor: accent,
+                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.28), 0 1px 2px rgba(15,23,42,0.14)",
+                    }}
+                  >
+                    <Calendar className="h-4 w-4" strokeWidth={2.25} />
+                    {reserveOpen ? "예약 닫기" : "예약하기"}
+                  </button>
+                  {reserveOpen && reserveExecutorSlot ? (
+                    <div className="cm-slide-up mt-2">{reserveExecutorSlot}</div>
+                  ) : null}
+                </div>
+              )}
+              {openGrid === "facilities" && (
+                <div className="cm-slide-up mt-2 flex flex-wrap gap-1.5">
+                  {(model.facilities ?? []).map((f, i) => (
+                    <span
+                      key={`${f}-${i}`}
+                      className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#404040]"
+                      style={{ boxShadow: "inset 0 0 0 1px #EDEDED" }}
+                    >
+                      <Check className="h-3 w-3 shrink-0" style={{ color: accent }} strokeWidth={2.75} />
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {openGrid === "store" && (
+                <div className="cm-slide-up mt-2 grid grid-cols-3 gap-2">
+                  {model.phone && (
+                    <button
+                      type="button"
+                      onClick={act.onPhone ?? act.onContact}
+                      className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[10px] bg-white text-[12px] font-semibold text-[#0A0A0A]"
+                      style={{ boxShadow: "inset 0 0 0 1px #EDEDED" }}
+                    >
+                      <Phone className="h-4 w-4" style={{ color: accent }} strokeWidth={2.25} />
+                      전화
+                    </button>
                   )}
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-[#C4C4C4]" strokeWidth={2.5} />
-              </button>
-            </div>
+                  {model.phone && (
+                    <button
+                      type="button"
+                      onClick={act.onSms ?? act.onContact}
+                      className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[10px] bg-white text-[12px] font-semibold text-[#0A0A0A]"
+                      style={{ boxShadow: "inset 0 0 0 1px #EDEDED" }}
+                    >
+                      <MessageCircle className="h-4 w-4" style={{ color: accent }} strokeWidth={2.25} />
+                      문자
+                    </button>
+                  )}
+                  {model.map && (
+                    <button
+                      type="button"
+                      onClick={act.onDirections ?? act.onContact}
+                      className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[10px] bg-white text-[12px] font-semibold text-[#0A0A0A]"
+                      style={{ boxShadow: "inset 0 0 0 1px #EDEDED" }}
+                    >
+                      <MapPin className="h-4 w-4" style={{ color: accent }} strokeWidth={2.25} />
+                      길찾기
+                    </button>
+                  )}
+                </div>
+              )}
+              {openGrid === "dock" && (
+                <div className="cm-slide-up mt-2 space-y-1.5">
+                  {dockItems.map((d, i) => {
+                    const row = (
+                      <>
+                        {d.imageUrl ? (
+                          <img
+                            src={d.imageUrl}
+                            alt=""
+                            className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                          />
+                        ) : (
+                          <span
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                            style={{ backgroundColor: `${accent}12`, color: accent }}
+                          >
+                            <ImageIcon className="h-4 w-4" strokeWidth={2} />
+                          </span>
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13px] font-bold text-[#0A0A0A]">
+                            {d.name}
+                          </span>
+                          {d.priceLabel && (
+                            <span className="block text-[11px] text-[#6E6E6E]">{d.priceLabel}</span>
+                          )}
+                        </span>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-[#C4C4C4]" strokeWidth={2.5} />
+                      </>
+                    );
+                    const cls =
+                      "flex w-full items-center gap-2.5 rounded-xl bg-white p-2 pr-2.5 text-left transition-transform duration-150 active:translate-y-px";
+                    const ring = { boxShadow: "inset 0 0 0 1px #EDEDED" } as const;
+                    return d.href ? (
+                      <a key={i} href={d.href} target="_blank" rel="noopener noreferrer" className={cls} style={ring}>
+                        {row}
+                      </a>
+                    ) : (
+                      <button key={i} type="button" onClick={act.onDockOpen} className={cls} style={ring}>
+                        {row}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
 
-          {/* 공유 푸터 — S3-3 ⑦(FIX-55 신스킨): 라벨 3액션([나도 만들기]+[링크 복사]+[친구에게
-              보내기], 아이콘 단독 0 — 60대 친화). 스튜디오·수신 동형(거울) — 수신은 model.remakeHref
-              로 실링크, 스튜디오는 시각 stub. showShareFooter=false 소비처는 기존대로 억제. */}
-          {showShareFooter && (
-          <>
-          <div className="mt-4 space-y-2">
-            {model.remakeHref ? (
-              <a
-                href={model.remakeHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl text-[14px] font-bold text-white transition-transform duration-150 active:translate-y-px"
-                style={{ backgroundColor: accent, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25)" }}
-              >
-                <Wand2 className="h-4 w-4" strokeWidth={2.25} />
-                {model.remakeLabel ?? "나도 만들기"}
-              </a>
-            ) : (
-              <button
-                type="button"
-                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl text-[14px] font-bold text-white"
-                style={{ backgroundColor: accent, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25)" }}
-              >
-                <Wand2 className="h-4 w-4" strokeWidth={2.25} />
-                {model.remakeLabel ?? "나도 만들기"}
-              </button>
-            )}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={act.onCopyLink}
-                className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-white text-[13px] font-semibold text-[#404040] transition-transform duration-150 active:translate-y-px"
-                style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-              >
-                <Copy className="h-4 w-4" strokeWidth={2.25} />
-                링크 복사
-              </button>
-              <button
-                type="button"
-                onClick={act.onShare}
-                className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-white text-[13px] font-semibold text-[#404040] transition-transform duration-150 active:translate-y-px"
-                style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-              >
-                <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
-                친구에게 보내기
-              </button>
-            </div>
-          </div>
-
-          {/* FTC 고지 */}
-          <p className="mt-3 text-center text-[11px] leading-relaxed text-[#6E6E6E]">
-            본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
-          </p>
-          </>
-          )}
+          {/* S3-4 §1 — 내장 공유푸터(3액션+FTC)·'나도 만들기' 렌더 제거: 전달 슬립(페이지 존,
+              info-drop-page)으로 이동. remakeHref/remakeLabel 필드·onShare/onCopyLink 핸들러는
+              보존(렌더만 제거 — 가역). showShareFooter prop 도 호환 보존(현재 미소비). */}
 
           {/* 공유 여정 — FIX-46: v0 원형 복원(행은 showJourney 만으로 상시 — 정본 :596 동일).
               진실경계: 확산 칩은 실집계(model.spreadCount) 주입 시만, 여정 미주입 = 펼침 안
