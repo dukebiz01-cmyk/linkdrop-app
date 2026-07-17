@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Calendar,
@@ -63,6 +63,11 @@ const CM_KEYFRAMES = `
 .cm-scale-in { animation: cm-scale-in 0.3s ease-out both; }
 @keyframes cm-forge-burst { 0% { transform: scale(0.4); opacity: 0; } 40% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
 .cm-forge-burst { animation: cm-forge-burst 0.8s ease-out both; }
+/* B전환 커밋2 — 실시간 반영 pop(시안 .just-in): 값이 빈→채움 되는 순간 그 필드 0.5s 하이라이트.
+   inset box-shadow 로 채워 어떤 바탕색(칩·투명 텍스트) 위에서도 스냅 없이 페이드 → 원래 바탕 복귀.
+   틴트색은 목적색(--cm-pop, 요소 인라인 주입). studio 미리보기 전용(수신 거울 무영향). */
+@keyframes cm-just-in { from { box-shadow: inset 0 0 0 200px var(--cm-pop, rgba(15,118,110,0.15)); } to { box-shadow: inset 0 0 0 200px rgba(255,255,255,0); } }
+.cm-just-in { animation: cm-just-in 0.5s ease; }
 `;
 
 export function CardModelBody({
@@ -87,6 +92,38 @@ export function CardModelBody({
   const slotFor = (anchor: string) =>
     variant === "studio" && currentSlot?.anchor === anchor ? currentSlot : null;
   const [journeyOpen, setJourneyOpen] = useState(false);
+
+  // B전환 커밋2 — 실시간 반영 pop: studio 미리보기에서 필드 값이 빈→채움으로 전이하는 순간 그 필드에
+  //   0.5s 하이라이트(시안 .just-in). 순수 렌더 유지 — 값 변화만 감지(외부 상태 주입 0). /d 수신
+  //   거울은 variant 게이트로 무영향. 스텝퍼·독 배지·점선 슬롯은 currentSlot 단일 정본과 이미 동기.
+  const [justIn, setJustIn] = useState<string | null>(null);
+  const prevValsRef = useRef<Record<string, string>>({});
+  const popSeededRef = useRef(false);
+  useEffect(() => {
+    if (variant !== "studio") return;
+    const cur: Record<string, string> = {
+      origin: model.productOrigin ?? "",
+      price: model.priceText ?? "",
+      qty: model.productQty ? String(model.productQty) : "",
+    };
+    // 첫 실행 = 시드만(기존 값 pre-fill 된 카드 편집 진입 시 mount pop 오발 방지).
+    if (!popSeededRef.current) {
+      popSeededRef.current = true;
+      prevValsRef.current = cur;
+      return;
+    }
+    const prev = prevValsRef.current;
+    let filled: string | null = null;
+    for (const k of Object.keys(cur)) if (!prev[k] && cur[k]) filled = k; // 빈→채움 전이만.
+    prevValsRef.current = cur;
+    if (!filled) return;
+    setJustIn(filled);
+    const t = setTimeout(() => setJustIn(null), 500);
+    return () => clearTimeout(t);
+  }, [variant, model.productOrigin, model.priceText, model.productQty]);
+  const popCls = (a: string) => (justIn === a ? "cm-just-in" : "");
+  const popStyle = (a: string) =>
+    justIn === a ? ({ ["--cm-pop"]: `${accent}26` } as CSSProperties) : undefined;
 
   const CategoryIcon: LucideIcon = model.categoryIcon ?? Tag;
   const CtaIcon: LucideIcon = model.ctaIcon ?? Tag;
@@ -427,7 +464,10 @@ export function CardModelBody({
                     </span>
                   )}
                   {model.productOrigin && (
-                    <span className="rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-bold text-[#525252]">
+                    <span
+                      className={`rounded-full bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-bold text-[#525252] ${popCls("origin")}`}
+                      style={popStyle("origin")}
+                    >
                       원산지 {model.productOrigin}
                     </span>
                   )}
@@ -457,7 +497,10 @@ export function CardModelBody({
                 </span>
                 <span className="flex items-baseline gap-1.5">
                   {model.productQty && (
-                    <span className="text-[10px] font-semibold text-[#8A8A8A]">
+                    <span
+                      className={`text-[10px] font-semibold text-[#8A8A8A] ${popCls("qty")}`}
+                      style={popStyle("qty")}
+                    >
                       한정 {model.productQty}
                       {model.productQtyUnit ?? "개"}
                     </span>
@@ -477,7 +520,10 @@ export function CardModelBody({
                       {currentSlot!.label}이 여기 붙어요
                     </span>
                   ) : (
-                    <span className="text-[18px] font-bold tabular-nums text-[#0A0A0A]">
+                    <span
+                      className={`text-[18px] font-bold tabular-nums text-[#0A0A0A] ${popCls("price")}`}
+                      style={popStyle("price")}
+                    >
                       {model.priceText || "가격 미정"}
                     </span>
                   )}
