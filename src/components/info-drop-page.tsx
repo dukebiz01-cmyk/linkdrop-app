@@ -63,10 +63,8 @@ import {
 } from "@/components/reservation-calendar-page";
 import type { ReservationDateItem } from "@/components/create-drop-wizard";
 import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
-import { CouponPreview } from "@/components/receiver/CouponPreview";
-import { CardBody } from "@/components/card/CardBody";
-// Phase 1-C — 1-A 배지 재사용(수신카드 주입). 순환 없음: ShareCardTile 트리(home-page→drop-feed-card)는 본 파일 미참조.
-import { TimerBadge, StockMeta } from "@/components/home/ShareCardTile";
+// S3-2 — CouponPreview·CardBody·TimerBadge 소비 소멸(수렴 3종의 쿠폰·본체는 CardModelBody 정본).
+import { StockMeta } from "@/components/home/ShareCardTile";
 // ST2b-2a A2 — 판매기간 D-day 라벨(FIX-39 booster45 순수 모듈 재사용 — 조회 시점 계산).
 import { ddayLabel, buildGroupBuyView } from "@/components/card-model/booster45";
 // ST2b-2b B1 — 재입고 알림(FIX-41) 실배선 — 락 문구 정본 사용.
@@ -81,9 +79,8 @@ import { ShareJourneyTimeline, type ShareJourneyRpcNode } from "@/components/sha
 import { PurchaseCardBody } from "@/components/card/PurchaseCardBody";
 import { ProductWidget } from "@/components/card/ProductWidget";
 import { CardActionButton } from "@/components/card/CardActionButton";
-import { DropCardShell } from "@/components/card/DropCardShell";
 import { ButtonBlock } from "@/components/card/ButtonBlock";
-import { toCardBodyProps, buildProductWidget, toDropDetailInput } from "@/lib/adapters";
+import { buildProductWidget, toDropDetailInput } from "@/lib/adapters";
 // 거울 수렴 S1 — info 분기만 CardModel 정본 렌더로 마운트(fromDropDetail). 타 variant 무접촉.
 import { CardModelBody } from "@/components/card-model/CardModelBody";
 import { fromDropDetail } from "@/components/card-model/card-model-adapters";
@@ -969,6 +966,11 @@ export function InfoDropPage({
   // S18-A(P4) — 카드 내부 "쿠폰 받기" CTA 가시성 관찰: 보이면(threshold 0.5) sticky 숨김, 벗어나면 복귀.
   //   IO 미지원·스크립트 미실행·SSR = visible=false 유지 → sticky 항상 표시(현행 동작 폴백).
   const inlineCouponCtaRef = useRef<HTMLDivElement | null>(null);
+  // S3-3 ④ — 카드 내 [예약하기]·[매장정보] = 표시 동형(스튜디오), 실행은 실행 카드로 스크롤 안내
+  //   (캘린더에서 날짜 선택 → 기존 예약 CTA 체인 / 연락 rows 도 실행 카드 편입분).
+  const executorRef = useRef<HTMLElement | null>(null);
+  const scrollToExecutor = () =>
+    executorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   const [inlineCouponCtaVisible, setInlineCouponCtaVisible] = useState(false);
   useEffect(() => {
     if (!hasStickyBar) return;
@@ -1021,7 +1023,7 @@ export function InfoDropPage({
   // 예약 활성 버튼은 캘린더 내부(reservation-calendar-page)의 단일 [예약하기]로 일원화
   //   (중복 제거). 여기선 슬롯 흐름이 깨졌을 때(onReservationRequest 부재) 안전 안내 1줄만.
   const reserveNotice = !onReservationRequest ? (
-    <p className={`text-xs font-medium tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}>
+    <p className={`text-xs font-medium tracking-ko ${isLightShell ? "text-text-muted" : "text-white/70"}`}>
       예약 신청을 받을 수 없는 매장이에요.
     </p>
   ) : null;
@@ -1036,27 +1038,9 @@ export function InfoDropPage({
     </p>
   );
 
-  // Phase 1-C — 마감 타이머(1-A TimerBadge 재사용, L1~L7 하드락은 ShareCardTile·use-countdown 주석 체계 준수).
-  //   [보정2] 게이트: 쿠폰 계열 variant + funnelCoupon 존재 + expiresAt 주입 시에만. 그 외 미렌더.
-  //   TimerBadge 는 absolute 배지라 relative 스트립으로 감싼다(배지 자체 무수정).
-  const couponTimer =
-    (resolvedVariant === "coupon" || resolvedVariant === "reservation") &&
-    funnelCoupon &&
-    expiresAt ? (
-      <div className="relative h-7">
-        <TimerBadge expiresAt={expiresAt} serverNow={serverNow} />
-      </div>
-    ) : null;
-
-  const couponPanel = funnelCoupon ? (
-    <div className="space-y-3">
-      {couponTimer}
-      <CouponPreview coupon={funnelCoupon} />
-      <p className={`text-xs font-medium tracking-ko ${isLightCard ? "text-text-muted" : "text-white/70"}`}>
-        예약을 신청하면 쿠폰이 지갑에 담겨요.
-      </p>
-    </div>
-  ) : null;
+  // S3-2 — 구 쿠폰 패널 체인(couponTimer→couponPanel→benefitEventSection·combinedCouponOnlyCta)
+  //   제거: S2(coupon)·S3-1(reservation) 수렴으로 소비 소멸(참조 0 grep 확인). 타이머·쿠폰
+  //   표시는 CardModelBody 내장 쿠폰 존(couponExpiresAt·serverNow 관통)이 정본.
 
   // CC#2 (a) — 진행 이벤트 요약(makerAvailableDates 의 eventTitle/eventDescription).
   //   캘린더 내부 상세 리스트 카드(reservation-calendar-page)는 데이터·소스 그대로 유지.
@@ -1091,42 +1075,8 @@ export function InfoDropPage({
     </div>
   ) : null;
 
-  // CC#2 (a) — "예약하면 받는 혜택 / 진행 이벤트" 합성 섹션.
-  //   혜택 = funnelCoupon(기존 couponPanel 재사용) · 이벤트 = makerAvailableDates 요약.
-  //   두 소스 독립 → 조건부 병치(쿠폰만/이벤트만/둘 다 모두 정상, 둘 다 없으면 미렌더).
-  const benefitEventSection =
-    funnelCoupon || hasEvents ? (
-      <section data-testid="benefit-event-section" className="space-y-3">
-        {funnelCoupon ? (
-          <div className="space-y-2">
-            <h2 className={`text-sm font-bold tracking-ko ${isLightCard ? "text-text-strong" : "text-white"}`}>
-              예약하면 받는 혜택
-            </h2>
-            {couponPanel}
-          </div>
-        ) : null}
-        {eventsSection}
-      </section>
-    ) : null;
-
-  // S23 — 교집합(isCombined) 보조 "쿠폰 받기"(쿠폰만): 옛 IIFE 셸(카드 밖 하단 스택) 렌더가
-  //   "하단 깔림" 증상 → 카드 내부(couponBlock, 쿠폰 패널 인접)로 이동. 버튼 testid·클래스·
-  //   핸들러(onReserveAndClaim = S14 claim_coupon 경로) 그대로 — 위치만. sticky 는 교집합에서
-  //   원래 미표시(hasStickyBar !isCombined)라 IO 연동 변화 없음.
-  const combinedCouponOnlyCta =
-    isCombined && onReserveAndClaim ? (
-      <button
-        type="button"
-        data-testid="cta-coupon-only"
-        onClick={onReserveAndClaim}
-        className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-bold tracking-ko text-[#0A0A0A] hover:bg-[#FAFAFA]"
-      >
-        쿠폰 받기
-      </button>
-    ) : null;
-
-  // 3b-2 — 정보 보기(연락) 블록 const 추출. 콘텐츠 0변화, 위치만(handleCtaClick 결선 그대로).
-  //   3b-3 에서 CardBody contactBlock 으로 주입하기 위함.
+  // 3b-2 — 정보 보기(연락) 블록 const 추출. 콘텐츠 0변화(handleCtaClick 결선 그대로).
+  //   S3-2 — 예약 실행 카드(coupon·reservation 분기) 하단에 편입 렌더.
   const contactRow =
     hasPhone || Boolean(safeLocal.address?.trim() || safeLocal.name?.trim()) ? (
       <section data-testid="secondary-contact-row" className="flex items-stretch gap-2">
@@ -1210,51 +1160,90 @@ export function InfoDropPage({
   // S17(P4) — 단일 마크업을 light 파라미터 함수로: 기존 소비처(카드색 기반)는 shareFooter 그대로,
   //   흰 카드 프레임 안 인입(purchase ProductWidget footerSlot·lead 폼)은 renderShareFooter(true)로
   //   라이트 스타일 강제(navy 페이지 배경과 무관하게 카드 안은 흰 바탕). 마크업·핸들러 복제 0.
-  const renderShareFooter = (light: boolean) => (
+  // S5c/S9/P6-4 — 나도 만들기 목적지(기존 체인 무수정 — 지점③은 스킨만).
+  const remakeHref = isViewerBusiness
+    ? "/studio-build"
+    : videoSourceUrl && !commerce?.selfUpload
+      ? `/create-wizard?url=${encodeURIComponent(videoSourceUrl)}&purpose=${resolvedVariant}`
+      : `/create-wizard?purpose=${resolvedVariant}`;
+  const remakeLabel = videoSourceUrl && !commerce?.selfUpload ? "이 영상으로 나도 만들기" : "나도 만들기";
+  // S3-3 ⑦ — withActions=false: 공유 3액션·FTC 는 카드 내장 푸터(CardModelBody)가 담당하는
+  //   수렴 variant 용 법정-only 모드(문제신고·공유여정만). 기본 true = 기존 전체 푸터.
+  const renderShareFooter = (light: boolean, withActions = true) => (
     <div data-testid="share-footer">
-      <div data-testid="share-block" className="mt-4 flex items-center gap-2">
-        {/* S5b — 형님 확정 A: 푸터 4면 동일. 영상 무 카드는 Wand2=나도 만들기(스튜디오 진입, 캐처→드로퍼 루프). */}
-        {/* S5c — 형님 확정(a): purpose=resolvedVariant 전파. 비사업자 강등 게이트는 위저드가 담당. */}
-        {/* S9 — 새 탭: 보던 카드 보존 + 위저드 작업 보호 (리포 확립 패턴: 외부 진입=새 탭) */}
-        <a
-          href={
-            // P6-4(N4) — 사업자 열람자 = studio-build 직결(purpose 프리셋: 빌더가 쿼리 초기모드
-            //   미수신이라 전파 생략 — 수신 신설은 다음 슬라이스 판단). 그 외 = 현행 S5c 그대로.
-            isViewerBusiness
-              ? "/studio-build"
-              : videoSourceUrl && !commerce?.selfUpload
-                ? `/create-wizard?url=${encodeURIComponent(videoSourceUrl)}&purpose=${resolvedVariant}`
-                : `/create-wizard?purpose=${resolvedVariant}`
-          }
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={videoSourceUrl && !commerce?.selfUpload ? "이 영상으로 만들기" : "나도 만들기"}
-          // C13 S4b — 라이트 카드는 목적색(accent) bg+흰글씨(스튜디오 MODE_ACCENT 미러). 다크 레거시는 기존 흰 버튼 보존.
-          className={`flex h-12 flex-1 items-center justify-center rounded-2xl shadow-[0_4px_14px_rgba(0,0,0,0.18)] ${light ? "text-white" : "bg-white text-[#0A0A0A]"}`}
-          style={light ? { backgroundColor: accent } : undefined}
-        >
-          <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
-        </a>
-        <button
-          type="button"
-          onClick={handleCopy}
-          aria-label="링크 복사"
-          className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${light ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
-        >
-          <Copy className="h-5 w-5" strokeWidth={2.25} />
-        </button>
-        <button
-          type="button"
-          onClick={handleKakao}
-          aria-label="친구에게 보내기"
-          className={`flex h-12 w-12 items-center justify-center rounded-2xl ring-1 ring-inset ${light ? "bg-[#F5F5F5] text-text-strong ring-[#E5E5E5]" : "bg-white/15 text-white ring-white/25"}`}
-        >
-          <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
-        </button>
-      </div>
-      <p className={`mt-3 text-center text-[10px] leading-relaxed ${light ? "text-text-subtle" : "text-white/45"}`}>
-        본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
-      </p>
+      {!withActions ? null : light ? (
+        // S3-2 지점③(FIX-55 파킹 해제) — 라이트 푸터 정본화: 아이콘 단독 금지(60대 친화),
+        //   [매직봉+라벨 명시] + [링크 복사] + [친구에게 보내기] 3액션 라벨 행.
+        //   href/핸들러/체인 로직 무수정 — 스킨만. 비-light(잔존 variant 네이비)는 기존 유지.
+        <div data-testid="share-block" className="mt-4 space-y-2">
+          <a
+            href={remakeHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={remakeLabel}
+            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-[15px] font-bold tracking-ko text-white shadow-[0_4px_14px_rgba(0,0,0,0.12)]"
+            style={{ backgroundColor: accent }}
+          >
+            <Wand2 className="h-5 w-5" strokeWidth={2.25} />
+            {remakeLabel}
+          </a>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopy}
+              aria-label="링크 복사"
+              className="flex min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-[#F5F5F5] text-sm font-bold tracking-ko text-text-strong ring-1 ring-inset ring-[#E5E5E5]"
+            >
+              <Copy className="h-4 w-4" strokeWidth={2.25} />
+              링크 복사
+            </button>
+            <button
+              type="button"
+              onClick={handleKakao}
+              aria-label="친구에게 보내기"
+              className="flex min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-[#F5F5F5] text-sm font-bold tracking-ko text-text-strong ring-1 ring-inset ring-[#E5E5E5]"
+            >
+              <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
+              친구에게 보내기
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div data-testid="share-block" className="mt-4 flex items-center gap-2">
+          {/* S5b — 형님 확정 A: 푸터 4면 동일. 영상 무 카드는 Wand2=나도 만들기(스튜디오 진입, 캐처→드로퍼 루프). */}
+          {/* S9 — 새 탭: 보던 카드 보존 + 위저드 작업 보호 (리포 확립 패턴: 외부 진입=새 탭) */}
+          <a
+            href={remakeHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={remakeLabel}
+            className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-white text-[#0A0A0A] shadow-[0_4px_14px_rgba(0,0,0,0.18)]"
+          >
+            <Wand2 className="h-[22px] w-[22px]" strokeWidth={2.25} />
+          </a>
+          <button
+            type="button"
+            onClick={handleCopy}
+            aria-label="링크 복사"
+            className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-inset ring-white/25"
+          >
+            <Copy className="h-5 w-5" strokeWidth={2.25} />
+          </button>
+          <button
+            type="button"
+            onClick={handleKakao}
+            aria-label="친구에게 보내기"
+            className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-inset ring-white/25"
+          >
+            <MessageCircle className="h-5 w-5" strokeWidth={2.25} />
+          </button>
+        </div>
+      )}
+      {withActions ? (
+        <p className={`mt-3 text-center text-[10px] leading-relaxed ${light ? "text-text-subtle" : "text-white/45"}`}>
+          본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
+        </p>
+      ) : null}
       <button
         type="button"
         onClick={() => setIsReportSheetOpen(true)}
@@ -1297,7 +1286,10 @@ export function InfoDropPage({
       ) : null}
     </div>
   );
-  const shareFooter = renderShareFooter(isLightCard);
+  // S3-2 추가 — 라이트 variant(info·coupon·reservation·lead) 푸터 = 단일 정본(라벨 3액션).
+  //   구 isLightCard(카드 저장색 판정)로는 info 가 light=false 구 스킨에 남았음 → isLightShell 로
+  //   교체. 비-light(purchase 폴백 등 navy)만 구 아이콘 스킨 분기 존치.
+  const shareFooter = renderShareFooter(isLightShell);
   /* SM-2 상태·핸들러는 컴포넌트 상단(useState 클러스터)에 — renderShareFooter 가 클로저로 사용. */
 
   return (
@@ -1417,17 +1409,16 @@ export function InfoDropPage({
         {resolvedVariant === "info" && (
           // 거울 수렴 S1 — info 분기 = CardModel 정본 렌더(CardModelBody, 스튜디오 미리보기와 동일
           //   거울). 프레임 navy(DropCardShell)→white(CardModelBody)는 의도된 수렴(문서 기록).
-          //   내장 공유푸터는 억제(showShareFooter=false)하고 페이지 크롬 shareFooter(나도만들기/신고/
-          //   여정) 존치. 영상요약(aiSummaryAccordion)도 페이지 크롬으로 존치. S13(전화/예약 칩 없음)은
-          //   local/funnelCoupon 미주입으로 유지(정보 카드 = 영상·제목·한마디·키포인트만).
+          //   S3-3 ⑦ — 내장 공유푸터 사용(스튜디오 정본 위치·라벨 3액션 신스킨). 페이지 하단은
+          //   법정만(renderShareFooter legal-only). 영상요약(aiSummaryAccordion)은 페이지 크롬 존치.
+          //   S13(전화/예약 칩 없음)은 local/funnelCoupon 미주입으로 유지.
           <>
             <CardModelBody
               variant="receiver"
-              showShareFooter={false}
               showJourney={false}
               actions={{ onShare, onCopyLink }}
-              model={fromDropDetail(
-                toDropDetailInput({
+              model={fromDropDetail({
+                ...toDropDetailInput({
                   videoSourceUrl,
                   videoThumbnailUrl,
                   videoDurationSec,
@@ -1439,10 +1430,12 @@ export function InfoDropPage({
                   variant,
                   maker,
                 } as unknown as InfoDropPageProps),
-              )}
+                remakeHref,
+                remakeLabel,
+              })}
             />
             {aiSummaryAccordion}
-            {shareFooter}
+            {renderShareFooter(true, false)}
           </>
         )}
         {resolvedVariant === "coupon" && (
@@ -1460,12 +1453,18 @@ export function InfoDropPage({
           <>
             <CardModelBody
               variant="receiver"
-              showShareFooter={false}
               showJourney={false}
               couponCtaRef={inlineCouponCtaRef}
-              actions={{ onShare, onCopyLink, onClaimCoupon: onReserveAndClaim }}
-              model={fromDropDetail(
-                toDropDetailInput({
+              actions={{
+                onShare,
+                onCopyLink,
+                onClaimCoupon: onReserveAndClaim,
+                // S3-3 ④ — 표시 동형(스튜디오 stub 자리) + 실행 카드 스크롤 안내.
+                onReserve: scrollToExecutor,
+                onContact: scrollToExecutor,
+              }}
+              model={fromDropDetail({
+                ...toDropDetailInput({
                   videoSourceUrl,
                   videoThumbnailUrl,
                   videoDurationSec,
@@ -1479,22 +1478,35 @@ export function InfoDropPage({
                   funnelCoupon,
                   expiresAt,
                   serverNow,
-                  local: local?.name ? { name: local.name } : undefined,
+                  // S3-3 ③·④·⑥ — 결합 카드 스튜디오 동형: 예약 가능일(슬롯)·매장정보 버튼
+                  //   (phone/address)·함께 받는 카드(도킹) 관통.
+                  initialSlots,
+                  attachedProducts,
+                  local,
                 } as unknown as InfoDropPageProps),
-              )}
+                remakeHref,
+                remakeLabel,
+              })}
             />
+            {/* S3-2 — 예약 실행 카드: 캘린더(캠핑장정보·인원·선택예약·CTA)·결제고지·연락을
+                본체와 동일 시각 언어(흰 카드·rounded-2xl·보더)의 카드 한 장으로 묶음 —
+                캘린더 내부 로직·RESERVATION_* 토큰 무수정(래핑+연락 편입만).
+                스택 정본: 본체 카드 → 실행 카드 → 콘텐츠(이벤트·요약) → 법정(푸터). */}
+            {(showCalendar || contactRow) && (
+              <section
+                ref={executorRef}
+                data-testid="reserve-executor-card"
+                className="space-y-4 rounded-2xl border border-[#E8EDF3] bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]"
+              >
+                {showCalendar ? calendarPanel : null}
+                {showCalendar ? billingNotice : null}
+                {contactRow}
+              </section>
+            )}
             {eventsSection}
-            {showCalendar ? (
-              <div className="space-y-3">
-                {calendarPanel}
-                {billingNotice}
-              </div>
-            ) : null}
-            {contactRow}
             {aiSummaryAccordion}
-            {/* S2 — 라이트 셸 강제(lead S17 선례): 공용 shareFooter(isLightCard 판정)는 잔존
-                variant 몫이라 무접촉, coupon 은 항상 light. */}
-            {renderShareFooter(true)}
+            {/* S3-3 ⑦ — 공유 3액션은 카드 내장 푸터로 이동. 하단은 법정만(신고·여정). */}
+            {renderShareFooter(true, false)}
           </>
         )}
         {isReservation && (
@@ -1528,21 +1540,23 @@ export function InfoDropPage({
           //     예약하기 CTA·결제고지) = 아래 크롬 존치(무조건 렌더 — 옛 reservationBlock 동작 보존).
           //   · funnelCoupon 주입 = 결합 카드 인카드 쿠폰존(S3-0 isCombined 정합·sticky 미표시,
           //     쿠폰 받기 = onReserveAndClaim). 구 combinedCouponOnlyCta/benefitEventSection 쿠폰부 대체.
-          //   · local 은 name·reservationUrl 만 주입(발급처 표기 + 슬롯 0 카드의 calendar 버튼
-          //     폴백) — phone/address 미주입 = 카드 내 매장정보 버튼 미렌더(contactRow 크롬 존치).
+          //   · local 은 name 만 주입(쿠폰존 발급처 표기) — phone/address 미주입 = 카드 내
+          //     매장정보 버튼 미렌더(연락은 실행 카드 편입분 몫). S3-2: reservationUrl 주입도
+          //     제거(어댑터 calendar 게이트가 dates 전용으로 정합 — 스튜디오 동형).
           <>
             <CardModelBody
               variant="receiver"
-              showShareFooter={false}
               showJourney={false}
               actions={{
                 onShare,
                 onCopyLink,
                 onClaimCoupon: onReserveAndClaim,
-                onReserve: () => onReservationRequest?.(),
+                // S3-3 ④ — 표시 동형 + 실행 카드 스크롤 안내(날짜 선택 → 기존 예약 CTA 체인).
+                onReserve: scrollToExecutor,
+                onContact: scrollToExecutor,
               }}
-              model={fromDropDetail(
-                toDropDetailInput({
+              model={fromDropDetail({
+                ...toDropDetailInput({
                   videoSourceUrl,
                   videoThumbnailUrl,
                   videoDurationSec,
@@ -1557,22 +1571,31 @@ export function InfoDropPage({
                   expiresAt,
                   serverNow,
                   initialSlots,
-                  local:
-                    local?.name || local?.reservationUrl
-                      ? { name: local?.name, reservationUrl: local?.reservationUrl ?? null }
-                      : undefined,
+                  // S3-3 ④·⑥ — 매장정보 버튼(phone/address)·함께 받는 카드(도킹) 관통.
+                  attachedProducts,
+                  local,
                 } as unknown as InfoDropPageProps),
-              )}
+                remakeHref,
+                remakeLabel,
+              })}
             />
-            {eventsSection}
-            <div className="space-y-3">
+            {/* S3-2 — 예약 실행 카드(coupon 분기 동형): 캘린더·결제고지·연락을 라이트 카드
+                한 장으로 묶음(래핑+연락 편입만 — 내부 무수정). 캘린더는 예약 variant 정본대로
+                무조건 렌더(showCalendar false 시 calendarPanel 자체 fallback 보존).
+                스택 정본: 본체 카드 → 실행 카드 → 콘텐츠(이벤트) → 법정(푸터). */}
+            <section
+              ref={executorRef}
+              data-testid="reserve-executor-card"
+              className="space-y-4 rounded-2xl border border-[#E8EDF3] bg-white p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)]"
+            >
+              {reserveNotice}
               {calendarPanel}
               {billingNotice}
-            </div>
-            {contactRow}
-            {/* S3-1 — 라이트 셸 강제(S2 coupon 동형): 공용 shareFooter(isLightCard 판정)는
-                잔존 variant(purchase·lead) 몫. */}
-            {renderShareFooter(true)}
+              {contactRow}
+            </section>
+            {eventsSection}
+            {/* S3-3 ⑦ — 공유 3액션은 카드 내장 푸터로 이동. 하단은 법정만(신고·여정). */}
+            {renderShareFooter(true, false)}
           </>
         )}
 
@@ -1659,26 +1682,8 @@ export function InfoDropPage({
           </p>
         )}
 
-        {/* 예약 드롭 = [예약가능 캘린더 | 예약하기 | 쿠폰] 3탭 (기존).
-            v7.2 쿠폰 드롭 = [쿠폰 | 예약가능 캘린더] 2탭. 정보/구매/상담 진입 X. */}
-        {showReservationCalendar &&
-          (() => {
-
-            // CC#2 (a) 탭 → 스택. ReservationCardTabs(표시-전환 state 만 보유, 라우팅·데이터
-            //   로직 없음) 제거하고 패널을 세로 스택으로 보존. variant 별 구성 유지:
-            //   coupon = [혜택·이벤트][캘린더] / reservation = [혜택·이벤트][캘린더(예약하기·결제고지 포함)].
-            return (
-              // 하단 블록 균일 스택 — 본문 space-y-6 리듬에 통일(쿠폰 미리보기·예약·쿠폰 받기).
-              //   새 블록(상품/타카드) 슬롯인 시 동일 간격 자동 적용. 블록 내부는 0터치.
-              <div className="space-y-6">
-                {/* 손님 하단 블록(쿠폰·예약)은 CardBody couponBlock/reservationBlock 로 이관(3b-3).
-                    IIFE 셸엔 reserveNotice·쿠폰만받기만 잔류(조건 동일, funnel 0터치). */}
-                {!isCoupon ? reserveNotice : null}
-                {/* Phase 1 통합(가-2) 보조 "쿠폰만 받기"는 S23 에서 카드 내부(couponBlock,
-                    combinedCouponOnlyCta)로 이동 — 여기(카드 밖 하단) 렌더 제거. */}
-              </div>
-            );
-          })()}
+        {/* S3-2 — 구 IIFE 하단 스택 제거: 쿠폰에선 빈 div 잔재, 예약의 reserveNotice 는
+            실행 카드 내부로 편입(아래 reservation 분기). */}
 
         {/* S7 — AI 요약 아코디언은 info/coupon 카드 내부(CardBody preFooterSlot)로 이동.
             정의: 상단 aiSummaryAccordion const. 여기(카드 밖) 직접 렌더 제거. */}
@@ -1815,9 +1820,14 @@ export function InfoDropPage({
           </section>
         )}
 
-        {/* ③ 관련 상품 — 담은 상품(attached). 본체 커머스/영상/쿠폰/예약 렌더와 독립.
-            탭 → 그 상품 자체 카드(/d/{refShareUuid}) 인앱 이동. 없으면 미표시. */}
-        {attachedProducts && attachedProducts.length > 0 && (
+        {/* ③ 관련 상품 — 담은 상품(attached). 본체 커머스/영상 렌더와 독립.
+            탭 → 그 상품 자체 카드(/d/{refShareUuid}) 인앱 이동. 없으면 미표시.
+            S3-3 ⑥ — coupon·reservation 수렴 분기는 카드 내 도킹 존(함께 받는 카드)이 담당
+            → 이중 렌더 금지로 크롬 미렌더. */}
+        {attachedProducts &&
+          attachedProducts.length > 0 &&
+          resolvedVariant !== "coupon" &&
+          resolvedVariant !== "reservation" && (
           <section data-testid="related-products">
             <h2
               className={cn(

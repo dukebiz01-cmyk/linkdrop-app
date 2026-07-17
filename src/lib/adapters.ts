@@ -637,6 +637,16 @@ export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
     ...(props.serverNow ? { serverNow: props.serverNow } : {}),
     // S3-1 — 예약 슬롯 관통(SSR loader initialSlots → 카드 내 예약 존: 스튜디오 cfgDates 거울).
     ...(props.initialSlots?.length ? { initialSlots: props.initialSlots } : {}),
+    // S3-3 ⑥ — 함께 받는 카드(도킹) 관통: 스튜디오 dockedProducts[0] 거울(CardModel dock 존 1개).
+    ...(props.attachedProducts?.length
+      ? {
+          attachedProducts: props.attachedProducts.map((p) => ({
+            name: p.name,
+            priceKrw: p.priceKrw,
+            producerName: p.producerName,
+          })),
+        }
+      : {}),
     ...(props.local
       ? {
           local: {

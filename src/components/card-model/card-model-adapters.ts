@@ -1,4 +1,4 @@
-import { Calendar, MessageCircle, Newspaper, ShoppingBag, Tag, Ticket } from "lucide-react";
+import { Calendar, MessageCircle, Newspaper, ShoppingBag, Tag } from "lucide-react";
 import type { CardJourneyNode, CardModel } from "./card-model.types";
 
 /**
@@ -112,6 +112,12 @@ export type DropDetailInput = {
   couponExpiresAt?: string | null;
   /** S2 — 서버 기준시각(라우트 loader serverNow). TimerBadge offset 보정 관통. */
   serverNow?: string;
+  /** S3-3 ⑤ — 매장 시설 태그 관통(applied.link 게이트 하 렌더). 현행 공급원 부재(RPC store
+   *  미포함) = 미주입 = 미렌더 — 가짜값 금지, 관통 자리만. */
+  facilities?: string[];
+  /** S3-3 ⑦ — 내장 푸터 "나도 만들기" 실링크(수신 전용). 미주입(스튜디오) = 시각 stub. */
+  remakeHref?: string;
+  remakeLabel?: string;
   /** ← InfoDropPageProps.local (RPC store). */
   local?: {
     name?: string;
@@ -144,24 +150,23 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
       ? CARD_MODEL_ACCENTS.reserve
       : CARD_MODEL_ACCENTS.general;
 
+  // S3-2 지점① — 본체 칩 = 스튜디오 실렌더 동형(CardStudioPage45 content.category):
+  //   reserve 모드 = "예약 · 쿠폰 카드"(Calendar). 쿠폰 variant 를 "쿠폰 카드"로 쓰면
+  //   도킹 쿠폰 존 칩("쿠폰 카드" — CardModelBody 고정)과 2회 중복 — 스튜디오는 1회.
   const category = isCommerce
     ? "상품 카드"
-    : isReservation
-      ? "예약 카드"
-      : variant === "coupon"
-        ? "쿠폰 카드"
-        : variant === "lead"
-          ? "상담 카드"
-          : "정보 카드";
+    : isReservation || variant === "coupon"
+      ? "예약 · 쿠폰 카드"
+      : variant === "lead"
+        ? "상담 카드"
+        : "정보 카드";
   const categoryIcon = isCommerce
     ? ShoppingBag
-    : isReservation
+    : isReservation || variant === "coupon"
       ? Calendar
-      : variant === "coupon"
-        ? Ticket
-        : variant === "lead"
-          ? MessageCircle
-          : Newspaper;
+      : variant === "lead"
+        ? MessageCircle
+        : Newspaper;
 
   // 예약 — initialSlots(slot_date/slot_time/available) → dates/times/slotsByDate 집계.
   const slots = input.initialSlots ?? [];
@@ -194,7 +199,11 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
       content: !isCommerce && !!input.videoThumbnailUrl,
       productimage: isCommerce && !!heroImageUrl,
       product: isCommerce,
-      calendar: isReservation && (dates.length > 0 || !!input.local?.reservationUrl),
+      // S3-2 — 스튜디오 동형: 카드 내 예약 존은 dates 있을 때만(스튜디오는 cfgDates 0이면
+      //   장착 불가 → 못 그리는 상태는 수신도 안 그림). reservationUrl 단독 폴백 제거 —
+      //   외부 예약 링크는 페이지 크롬(실행 카드) 몫.
+      //   S3-3 ③ — 결합(coupon+캘린더) 카드도 스튜디오 동형(예약·쿠폰 모드 = variant 2종 공용).
+      calendar: (isReservation || variant === "coupon") && dates.length > 0,
       coupon: hasCoupon,
       link: !!(input.local?.phone || input.local?.address),
       dock: !!dock,
@@ -248,6 +257,10 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
     ...(isCommerce && (input.commerce?.dropyReward ?? 0) > 0 ? { dropyReady: true } : {}),
     phone: !!input.local?.phone,
     map: !!input.local?.address,
+    // S3-3 ⑤·⑦ — 시설 태그·나도 만들기 관통(미주입 = 미렌더/스튜디오 stub).
+    ...(input.facilities?.length ? { facilities: input.facilities } : {}),
+    ...(input.remakeHref ? { remakeHref: input.remakeHref } : {}),
+    ...(input.remakeLabel ? { remakeLabel: input.remakeLabel } : {}),
     ...(dock
       ? {
           dockTitle: dock.name,

@@ -172,6 +172,12 @@ export type CardModel = {
   /** 확산 인원 — journey 렌더 시 0 폴백. */
   spreadCount?: number;
 
+  // ── 나도 만들기(S3-3 ⑦ — 내장 공유푸터 신스킨) ──
+  /** 수신 방향: /create-wizard(또는 studio) 진입 href. 미주입(스튜디오 미리보기) = 시각 stub 버튼. */
+  remakeHref?: string;
+  /** 버튼 라벨(예: "이 영상으로 나도 만들기"). 미주입 = "나도 만들기". */
+  remakeLabel?: string;
+
   // ── 드로피(거울 수렴 S0) — 수신 전용 신호. ──
   /** 드로피 적립 가능 카드 신호(수신 화면 전용). true = receiver variant 에서 "적립 (준비 중)"
    *  라인 렌더. 락 §드로피: 금액은 담지 않는다(숫자 절대 미노출). studio/share 미사용 = 스튜디오

@@ -29,6 +29,7 @@ import {
   TrendingUp,
   Truck,
   Users,
+  Wand2,
   Waypoints,
   Zap,
 } from "lucide-react";
@@ -839,28 +840,53 @@ export function CardModelBody({
             </div>
           )}
 
-          {/* 공유 푸터 — 거울 수렴 S1: showShareFooter=false(/d)면 억제(페이지 크롬 shareFooter 사용). */}
+          {/* 공유 푸터 — S3-3 ⑦(FIX-55 신스킨): 라벨 3액션([나도 만들기]+[링크 복사]+[친구에게
+              보내기], 아이콘 단독 0 — 60대 친화). 스튜디오·수신 동형(거울) — 수신은 model.remakeHref
+              로 실링크, 스튜디오는 시각 stub. showShareFooter=false 소비처는 기존대로 억제. */}
           {showShareFooter && (
           <>
-          <div className="mt-4 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={act.onCopyLink}
-              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-white text-[13px] font-semibold text-[#404040] transition-transform duration-150 active:translate-y-px"
-              style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-            >
-              <Copy className="h-4 w-4" strokeWidth={2.25} />
-              링크 복사
-            </button>
-            <button
-              type="button"
-              onClick={act.onShare}
-              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-white text-[13px] font-semibold text-[#404040] transition-transform duration-150 active:translate-y-px"
-              style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-            >
-              <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
-              카톡 공유
-            </button>
+          <div className="mt-4 space-y-2">
+            {model.remakeHref ? (
+              <a
+                href={model.remakeHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl text-[14px] font-bold text-white transition-transform duration-150 active:translate-y-px"
+                style={{ backgroundColor: accent, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25)" }}
+              >
+                <Wand2 className="h-4 w-4" strokeWidth={2.25} />
+                {model.remakeLabel ?? "나도 만들기"}
+              </a>
+            ) : (
+              <button
+                type="button"
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl text-[14px] font-bold text-white"
+                style={{ backgroundColor: accent, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25)" }}
+              >
+                <Wand2 className="h-4 w-4" strokeWidth={2.25} />
+                {model.remakeLabel ?? "나도 만들기"}
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={act.onCopyLink}
+                className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-white text-[13px] font-semibold text-[#404040] transition-transform duration-150 active:translate-y-px"
+                style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+              >
+                <Copy className="h-4 w-4" strokeWidth={2.25} />
+                링크 복사
+              </button>
+              <button
+                type="button"
+                onClick={act.onShare}
+                className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-white text-[13px] font-semibold text-[#404040] transition-transform duration-150 active:translate-y-px"
+                style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+              >
+                <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
+                친구에게 보내기
+              </button>
+            </div>
           </div>
 
           {/* FTC 고지 */}

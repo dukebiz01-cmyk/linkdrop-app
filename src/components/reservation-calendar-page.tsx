@@ -32,12 +32,14 @@ export type CampgroundInfoCardData = Pick<ReservationCampgroundInfo, "name"> &
 export function CampgroundInfoCard({ info }: { info: CampgroundInfoCardData }) {
   const [showDetails, setShowDetails] = useState(false);
 
+  // S3-2 지점② — 실행 카드(reserve-executor-card) 내부 편입: 자체 박스 제거 →
+  //   카드 상단 타이틀 행(내용·토글 로직 무수정, 스타일만).
   return (
     <section
       data-testid="campground-info-card"
       data-source={info.source}
       data-expanded={showDetails}
-      className="w-full max-w-full rounded-2xl border border-border bg-surface p-4"
+      className="w-full max-w-full"
     >
       <h3 className="text-sm font-bold tracking-ko text-text-strong">캠핑장 정보</h3>
       <p className="mt-2 text-base font-extrabold leading-snug tracking-ko text-text-strong">
@@ -630,7 +632,7 @@ function EditableReservationCard({
           TODO(date_time_slot): 시간슬롯(slot_time) 선택 UI 분기. 현재는 date_range(range)로 폴백. */}
       <div
         data-calendar-mode={calendarMode}
-        className="w-full max-w-full overflow-hidden rounded-2xl border border-border bg-bg p-4"
+        className="w-full max-w-full overflow-hidden rounded-2xl border border-[#E8EDF3] bg-white p-4"
       >
         <Calendar
           mode="range"
@@ -671,7 +673,7 @@ function EditableReservationCard({
       </div>
 
       {hasMakerDates && (
-        <div className="w-full max-w-full space-y-2 rounded-2xl border border-border bg-surface p-4">
+        <div className="w-full max-w-full space-y-2 rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] p-4">
           <p className="text-sm font-bold tracking-ko text-text-strong">
             메이커가 보낸 예약 가능 날짜
           </p>
@@ -722,7 +724,7 @@ function EditableReservationCard({
         </div>
       )}
 
-      <div className="w-full max-w-full space-y-3 rounded-2xl border border-border bg-surface p-4">
+      <div className="w-full max-w-full space-y-3 rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] p-4">
         <p className="text-sm font-semibold tracking-ko text-text-strong">인원</p>
         <GuestStepperRow
           label="성인"
@@ -749,7 +751,8 @@ function EditableReservationCard({
         </label>
       </div>
 
-      <div className="rounded-2xl border border-text-strong/30 bg-surface px-4 py-4">
+      {/* S3-2 지점② — 소박스 시각 언어 통일(제각각 진한 보더 제거 — 인원·가능일 박스와 동일 토큰). */}
+      <div className="rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] px-4 py-4">
         <p className="text-xs font-bold tracking-ko text-text-muted">선택한 예약</p>
         {!checkIn && (
           <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">날짜를 선택해 주세요</p>
@@ -872,7 +875,7 @@ function ReadOnlyReservationCard({
       {/* CC#2 (b) mode seam — TODO(date_time_slot): 시간슬롯 분기. 현재 date_range 만. */}
       <div
         data-calendar-mode={calendarMode}
-        className="w-full max-w-full overflow-hidden rounded-2xl border border-border bg-bg p-4"
+        className="w-full max-w-full overflow-hidden rounded-2xl border border-[#E8EDF3] bg-white p-4"
         aria-label="메이커가 확정한 예약 가능 날짜 (재공유 · 읽기 전용)"
       >
         <div className="pointer-events-none select-none" aria-disabled="true">
@@ -904,7 +907,7 @@ function ReadOnlyReservationCard({
       </div>
 
       {hasMakerDates && (
-        <div className="w-full max-w-full space-y-2 rounded-2xl border border-border bg-surface p-4">
+        <div className="w-full max-w-full space-y-2 rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] p-4">
           <p className="text-sm font-bold tracking-ko text-text-strong">
             메이커가 보낸 예약 가능 날짜
           </p>
@@ -949,7 +952,7 @@ function ReadOnlyReservationCard({
         </div>
       )}
 
-      <div className="w-full max-w-full rounded-2xl border border-border bg-surface p-4">
+      <div className="w-full max-w-full rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] p-4">
         <p className="text-sm font-semibold tracking-ko text-text-strong">예약 인원</p>
         <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">{guestSummary}</p>
       </div>
