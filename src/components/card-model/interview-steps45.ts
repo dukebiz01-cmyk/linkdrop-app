@@ -2,7 +2,9 @@
 //   이 파일은 순서·번호·라벨·앵커(덱 블록/폼 필드)만 소유한다. done 계산은 여기서 하지 않고,
 //   호출부(CardStudioPage45 스텝퍼·덱 배지 / ProductRegisterForm45 폼 마커)가 기존에 이미
 //   계산한 done 값을 signals 로 넘겨 resolveInterviewDone 이 "매핑"만 한다(신규 판정 금지).
-//   설계 정본(Duke 확정): 발행 = 항상 마지막 번호. 선택 항목은 번호 없음((+) — 여기 미포함).
+//   설계 정본(Duke 확정): 발행 = 항상 마지막 번호. 순수 강화블록(boost/marketing/bgcolor 등)은
+//   여정 미포함(번호 없음). 도킹은 예외 — 정식 "선택 단계(skippable)"로 발행 직전에 번호와 함께
+//   편입(작업13: 전 목적. 상품 빠른등록만 제외). 건너뛰기 가능이나 스텝퍼엔 번호로 표시.
 
 export type InterviewMode = "general" | "reserve" | "commerce";
 /** 상품판매 판매/등록 방식 — 커머스 여정 분기(quick=빠른등록 / full=일반판매 / groupBuy=공동구매). */
@@ -58,17 +60,21 @@ export function getInterviewJourney(
 ): InterviewStep[] {
   let steps: InterviewStep[];
   if (mode === "general") {
+    // 작업13 — 도킹 편입(Duke 확정: 전 목적 도킹 단계 필요). ①영상 ②한마디 ③도킹(+) ④발행.
     steps = [
       { no: 0, key: "video", label: "영상", deckBlock: "content" },
       { no: 0, key: "tagline", label: "한마디", deckBlock: "content" },
+      { no: 0, key: "dock", label: "도킹", deckBlock: "dock", skippable: true },
     ];
   } else if (mode === "reserve") {
+    // 작업13 — 도킹 편입. ①영상 ②쿠폰 ③캘린더 ④매장주소 ⑤시설 ⑥도킹(+) ⑦발행.
     steps = [
       { no: 0, key: "video", label: "영상", deckBlock: "content" },
       { no: 0, key: "coupon", label: "쿠폰", deckBlock: "coupon" },
       { no: 0, key: "calendar", label: "캘린더", deckBlock: "calendar" },
       { no: 0, key: "storeAddr", label: "매장주소", deckBlock: "link" },
       { no: 0, key: "facilities", label: "시설", deckBlock: "link" },
+      { no: 0, key: "dock", label: "도킹", deckBlock: "dock", skippable: true },
     ];
   } else if (method === "quick") {
     // 커머스 · 빠른 등록(원포토)
