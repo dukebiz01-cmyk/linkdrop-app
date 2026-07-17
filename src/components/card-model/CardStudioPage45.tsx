@@ -4725,7 +4725,10 @@ export function CardStudioPage45({
                 // 작업8c — 좌우 자유 이동: left = fabPos.x(패널 폭 기준 클램프), width = 85vw(≤332).
                 const pw = Math.min(PANEL_MAXW, Math.round(vw * 0.85));
                 const fx = fabPos?.x ?? Math.round((vw - pw) / 2);
-                const left = Math.min(Math.max(FAB_MARGIN, fx), Math.max(FAB_MARGIN, vw - pw - FAB_MARGIN));
+                let left = Math.min(Math.max(FAB_MARGIN, fx), Math.max(FAB_MARGIN, vw - pw - FAB_MARGIN));
+                // 3차 열림 보정 — 클램프 후에도 좌/우 여백이 12px 미만이면(초협폭) 중앙 수납. 정상
+                //   경로(여백 ≥12)에선 미개입 = fabPos 공유 계약 유지(과보정 금지).
+                if (left < FAB_MARGIN || vw - (left + pw) < FAB_MARGIN) left = Math.max(FAB_MARGIN, Math.round((vw - pw) / 2));
                 const vert = openUp
                   ? { bottom: Math.max(FAB_MARGIN, vh - fy + 8) } // 패널 하단 = 캡슐 위 8px
                   : { top: fy + FAB_SIZE + 8 }; // 패널 상단 = 캡슐 아래 8px
@@ -4747,7 +4750,15 @@ export function CardStudioPage45({
                   >
                     <span className="h-1.5 w-10 rounded-full bg-[#E0E0E0]" />
                   </div>
-                  <div className="flex items-center gap-2.5">
+                  {/* 3차 히트영역 수술 — 드래그 시작 = 헤더 행 전체(그래버 한 점 → 행 전체).
+                      스피커·접기 버튼만 stopPropagation(그 위에선 드래그 대신 토글). */}
+                  <div
+                    className={`flex touch-none select-none items-center gap-2.5 ${panelDragging ? "cursor-grabbing" : "cursor-grab"}`}
+                    onPointerDown={onPanelPointerDown}
+                    onPointerMove={onPanelPointerMove}
+                    onPointerUp={onPanelPointerUp}
+                    onPointerCancel={onPanelPointerUp}
+                  >
                     <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
                       <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2.25} />
                       <Sparkles className="absolute -right-0.5 -top-0.5 h-[11px] w-[11px]" strokeWidth={2.5} fill="currentColor" />
@@ -4770,13 +4781,16 @@ export function CardStudioPage45({
                         )}
                       </div>
                     </div>
-                    {/* B-lite 작업10 — 스피커 헤더 토글(공용 부품, 입력줄 낭독 pill 대체). */}
-                    <SpeakerToggle ttsOn={voice.ttsOn} speaking={voice.speaking} onToggle={voice.toggleTts} accent={accent} />
+                    {/* B-lite 작업10 — 스피커 헤더 토글(공용 부품, 입력줄 낭독 pill 대체). 드래그 제외. */}
+                    <span className="flex items-center" onPointerDown={(e) => e.stopPropagation()}>
+                      <SpeakerToggle ttsOn={voice.ttsOn} speaking={voice.speaking} onToggle={voice.toggleTts} accent={accent} />
+                    </span>
                     {/* FIX-48+50 P1.5 — 링고 단일 박스: 접힘(캡슐)↔펼침(패널) 2상태만. 완전닫기(closed
                         점) 폐지 → 접기(캡슐)로 일원화(별도 플로팅 개체 0). */}
                     <button
                       type="button"
                       aria-label="캡슐로 접기"
+                      onPointerDown={(e) => e.stopPropagation()}
                       onClick={() => setLingoView("strip")}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] transition-transform active:scale-90"
                     >

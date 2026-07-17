@@ -166,7 +166,10 @@ export function LingoHomeBox({
         // 작업8c — 좌우 자유 이동: left = fabPos.x(패널 폭 기준 클램프), width = 85vw(≤332).
         const pw = Math.min(PANEL_MAXW, Math.round(vw * 0.85));
         const fx = fabPos?.x ?? Math.round((vw - pw) / 2);
-        const left = Math.min(Math.max(FAB_MARGIN, fx), Math.max(FAB_MARGIN, vw - pw - FAB_MARGIN));
+        let left = Math.min(Math.max(FAB_MARGIN, fx), Math.max(FAB_MARGIN, vw - pw - FAB_MARGIN));
+        // 3차 열림 보정 — 클램프 후에도 좌/우 여백이 12px 미만이면(초협폭) 중앙 수납. 정상 경로
+        //   (여백 ≥12)에선 미개입 = fabPos 공유 계약 유지(과보정 금지).
+        if (left < FAB_MARGIN || vw - (left + pw) < FAB_MARGIN) left = Math.max(FAB_MARGIN, Math.round((vw - pw) / 2));
         const vert = openUp ? { bottom: Math.max(FAB_MARGIN, vh - fy + 8) } : { top: fy + FAB_SIZE + 8 };
         const posStyle = { left, width: pw, ...vert };
         return (
@@ -185,15 +188,16 @@ export function LingoHomeBox({
                   >
                     <span className="h-1.5 w-10 rounded-full bg-[#D8D6CE]" />
                   </div>
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className={`flex h-9 shrink-0 touch-none items-center justify-center ${panelDragging ? "cursor-grabbing" : "cursor-grab"}`}
-                      onPointerDown={onPanelDown}
-                      onPointerMove={onPanelMove}
-                      onPointerUp={onPanelUp}
-                      onPointerCancel={onPanelUp}
-                      aria-hidden="true"
-                    >
+                  {/* 3차 히트영역 수술 — 드래그 시작 = 헤더 행 전체(⠿ 한 점 → 행 전체). ⠿는 시각
+                      안내로 존치. 스피커·접기 버튼만 stopPropagation(그 위에선 드래그 대신 토글). */}
+                  <div
+                    className={`flex touch-none select-none items-center gap-2.5 ${panelDragging ? "cursor-grabbing" : "cursor-grab"}`}
+                    onPointerDown={onPanelDown}
+                    onPointerMove={onPanelMove}
+                    onPointerUp={onPanelUp}
+                    onPointerCancel={onPanelUp}
+                  >
+                    <span className="flex h-9 shrink-0 items-center justify-center" aria-hidden="true">
                       <GripVertical className="h-4 w-4 text-[#C4C2B9]" strokeWidth={2} />
                     </span>
                     <span className="relative flex h-9 w-9 items-center justify-center rounded-full text-white" style={{ backgroundColor: ACCENT }}>
@@ -204,9 +208,11 @@ export function LingoHomeBox({
                       <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">링고AI</p>
                       <p className="text-[11px] font-medium text-[#9A9A9A]">{statusLine}</p>
                     </div>
-                    {/* 작업10 — 스피커 헤더 토글(공용 부품 SpeakerToggle). */}
-                    <SpeakerToggle ttsOn={voice.ttsOn} speaking={voice.speaking} onToggle={voice.toggleTts} accent={ACCENT} />
-                    <button type="button" aria-label="캡슐로 접기" onClick={() => setView("strip")} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] active:scale-90">
+                    {/* 작업10 — 스피커 헤더 토글(공용 부품 SpeakerToggle). 드래그 제외(stopPropagation). */}
+                    <span className="flex items-center" onPointerDown={(e) => e.stopPropagation()}>
+                      <SpeakerToggle ttsOn={voice.ttsOn} speaking={voice.speaking} onToggle={voice.toggleTts} accent={ACCENT} />
+                    </span>
+                    <button type="button" aria-label="캡슐로 접기" onPointerDown={(e) => e.stopPropagation()} onClick={() => setView("strip")} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] active:scale-90">
                       <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
                     </button>
                   </div>
