@@ -302,7 +302,7 @@ export function LingoHomeBox({
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[12px] font-bold leading-tight text-[#0A0A0A]">링고AI</span>
-            <span className="block truncate text-[11px] font-medium text-[#8A8A8A]">{isMaker ? "성과 볼까요?" : "시작해 볼까요?"}</span>
+            <span className="block truncate text-[11px] font-medium text-[#8A8A8A]">{isMaker ? "성과 볼까요?" : "링고AI와 같이 시작해 볼까요?"}</span>
           </span>
           {!inAppNoMic && (
             <SlideToMic
