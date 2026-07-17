@@ -2228,6 +2228,11 @@ export function CardStudioPage45({
       ...(mode === "commerce" && productUnitLabel ? { productUnitLabel } : {}),
       // FIX-24 — 수확·발송 기간 칩(date_range_label 미러, 단일일=미주입=미렌더).
       ...(mode === "commerce" && productDateRangeLabel ? { productDateRangeLabel } : {}),
+      // S4-3 — CTA 라벨 거울: 45 스튜디오 상품판매 발행은 항상 자체등록(self_upload:true, :1902)
+      //   → selfUpload 상태 = commerce 모드 자체 = "주문예약". 그 외 = 미주입 = 렌더러 "구매" 폴백.
+      // ★거울 락: fromDropDetail의 ctaLabel 분기(selfUpload→"주문예약"/buyUrl→"구매하기")와 동일해야 함.
+      //   스튜디오가 외부 buyUrl 상품을 지원하게 되면 이 하드코딩도 분기로 확장할 것 (S4-3)
+      ...(mode === "commerce" ? { ctaLabel: "주문예약" } : {}),
       // FIX-39 — 판매 부스터 칩(실값 한정 · 빈 배열 = 미주입 = 미렌더).
       ...(boosterChips.length > 0 ? { boosterChips } : {}),
       // FIX-40 — 공동구매(설정 실존 시만 · 미주입 = 미렌더).
