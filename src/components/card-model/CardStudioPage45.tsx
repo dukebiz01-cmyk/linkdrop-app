@@ -1596,8 +1596,12 @@ export function CardStudioPage45({
   function onPanelPointerDown(e: React.PointerEvent) {
     // 작업8b — fabPos 미설정(자동인사가 openPanelAt 미경유로 패널만 열었을 때) 드래그 원점을
     //   렌더 앵커 폴백과 동일하게 잡는다. 0 기준이면 첫 드래그가 델타-from-0 으로 순간이동.
-    //   작업8c — x 원점도 렌더 폴백(가운데)과 일치 → 좌우 드래그 1:1 비례.
-    const ox = fabPos?.x ?? Math.round((window.innerWidth - panelWidth()) / 2);
+    // 재판정 수술 — x 원점을 렌더된(패널 폭 기준 클램프) left 와 일치시킨다. fabPos.x 는 캡슐
+    //   좌표계([12,vw-56-12])라, openPanelAt(캡슐 탭)로 연 패널은 그 값이 패널 범위([12,vw-pw-12])
+    //   밖(우측)이라 원점≠렌더 → 첫 ~268px 좌드래그가 클램프에 먹혀 "안 움직임". 클램프 후 1:1.
+    const pw = panelWidth();
+    const maxX = Math.max(FAB_MARGIN, window.innerWidth - pw - FAB_MARGIN);
+    const ox = Math.min(Math.max(FAB_MARGIN, fabPos?.x ?? Math.round((window.innerWidth - pw) / 2)), maxX);
     const oy = fabPos?.y ?? window.innerHeight - 200;
     panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox, oy };
     setPanelDragging(true);

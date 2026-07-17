@@ -98,8 +98,12 @@ export function LingoHomeBox({
   const panelDrag = useRef({ active: false, sx: 0, sy: 0, ox: 0, oy: 0 });
   const onPanelDown = (e: React.PointerEvent) => {
     const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-    // 작업8c — fabPos 미설정 시 원점을 렌더 폴백(가운데 x, y=vh-200)과 일치 → 좌우 1:1 비례.
-    const ox = fabPos?.x ?? Math.round((window.innerWidth - panelWidth()) / 2);
+    // 재판정 수술 — x 원점을 렌더된(패널 폭 기준 클램프) left 와 일치. fabPos.x 는 캡슐 좌표계라
+    //   openPanel(캡슐 탭)로 연 패널은 그 값이 패널 범위 밖(우측) → 첫 좌드래그가 클램프에 먹혀
+    //   "안 움직임". 클램프 후 원점=렌더 left 로 첫 픽셀부터 1:1. (스튜디오 동일 미러)
+    const pw = panelWidth();
+    const maxX = Math.max(FAB_MARGIN, window.innerWidth - pw - FAB_MARGIN);
+    const ox = Math.min(Math.max(FAB_MARGIN, fabPos?.x ?? Math.round((window.innerWidth - pw) / 2)), maxX);
     const oy = fabPos?.y ?? vh - 200;
     panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox, oy };
     setPanelDragging(true);
