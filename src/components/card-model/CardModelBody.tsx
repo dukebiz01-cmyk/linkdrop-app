@@ -77,6 +77,7 @@ export function CardModelBody({
   variant = "receiver",
   burstKey = 0,
   showJourney = true,
+  showShareFooter = true,
   actions,
   currentSlot,
 }: {
@@ -84,6 +85,9 @@ export function CardModelBody({
   variant?: CardModelVariant;
   burstKey?: number;
   showJourney?: boolean;
+  /** 거울 수렴 S1 — 카드 내장 공유푸터(복사/카톡)+FTC 노출. 기본 true(스튜디오·기존 소비처 유지).
+   *  /d 는 페이지 크롬의 richer shareFooter(나도만들기/신고/여정)를 쓰므로 false 로 억제(중복 방지). */
+  showShareFooter?: boolean;
   actions?: CardModelActions;
   /** FIX-48+50 P2 — 번호 인터뷰 현재 슬롯(별도 prop · 모델 타입 무오염). variant==="studio" 에서만
    *  점선 번호 슬롯("③ 가격이 여기 붙어요")으로 현재 단계 위치를 미리보기에 표시. /d 미전달 = 렌더 무영향. */
@@ -352,6 +356,27 @@ export function CardModelBody({
             >
               {currentSlot!.no}. {currentSlot!.label} 여기에 붙어요
             </span>
+          )}
+
+          {/* 거울 수렴 S1 보정1 — 비커머스 셀링포인트(정보/쿠폰/예약 카드 키포인트 복원). 커머스는
+              applied["product"] 블록 안에서 렌더하므로 여기선 !applied["product"] 로 분기(중복 출력 0).
+              미주입=미렌더(빈 배열/미주입 시 섹션 자체 없음). variant 무관 공통(스튜디오=정본 복원). */}
+          {!applied["product"] && model.productPoints && model.productPoints.length > 0 && (
+            <ul className="mt-3 space-y-1">
+              {model.productPoints.map((pt, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-1.5 text-[12px] leading-relaxed text-[#525252]"
+                >
+                  <Check
+                    className="mt-0.5 h-3.5 w-3.5 flex-none"
+                    style={{ color: accent }}
+                    strokeWidth={2.75}
+                  />
+                  <span className="text-pretty">{pt}</span>
+                </li>
+              ))}
+            </ul>
           )}
 
           {/* 브랜드 소개 */}
@@ -717,10 +742,11 @@ export function CardModelBody({
             <ReservationPreview model={model} accent={accent} />
           )}
 
-          {/* 행동 버튼 조립 */}
-          {bodyButtons.length === 0 && !applied["dock"] ? (
+          {/* 행동 버튼 조립 — 거울 수렴 S1 보정2: 빈 상태("행동 버튼 준비 중")는 studio 제작 가이드
+              에서만. receiver/share 는 액션 0이면 이 영역 렌더 0(빈 껍데기 노출 금지). */}
+          {bodyButtons.length === 0 && !applied["dock"] && variant === "studio" ? (
             <div className="mt-3.5 rounded-xl border border-dashed border-[#D6D6D6] px-3 py-3 text-center text-[12px] font-medium text-[#737373] [word-break:keep-all]">
-              {variant === "studio" ? "목적 카드를 장착하면 여기에 행동 버튼이 생겨요" : "행동 버튼 준비 중"}
+              목적 카드를 장착하면 여기에 행동 버튼이 생겨요
             </div>
           ) : bodyButtons.length > 0 ? (
             // FIX-12 — 행동 블록 세로 스택: 블록 하나 = 한 행(전폭). variant 3종 동일(거울).
@@ -807,7 +833,9 @@ export function CardModelBody({
             </div>
           )}
 
-          {/* 공유 푸터 */}
+          {/* 공유 푸터 — 거울 수렴 S1: showShareFooter=false(/d)면 억제(페이지 크롬 shareFooter 사용). */}
+          {showShareFooter && (
+          <>
           <div className="mt-4 flex items-center gap-2">
             <button
               type="button"
@@ -833,6 +861,8 @@ export function CardModelBody({
           <p className="mt-3 text-center text-[11px] leading-relaxed text-[#6E6E6E]">
             본 콘텐츠는 LinkDrop 광고/제휴 안내가 적용됩니다. (FTC 권고 사항)
           </p>
+          </>
+          )}
 
           {/* 공유 여정 — FIX-46: v0 원형 복원(행은 showJourney 만으로 상시 — 정본 :596 동일).
               진실경계: 확산 칩은 실집계(model.spreadCount) 주입 시만, 여정 미주입 = 펼침 안

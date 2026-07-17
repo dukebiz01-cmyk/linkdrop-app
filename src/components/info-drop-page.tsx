@@ -83,7 +83,10 @@ import { ProductWidget } from "@/components/card/ProductWidget";
 import { CardActionButton } from "@/components/card/CardActionButton";
 import { DropCardShell } from "@/components/card/DropCardShell";
 import { ButtonBlock } from "@/components/card/ButtonBlock";
-import { toCardBodyProps, buildProductWidget } from "@/lib/adapters";
+import { toCardBodyProps, buildProductWidget, toDropDetailInput } from "@/lib/adapters";
+// 거울 수렴 S1 — info 분기만 CardModel 정본 렌더로 마운트(fromDropDetail). 타 variant 무접촉.
+import { CardModelBody } from "@/components/card-model/CardModelBody";
+import { fromDropDetail } from "@/components/card-model/card-model-adapters";
 import { parseVideoUrl } from "@/lib/video-metadata";
 import { cn } from "@/lib/utils";
 import { trackReceiverEvent } from "@/lib/event-tracking";
@@ -1395,40 +1398,35 @@ export function InfoDropPage({
         {/* 4a — info variant 만 단일 CardBody(스튜디오 동일, 싱크로). 나머지 variant 는 아래 기존 렌더 0변경.
             text-white 래퍼 = CardBody 제목(부모색 상속)을 navy 위 흰글씨로(묻힘 방지). */}
         {resolvedVariant === "info" && (
-          // 4b — info CardBody 를 DropCardShell 로 감싸 스튜디오와 동일한 navy+holo 밝은 카드로.
-          //   DropCardShell 이 text-white base+holo+rounded 제공(4a text-white 래퍼 대체).
-          //   interactive=false(손님 스크롤 페이지라 틸트 끔), holoOpacity 고정 0.2(stage 없음).
-          <DropCardShell
-            cardColor={cardColor ?? "#1E3A8A"}
-            interactive={false}
-            // 스튜디오 완성(별3) 기준 밝기 + 파란 holo 강화(0.45). boxShadow alpha 0.28+3*0.07=0.49.
-            holoOpacity={0.45}
-            boxShadow="0 22px 60px -12px rgba(15,23,42,0.49), 0 0 0 1px rgba(255,255,255,0.08) inset"
-          >
-            {/* C8② — 흰 카드(#FFFFFF) 미러: CardBody 제목 h3(색 미명시, 부모 text-white 상속)이
-                흰-위-흰 되는 것 방지. 스튜디오(studio-build) 동일 패턴. navy(false)면 undefined→회귀 0. */}
-            <div className={isLightCard ? "text-[#0F172A]" : undefined}>
-            <CardBody
-              light={isLightCard}
-              {...toCardBodyProps({
-                videoSourceUrl,
-                videoThumbnailUrl,
-                videoDurationSec,
-                videoSourceLabel,
-                title,
-                makerMessage,
-                keyPoints,
-                cardColor,
-                funnelCoupon,
-                local,
-                variant,
-              } as unknown as InfoDropPageProps)}
-              // S13 — 형님 확정: 정보 카드에 전화·길찾기·예약 칩 없음(양면 거울). contactSlot 미전달.
-              shareFooter={shareFooter}
-              preFooterSlot={aiSummaryAccordion}
+          // 거울 수렴 S1 — info 분기 = CardModel 정본 렌더(CardModelBody, 스튜디오 미리보기와 동일
+          //   거울). 프레임 navy(DropCardShell)→white(CardModelBody)는 의도된 수렴(문서 기록).
+          //   내장 공유푸터는 억제(showShareFooter=false)하고 페이지 크롬 shareFooter(나도만들기/신고/
+          //   여정) 존치. 영상요약(aiSummaryAccordion)도 페이지 크롬으로 존치. S13(전화/예약 칩 없음)은
+          //   local/funnelCoupon 미주입으로 유지(정보 카드 = 영상·제목·한마디·키포인트만).
+          <>
+            <CardModelBody
+              variant="receiver"
+              showShareFooter={false}
+              showJourney={false}
+              actions={{ onShare, onCopyLink }}
+              model={fromDropDetail(
+                toDropDetailInput({
+                  videoSourceUrl,
+                  videoThumbnailUrl,
+                  videoDurationSec,
+                  videoSourceLabel,
+                  title,
+                  makerMessage,
+                  keyPoints,
+                  cardColor,
+                  variant,
+                  maker,
+                } as unknown as InfoDropPageProps),
+              )}
             />
-            </div>
-          </DropCardShell>
+            {aiSummaryAccordion}
+            {shareFooter}
+          </>
         )}
         {resolvedVariant === "coupon" && (
           // 4c — 쿠폰 코어(영상·제목·한마디·셀링)도 동일 CardBody(A1: 코어만, navy 유지).
