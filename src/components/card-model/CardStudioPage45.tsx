@@ -2802,10 +2802,10 @@ export function CardStudioPage45({
       style={{
         backgroundColor: pageBg,
         // B전환 커밋1 — 하단 스택(발행바 + 링고 독/캡슐) 위로 콘텐츠(미리보기)가 스크롤되도록 예약.
-        //   펼침=발행바+독(≤52vh) / 접힘=발행바+캡슐(64px). 스텝퍼·미리보기는 독이 열려도 노출.
+        //   펼침=발행바+독(≤34vh, B 보강 다이어트) / 접힘=발행바+캡슐(64px). 미리보기 겹침 0 유지.
         paddingBottom:
           lingoView === "panel"
-            ? `calc(52vh + ${publishBarH + 16}px)`
+            ? `calc(34vh + ${publishBarH + 16}px)`
             : `${publishBarH + 80}px`,
       }}
     >
@@ -4750,7 +4750,9 @@ export function CardStudioPage45({
                   시안 정본 .lingo: 흰 배경·상단 보더 #E3E1DA·상단 그림자·라운드 18px 상단만. */}
               <div className="sl-slide-up fixed inset-x-0 z-40" style={{ bottom: publishBarH }}>
                 <div className="mx-auto w-full max-w-md rounded-t-[18px] border-t border-[#E3E1DA] bg-white [box-shadow:0_-3px_12px_rgba(0,0,0,0.05)]">
-                  <div className="relative max-h-[52vh] overflow-y-auto px-4 pb-4 pt-3">
+                  {/* B 보강 — 독 높이 다이어트: 콘텐츠 기반 + 상한 34vh(화면 1/3 초과 금지). 초과분은
+                      이 컨테이너 내부 스크롤. 상하 패딩 8pt 그리드 최소(pt-2/pb-3). */}
+                  <div className="relative max-h-[34vh] overflow-y-auto px-4 pb-3 pt-2">
                   {/* 독 헤더 — 번호 배지(펄스)+지금 N번 라벨+스피커 토글(드래그 폐기 → 정적 행). */}
                   <div className="flex items-center gap-2.5">
                     <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
@@ -4792,8 +4794,9 @@ export function CardStudioPage45({
                     </button>
                   </div>
 
-                  {/* 정적 가이드 문구(규칙 기반 코칭) — FIX-16: 비동기/플래시도 여기서 갱신. */}
-                  <div className="mt-3 rounded-2xl bg-[#F7F7F8] p-3.5">
+                  {/* 정적 가이드 문구(규칙 기반 코칭) — FIX-16: 비동기/플래시도 여기서 갱신.
+                      B 보강 — 패딩 다이어트(p-3.5→p-3, mt-3→mt-2) 독 총높이 축소. */}
+                  <div className="mt-2 rounded-2xl bg-[#F7F7F8] p-3">
                     <p className="flex items-start gap-1.5 text-pretty text-[13px] font-medium leading-relaxed text-[#404040] [word-break:keep-all]">
                       {stripBusy ? (
                         <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
@@ -4912,12 +4915,14 @@ export function CardStudioPage45({
                     {chat.messages.length > 0 && (
                       <div
                         ref={chatListRef}
-                        className="max-h-[220px] space-y-2 overflow-y-auto rounded-2xl bg-[#FAFAFA] p-3 [box-shadow:inset_0_0_0_1px_#EFEFEF]"
+                        // B 보강 — 대화 스트림 = 최신 발화(AI 1 + 사용자 직전 1, 약 2~3 말풍선)만 시야.
+                        //   이전 기록은 이 영역 내부 스크롤(위로 당겨 열람). 새 발화 시 하단 자동 고정.
+                        className="max-h-[124px] space-y-2 overflow-y-auto rounded-2xl bg-[#FAFAFA] p-2.5 [box-shadow:inset_0_0_0_1px_#EFEFEF]"
                       >
                         {chat.messages.map((m) => (
                           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                             <p
-                              className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[13px] font-medium leading-relaxed [word-break:keep-all] ${
+                              className={`max-h-[22vh] max-w-[85%] overflow-y-auto whitespace-pre-wrap rounded-2xl px-3 py-2 text-[13px] font-medium leading-relaxed [word-break:keep-all] ${
                                 m.role === "user"
                                   ? "rounded-br-md text-white"
                                   : "rounded-bl-md bg-white text-[#404040] [box-shadow:inset_0_0_0_1px_#ECECEE]"
