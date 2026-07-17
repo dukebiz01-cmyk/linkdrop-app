@@ -19,8 +19,10 @@ import { X } from "lucide-react";
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 
 // 로그인 앱 경로 — 여기선 사업자 푸터를 숨긴다(하단 BottomNav 충돌 회피).
-// 그 외(공개 경로: / · /d/ · /r · /alliance · /terms · /business-info · /privacy 등)에만 노출.
-const APP_PREFIXES = ["/home", "/explore", "/me", "/create", "/studio", "/partner", "/admin"];
+// 그 외(공개 경로: / · /r · /alliance · /terms · /business-info · /privacy 등)에만 노출.
+// S3-4e — /d 카드 페이지는 자체 법정 푸터(FTC·문제신고·사업자 정보 펼침)를 가지므로 전역
+//   BusinessFooter 억제(바닥 나열 5줄 중복 제거 — 펼침으로 흡수).
+const APP_PREFIXES = ["/home", "/explore", "/me", "/create", "/studio", "/partner", "/admin", "/d/"];
 
 function NotFoundComponent() {
   return (

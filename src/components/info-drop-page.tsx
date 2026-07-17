@@ -40,6 +40,7 @@ import {
   Info,
   ChevronDown,
   GitBranch,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type PriceOfferRow } from "@/components/ai-price-comparison-card";
@@ -76,6 +77,8 @@ import {
 
 // SM-4 — 여정 렌더부 공용 추출분(share-journey.tsx). 타입·타임라인 모두 공용 소비.
 import { ShareJourneyTimeline, type ShareJourneyRpcNode } from "@/components/share-journey";
+// S3-4e — 사업자 정보 단일 소스(하드코딩 중복 금지) — 법정 푸터 펼침이 재사용.
+import { BUSINESS_INFO } from "@/components/business-footer";
 import { PurchaseCardBody } from "@/components/card/PurchaseCardBody";
 import { ProductWidget } from "@/components/card/ProductWidget";
 import { CardActionButton } from "@/components/card/CardActionButton";
@@ -645,6 +648,8 @@ export function InfoDropPage({
   isViewerBusiness,
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
+  // S3-4e — 법정 푸터 사업자 정보 인라인 펼침(Radix 0).
+  const [bizOpen, setBizOpen] = useState(false);
   // 트랙 D §50 — 매장(partnerId) 구독. me.tsx handleSubscribe 패턴 재사용(maker_follows, 스키마 0).
   const [subscriberUserId, setSubscriberUserId] = useState<string | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -1393,27 +1398,24 @@ export function InfoDropPage({
           </button>
         </div>
       )}
-      {/* S3-4 §4 — 법정 뮤트 블록: FTC 는 카드 내장 푸터 제거에 따라 페이지 하단 상시 존치. */}
-      <p className={`mt-3 text-center text-[11px] leading-relaxed ${light ? "text-text-subtle" : "text-white/45"}`}>
-        본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
-      </p>
-      <button
-        type="button"
-        onClick={() => setIsReportSheetOpen(true)}
-        className={`mt-2 mx-auto flex items-center gap-1 text-[11px] underline underline-offset-2 ${light ? "text-text-subtle" : "text-white/50"}`}
-      >
-        문제 신고
-      </button>
-
-      {/* SM-2 — 공유 여정 아코디언. S3-4 §5: 수렴 variant(withActions=false)는 슬립의 지도가
-          대체(중복 제거) — 비수렴(purchase 폴백 등)에서만 기존 버튼 유지. 락 전부 상속. */}
       {withActions ? (
+        // 비수렴(purchase 폴백·lead): FTC 1줄 + 문제신고 텍스트링크 + 공유여정 버튼(기존 무접촉).
         <>
+          <p className={`mt-3 text-center text-[11px] leading-relaxed ${light ? "text-text-subtle" : "text-white/45"}`}>
+            본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다. (FTC 권고)
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsReportSheetOpen(true)}
+            className={`mt-2 mx-auto flex items-center gap-1 text-[11px] underline underline-offset-2 ${light ? "text-text-subtle" : "text-white/50"}`}
+          >
+            문제 신고
+          </button>
+          {/* SM-2 — 공유 여정 아코디언(비수렴 전용 — 수렴은 슬립 지도가 대체). 락 전부 상속. */}
           <button
             type="button"
             onClick={() => void toggleJourney()}
             aria-expanded={journeyOpen}
-            // BADGE-ⓑ(SM-5) — 승격: 13px + 틴트 한 단계 강화(44px·정적 유지).
             className={`mt-3 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border px-4 text-[13px] font-semibold tracking-ko ${
               light
                 ? "border-[#D9E2EC] bg-[#EFF3F8] text-[#1E293B]"
@@ -1436,7 +1438,59 @@ export function InfoDropPage({
             />
           ) : null}
         </>
-      ) : null}
+      ) : (
+        // S3-4e — 법정 푸터 정본(수렴 3분기): 헤어라인 → FTC 1줄 → 알약 2버튼 → © LinkDrop.
+        //   사업자 정보는 BUSINESS_INFO 단일 소스 재사용(하드코딩 중복 0 · Radix 0).
+        //   기존 바닥 나열 5줄(전역 BusinessFooter)은 /d 에서 __root 가 억제 — 이 펼침으로 흡수.
+        <div data-testid="legal-footer" className="mt-5 border-t border-[#E8EDF3] pt-4">
+          <p className="flex items-center justify-center gap-1 text-center text-[11px] leading-relaxed text-text-subtle">
+            <Info className="size-3 shrink-0" strokeWidth={2} />
+            본 콘텐츠는 LinkDrop 광고·제휴 안내가 적용됩니다 (FTC 권고)
+          </p>
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsReportSheetOpen(true)}
+              className="inline-flex min-h-[36px] items-center gap-1 rounded-full border border-[#E2E8F0] px-3 text-[12px] font-medium tracking-ko text-text-muted"
+            >
+              <Flag className="size-3.5" strokeWidth={2} />
+              문제 신고
+            </button>
+            <button
+              type="button"
+              onClick={() => setBizOpen((v) => !v)}
+              aria-expanded={bizOpen}
+              className="inline-flex min-h-[36px] items-center gap-1 rounded-full border border-[#E2E8F0] px-3 text-[12px] font-medium tracking-ko text-text-muted"
+            >
+              <Building2 className="size-3.5" strokeWidth={2} />
+              사업자 정보
+              <ChevronDown
+                className={`size-3 transition-transform ${bizOpen ? "rotate-180" : ""}`}
+                strokeWidth={2}
+              />
+            </button>
+          </div>
+          {bizOpen ? (
+            <dl
+              data-testid="business-info-expand"
+              className="mx-auto mt-3 max-w-[360px] rounded-xl bg-[#F8FAFC] px-4 py-3"
+              style={{ boxShadow: "inset 0 0 0 1px #E8EDF3" }}
+            >
+              {BUSINESS_INFO.map((row) => (
+                <div key={row.label} className="flex gap-3 py-0.5 text-[11px] leading-relaxed">
+                  <dt className="w-24 shrink-0 font-semibold tracking-ko text-text-subtle">
+                    {row.label}
+                  </dt>
+                  <dd className="min-w-0 flex-1 font-medium tracking-ko text-text-muted">
+                    {row.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          <p className="mt-3 text-center text-[11px] text-text-subtle">© LinkDrop</p>
+        </div>
+      )}
     </div>
   );
   // S3-2 추가 — 라이트 variant(info·coupon·reservation·lead) 푸터 = 단일 정본(라벨 3액션).

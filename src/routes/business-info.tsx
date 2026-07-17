@@ -1,19 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
+// S3-4e — 사업자 정보 단일 소스 이관: components/business-footer.tsx 의 BUSINESS_INFO 공유
+//   (/d 법정 푸터 펼침과 중복 하드코딩 금지).
+import { BUSINESS_INFO } from "@/components/business-footer";
 
 // 사업자 정보 — 공개(비로그인) 라우트. Kakao 비즈 심사 + 전자상거래법 §10 충족용.
 //   app.drop.how/business-info 로 로그인 없이 도달(랜딩 푸터 링크).
 //   ⚠️ 법인등록번호는 절대 넣지 말 것(내부 식별번호). 사업자등록번호만 공개.
-
-type InfoRow = { label: string; value: string };
-
-const BUSINESS_INFO: InfoRow[] = [
-  { label: "상호", value: "피티아이티 주식회사" },
-  { label: "대표자", value: "이현민" },
-  { label: "사업자등록번호", value: "125-86-19781" },
-  { label: "사업장 주소", value: "경기도 평택시 용죽2로 30, 상가동 지하1층 B04호" },
-  { label: "이메일", value: "dukebiz01@gmail.com" },
-  { label: "고객문의", value: "031-8094-0012" },
-];
 
 export const Route = createFileRoute("/business-info")({
   head: () => ({ meta: [{ title: "사업자 정보 — LinkDrop" }] }),
