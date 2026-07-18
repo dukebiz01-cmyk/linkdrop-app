@@ -6,6 +6,17 @@
 
 export type VideoPlatform = "youtube" | "instagram" | "unknown";
 
+/** 영상 슬롯 데이터 형태 — YouTubeLiteEmbed 시그니처(스튜디오 selectedVideo / 손님 어댑터 공통).
+ *  S5-2 — 구 CardBody.types.ts(장례)에서 중립 이주. CardStudioPage45 VideoSlot45 미러와 동형. */
+export type VideoSlot = {
+  videoId: string;
+  thumbnailUrl: string;
+  title: string;
+  isShorts: boolean;
+  durationLabel?: string;
+  sourceLabel?: string;
+};
+
 export type VideoMetadataFetchedBy =
   | "youtube_oembed"
   | "youtube_fallback"

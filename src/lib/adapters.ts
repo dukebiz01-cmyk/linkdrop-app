@@ -6,11 +6,8 @@
 import type { InfoDropPageProps } from "@/components/info-drop-page";
 import type { PriceOfferRow } from "@/components/ai-price-comparison-card";
 import type { DropViewVariant } from "@/lib/mock-data";
-import type { CardBodyProps, VideoSlot } from "@/components/card/CardBody.types";
-import type { ProductWidgetProps } from "@/components/card/ProductWidget";
-import type { CouponPreviewCoupon } from "@/components/receiver/CouponPreview";
-import type { DropPurpose } from "@/lib/types";
-import { parseVideoUrl } from "@/lib/video-metadata";
+// S5-2 — VideoSlot 은 구 CardBody.types(장례)에서 @/lib/video-metadata 로 중립 이주.
+import { parseVideoUrl, type VideoSlot } from "@/lib/video-metadata";
 // ST2b-2 — 남은수량 단위 라벨 파생(FIX-45c 순수 모듈 재사용 — 스튜디오·/d 동일 번역).
 import { stockUnitLabelFrom } from "@/components/card-model/booster45";
 // 거울 수렴 S1 — /d → CardModel 마운트용 입력 타입(변환부 toDropDetailInput 반환형).
@@ -518,20 +515,8 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
   };
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// 4단계 준비 — 손님 데이터(InfoDropPageProps) → CardBodyProps 변환(순수함수).
-//   이번 단계는 함수만 추가(어디서도 호출 0). 손님이 CardBody 를 렌더하는 4단계에서 사용.
-//   스튜디오는 자체 state 로 CardBody 를 채우고, 손님은 이 어댑터로 채워 = 싱크로율.
-// ──────────────────────────────────────────────────────────────────────────
-
-// DropViewVariant(5목적 UI) → DropPurpose(enum). PURPOSE_TO_VARIANT 의 역방향.
-const VARIANT_TO_PURPOSE: Record<DropViewVariant, DropPurpose> = {
-  info: "정보",
-  coupon: "쿠폰",
-  reservation: "예약",
-  purchase: "구매",
-  lead: "상담",
-};
+// S5-2 — toCardBodyProps(호출 0)·buildProductWidget(레거시 스튜디오 전용)·VARIANT_TO_PURPOSE
+//   장례. 잔존 실경로 = toVideoSlot(아래 — toDropDetailInput 이 소비).
 
 // 초 → "M:SS"(또는 ≥1h "H:MM:SS"). VideoSlot.durationLabel 용(YouTubeLiteEmbed 오버레이).
 function secToDurationLabel(sec: number): string {
@@ -556,71 +541,6 @@ function toVideoSlot(p: InfoDropPageProps): VideoSlot | null {
     isShorts: p.videoDurationSec > 0 && p.videoDurationSec <= 60,
     durationLabel: p.videoDurationSec > 0 ? secToDurationLabel(p.videoDurationSec) : undefined,
     sourceLabel: p.videoSourceLabel,
-  };
-}
-
-/** 손님 InfoDropPageProps → CardBodyProps. 순수함수. (4단계에서 호출, 지금은 미사용.) */
-export function toCardBodyProps(props: InfoDropPageProps): CardBodyProps {
-  const coupon: CouponPreviewCoupon | null = props.funnelCoupon
-    ? {
-        title: props.funnelCoupon.title,
-        coupon_type: props.funnelCoupon.coupon_type,
-        gift_item: props.funnelCoupon.gift_item,
-        conditions: props.funnelCoupon.conditions,
-        valid_until: props.funnelCoupon.valid_until,
-      }
-    : null;
-
-  return {
-    mode: "live",
-    cardColor: props.cardColor ?? "#1E3A8A",
-    video: toVideoSlot(props),
-    // 제목 = 영상 헤드라인(손님), 부제 = 메이커 한마디(curator_message=makerMessage).
-    title: props.title,
-    tagline: props.makerMessage ?? "",
-    sellingPoints: props.keyPoints ?? [],
-    coupon,
-    // local → store(연락 매핑). local 은 InfoDropPageProps 필수라 항상 객체.
-    store: {
-      name: props.local.name,
-      phone: props.local.phone,
-      address: props.local.address,
-      reservationUrl: props.local.reservationUrl ?? null,
-    },
-    purpose: props.variant ? VARIANT_TO_PURPOSE[props.variant] : "정보",
-    // 연락 슬롯(contactSlot)·하단 블록 슬롯은 container(info-drop-page)가 주입(지금 undefined).
-    //   reservationSlot·ctaSlot 은 3d 에서 제거(미사용 live전용 안티패턴).
-  };
-}
-
-/** 손님 InfoDropPageProps → ProductWidgetProps. props.commerce(이미 buildCommerce 로 만든 구매 데이터) + local(산지) 매핑.
- *  C1 신규(호출 0 — C2 에서 손님 purchase 분기가 CardBody.productBlock 으로 주입). onPreorder 는 container 가 주입.
- *  ※ buildCommerce 는 DropDetailRpc 입력용 — 여기선 이미 변환된 props.commerce 를 재사용(중복 변환 회피). */
-export function buildProductWidget(props: InfoDropPageProps): ProductWidgetProps {
-  const c = props.commerce;
-  // 구매 데이터 없으면(purpose≠구매 등) 최소 형태 — title/가격미정. (C2 는 purchase 에서만 호출.)
-  if (!c) {
-    return { name: props.title, priceKrw: null };
-  }
-  return {
-    name: c.name,
-    priceKrw: c.priceKrw,
-    media: { type: "image", imageUrl: c.imageUrl },
-    imageUrl: c.imageUrl,
-    headline: c.headline,
-    sellingPoints: c.sellingPoints,
-    isFresh: c.isFresh,
-    harvestDate: c.harvestDate,
-    stockLimit: c.stockLimit,
-    local: props.local
-      ? { name: props.local.name, address: props.local.address, distance: props.local.distance }
-      : undefined,
-    selfUpload: c.selfUpload,
-    buyUrl: c.buyUrl,
-    // BADGE-ⓑ(4b) — Droppy 예상 보상 관통(buildCommerce 산출 → 위젯 표기).
-    dropyReward: c.dropyReward,
-    // BUG-2 T2 — 재고 단위 라벨 관통(FIX-45c): 한정 배지 단위 동기화(미주입=위젯에서 '개' 폴백).
-    stockUnitLabel: c.stockUnitLabel,
   };
 }
 
