@@ -269,7 +269,9 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
       //   분기는 발행 후 시점 데이터 상태의 정직 표기(거울 상위집합·위반 아님).
       calendar: isReservation || (variant === "coupon" && !!input.calendarEquipped),
       coupon: hasCoupon,
-      link: !!(input.local?.phone || input.local?.address),
+      // S4-4a — 커머스 그리드 다이어트: purchase 는 매장정보 셀 미장착(스튜디오 주입부와 동형
+      //   거울). 잔여 장착물(도킹 등)만 그리드존에 남는다. 타 variant 는 현행 유지.
+      link: !isCommerce && !!(input.local?.phone || input.local?.address),
       dock: !!dock,
       // ❌ 백엔드 부재 — 켜지 않는다(가짜 렌더 금지): seasonal/delivery/review/brand/
       //    top/boost/marketing/party.
@@ -333,7 +335,8 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
     phone: !!input.local?.phone,
     map: !!input.local?.address,
     // S3-3 ⑤·⑦ — 시설 태그·나도 만들기 관통(미주입 = 미렌더/스튜디오 stub).
-    ...(input.facilities?.length ? { facilities: input.facilities } : {}),
+    //   S4-4a — 커머스는 시설 셀 미장착(그리드 다이어트 · 스튜디오 주입부 동형).
+    ...(!isCommerce && input.facilities?.length ? { facilities: input.facilities } : {}),
     ...(input.remakeHref ? { remakeHref: input.remakeHref } : {}),
     ...(input.remakeLabel ? { remakeLabel: input.remakeLabel } : {}),
     ...(dock

@@ -2187,7 +2187,9 @@ export function CardStudioPage45({
     {
       buildMode: mode,
       cardColor,
-      applied,
+      // S4-4a — 커머스 그리드 다이어트: 상품판매 모드는 매장정보 셀 미장착(link 강제 false —
+      //   fromDropDetail 수신 억제와 동형 거울). 덱 장착 토글이 있어도 미리보기 미렌더.
+      applied: mode === "commerce" ? { ...applied, link: false } : applied,
       tagline: cfgSubtitle,
       selectedVideo,
       pickedPoints,
@@ -2223,7 +2225,10 @@ export function CardStudioPage45({
       ...(applied["seasonal"] && DATE_OPTIONS.length > 0
         ? { saleStart: DATE_OPTIONS[saleStartIdx], saleEnd: DATE_OPTIONS[saleEndIdx] }
         : {}),
-      ...(applied["link"] ? { facilities: cfgFacilities.map((f) => f.text.trim()).filter(Boolean) } : {}),
+      // S4-4a — 커머스는 시설 셀 미주입(그리드 다이어트 · fromDropDetail 동형).
+      ...(applied["link"] && mode !== "commerce"
+        ? { facilities: cfgFacilities.map((f) => f.text.trim()).filter(Boolean) }
+        : {}),
       // FIX-15 — 상품 구성 메타 칩(등록 폼 unit_label 미러, 미주입=미렌더).
       ...(mode === "commerce" && productUnitLabel ? { productUnitLabel } : {}),
       // FIX-24 — 수확·발송 기간 칩(date_range_label 미러, 단일일=미주입=미렌더).
