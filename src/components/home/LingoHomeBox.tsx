@@ -18,7 +18,7 @@ const ACCENT = "#2563EB"; // 홈 링고 목적색(버튼·칩 — 기존 유지)
 const BORDER_ACCENT = "#1D4ED8"; // LINGO-UI-2 §3-4 — 아코디언 컨테이너 테두리(D-1 락).
 
 // §3-3 카피 락 — 한 글자도 임의 변경 금지.
-const HEADER_COPY = "안녕하세요, 링고AI예요. 무엇을 도와드릴까요?";
+const HEADER_COPY = "링고AI와 같이 링크드롭을 시작해 볼까요?"; // LINGO-UI-2-FIX-1 — 한 글자 락.
 const GREETING_COPY =
   "안녕하세요, 링고AI예요. 저는 링크드롭의 안내자이자 어드바이저입니다. 무엇을 도와드릴까요? 링크드롭 사용법, 저와 함께 시작해볼까요?";
 

@@ -346,13 +346,13 @@ export function RoleHome({
             작업5 — "시작해 볼까요" → 링고 캡슐 펼침 연결. */}
         <HomeMarketingBanner onStart={() => setLingoOpenSignal((s) => s + 1)} open={lingoOpen} />
 
+        {/* LINGO-UI-2-FIX-1 — 아코디언 = 마케팅배너 바로 밑(수익배너 위). 배선 무변경. */}
+        <LingoHomeBox cardCount={myCreatedDrops.length} conversions30d={conv30d} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
+
         {/* 성과 2셀 — 전환(get_creator_performance 30d 자체 fetch) / 적립(준비중 락). v0 룩. */}
         <div className="pb-1">
           <PerformanceBanner onConversions={setConv30d} />
         </div>
-
-        {/* LINGO-UI-2 — 홈 링고 = 수익배너 바로 밑 인라인 아코디언(부유 독 폐기). 배선 무변경. */}
-        <LingoHomeBox cardCount={myCreatedDrops.length} conversions30d={conv30d} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
 
         {/* 오늘 공유하기 좋은 — 추천 영상(있을 때만) 가로 스와이프. 빈 박스 방지(L12) — 없으면 숨김. */}
         {recommendedDrops.length > 0 ? (
@@ -425,13 +425,13 @@ export function RoleHome({
 
       {/* HOME-LINGO — 링고 스타터·성과진단 셸 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합.
           1장+ = 메이커 분기("성과 볼까요?" → surface:home + performance 발화). 1층 실값 카드·3층 칩 = 커밋2. */}
+      {/* LINGO-UI-2-FIX-1 — 아코디언 = 마케팅배너 바로 밑(수익배너 위). 배선 무변경. */}
+      <LingoHomeBox cardCount={myCreatedDrops.length} conversions30d={conv30d} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
+
       {/* 성과 3셀 — 전환(get_creator_performance 30d 자체 fetch)·적립(준비중 락)·구독자(실값). */}
       <div className="pb-1">
         <PerformanceBanner subscriberCount={merchant.subscriberCount} onConversions={setConv30d} />
       </div>
-
-      {/* LINGO-UI-2 — 홈 링고 = 수익배너 바로 밑 인라인 아코디언(부유 독 폐기). 배선 무변경. */}
-      <LingoHomeBox cardCount={myCreatedDrops.length} conversions30d={conv30d} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
 
       {/* ✅ 새 제안 보존 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. */}
       {merchant.proposals.length > 0 ? (
