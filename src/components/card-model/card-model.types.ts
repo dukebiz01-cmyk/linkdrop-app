@@ -97,6 +97,9 @@ export type CardModel = {
   productQtyUnit?: string;
   /** 셀링포인트 ← selling_points/ai_key_points. */
   productPoints?: string[];
+  /** FIX-59b — 비커머스 [영상 요약] 접이의 요약문(ai_summary 실값만). 미주입 = 포인트만 렌더.
+   *  스튜디오는 제작 중 요약 소스 부재 → 미주입(미주입=미렌더 계약 — videoEmbed 동형). */
+  summaryText?: string;
   /** FIX-39 — 판매 부스터 칩(전부 실값 · 빈 배열/미주입 = 미렌더).
    *  산출은 booster45.ts 순수 모듈(D-day·남은수량 = 조회 시점 계산 — 스냅샷 박제 금지). */
   boosterChips?: Array<{ kind: "stock" | "dday" | "orders" | "benefit"; label: string }>;

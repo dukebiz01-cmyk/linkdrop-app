@@ -114,6 +114,8 @@ export type DropDetailInput = {
   maker?: { name: string };
   /** ← InfoDropPageProps.keyPoints (drop.ai_key_points). */
   keyPoints?: string[];
+  /** FIX-59b — ← InfoDropPageProps.aiSummary (drop.ai_summary 실값만). 카드 [영상 요약] 접이 요약문. */
+  aiSummary?: string;
   /** ← InfoDropPageProps.commerce (본체 product 블록 block_data). */
   commerce?: {
     name: string;
@@ -339,6 +341,8 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
     productPoints: isCommerce
       ? (input.commerce?.sellingPoints?.length ? input.commerce.sellingPoints : input.keyPoints)
       : input.keyPoints,
+    // FIX-59b — 비커머스 [영상 요약] 접이 요약문(실값만 · 커머스 미주입 = 현행 셀링포인트 무접촉).
+    ...(!isCommerce && input.aiSummary?.trim() ? { summaryText: input.aiSummary.trim() } : {}),
     // 예약 데이터 — 슬롯 없으면 미주입(=예약 섹션 미렌더, 외부 reservation_url 은 link 버튼 몫).
     ...(dates.length > 0 ? { dates, slotsByDate } : {}),
     ...(times.length > 0 ? { times } : {}),

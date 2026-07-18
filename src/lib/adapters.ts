@@ -647,6 +647,8 @@ export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
     ...(vs ? { videoEmbed: vs } : {}),
     ...(props.maker?.name ? { maker: { name: props.maker.name } } : {}),
     keyPoints: props.keyPoints,
+    // FIX-59b — 카드 [영상 요약] 접이 요약문 관통(ai_summary 실값만).
+    ...(props.aiSummary?.trim() ? { aiSummary: props.aiSummary.trim() } : {}),
     ...(c
       ? {
           commerce: {

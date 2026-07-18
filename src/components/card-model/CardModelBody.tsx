@@ -22,6 +22,7 @@ import {
   Rocket,
   Scissors,
   Share2,
+  Sparkles,
   Star,
   Store,
   Tag,
@@ -115,6 +116,8 @@ export function CardModelBody({
   const slotFor = (anchor: string) =>
     variant === "studio" && currentSlot?.anchor === anchor ? currentSlot : null;
   const [journeyOpen, setJourneyOpen] = useState(false);
+  // FIX-59b — 비커머스 키포인트 = [영상 요약] 접이(기본 접힘 · 재탭 닫힘 · Radix 0).
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   // B전환 커밋2 — 실시간 반영 pop: studio 미리보기에서 필드 값이 빈→채움으로 전이하는 순간 그 필드에
   //   0.5s 하이라이트(시안 .just-in). 순수 렌더 유지 — 값 변화만 감지(외부 상태 주입 0). /d 수신
@@ -393,23 +396,55 @@ export function CardModelBody({
 
           {/* 거울 수렴 S1 보정1 — 비커머스 셀링포인트(정보/쿠폰/예약 카드 키포인트 복원). 커머스는
               applied["product"] 블록 안에서 렌더하므로 여기선 !applied["product"] 로 분기(중복 출력 0).
-              미주입=미렌더(빈 배열/미주입 시 섹션 자체 없음). variant 무관 공통(스튜디오=정본 복원). */}
+              미주입=미렌더(빈 배열/미주입 시 섹션 자체 없음). variant 무관 공통(스튜디오=정본 복원).
+              FIX-59b — [영상 요약] 접이로 통합(페이지 하단 접이 중복 소멸 · 거울 자동): 헤더 행 탭
+              펼침 = summaryText(있으면)+✓포인트. 기본 접힘 · 게이트 현행(포인트 0 = 접이 미렌더). */}
+          {/* FIX-59c — 틴트 박스: 헤더+펼침을 한 박스(뉴트럴 #F7F7F8 · radius 10 · 보더 0)로 —
+              본문과 경계 명확. 접힘 = 틴트 헤더 행만, 펼침 = 같은 박스 안에서 패널 연속. */}
           {!applied["product"] && model.productPoints && model.productPoints.length > 0 && (
-            <ul className="mt-3 space-y-1">
-              {model.productPoints.map((pt, i) => (
-                <li
-                  key={i}
-                  className="flex items-start gap-1.5 text-[12px] leading-relaxed text-[#525252]"
-                >
-                  <Check
-                    className="mt-0.5 h-3.5 w-3.5 flex-none"
-                    style={{ color: accent }}
-                    strokeWidth={2.75}
-                  />
-                  <span className="text-pretty">{pt}</span>
-                </li>
-              ))}
-            </ul>
+            <div className="mt-3 rounded-[10px] bg-[#F7F7F8]">
+              <button
+                type="button"
+                onClick={() => setSummaryOpen((v) => !v)}
+                aria-expanded={summaryOpen}
+                data-testid="card-summary-fold"
+                className="flex w-full items-center justify-between rounded-[10px] px-3 py-2.5 text-left transition-colors active:bg-[#EFEFF1]"
+              >
+                <span className="flex items-center gap-2 text-[13px] font-bold text-[#404040]">
+                  <Sparkles className="h-4 w-4" strokeWidth={2.25} style={{ color: accent }} />
+                  영상 요약
+                </span>
+                <ChevronDown
+                  className="h-4 w-4 text-[#A3A3A3] transition-transform duration-300"
+                  strokeWidth={2.5}
+                  style={{ transform: summaryOpen ? "rotate(180deg)" : "none" }}
+                />
+              </button>
+              {summaryOpen && (
+                <div className="cm-slide-up px-3 pb-3">
+                  {model.summaryText && (
+                    <p className="mb-2 text-pretty text-[12px] font-medium leading-relaxed text-[#525252]">
+                      {model.summaryText}
+                    </p>
+                  )}
+                  <ul className="space-y-1">
+                    {model.productPoints.map((pt, i) => (
+                      <li
+                        key={i}
+                        className="flex items-start gap-1.5 text-[12px] leading-relaxed text-[#525252]"
+                      >
+                        <Check
+                          className="mt-0.5 h-3.5 w-3.5 flex-none"
+                          style={{ color: accent }}
+                          strokeWidth={2.75}
+                        />
+                        <span className="text-pretty">{pt}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
 
           {/* 브랜드 소개 */}

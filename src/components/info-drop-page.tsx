@@ -655,6 +655,8 @@ export function InfoDropPage({
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   // S3-4e — 법정 푸터 사업자 정보 인라인 펼침(Radix 0).
   const [bizOpen, setBizOpen] = useState(false);
+  // FIX-59 — 영상 요약 접이(콘텐츠 존 · 고시 접이 문법 통일 — Radix 아코디언 대체). 재탭 닫힘.
+  const [aiSummaryOpen, setAiSummaryOpen] = useState(false);
   // S4 — 재입고 알림: 카드 v2 내 버튼(boosterChips 품절 게이트) → 페이지 액션. 구
   //   RestockAlertButton 의 신청 로직·4상태 문구를 페이지 소관으로 승계(정의는 하단 보존).
   const [restockPhase, setRestockPhase] = useState<
@@ -1178,21 +1180,28 @@ export function InfoDropPage({
   //   페이지 레벨 양쪽에서 동일 마크업 재사용. 핸들러 1:1 보존: handleKakao=체인시드 / handleCopy / create-wizard href / 신고.
   // S7 — 형님 확정 A: AI요약을 카드 내부·푸터 위로(preFooterSlot). 스튜디오 정본(AI콘텐츠=푸터 위)과 정합.
   //   기존 카드 밖 아코디언(구 :1458 위치)에서 이 변수로 추출 — 게이트/내부 로직/스타일 불변, 위치만 이동.
+  // FIX-59 — 접이 옷 통일(고시 접이 문법 동형): 흰 카드 버튼(radius 12·펼침 시 목적색 보더)
+  //   + 인라인 펼침 패널. 게이트(비예약·비 selfUpload)·내용(summaryLine·points) 무손실.
   const aiSummaryAccordion =
     !isReservation && !commerce?.selfUpload ? (
-      <Accordion
-        type="single"
-        collapsible
-        className="rounded-2xl border border-border bg-surface px-4"
-      >
-        <AccordionItem value="ai-summary" className="border-b-0">
-          <AccordionTrigger className="hover:no-underline">
-            <span className="flex items-center gap-2">
-              <Sparkles className="size-4 text-accent" strokeWidth={2} />
-              <span className="text-sm font-bold tracking-ko text-text-strong">영상 요약</span>
-            </span>
-          </AccordionTrigger>
-          <AccordionContent>
+      <div data-testid="ai-summary-fold">
+        <button
+          type="button"
+          onClick={() => setAiSummaryOpen((v) => !v)}
+          aria-expanded={aiSummaryOpen}
+          className="flex min-h-[48px] w-full items-center gap-2 rounded-[12px] border bg-white px-4 py-3 text-left"
+          style={{ borderColor: aiSummaryOpen ? accent : "#E8EDF3" }}
+        >
+          <Sparkles className="size-4 shrink-0" strokeWidth={2} style={{ color: accent }} />
+          <span className="flex-1 text-sm font-bold tracking-ko text-text-strong">영상 요약</span>
+          <ChevronDown
+            className="size-4 shrink-0 text-text-subtle transition-transform"
+            style={{ transform: aiSummaryOpen ? "rotate(180deg)" : "none" }}
+            strokeWidth={2.25}
+          />
+        </button>
+        {aiSummaryOpen ? (
+          <div className="mt-2 rounded-[12px] border border-[#E8EDF3] bg-white p-4">
             <p className="text-base font-semibold leading-relaxed tracking-ko text-text-strong">
               {summaryLine}
             </p>
@@ -1209,9 +1218,9 @@ export function InfoDropPage({
                 ))}
               </ul>
             )}
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+          </div>
+        ) : null}
+      </div>
     ) : null;
 
   // S17(P4) — 단일 마크업을 light 파라미터 함수로: 기존 소비처(카드색 기반)는 shareFooter 그대로,
@@ -1676,6 +1685,8 @@ export function InfoDropPage({
                   title,
                   makerMessage,
                   keyPoints,
+                  // FIX-59b — 카드 [영상 요약] 접이 요약문 관통.
+                  aiSummary,
                   cardColor,
                   variant,
                   maker,
@@ -1686,8 +1697,8 @@ export function InfoDropPage({
                 remakeLabel,
               })}
             />
-            {/* S3-4c — 슬립 = 위치 B(콘텐츠 뒤·법정 직전). */}
-            {aiSummaryAccordion}
+            {/* FIX-59 — v2 정본 순서: 카드 → 전달 슬립(꼬리표) → 콘텐츠 → 법정.
+                FIX-59b — 영상 요약은 카드 내 접이로 통합(하단 중복 소멸). */}
             {deliverySlip}
             {renderShareFooter(true, false)}
           </>
@@ -1736,6 +1747,8 @@ export function InfoDropPage({
                   title,
                   makerMessage,
                   keyPoints,
+                  // FIX-59b — 카드 [영상 요약] 접이 요약문 관통.
+                  aiSummary,
                   cardColor,
                   variant,
                   maker,
@@ -1754,12 +1767,10 @@ export function InfoDropPage({
                 calendarEquipped: showCalendar,
               })}
             />
-            {/* S3-4c — 실행기 상시 노출 폐지: [예약 가능일]→[예약하기] 인라인 확장
-                (reserveExecutorSlot)으로 일원화. 슬립 = 위치 B(콘텐츠 뒤·법정 직전). */}
-            {eventsSection}
-            {aiSummaryAccordion}
+            {/* FIX-59 — v2 정본 순서: 카드 → 전달 슬립(꼬리표) → 콘텐츠(진행 이벤트) → 법정.
+                FIX-59b — 영상 요약은 카드 내 접이로 통합(하단 중복 소멸). */}
             {deliverySlip}
-            {/* S3-3 ⑦ — 공유 3액션은 카드 내장 푸터로 이동. 하단은 법정만(신고). */}
+            {eventsSection}
             {renderShareFooter(true, false)}
           </>
         )}
@@ -1828,6 +1839,8 @@ export function InfoDropPage({
                   title,
                   makerMessage,
                   keyPoints,
+                  // FIX-59b — 카드 [영상 요약] 접이 요약문 관통.
+                  aiSummary,
                   cardColor,
                   variant,
                   maker,
@@ -1843,11 +1856,10 @@ export function InfoDropPage({
                 remakeLabel,
               })}
             />
-            {/* S3-4c — 실행기 상시 노출 폐지: [예약 가능일]→[예약하기] 인라인 확장
-                (reserveExecutorSlot)으로 일원화. 슬립 = 위치 B(콘텐츠 뒤·법정 직전). */}
-            {eventsSection}
+            {/* FIX-59 — v2 정본 순서: 카드 → 전달 슬립(꼬리표) → 콘텐츠(진행 이벤트) → 법정.
+                공유 3액션은 슬립 담당(S3-3 ⑦). */}
             {deliverySlip}
-            {/* S3-3 ⑦ — 공유 3액션은 카드 내장 푸터로 이동. 하단은 법정만(신고). */}
+            {eventsSection}
             {renderShareFooter(true, false)}
           </>
         )}
