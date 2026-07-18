@@ -67,8 +67,7 @@ import { YouTubeLiteEmbed } from "@/components/receiver/youtube-lite-embed";
 // S3-2 — CouponPreview·CardBody·TimerBadge 소비 소멸(수렴 3종의 쿠폰·본체는 CardModelBody 정본).
 // S4 — StockMeta 소비 소멸(재고 = 카드 v2 productQty). ProductWidget/buildProductWidget 소비도
 //   소멸(purchase 본체 = CardModelBody) — 컴포넌트 자체는 보존(레거시 studio-build 소비 잔존).
-// ST2b-2a A2 — 판매기간 D-day 라벨(FIX-39 booster45 순수 모듈 재사용 — 조회 시점 계산).
-import { ddayLabel, buildGroupBuyView } from "@/components/card-model/booster45";
+// S5-3 — ddayLabel·buildGroupBuyView 소비 소멸(카드 v2 어댑터가 booster45 직접 소비).
 // ST2b-2b B1 — 재입고 알림(FIX-41) 실배선 — 락 문구 정본 사용.
 import {
   requestRestockAlert,
@@ -1134,46 +1133,7 @@ export function InfoDropPage({
     </div>
   ) : null;
 
-  // 3b-2 — 정보 보기(연락) 블록 const 추출. 콘텐츠 0변화(handleCtaClick 결선 그대로).
-  //   S3-2 — 예약 실행 카드(coupon·reservation 분기) 하단에 편입 렌더.
-  const contactRow =
-    hasPhone || Boolean(safeLocal.address?.trim() || safeLocal.name?.trim()) ? (
-      <section data-testid="secondary-contact-row" className="flex items-stretch gap-2">
-        {hasPhone ? (
-          <button
-            type="button"
-            onClick={() => handleCtaClick("phone")}
-            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
-            aria-label="전화 문의"
-          >
-            <Phone className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-            전화
-          </button>
-        ) : null}
-        {hasPhone ? (
-          <button
-            type="button"
-            onClick={() => handleCtaClick("sms")}
-            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
-            aria-label="문자 문의"
-          >
-            <MessageSquare className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-            문자
-          </button>
-        ) : null}
-        {safeLocal.address?.trim() || safeLocal.name?.trim() ? (
-          <button
-            type="button"
-            onClick={() => handleCtaClick("directions")}
-            className="flex flex-1 min-h-[56px] flex-col items-center justify-center gap-1 rounded-2xl border border-[#E5E7EB] bg-white px-2 py-2 text-xs font-semibold tracking-ko text-[#0F172A] hover:bg-[#FAFAFA]"
-            aria-label="길찾기"
-          >
-            <MapPin className="size-5 text-[#0A0A0A]" strokeWidth={2} />
-            길찾기
-          </button>
-        ) : null}
-      </section>
-    ) : null;
+  // S5-3 — 구 contactRow(연락 3버튼) 정의 장례: 렌더 소비 0(카드 그리드 [매장 정보]가 대체).
 
   // v0 원안 공유 푸터 — 카드 안 아이콘 줄(영상만들기 주 버튼 + 링크복사/친구에게보내기 아이콘 + 고지 + 신고).
   //   CardBody.shareFooter 슬롯(info/coupon/reservation = 카드 본문 맨 아래)과 비-CardBody variant(purchase/lead)
@@ -2688,129 +2648,6 @@ function PurchaseInfoFolds({
   );
 }
 
-function NoticeRowsSection({ rows }: { rows: Array<{ label: string; value: string }> }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <section className="rounded-2xl border border-border bg-surface">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex min-h-[44px] w-full items-center gap-1.5 px-4 py-3 text-left"
-      >
-        <span className="flex-1 text-sm font-bold tracking-ko text-text-strong">
-          상품 상세정보 고시
-        </span>
-        <span className="text-[11px] font-medium tracking-ko text-text-subtle">
-          전자상거래 필수 항목
-        </span>
-        <ChevronDown
-          className="size-4 shrink-0 text-text-subtle transition-transform"
-          style={{ transform: open ? "rotate(180deg)" : "none" }}
-          strokeWidth={2.25}
-        />
-      </button>
-      {open ? (
-        <div className="space-y-1.5 px-4 pb-4">
-          {rows.map((r, i) => (
-            <div key={i} className="rounded-lg bg-bg px-3 py-2">
-              <p className="text-[11px] font-semibold tracking-ko text-text-subtle">{r.label}</p>
-              {r.value ? (
-                <p className="mt-0.5 text-[13px] font-semibold tracking-ko text-text-strong">
-                  {r.value}
-                </p>
-              ) : (
-                <p className="mt-0.5 text-xs font-medium tracking-ko text-text-subtle">미입력</p>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-// ST2b-2a A2 — 판매기간 D-day 배지(조회 시점 계산 — 박제 금지). 마운트 가드 = SSR/클라
-//   시계·타임존 불일치 방지(TimerBadge 하이드레이션 문법 동형). 마감 경과 = "판매 마감" 정직.
-function SaleDdayBadge({ saleEndIso }: { saleEndIso: string }) {
-  const [today, setToday] = useState<string | null>(null);
-  useEffect(() => {
-    const t = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    setToday(`${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`);
-  }, []);
-  if (!today) return null;
-  return (
-    <span className="inline-flex shrink-0 items-center rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white">
-      {ddayLabel(saleEndIso, today)}
-    </span>
-  );
-}
-
-// ST2b-2b B1 — 재입고 알림 버튼(FIX-41 restock-alerts 실배선). 상태 4분기 정직 표기:
-//   완료/중복 = 락 문구 · 비로그인 = 로그인 유도 · 오류 = 재시도 안내. 서버 발신 없음(v1).
-function RestockAlertButton({ dropId }: { dropId: string }) {
-  const [phase, setPhase] = useState<"idle" | "busy" | "created" | "duplicate" | "unauthenticated" | "error">("idle");
-  if (phase === "created" || phase === "duplicate") {
-    return (
-      <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium leading-relaxed tracking-ko text-text-muted [word-break:keep-all]">
-        {phase === "duplicate" ? RESTOCK_ALERT_DUPLICATE_COPY : RESTOCK_ALERT_CONFIRM_COPY}
-      </p>
-    );
-  }
-  return (
-    <div className="space-y-1.5">
-      <button
-        type="button"
-        disabled={phase === "busy"}
-        onClick={() => {
-          setPhase("busy");
-          void requestRestockAlert(dropId).then((r) =>
-            setPhase(r === "created" ? "created" : r === "duplicate" ? "duplicate" : r === "unauthenticated" ? "unauthenticated" : "error"),
-          );
-        }}
-        className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-border bg-bg text-sm font-semibold tracking-ko text-text-strong hover:border-text-muted disabled:opacity-60"
-      >
-        재입고 알림 받기
-      </button>
-      {phase === "unauthenticated" ? (
-        <p className="text-xs font-medium tracking-ko text-text-subtle">
-          로그인하면 재입고 알림을 받을 수 있어요.
-        </p>
-      ) : null}
-      {phase === "error" ? (
-        <p className="text-xs font-medium tracking-ko text-text-subtle">
-          지금은 신청이 안 됐어요 — 잠시 후 다시 시도해 주세요.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-// ST2b-2b B2 — 공동구매 표시(FIX-40 buildGroupBuyView — 사실만: 조건·고지·취소 경로).
-//   진행률(joinedCount)은 실집계 입력 부재 → null(미렌더 — 가짜 집계 금지). 마감 = 조회 시점.
-function GroupBuySection({
-  groupBuy,
-}: {
-  groupBuy: { targetN: number; priceKrw: number; deadline: string | null };
-}) {
-  const view = buildGroupBuyView({
-    targetN: groupBuy.targetN,
-    achievedPriceKrw: groupBuy.priceKrw,
-    joinedCount: null,
-  });
-  if (!view) return null;
-  return (
-    <section className="space-y-2 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-bold tracking-ko text-text-strong">
-          공동구매 · {view.offerLine}
-        </p>
-        {groupBuy.deadline ? <SaleDdayBadge saleEndIso={groupBuy.deadline} /> : null}
-      </div>
-      <p className="text-xs font-medium leading-relaxed tracking-ko text-text-muted [word-break:keep-all]">
-        {view.noticeLine}
-      </p>
-      <p className="text-xs font-medium tracking-ko text-text-subtle">{view.cancelLine}</p>
-    </section>
-  );
-}
+// S5-3 — 죽은 정의 장례(렌더 소비 0 · 카드 v2가 대체): NoticeRowsSection(→PurchaseInfoFolds 고시)·
+//   SaleDdayBadge(→boosterChips D-day)·RestockAlertButton(→카드 버튼+restockFeedback)·
+//   GroupBuySection(→model.groupBuy). requestRestockAlert·RESTOCK 카피는 restockFeedback 이 계속 소비.
