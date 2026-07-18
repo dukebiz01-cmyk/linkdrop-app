@@ -1679,6 +1679,8 @@ export function InfoDropPage({
                   cardColor,
                   variant,
                   maker,
+                  // FIX-58 — 함께 받는 카드(도킹) 관통(coupon·reservation 동형 — 카드 셀 거울 수복).
+                  attachedProducts,
                 } as unknown as InfoDropPageProps),
                 remakeHref,
                 remakeLabel,
@@ -2106,12 +2108,13 @@ export function InfoDropPage({
 
         {/* ③ 관련 상품 — 담은 상품(attached). 본체 커머스/영상 렌더와 독립.
             탭 → 그 상품 자체 카드(/d/{refShareUuid}) 인앱 이동. 없으면 미표시.
-            S3-3 ⑥·S4 — coupon·reservation·purchase(commerce) 수렴 분기는 카드 내 도킹 존
-            (함께 받는 카드)이 담당 → 이중 렌더 금지로 크롬 미렌더. */}
+            S3-3 ⑥·S4·FIX-58 — coupon·reservation·info·purchase(commerce) 수렴 분기는 카드 내
+            도킹 존(함께 받는 카드)이 담당 → 이중 렌더 금지로 크롬 미렌더(lead·폴백 purchase 잔존). */}
         {attachedProducts &&
           attachedProducts.length > 0 &&
           resolvedVariant !== "coupon" &&
           resolvedVariant !== "reservation" &&
+          resolvedVariant !== "info" &&
           !(resolvedVariant === "purchase" && commerce) && (
           <section data-testid="related-products">
             <h2
