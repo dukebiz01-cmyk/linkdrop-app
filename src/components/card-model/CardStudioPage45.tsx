@@ -1333,6 +1333,54 @@ export function CardStudioPage45({
     prevInterviewNoRef.current = interviewCurNo;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interviewCurNo]);
+
+  // DRIVE-2e — 막힘 감지: 현재 스텝 90초 체류 + 그 사이 입력·조작·발화 없음(아래 활동 deps
+  //   변화 = 타이머 리셋) = 막힘 1회 판정. 스텝(key)당 1회(stuckRef — 넛지 예산과 별도).
+  //   무응답 재발화 금지(침묵 존중): 발화한 스텝은 재무장하지 않고, 행동 재개 시 추가 발화 없이
+  //   정상 흐름. 발화는 클라 템플릿(LLM 0) + stripMarkdown 경유.
+  const STUCK_MS = 90_000;
+  const stuckRef = useRef<Set<string>>(new Set());
+  const [stuckChips, setStuckChips] = useState<{ key: string; label: string; canFill: boolean } | null>(null);
+  const interviewCurKey = interviewCurrent?.step.key ?? null;
+  useEffect(() => {
+    setStuckChips(null); // 스텝 전이·활동 재개 = 칩 소거(스테일 방지).
+    if (!interviewCurKey || dropped) return;
+    if (stuckRef.current.has(interviewCurKey)) return;
+    const t = setTimeout(() => {
+      if (chat.streaming || voice.listening) return; // 대화·청취 중 = 막힘 아님(활동 변화가 재무장).
+      const cur = interviewStates.find((x) => x.state === "current");
+      if (!cur || cur.step.key !== interviewCurKey) return;
+      stuckRef.current.add(interviewCurKey);
+      chat.notify(
+        stripMarkdown("어려우시면 제가 추천안으로 채워 둘까요? 마음에 안 들면 나중에 바꾸면 돼요."),
+      );
+      // 수동 전용 판정 = 기존 필드 화이트리스트(interviewSetFieldKey) — null 이면 [추천으로 채워줘] 미노출.
+      setStuckChips({
+        key: cur.step.key,
+        label: cur.step.label,
+        canFill: interviewSetFieldKey(cur.step.key) != null,
+      });
+    }, STUCK_MS);
+    return () => clearTimeout(t);
+    // 활동 신호(발화·입력·블록 이동·폼 조작·모드) = 리셋 deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interviewCurKey, chat.messages.length, chatInput, deckIndex, mode, formProgress, dropped, chat.streaming, voice.listening]);
+
+  // DRIVE-2e — [건너뛸래요]: 다음 스텝으로 goToBlock(발행이면 발행 CTA 인입). 자동 반영 0.
+  function skipStuckStep() {
+    if (!stuckChips) return;
+    const idx = interviewJourney.findIndex((s) => s.key === stuckChips.key);
+    const next = idx >= 0 ? interviewJourney[idx + 1] : undefined;
+    setStuckChips(null);
+    if (!next) return;
+    if (next.publish) {
+      document.getElementById("sl-publish-cta")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (next.deckBlock) {
+      jumpToBlock(next.deckBlock);
+    } else {
+      scrollToDeck();
+    }
+  }
   const renderNumBadge = (no: number) => (
     <span
       className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold tabular-nums text-white transition-all duration-300"
@@ -5211,6 +5259,41 @@ export function CardStudioPage45({
                         )}
                       </div>
                     ) : null}
+                    {/* DRIVE-2e — 막힘 칩(90초 체류 발화 동반 · 스텝당 1회). 수동 전용 스텝은
+                        [추천으로 채워줘] 미노출. 추천 = 기존 자동주행 제안 경로(sendChatText →
+                        모델 setField 제안 → 확인 게이트) 재사용 — 자동 반영 0. */}
+                    {stuckChips && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {stuckChips.canFill && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const label = stuckChips.label;
+                              setStuckChips(null);
+                              void sendChatText(`${label} 단계를 추천안으로 채워 주세요`, "text");
+                            }}
+                            className="flex h-9 items-center rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+                            style={{ backgroundColor: accent }}
+                          >
+                            추천으로 채워줘
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={skipStuckStep}
+                          className="flex h-9 items-center rounded-full bg-white px-3 text-[12px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                        >
+                          건너뛸래요
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStuckChips(null)}
+                          className="flex h-9 items-center rounded-full bg-white px-3 text-[12px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                        >
+                          계속 해볼게요
+                        </button>
+                      </div>
+                    )}
                     {/* KAKAO-LINGO-1 — 인앱 안내 1줄(명세 §3 카피): 텍스트 대화는 살아있고,
                         음성은 [음성으로 만들기] 버튼이 크롬 핸드오프로 잇는다(FIX-47 게이트 대체). */}
                     {inAppNoMic && (
