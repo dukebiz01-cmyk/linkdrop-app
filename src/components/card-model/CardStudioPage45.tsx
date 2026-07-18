@@ -103,6 +103,8 @@ import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 // KAKAO-LINGO-1 — 인앱 음성 핸드오프: 마이크 자리 = [음성으로 만들기] → 크롬 탈출 스킴.
 //   KAKAO-LINGO-1b — 발급·탈출·안내 로직은 공용 헬퍼(voice-handoff)로 이관(홈과 공유).
 import { startVoiceHandoff } from "@/lib/voice-handoff";
+// LINGO-FIX-4b — 표시·낭독 기호 정제(홈과 공용 — 원본 메시지 무변경).
+import { stripMarkdown } from "@/lib/lingo-text";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
 import { buildBoosterChips, buildGroupBuyView, stockUnitLabelFrom } from "./booster45";
@@ -3111,7 +3113,8 @@ export function CardStudioPage45({
     if (conv && convActiveRef.current) {
       if (finalText) {
         // 낭독 종료(onDone) 후에만 재청취 — 링고가 자기 말을 듣는 루프 금지.
-        voice.speak(finalText, () => {
+        voice.speak(stripMarkdown(finalText), () => {
+          // LINGO-FIX-4b — 낭독 기호 정제(홈과 동일 공용).
           convBusyRef.current = false;
           convListen();
         });
@@ -3120,7 +3123,7 @@ export function CardStudioPage45({
         convListen();
       }
     } else if (finalText) {
-      voice.speak(finalText);
+      voice.speak(stripMarkdown(finalText)); // LINGO-FIX-4b — 낭독 기호 정제.
     }
   }
 
@@ -5146,7 +5149,7 @@ export function CardStudioPage45({
                               }`}
                               style={m.role === "user" ? { backgroundColor: accent } : undefined}
                             >
-                              {m.text ||
+                              {stripMarkdown(m.text) ||
                                 (m.streaming ? (
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
                                 ) : null)}
