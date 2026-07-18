@@ -69,7 +69,7 @@ import {
   type LingoContext,
   type LingoStudioAction,
 } from "./useLingoChat";
-import { CARD_MODEL_ACCENTS, fromStudioState } from "./card-model-adapters";
+import { CARD_MODEL_ACCENTS, fromStudioState, buildShippingView } from "./card-model-adapters";
 // FIX-42 — 발행 게이트 발화 정본 + 결정 로직(순수 — stage·1상태1발화 dedupe 실측 가능).
 import { decideGateUtterance } from "./gate-notes45";
 // FIX-48+50 — 번호 인터뷰 좌표계 단일 정본(순서·번호·라벨·앵커 · done 매핑만).
@@ -801,7 +801,14 @@ export function CardStudioPage45({
       prev.originSet === p.originSet &&
       prev.gbTargetSet === p.gbTargetSet &&
       prev.gbPriceSet === p.gbPriceSet &&
-      prev.gbDeadlineSet === p.gbDeadlineSet
+      prev.gbDeadlineSet === p.gbDeadlineSet &&
+      // S4-5·S4-6 — 배송 신호도 등가 비교(누락 시 배송 입력이 스텝퍼·미리보기 셀에 안 옴).
+      prev.shipMethodSet === p.shipMethodSet &&
+      prev.shipMethod === p.shipMethod &&
+      prev.freeShip === p.freeShip &&
+      prev.shipFeeKrw === p.shipFeeKrw &&
+      prev.shipNote === p.shipNote &&
+      prev.harvestDate === p.harvestDate
         ? prev
         : p,
     );
@@ -2205,6 +2212,19 @@ export function CardStudioPage45({
     [mode, productGroupBuy],
   );
 
+  // S4-6 — 배송정보 셀 거울: 폼 라이브 신호(formProgress) → 공용 buildShippingView(수신
+  //   fromDropDetail 과 단일 소스 — 문구·행 순서·무료배송 규칙 동일). 실값 0 = null = 셀 미렌더.
+  const studioShippingView =
+    mode === "commerce"
+      ? buildShippingView({
+          shipMethod: formProgress.shipMethod,
+          freeShip: formProgress.freeShip,
+          shipFeeKrw: formProgress.shipFeeKrw,
+          shipNote: formProgress.shipNote,
+          harvestDate: formProgress.harvestDate,
+        })
+      : null;
+
   // 제작=공유=수신 거울 — fromStudioState(어댑터) + 스튜디오 로컬 프리뷰 필드 병합.
   const couponTitle =
     selectedCoupon?.title ??
@@ -2215,7 +2235,11 @@ export function CardStudioPage45({
       cardColor,
       // S4-4a — 커머스 그리드 다이어트: 상품판매 모드는 매장정보 셀 미장착(link 강제 false —
       //   fromDropDetail 수신 억제와 동형 거울). 덱 장착 토글이 있어도 미리보기 미렌더.
-      applied: mode === "commerce" ? { ...applied, link: false } : applied,
+      // S4-6 — 배송정보 셀 장착 신호(실값 행 존재 시만 — 수신 applied.shipping 과 동형).
+      applied:
+        mode === "commerce"
+          ? { ...applied, link: false, shipping: !!studioShippingView }
+          : applied,
       tagline: cfgSubtitle,
       selectedVideo,
       pickedPoints,
@@ -2259,6 +2283,8 @@ export function CardStudioPage45({
       ...(mode === "commerce" && productUnitLabel ? { productUnitLabel } : {}),
       // FIX-24 — 수확·발송 기간 칩(date_range_label 미러, 단일일=미주입=미렌더).
       ...(mode === "commerce" && productDateRangeLabel ? { productDateRangeLabel } : {}),
+      // S4-6 — 배송정보 셀 표 행(공용 헬퍼 산출 — 수신과 동일 코드 렌더).
+      ...(studioShippingView ? { shipping: studioShippingView } : {}),
       // S4-3 — CTA 라벨 거울: 45 스튜디오 상품판매 발행은 항상 자체등록(self_upload:true, :1902)
       //   → selfUpload 상태 = commerce 모드 자체 = "주문예약". 그 외 = 미주입 = 렌더러 "구매" 폴백.
       // ★거울 락: fromDropDetail의 ctaLabel 분기(selfUpload→"주문예약"/buyUrl→"구매하기")와 동일해야 함.

@@ -257,6 +257,12 @@ export type ProductFormProgress45 = {
   gbDeadlineSet?: boolean;
   /** S4-5 — 배송 스텝 신호(배송방법 선택 = done). */
   shipMethodSet?: boolean;
+  /** S4-6 — 배송정보 셀 라이브 미리보기 재료(buildShippingView 입력 — 파생값 방출만, 판정 0). */
+  shipMethod?: string;
+  freeShip?: boolean;
+  shipFeeKrw?: number | null;
+  shipNote?: string;
+  harvestDate?: string;
 };
 
 export function ProductRegisterForm45({
@@ -605,6 +611,12 @@ export function ProductRegisterForm45({
       gbDeadlineSet: !!groupBuyDeadline.trim(),
       // S4-5 — 배송 스텝 신호(배송방법 선택 = done).
       shipMethodSet: !!shipMethod,
+      // S4-6 — 배송정보 셀 라이브 재료(구매자 부담 배송비만 — ship_fee_krw 저장 규칙 동일).
+      shipMethod,
+      freeShip,
+      shipFeeKrw: !freeShip && shipFee ? Math.floor(Number(shipFee)) : null,
+      shipNote,
+      harvestDate,
       ...over,
     });
   // 마운트 시 1회 동기화 — 폼 재마운트(패널 접힘/재장착) 후 호스트의 낡은 진행 상태 초기화.
@@ -617,7 +629,7 @@ export function ProductRegisterForm45({
   useEffect(() => {
     emitProgress();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quickMode, groupBuyOn, origin, groupBuyN, groupBuyPrice, groupBuyDeadline, price, imageUrl, name, nameConfirmed, shipMethod]);
+  }, [quickMode, groupBuyOn, origin, groupBuyN, groupBuyPrice, groupBuyDeadline, price, imageUrl, name, nameConfirmed, shipMethod, freeShip, shipFee, shipNote, harvestDate]);
 
   // FIX-48+50 P2 — 링고 인터뷰 setField 부착: 스튜디오 fieldPatch 수신 → 필드별 검증·부착·prev 회신.
   //   검증 = 폼 handleSubmit 규칙 준용(가격>0 / 목표인원 N≥2 / 달성가 0<x<기본가). restore(undo)는
