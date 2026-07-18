@@ -98,11 +98,15 @@ export function LingoHomeBox({
   }, [open, onOpenChange]);
 
   // 채팅 전송 — surface='home'(T-B 홈 인텐트). 메이커면 context.performance=true(T-D 성과 진단 재료).
+  //   LINGO-UI-2-FIX-2 — 완주 응답 낭독 배선(원천 미배선 수복 · 스튜디오 sendChatText 패턴 복제):
+  //   채널 무관(텍스트·마이크 유래 모두 이 함수 경유). ttsOn 게이트는 speak 내부가 담당.
   const sendChat = async (text: string) => {
     const t = text.trim();
     if (!t || chat.streaming || voice.listening) return;
+    voice.stopSpeaking(); // 새 입력 = 진행 중 낭독 즉시 중단(기존 관례).
     setChatInput("");
-    await chat.send(t, "text", isMaker ? { performance: true } : {}, "home");
+    const finalText = await chat.send(t, "text", isMaker ? { performance: true } : {}, "home");
+    if (finalText) voice.speak(finalText);
   };
   // LINGO-MIC-AUTOSEND-1 — final → 입력창 잠깐 표시(600ms) → 기존 sendChat(자동 전송). 빈 final=무전송.
   const micAutoSendRef = useRef<ReturnType<typeof setTimeout> | null>(null);
