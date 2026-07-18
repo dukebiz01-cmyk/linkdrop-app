@@ -1994,10 +1994,13 @@ export function InfoDropPage({
                   콘텐츠(고시·한마디·영상요약·재입고 문구) → 법정 푸터. */}
               {deliverySlip}
               {restockFeedback}
-              {/* ST2b-2a A1 — 상품정보제공고시(전자상거래 필수 — 삭제 절대 금지). 페이지 존 유지. */}
-              {commerce.noticeRows && commerce.noticeRows.length > 0 ? (
-                <NoticeRowsSection rows={commerce.noticeRows} />
-              ) : null}
+              {/* S4-4b — 고시·배송정보 접이 2버튼(전달 슬립 아래·법정 푸터 위). 고시 내용
+                  무손실(전자상거래 필수 — 삭제 절대 금지) · 실데이터 0 = 버튼 미렌더. */}
+              <PurchaseInfoFolds
+                noticeRows={commerce.noticeRows}
+                harvestDate={commerce.harvestDate}
+              />
+
               {/* C13 S3(🅱) — purchase 한마디(콘텐츠 존 유지). */}
               {makerMessage && (
                 <p className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium italic leading-relaxed tracking-ko text-text-muted">
@@ -2607,6 +2610,98 @@ export function InfoDropPageReservation() {
 
 // ST2b-2a A1 — 상품정보제공고시 인라인 펼침(FIX-37 스냅샷 {label,value} 표시형 그대로 —
 //   유형 분기 불요). 미입력 값 = "미입력" 정직 표기(자동 생성 0). Radix 0 — useState 펼침.
+// S4-4b — 고시·배송정보 접이 2버튼(콘텐츠 존 · 승인 목업 동형: 흰 카드 버튼·radius 12·펼침 시
+//   accent #0F766E 보더). Radix 0 — 탭 펼침·재탭 닫힘·한 번에 하나만(상호 배타).
+//   · 고시 펼침 = 기존 NoticeRowsSection 표 마크업 그대로(내용 무손실 — 전자상거래 필수).
+//   · 배송정보 = harvestDate + noticeRows 배송 분류행(발송/배송/택배) 실데이터만 — 0이면 버튼
+//     자체 미렌더(가짜값 금지). 배송조회/송장/SHIP_STAGES 절대 미주입(§0).
+function PurchaseInfoFolds({
+  noticeRows,
+  harvestDate,
+}: {
+  noticeRows?: Array<{ label: string; value: string }>;
+  harvestDate?: string | null;
+}) {
+  const [open, setOpen] = useState<"notice" | "shipping" | null>(null);
+  const rows = noticeRows ?? [];
+  const shipRows = rows.filter((r) => /발송|배송|택배/.test(`${r.label} ${r.value}`));
+  // 수확·발송 문구 — ProductWidget(:130) 규칙 동일(M월 D일 수확·발송 예정 · 파싱 실패 = 원문).
+  const harvestLine = (() => {
+    if (!harvestDate) return null;
+    const parts = String(harvestDate).split("-");
+    const mm = parts[1];
+    const dd = parts[2];
+    return mm && dd ? `${Number(mm)}월 ${Number(dd)}일 수확·발송 예정` : String(harvestDate);
+  })();
+  const hasNotice = rows.length > 0;
+  const hasShipping = !!harvestLine || shipRows.length > 0;
+  if (!hasNotice && !hasShipping) return null;
+  const toggle = (k: "notice" | "shipping") => setOpen((v) => (v === k ? null : k));
+  const renderRow = (r: { label: string; value: string }, i: number) => (
+    <div key={i} className="rounded-lg bg-bg px-3 py-2">
+      <p className="text-[11px] font-semibold tracking-ko text-text-subtle">{r.label}</p>
+      {r.value ? (
+        <p className="mt-0.5 text-[13px] font-semibold tracking-ko text-text-strong">{r.value}</p>
+      ) : (
+        <p className="mt-0.5 text-xs font-medium tracking-ko text-text-subtle">미입력</p>
+      )}
+    </div>
+  );
+  const foldButton = (k: "notice" | "shipping", label: string, sub?: string) => (
+    <button
+      type="button"
+      onClick={() => toggle(k)}
+      aria-expanded={open === k}
+      className="flex min-h-[48px] w-full items-center gap-1.5 rounded-[12px] border bg-white px-4 py-3 text-left"
+      style={{ borderColor: open === k ? "#0F766E" : "#E8EDF3" }}
+    >
+      <span className="flex-1 text-sm font-bold tracking-ko text-text-strong">{label}</span>
+      {sub ? (
+        <span className="text-[11px] font-medium tracking-ko text-text-subtle">{sub}</span>
+      ) : null}
+      <ChevronDown
+        className="size-4 shrink-0 text-text-subtle transition-transform"
+        style={{ transform: open === k ? "rotate(180deg)" : "none" }}
+        strokeWidth={2.25}
+      />
+    </button>
+  );
+  return (
+    <div data-testid="purchase-info-folds" className="space-y-2">
+      {hasNotice ? (
+        <div>
+          {foldButton("notice", "상품정보 제공고시", "전자상거래 필수 항목")}
+          {open === "notice" ? (
+            <div className="mt-2 space-y-1.5 rounded-[12px] border border-[#E8EDF3] bg-white p-3">
+              {rows.map(renderRow)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {hasShipping ? (
+        <div>
+          {foldButton("shipping", "배송정보")}
+          {open === "shipping" ? (
+            <div className="mt-2 space-y-1.5 rounded-[12px] border border-[#E8EDF3] bg-white p-3">
+              {harvestLine ? (
+                <div className="rounded-lg bg-bg px-3 py-2">
+                  <p className="text-[11px] font-semibold tracking-ko text-text-subtle">
+                    수확·발송 예정
+                  </p>
+                  <p className="mt-0.5 text-[13px] font-semibold tracking-ko text-text-strong">
+                    {harvestLine}
+                  </p>
+                </div>
+              ) : null}
+              {shipRows.map(renderRow)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function NoticeRowsSection({ rows }: { rows: Array<{ label: string; value: string }> }) {
   const [open, setOpen] = useState(false);
   return (
