@@ -338,7 +338,7 @@ const ENABLE_CARD_COLORS = false;
 //   블록 power / dock = 도킹 실카운트). 톤 = 60대 친화 존댓말.
 const COACH_NOTES: Record<string, { why: string; effect: string }> = {
   tagline: {
-    why: "사장님 목소리 한 줄이 있으면 광고가 아니라 지인의 추천이 돼요",
+    why: "대표님 목소리 한 줄이 있으면 광고가 아니라 지인의 추천이 돼요",
     effect: "받은 분이 끝까지 읽을 이유가 생겨요",
   },
   coupon: {
@@ -1165,7 +1165,7 @@ export function CardStudioPage45({
   useEffect(() => {
     if (lingoView !== "panel") return;
     if (!cardHasProgress) {
-      chat.seed("사장님, 오늘은 뭘 알려볼까요?");
+      chat.seed("대표님, 오늘은 뭘 알려볼까요?"); // DRIVE-2a — 호칭 정본(파트너=대표님).
       return;
     }
     const cur = interviewStates.find((x) => x.state === "current");

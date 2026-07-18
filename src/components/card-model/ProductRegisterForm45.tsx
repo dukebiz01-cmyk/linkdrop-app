@@ -1597,7 +1597,7 @@ export function ProductRegisterForm45({
               />
             </div>
             <p className="text-[10.5px] font-medium leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
-              목표 달성 시 할인가 적용은 사장님이 주문 확정 시 직접 반영해 주세요. 목표 미달이면
+              목표 달성 시 할인가 적용은 대표님이 주문 확정 시 직접 반영해 주세요. 목표 미달이면
               기본가로 진행돼요(자동 취소 없음).
             </p>
           </div>

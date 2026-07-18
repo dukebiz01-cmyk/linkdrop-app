@@ -227,7 +227,7 @@ function CouponDetailView({ data, onBack }: { data: CouponDetailData; onBack: ()
               <HomeIcon className="h-[21px] w-[21px] text-[#0A0A0A]" strokeWidth={2} />
             </span>
             <p className="text-base font-bold leading-[1.4] tracking-[-0.01em] text-[#1E293B]">
-              방문 시 사장님께
+              방문 시 매장에
               <br />이 화면을 보여주세요
             </p>
           </div>

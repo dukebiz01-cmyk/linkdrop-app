@@ -259,7 +259,7 @@ function CancelRequestBlock({ row }: { row: MyPreorderRow }) {
   if (requested) {
     return (
       <p className="mt-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-xs font-medium leading-relaxed tracking-ko text-text-muted [word-break:keep-all]">
-        취소를 요청했어요. 사장님이 확인 후 처리해 드려요
+        취소를 요청했어요. 매장에서 확인 후 처리해 드려요
       </p>
     );
   }
