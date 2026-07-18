@@ -69,7 +69,12 @@ import {
   type LingoContext,
   type LingoStudioAction,
 } from "./useLingoChat";
-import { CARD_MODEL_ACCENTS, fromStudioState, buildShippingView } from "./card-model-adapters";
+import {
+  CARD_MODEL_ACCENTS,
+  CARD_CATEGORY_LABELS,
+  fromStudioState,
+  buildShippingView,
+} from "./card-model-adapters";
 // FIX-42 — 발행 게이트 발화 정본 + 결정 로직(순수 — stage·1상태1발화 dedupe 실측 가능).
 import { decideGateUtterance } from "./gate-notes45";
 // FIX-48+50 — 번호 인터뷰 좌표계 단일 정본(순서·번호·라벨·앵커 · done 매핑만).
@@ -2159,7 +2164,8 @@ export function CardStudioPage45({
   const content = useMemo(() => {
     if (mode === "commerce") {
       return {
-        category: "상품판매 카드",
+        // FIX-60 — 칩 라벨 = 수신 정본 단일 상수(모드 탭 명칭 "상품판매"와 별개).
+        category: CARD_CATEGORY_LABELS.commerce,
         categoryIcon: Store,
         store: storeName || "내 매장",
         source: storeName ? `${storeName} · 산지·매장 직접 판매` : "내 상품 · 직접 판매",
@@ -2169,7 +2175,7 @@ export function CardStudioPage45({
     }
     if (mode === "reserve") {
       return {
-        category: "예약 · 쿠폰 카드",
+        category: CARD_CATEGORY_LABELS.reserve,
         categoryIcon: Calendar,
         store: storeName || "내 매장",
         source: selectedVideo ? `YouTube · ${selectedVideo.title}` : "YouTube",
@@ -2178,7 +2184,8 @@ export function CardStudioPage45({
       };
     }
     return {
-      category: "퍼블릭 카드",
+      // FIX-60 — 칩 라벨 = 수신 정본 단일 상수(모드 탭 명칭 "퍼블릭"과 별개).
+      category: CARD_CATEGORY_LABELS.info,
       categoryIcon: Globe,
       store: storeName || "내 채널",
       source: selectedVideo ? "YouTube · 공유 콘텐츠" : "YouTube",

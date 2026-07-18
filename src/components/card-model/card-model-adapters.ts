@@ -30,6 +30,16 @@ export const CARD_MODEL_ACCENTS = {
   commerce: "#0F766E",
 } as const;
 
+/** FIX-60 — 카드 칩 라벨 단일 상수(거울 단일 소스 — buildShippingView 문법): 수신
+ *  fromDropDetail 과 스튜디오 미리보기(content.category)가 같은 문자열을 소비한다.
+ *  정본 = 수신 산출("정보 카드"·"상품 카드"). 모드 탭 등 UI 명칭(퍼블릭/상품판매)과는 별개. */
+export const CARD_CATEGORY_LABELS = {
+  info: "정보 카드",
+  reserve: "예약 · 쿠폰 카드",
+  commerce: "상품 카드",
+  lead: "상담 카드",
+} as const;
+
 const DEFAULT_CARD_COLOR = "#FFFFFF";
 /** 카드 뒤 페이지 배경(쿠폰 노치 구멍색) — 앱 표면 톤. */
 const DEFAULT_PAGE_BG = "#F8FAFC";
@@ -213,13 +223,14 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
   // S3-2 지점① — 본체 칩 = 스튜디오 실렌더 동형(CardStudioPage45 content.category):
   //   reserve 모드 = "예약 · 쿠폰 카드"(Calendar). 쿠폰 variant 를 "쿠폰 카드"로 쓰면
   //   도킹 쿠폰 존 칩("쿠폰 카드" — CardModelBody 고정)과 2회 중복 — 스튜디오는 1회.
+  // FIX-60 — 칩 라벨 = 단일 상수 소비(스튜디오 미리보기와 문자 단위 동형).
   const category = isCommerce
-    ? "상품 카드"
+    ? CARD_CATEGORY_LABELS.commerce
     : isReservation || variant === "coupon"
-      ? "예약 · 쿠폰 카드"
+      ? CARD_CATEGORY_LABELS.reserve
       : variant === "lead"
-        ? "상담 카드"
-        : "정보 카드";
+        ? CARD_CATEGORY_LABELS.lead
+        : CARD_CATEGORY_LABELS.info;
   const categoryIcon = isCommerce
     ? ShoppingBag
     : isReservation || variant === "coupon"
