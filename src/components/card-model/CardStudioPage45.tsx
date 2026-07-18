@@ -251,6 +251,21 @@ function mapSpokenPurpose(raw: string): BuildMode | "ambiguous" {
   if (digit) return PURPOSE_NUM[digit[1] as "1" | "2" | "3"];
   return "ambiguous";
 }
+// LINGO-DRIVE-1 D-3 — 판매방식 발화 매핑(명세 사전 + 세그먼트 라벨 어휘). 조사 포함 발화 라벨.
+const METHOD_SPEAK_LABEL: Record<SalesMethod, string> = {
+  quick: "빠른 등록으로",
+  full: "일반 등록으로",
+  groupBuy: "공동구매로",
+};
+function mapSpokenMethod(raw: string): SalesMethod | "ambiguous" {
+  const t = raw.replace(/\s+/g, "").replace(/[.,!?~…。、！？]+$/u, "");
+  if (/(빠른|빠르|간단|원포토)/.test(t)) return "quick";
+  if (/(공동|같이|공구)/.test(t)) return "groupBuy";
+  if (/(일반|자세|보통|그냥)/.test(t)) return "full";
+  const digit = t.match(/^([123])번?$/);
+  if (digit) return (["quick", "full", "groupBuy"] as SalesMethod[])[Number(digit[1]) - 1];
+  return "ambiguous";
+}
 // LINGO-V2b C2 — setField 값 상한. READ 판정: title(cfgTitle)·한마디(cfgSubtitle) 입력칸과
 //   저장측(curator_message) 모두 명시 상한 부재 → 스펙 지시 100자 채택(둘 동일 준용).
 const LINGO_FIELD_MAX = 100;
@@ -272,6 +287,8 @@ const LINGO_FIELD_LABELS: Record<string, string> = {
   dock: "도킹",
   phone: "전화",
   map: "지도",
+  // LINGO-DRIVE-1 D-3 — 판매방식(폼 fieldPatch 브리지 전용 — setField 화이트리스트 아님).
+  salesMethod: "판매 방식",
 };
 // FIX-48+50 P2 — 상품 폼(ProductRegisterForm45) 내부 필드로 부착되는 setField 키(스튜디오 직접
 //   소유가 아님 → fieldPatch 브리지로 폼에 전달·폼이 최종 검증·부착). title/subtitle 은 스튜디오 직접.
@@ -1131,17 +1148,30 @@ export function CardStudioPage45({
   const currentStepIdx = steps.findIndex((s) => !s.done);
   const nextStepLabel = currentStepIdx >= 0 ? steps[currentStepIdx].label : null;
 
-  // T5 — 빈 채팅박스 금지: 패널 첫 진입 시 현재 모드·단계 기반 시작 제안 1개를 링고 말풍선으로
-  //   선노출(이미 대화가 있으면 seed 는 no-op).
+  // LINGO-DRIVE-1 D-1 — 카드 상태 인지형 오프닝(클라 템플릿 — LLM 호출 0). 빈 카드=목적 질문
+  //   (+아래 목적 칩), 진행 중=다음 번호 이어하기(+[이어하기] 칩). seed 는 기존 no-op 계약
+  //   유지(대화가 이미 있으면 침묵) — T5 "빈 채팅박스 금지" 승계.
+  const cardHasProgress =
+    Object.values(applied).some(Boolean) ||
+    !!selectedVideo ||
+    formProgress.nameSet ||
+    formProgress.photoSet ||
+    !!cfgSubtitle.trim();
   useEffect(() => {
     if (lingoView !== "panel") return;
-    const intro =
-      mode === "commerce"
-        ? "상품 카드를 같이 완성해 볼까요? 소개 문구나 가격 고민, 뭐든 물어보세요."
-        : mode === "reserve"
-          ? "예약·쿠폰 카드를 같이 만들어 볼까요? 어떤 매장·혜택인지 알려주시면 문구부터 도와드릴게요."
-          : "카드를 같이 완성해 볼까요? 영상 고르기부터 한마디 문구까지 뭐든 물어보세요.";
-    chat.seed(nextStepLabel ? `${intro} 지금은 ${nextStepLabel} 단계예요.` : intro);
+    if (!cardHasProgress) {
+      chat.seed("사장님, 오늘은 뭘 알려볼까요?");
+      return;
+    }
+    const cur = interviewStates.find((x) => x.state === "current");
+    chat.seed(
+      cur
+        ? `이어서 할까요? 다음은 ${cur.step.no}번 ${cur.step.label}이에요.`
+        : nextStepLabel
+          ? `이어서 할까요? 다음은 ${nextStepLabel} 단계예요.`
+          : "카드를 같이 완성해 볼까요? 뭐든 물어보세요.",
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lingoView, mode, nextStepLabel, chat.seed]);
 
   // T5 — 새 말풍선/타자 진행 시 대화 리스트 하단 고정.
@@ -1273,14 +1303,26 @@ export function CardStudioPage45({
   const interviewCurNo = interviewCurrent?.step.no ?? null;
   const prevInterviewNoRef = useRef<number | null>(interviewCurNo);
   const [interviewAdvanceFlash, setInterviewAdvanceFlash] = useState(false);
+  // LINGO-DRIVE-1 D-1 — 스텝 완료 넛지 예산(락 ③): 스텝(key)당 1회, 재전이 시 침묵. 세션 내 유지.
+  const nudgedStepsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (prevInterviewNoRef.current != null && interviewCurNo != null && interviewCurNo > prevInterviewNoRef.current) {
+      // LINGO-DRIVE-1 D-1 — 전이 감지(수동·링고 공통: applied·폼 신호 파생) → 다음 미완 1줄 넛지.
+      const prevStep = interviewJourney.find((s) => s.no === prevInterviewNoRef.current);
+      const curStep = interviewJourney.find((s) => s.no === interviewCurNo);
+      if (curStep && !nudgedStepsRef.current.has(curStep.key)) {
+        nudgedStepsRef.current.add(curStep.key);
+        chat.notify(
+          `${prevStep ? `${prevStep.label} 됐어요. ` : ""}다음은 ${curStep.no}번 ${curStep.label}인데, 해볼까요?`,
+        );
+      }
       setInterviewAdvanceFlash(true);
       const t = setTimeout(() => setInterviewAdvanceFlash(false), 700);
       prevInterviewNoRef.current = interviewCurNo;
       return () => clearTimeout(t);
     }
     prevInterviewNoRef.current = interviewCurNo;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interviewCurNo]);
   const renderNumBadge = (no: number) => (
     <span
@@ -2464,6 +2506,17 @@ export function CardStudioPage45({
           ...(s.skippable ? { skippable: true } : {}),
           ...(s.publish ? { publish: true } : {}),
         })),
+        // LINGO-DRIVE-1 D-2 — 다음 미완 스텝(클라 계산 정답 동봉 — 모델 추측 금지).
+        ...(interviewCurrent
+          ? {
+              next_incomplete: {
+                step_no: interviewCurrent.step.no,
+                id: interviewCurrent.step.key,
+                label: interviewCurrent.step.label,
+                can_set: interviewSetFieldKey(interviewCurrent.step.key) != null,
+              },
+            }
+          : {}),
       },
     };
   }
@@ -2772,7 +2825,10 @@ export function CardStudioPage45({
       }
     }
     // FIX-48+50 P2 — 상품 폼 필드는 restore 패치로 prev 그대로 복원(검증 우회 · 폼 미회신).
-    const productUndo = lingoActUndo.fields.filter((f) => LINGO_PRODUCT_FIELDS.has(f.field));
+    //   LINGO-DRIVE-1 D-3 — salesMethod(방식)도 폼 restore 경유.
+    const productUndo = lingoActUndo.fields.filter(
+      (f) => LINGO_PRODUCT_FIELDS.has(f.field) || f.field === "salesMethod",
+    );
     if (productUndo.length > 0) {
       setProductFieldPatch({
         seq: ++productPatchSeq.current,
@@ -2800,6 +2856,9 @@ export function CardStudioPage45({
   //   목적 매핑. convPurposeChips=칩(말/탭 병행) 노출.
   const [convPurposeChips, setConvPurposeChips] = useState(false);
   const convPurposeRef = useRef(false);
+  // LINGO-DRIVE-1 D-3 — 0단계 확장: 상품판매 확정 후 판매방식(quick/full/groupBuy) 후속 스테이지.
+  const [convMethodChips, setConvMethodChips] = useState(false);
+  const convMethodRef = useRef(false);
   const convActiveRef = useRef(false);
   const convFinalRef = useRef<string | null>(null);
   const convBusyRef = useRef(false); // 프리뷰~전송~낭독 동안 재청취 금지(중복·에코 차단).
@@ -2876,7 +2935,11 @@ export function CardStudioPage45({
   function handleSpokenPurpose(raw: string) {
     const m = mapSpokenPurpose(raw);
     if (m === "ambiguous") {
-      speakConv("예를 들어 정보 알리기, 예약·쿠폰, 상품 판매처럼 말씀하거나 아래 버튼을 눌러 주세요. 어떤 걸 만들까요?");
+      // LINGO-DRIVE-1 D-3 — 재질문 지옥 금지: 어휘 밖 발화는 그대로 모델에(기존 채팅 경로 재사용
+      //   — 모델이 switchMode 액션으로 회신하면 기존 확인 게이트가 처리). 스테이지는 종료.
+      convPurposeRef.current = false;
+      setConvPurposeChips(false);
+      void sendChatText(raw, "voice", true);
       return;
     }
     pickPurpose(m);
@@ -2894,6 +2957,11 @@ export function CardStudioPage45({
     setConvPurposeChips(false);
     purposeConfirmedRef.current = true;
     if (key !== mode) doSwitchMode(key);
+    // LINGO-DRIVE-1 D-3 — 상품판매 full 고정 해제: 판매방식 후속 선택 스테이지 삽입.
+    if (key === "commerce") {
+      startMethodStage();
+      return;
+    }
     const first = getInterviewJourney(key, "full")[0];
     const lead = `${PURPOSE_SPEAK_LABEL[key]}로 시작할게요. ${first.no}번 ${first.label}부터 시작해 볼까요?`;
     chat.notify(lead);
@@ -2902,6 +2970,42 @@ export function CardStudioPage45({
       convBusyRef.current = false;
       convListen();
     });
+  }
+  // LINGO-DRIVE-1 D-3 — 판매방식 스테이지(칩+음성 병행 — 0단계 커밋2 패턴 복제).
+  function startMethodStage() {
+    convMethodRef.current = true;
+    setConvMethodChips(true);
+    speakConv(
+      "상품 판매로 시작할게요. 어떻게 팔까요? 빠른 등록, 일반 등록, 공동구매 중에 말씀하거나 아래 버튼을 눌러 주세요.",
+    );
+  }
+  // LINGO-DRIVE-1 D-3 — 방식 확정(칩·음성 공용): 폼 fieldPatch 브리지로 반영(폼이 수동 세그먼트
+  //   onSelect 정본 setter 재사용 — 신규 쓰기 경로 0) + 상품 칸으로 이동 + 새 여정 1번 리드.
+  function pickSalesMethod(m: SalesMethod) {
+    if (voice.listening) voice.stopListening();
+    convMethodRef.current = false;
+    setConvMethodChips(false);
+    setProductFieldPatch({ seq: ++productPatchSeq.current, fields: [{ field: "salesMethod", value: m }] });
+    jumpToBlock("product");
+    const first = getInterviewJourney("commerce", m)[0];
+    const lead = `${METHOD_SPEAK_LABEL[m]} 진행할게요. ${first.no}번 ${first.label}부터 시작해 볼까요?`;
+    chat.notify(lead);
+    convBusyRef.current = true;
+    voice.speak(lead, () => {
+      convBusyRef.current = false;
+      convListen();
+    });
+  }
+  function handleSpokenMethod(raw: string) {
+    const m = mapSpokenMethod(raw);
+    if (m === "ambiguous") {
+      // LINGO-DRIVE-1 D-3 — 재질문 지옥 금지(목적 스테이지와 동일 폴백).
+      convMethodRef.current = false;
+      setConvMethodChips(false);
+      void sendChatText(raw, "voice", true);
+      return;
+    }
+    pickSalesMethod(m);
   }
   // P3 커밋1 — 현재 번호 질문 발화(창작 0 — interview-steps45 정본 인용 = 자동인사 seed 와 동일
   //   문구). 발화 동안 convBusyRef=true(재청취 금지) → 낭독 종료 후 convListen. TTS off/미지원이면
@@ -2927,6 +3031,8 @@ export function CardStudioPage45({
     convFinalRef.current = null;
     convPurposeRef.current = false; // P3 커밋2 — 0단계 잔여 상태 정리(재진입 청결).
     setConvPurposeChips(false);
+    convMethodRef.current = false; // LINGO-DRIVE-1 D-3 — 판매방식 스테이지도 동일 정리.
+    setConvMethodChips(false);
     setConvMode(false);
     setConvPaused(false);
     setConvPreview(null);
@@ -3061,6 +3167,11 @@ export function CardStudioPage45({
         convIdleAtRef.current = Date.now();
         // P3 커밋2 — 0단계(목적 선택) 답변은 서버 전송 X: 로컬 정본 매핑만(프리뷰·send 우회).
         //   handleSpokenPurpose 가 자체적으로 busy/speak/재청취를 관리(에코가드 동일).
+        //   LINGO-DRIVE-1 D-3 — 판매방식 스테이지도 동일 라우팅(매핑 실패 = LLM 폴백).
+        if (convMethodRef.current) {
+          handleSpokenMethod(t);
+          return;
+        }
         if (convPurposeRef.current) {
           handleSpokenPurpose(t);
           return;
@@ -5082,6 +5193,59 @@ export function CardStudioPage45({
                         ))}
                       </div>
                     )}
+                    {/* LINGO-DRIVE-1 D-1/D-3 — 오프닝 칩(빈 카드=목적 3종 / 진행=이어하기 · 첫 인사
+                        상태에서만) + 판매방식 칩(스테이지 동안 — 텍스트 병행). 핸들러 = 음성 칩과
+                        공용 정본(pickPurpose/pickSalesMethod/continueFlow — 신규 경로 0). */}
+                    {convMethodChips ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {(
+                          [
+                            ["quick", "① 빠른 등록"],
+                            ["full", "② 일반 등록"],
+                            ["groupBuy", "③ 공동구매"],
+                          ] as [SalesMethod, string][]
+                        ).map(([k, l]) => (
+                          <button
+                            key={k}
+                            type="button"
+                            onClick={() => pickSalesMethod(k)}
+                            className="flex h-9 items-center rounded-full bg-white px-3 text-[12px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                          >
+                            {l}
+                          </button>
+                        ))}
+                      </div>
+                    ) : chat.messages.length <= 1 && !chat.streaming ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {cardHasProgress ? (
+                          <button
+                            type="button"
+                            onClick={continueFlow}
+                            className="flex h-9 items-center rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+                            style={{ backgroundColor: accent }}
+                          >
+                            이어하기
+                          </button>
+                        ) : (
+                          (
+                            [
+                              ["general", "① 정보 알리기"],
+                              ["reserve", "② 예약·쿠폰"],
+                              ["commerce", "③ 상품 판매"],
+                            ] as [BuildMode, string][]
+                          ).map(([k, l]) => (
+                            <button
+                              key={k}
+                              type="button"
+                              onClick={() => pickPurpose(k)}
+                              className="flex h-9 items-center rounded-full bg-white px-3 text-[12px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                            >
+                              {l}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
                     {/* KAKAO-LINGO-1 — 인앱 안내 1줄(명세 §3 카피): 텍스트 대화는 살아있고,
                         음성은 [음성으로 만들기] 버튼이 크롬 핸드오프로 잇는다(FIX-47 게이트 대체). */}
                     {inAppNoMic && (
@@ -5301,13 +5465,20 @@ export function CardStudioPage45({
                 // P3 커밋2 — 0단계 목적 칩(말/탭 병행). 사업자 아님이면 예약·판매는 잠금 안내로 흡수되나
                 //   칩은 3종 노출(탭 시 pickPurpose 가 권한 정직 안내). 정본 라벨(①②③)만.
                 purposeChoices={
-                  convPurposeChips
+                  // LINGO-DRIVE-1 D-3 — 판매방식 스테이지 칩(목적 칩과 동일 슬롯 재사용 — 배타).
+                  convMethodChips
                     ? [
-                        { key: "general", label: "① 정보 알리기", onPick: () => pickPurpose("general") },
-                        { key: "reserve", label: "② 예약·쿠폰", onPick: () => pickPurpose("reserve") },
-                        { key: "commerce", label: "③ 상품 판매", onPick: () => pickPurpose("commerce") },
+                        { key: "quick", label: "① 빠른 등록", onPick: () => pickSalesMethod("quick") },
+                        { key: "full", label: "② 일반 등록", onPick: () => pickSalesMethod("full") },
+                        { key: "groupBuy", label: "③ 공동구매", onPick: () => pickSalesMethod("groupBuy") },
                       ]
-                    : undefined
+                    : convPurposeChips
+                      ? [
+                          { key: "general", label: "① 정보 알리기", onPick: () => pickPurpose("general") },
+                          { key: "reserve", label: "② 예약·쿠폰", onPick: () => pickPurpose("reserve") },
+                          { key: "commerce", label: "③ 상품 판매", onPick: () => pickPurpose("commerce") },
+                        ]
+                      : undefined
                 }
               />
             </div>

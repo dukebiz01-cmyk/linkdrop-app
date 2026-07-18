@@ -99,6 +99,8 @@ export type LingoInterviewContext = {
     skippable?: boolean;
     publish?: boolean;
   }[];
+  /** LINGO-DRIVE-1 D-2 — 다음 미완 스텝(클라 계산 정답 — 모델 추측 금지 재료). */
+  next_incomplete?: { step_no: number; id: string; label: string; can_set: boolean };
 };
 
 const FALLBACK_FRIENDLY = "죄송해요, 지금 답을 만들지 못했어요. 잠시 후 다시 물어봐 주세요.";
@@ -141,6 +143,9 @@ export function useLingoChat() {
   // LINGO-V2 — 액션 제안(event:actions 수신분). 확인 게이트 통과 전까지만 유효 —
   //   새 send() 시작 시 만료(스테일 액션 적용 금지). 거절([안 할래요]) = clearProposal.
   const [proposal, setProposal] = useState<LingoActionProposal | null>(null);
+  // LINGO-DRIVE-1 D-4 — 홈 인텐트(event:intent — 그간 서버만 방출·클라 미소비였던 반쪽 완성).
+  //   최신 수신값 노출, 새 send 시작 시 리셋(스테일 인텐트 소비 금지).
+  const [intent, setIntent] = useState<"create" | "explore" | null>(null);
   const streamingRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
   const acRef = useRef<AbortController | null>(null);
@@ -165,6 +170,7 @@ export function useLingoChat() {
     ): Promise<string | null> => {
       if (streamingRef.current) return null;
       setProposal(null); // LINGO-V2 — 새 대화 시작 = 미확인 제안 만료(스테일 적용 금지).
+      setIntent(null); // LINGO-DRIVE-1 D-4 — 인텐트도 동일 만료 규칙.
       const botId = nextId();
       setMessages((prev) => [
         ...prev,
@@ -294,6 +300,10 @@ export function useLingoChat() {
                   },
                 ]);
               }
+            } else if (ev.event === "intent") {
+              // LINGO-DRIVE-1 D-4 — 홈 인텐트 소비(enum 2종 외 무시 — 서버 검증과 동일 가드).
+              const d = safeJson(ev.data);
+              if (d?.intent === "create" || d?.intent === "explore") setIntent(d.intent);
             } else if (ev.event === "done") {
               gotDone = true;
               // LINGO-V2b A1 스텁 — 서버 done 프레임에 actions_sent 플래그 합의(41창 회신) 후:
@@ -360,7 +370,7 @@ export function useLingoChat() {
     }
   }, []);
 
-  return { messages, streaming, stage, proposal, seed, send, stop, clearProposal, notify, close };
+  return { messages, streaming, stage, proposal, intent, seed, send, stop, clearProposal, notify, close };
 }
 
 // ── 음성 반이중 v1 — Web Speech API (지원 감지, 미지원 시 정직 안내) ──────────────

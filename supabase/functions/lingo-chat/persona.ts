@@ -41,6 +41,8 @@ export interface LingoInterviewContext {
   current_no?: number | null;
   current_label?: string | null;
   steps?: LingoInterviewStep[];
+  /** LINGO-DRIVE-1 D-2 — 다음 미완 스텝(클라 계산 정답 — 모델 추측 금지). */
+  next_incomplete?: { step_no?: number; id?: string; label?: string; can_set?: boolean };
 }
 
 export interface LingoContext {
@@ -110,6 +112,8 @@ const BLOCK_H = `[스튜디오 액션 규칙]
 - 카드를 통째로 구성하는 요청("~카드 만들어줘")이면: 목적에 맞게 2~5개 액션으로 조립하고,
   steps 에 조립 순서(label + 한 줄 note)를 담는다. 단순 요청 1건이면 steps 는 생략.
 - 반영한 뒤 답변 텍스트는 짧게: 무엇을 했고, 다음에 뭘 고르면 되는지 한 가지만.
+- setField 를 반영한 뒤에는 [인터뷰 진행]의 '다음 미완' 단계를 1문장으로 이어 제안한다(있을 때).
+  이미 안내한 단계를 같은 말로 반복하지 않는다.
 - 요청이 모호하면 액션 없이 되묻는다. 추측으로 조작하지 않는다.`;
 
 // [덱 현황] 동적 블록 — deck 을 "- id(label) 장착됨/미장착/잠김" 줄로, 비어있지 않은
@@ -191,6 +195,9 @@ const BLOCK_I = `[번호 인터뷰 규칙]
 - 사용자가 다른 번호를 요청하면 그 번호부터 처리하고, 끝나면 남은 번호로 돌아온다("아까 3번이 남았어요").
 - 검증에 걸리면(예: 달성가가 기본가보다 높음) 지적하고 올바른 값을 다시 묻는다. 임의로 고쳐 넣지 않는다.
 - 공동구매는 카드 모드가 아니라 상품판매(commerce) 안의 판매방식이다. 사용자가 공동구매를 요청하면 모드 전환을 제안하지 말고, gbTargetCount(목표 인원)·gbTargetPrice(달성가) setField 로 설정을 진행한다. 두 값이 없으면 순서대로 물어서 받는다.
+- setField 가 반영된 응답에서는 반드시 '다음 미완' 단계를 1문장으로 이어 제안한다. 대화로 부착
+  가능한 단계면 값 제안까지, 직접 입력 단계면 goToBlock 을 동반해 데려간다. 질문은 한 번에 1개,
+  예/아니오나 선택지 형태로. 이미 안내한 단계를 같은 말로 반복하지 않는다.
 - 전부 끝나면: "다 됐어요. 발행 버튼은 직접 눌러 확인해 주세요." (발행은 네가 대신 못 누른다 — 락)`;
 
 // [인터뷰 진행] 동적 블록 — 번호·라벨·완료·부착가능을 그대로 주입(창작 재료 아님).
@@ -205,7 +212,13 @@ function buildInterviewBlock(iv: LingoInterviewContext): string {
   const head =
     `[인터뷰 진행]${iv.mode ? ` (모드: ${iv.mode}${iv.sales_method ? `/${iv.sales_method}` : ""})` : ""}` +
     (iv.current_no != null ? ` · 현재 = ${iv.current_no}번 ${(iv.current_label ?? "").trim()}` : " · 현재 없음(완주)");
-  return `${BLOCK_I}\n\n${head}\n${steps.length > 0 ? steps.join("\n") : "- (단계 없음)"}`;
+  // LINGO-DRIVE-1 D-2 — 다음 미완(클라 계산 정답) 1줄 — 주행 규칙의 참조 대상.
+  const ni = iv.next_incomplete;
+  const niLine =
+    ni && typeof ni.step_no === "number"
+      ? `\n다음 미완 = ${ni.step_no}번 ${(ni.label ?? "").trim()} (${ni.can_set ? "대화로 부착 가능" : "직접 입력 — goToBlock 으로 데려간다"})`
+      : "";
+  return `${BLOCK_I}\n\n${head}${niLine}\n${steps.length > 0 ? steps.join("\n") : "- (단계 없음)"}`;
 }
 
 // ── [블록 F — 현재 작업 정보 (동적)] ─────────────────────────────────────

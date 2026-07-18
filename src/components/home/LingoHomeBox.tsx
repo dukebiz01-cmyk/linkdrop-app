@@ -3,6 +3,7 @@
 //   분기(발행 카드 수): 0장=스타터("시작해 볼까요?"→카드 만들기) / 1장+=메이커("성과 볼까요?"→성과 진단).
 //   자동 펼침 없음 — 홈은 사용자 개시(스튜디오 자동 인사와 구분). surface='home'(T-B/T-D 기존 배선 소비).
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { MessageCircle, Sparkles, ChevronDown, GripVertical, ArrowUp, Square, Loader2, Mic, Rocket, TrendingUp } from "lucide-react";
 import { useLingoChat, useLingoVoice } from "@/components/card-model/useLingoChat";
 import { SlideToMic } from "@/components/lingo/SlideToMic";
@@ -36,7 +37,23 @@ export function LingoHomeBox({
 }) {
   const chat = useLingoChat();
   const voice = useLingoVoice();
+  const navigate = useNavigate(); // LINGO-DRIVE-1 D-4 — explore 인텐트 이동용.
   const isMaker = cardCount > 0;
+  // LINGO-DRIVE-1 D-4 — intent 수신 시 안내 1줄(값당 1회 — 새 send 가 intent 를 리셋하면 재무장).
+  const intentNotifiedRef = useRef<"create" | "explore" | null>(null);
+  useEffect(() => {
+    if (!chat.intent) {
+      intentNotifiedRef.current = null;
+      return;
+    }
+    if (intentNotifiedRef.current === chat.intent) return;
+    intentNotifiedRef.current = chat.intent;
+    chat.notify(
+      chat.intent === "create"
+        ? "스튜디오로 갈까요? 아래 버튼으로 바로 이어져요."
+        : "둘러보러 갈까요? 아래 버튼으로 이어져요.",
+    );
+  }, [chat.intent, chat.notify, chat]);
   // KAKAO-LINGO-1 K-3 — 렌더 중 판정 → 마운트 후 판정(스튜디오 :783-786 패턴 통일).
   //   SSR(null=마이크 렌더)과 인앱 첫 클라 렌더가 갈리던 hydration 불일치 제거.
   const [inAppNoMic, setInAppNoMic] = useState<InAppBrowser | null>(null);
@@ -258,6 +275,25 @@ export function LingoHomeBox({
                           </p>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* LINGO-DRIVE-1 D-4 — 홈 intent 칩: create=스튜디오 / explore=둘러보기.
+                      미지 값은 훅이 걸러 미노출. 세션 승계는 4단계 스코프 — 이번엔 이동까지. */}
+                  {chat.intent && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (chat.intent === "create") onGoStudio();
+                          else void navigate({ to: "/explore" });
+                        }}
+                        className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+                        style={{ backgroundColor: ACCENT }}
+                      >
+                        <Rocket className="h-4 w-4" strokeWidth={2.25} />
+                        {chat.intent === "create" ? "만들러 가기" : "둘러보러 가기"}
+                      </button>
                     </div>
                   )}
 

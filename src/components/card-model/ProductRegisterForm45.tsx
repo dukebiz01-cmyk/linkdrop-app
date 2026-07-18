@@ -649,6 +649,13 @@ export function ProductRegisterForm45({
         else if (field === "stockQty") setQuantity(value);
         else if (field === "gbTargetCount") setGroupBuyN(value);
         else if (field === "gbTargetPrice") setGroupBuyPrice(value);
+        else if (field === "salesMethod") {
+          // LINGO-DRIVE-1 D-3 — 방식 복원(수동 세그먼트 onSelect 정본 미러 — 아래 케이스와 동일).
+          const q = value === "quick";
+          setQuickMode(q);
+          if (q && type !== "fresh") selectType("fresh");
+          setGroupBuyOn(value === "groupBuy");
+        }
       }
       return;
     }
@@ -700,6 +707,20 @@ export function ProductRegisterForm45({
             return { field, ok: false, prev, reason: "달성 할인가는 기본 판매가보다 낮아야 해요." };
           setGroupBuyOn(true);
           setGroupBuyPrice(d);
+          return { field, ok: true, prev };
+        }
+        case "salesMethod": {
+          // LINGO-DRIVE-1 D-3 — 판매방식 전환: 수동 세그먼트 onSelect 정본 미러
+          //   (등록 방법 세그먼트의 setQuickMode+selectType / 판매 방식 세그먼트의 setGroupBuyOn
+          //   — 신규 쓰기 경로 0). 링고 0단계 확장(빠른/일반/공동구매)이 이 브리지로 반영.
+          const prev = quickMode ? "quick" : groupBuyOn ? "groupBuy" : "full";
+          if (v !== "quick" && v !== "full" && v !== "groupBuy") {
+            return { field, ok: false, prev, reason: "판매 방식을 알 수 없어요." };
+          }
+          const q = v === "quick";
+          setQuickMode(q);
+          if (q && type !== "fresh") selectType("fresh");
+          setGroupBuyOn(v === "groupBuy");
           return { field, ok: true, prev };
         }
         default:
