@@ -336,6 +336,76 @@ const v6GateBlocked = (missingLabel: string) =>
 버튼 옆에 무엇이 필요한지 한 줄로 나와요. ${withSubjectParticle(missingLabel)} 비어 있거든요.
 그 칸으로 제가 데려다 드릴게요. 같이 채울까요? 금방이에요.`;
 
+// DRIVE-2d — 대본 v6 정본 상수(한 글자 락 · 〔〕 동적 슬롯만 치환 · ★실측 메타 주석 제외).
+const V6_ENTRY_EMPTY = `어서 오세요. 이제 카드를 같이 만들어 볼게요.
+제가 한 걸음씩 안내해 드릴게요. 말씀하셔도 되고, 버튼을 누르셔도 돼요.
+먼저, 오늘 무엇을 알리고 싶으세요?
+가게 소식인가요, 예약을 받고 싶으세요, 아니면 물건을 파실 건가요?`;
+const V6_ENTRY_EMPTY_VOICE = "어서 오세요. 오늘은 뭘 알려볼까요? 소식, 예약, 판매 중에 골라 주세요.";
+const v6EntryResume = (no: number, label: string) =>
+  `다시 오셨네요. 만들던 카드가 그대로 있어요.
+이어서 할까요? 다음 할 일은 ${no}번, ${label}이에요.`;
+const V6_METHOD_PICK = `좋아요, 물건을 팔아볼게요. 파는 방법이 세 가지 있어요.
+빠른 등록은 이름과 가격만으로 간단히 올리는 방법이에요.
+일반 등록은 사진과 설명까지 제대로 갖추는 방법이에요.
+공동구매는 여러 명이 모이면 함께 사는 방법이에요.
+어떤 걸로 할까요?`;
+const V6_METHOD_PICK_VOICE = "빠른 등록, 일반 등록, 공동구매가 있어요. 어떤 걸로 할까요?";
+const V6_TEACH_VIDEO = `이제 카드에 넣을 영상을 골라볼게요. 영상이 카드의 얼굴이에요.
+위 번호에서 1번을 누르면 영상 칸으로 와요.
+우리 매장 영상을 찾으실 거면 영상 찾기를 눌러 주세요.
+매장 이름이 미리 적혀 있어서, 돋보기만 누르면 영상 목록이 나와요.
+링크를 복사해 오셨거나 다른 영상을 찾으시면,
+위 검색창에 링크 주소나 낱말을 넣고 돋보기를 눌러 보세요.
+목록에서 마음에 드는 영상을 하나 누르세요.
+고르는 것만으로는 아직 담긴 게 아니에요.
+이 영상으로 확정 버튼까지 눌러야 카드에 담겨요.
+미리보기에 영상이 나타나면 성공이에요. 다음은 제목 차례예요.`;
+const V6_TEACH_TAGLINE = `카드 제목과, 받는 분에게 보일 한마디를 정할게요.
+저한테 말로 해주시면 제가 바로 채워 드려요.
+제목은 가게 이름, 한마디는 추천하는 이유 한 줄이면 충분해요.
+채우는 순간 미리보기에 바로 나타나요. 다음은 쿠폰 차례예요.`;
+const V6_TEACH_COUPON = `이제 쿠폰을 붙여 볼게요. 쿠폰이 있어야 받는 분이 카드를 눌러요.
+이미 만들어 둔 쿠폰이 있으시면, 어떤 쿠폰인지 말씀만 하세요. 제가 붙여 드려요.
+직접 하시려면 쿠폰 연결 칸에서 쿠폰을 누르고 이 쿠폰 적용을 누르시면 돼요.
+아직 쿠폰이 하나도 없으시면, 바로 아래 새 쿠폰 만들기를 눌러 보세요.
+그 자리에서 이름과 혜택을 적고 쿠폰 만들기 버튼을 누르면 새 쿠폰이 생겨요.
+적용되면 적용됨 표시가 뜨고, 미리보기 카드에 쿠폰이 보여요.
+지금은 건너뛰고 나중에 붙이셔도 돼요.`;
+const V6_TEACH_CALENDAR = `예약을 받으려면 날짜를 열어야 해요. 캘린더 칸으로 모셔다 드릴게요.
+예약 받을 날짜를 누르면 자리수 적는 칸이 나와요.
+받을 수 있는 자리 수를 넣고 저장 버튼을 눌러 주세요. 날짜마다 이렇게 여시면 돼요.
+다 여셨으면 아래 적용 버튼을 눌러 카드에 담아 주세요.
+여기서 여는 날짜가 손님에게 그대로 보여요. 실제로 받을 수 있는 날만 여는 게 중요해요.
+날짜와 자리는 가게 사정이라, 대표님 손으로 직접 정하셔야 해요.`;
+const V6_TEACH_STORE = `이번엔 매장 주소와 시설을 알려드릴 차례예요.
+손님이 카드에서 길찾기를 누르려면 주소가 있어야 하거든요.
+주소를 말씀해 주시면 제가 입력칸에 채워 드려요.
+채워 드린 다음, 저장 버튼은 대표님이 직접 눌러 주세요.
+매장 정보는 카드 여러 장에 함께 쓰이는 소중한 정보라서요.
+시설은 목록에서 우리 매장에 있는 것만 눌러 고르시면 돼요.
+화장실, 주차장 같은 것들이요. 손님이 미리 알면 안심하고 와요.
+저장되면 미리보기 카드의 매장 정보 칸에 나타나요. 그게 성공 신호예요.`;
+const V6_TEACH_PRODUCT = `파실 물건의 정보를 채울게요.
+물건 이름과 가격을 말씀해 주세요. 옥수수 한 박스 만 원, 이렇게요.
+말씀하신 대로 제가 칸에 채워 드려요.
+다 채워지면 상품 등록 버튼만 직접 눌러 주세요.
+등록은 물건을 실제로 파는 약속이라, 그 버튼은 대표님 몫이에요.
+카드에 상품이 나타나면 성공이에요.`;
+const V6_TEACH_SHIP_BASIS = `이제 언제, 어떻게 보낼지 정할 차례예요.
+먼저 발송기준이에요. 손님이 제일 궁금해하는 게 언제 받느냐거든요.
+바로 보낼 수 있으면 판매 기간을, 수확해서 보내는 물건이면
+수확하고 보내는 날을 정해 주세요. 정직한 날짜가 제일 좋은 약속이에요.`;
+const V6_TEACH_SHIP = `다음은 배송 방법이에요. 어떤 택배로 보낼지 고르시고,
+배송비를 받으실지 무료로 하실지 정해 주세요.
+받는 분 화면에 그대로 보이니, 실제 보내시는 방법 그대로 적는 게 중요해요.
+다 정하면 미리보기 카드에 배송 안내가 나타나요. 그게 성공 신호예요.`;
+const V6_INAPP_NOTICE = `카카오톡 안에서는 음성을 쓸 수 없어요. 카카오톡이 마이크를 막고 있거든요.
+글로 말씀하시면 제가 전부 도와드려요.
+음성으로 하고 싶으시면 음성으로 만들기 버튼을 눌러 보세요.
+크롬이 열리면서 로그인 없이 바로 이어집니다.`;
+const V6_UNDO_DONE = "네, 방금 것 되돌렸어요. 그 전 모습으로 돌아갔어요.";
+
 // LINGO-HANDS-1 — 클립 발화 변환층: "1:20~1:45" · "80~105초" · "1분20초부터 1분45초까지" → 초.
 //   검증(끝>시작·영상길이)은 applyClip 정본 재사용 — 여기는 파싱만(신규 판정 금지).
 function parseClipTimePart(raw: string): number | null {
@@ -1101,14 +1171,14 @@ export function CardStudioPage45({
         {
           label: "상품", coach: "product", block: "product", candidates: ["product", "productimage"], required: true, done: productDone,
           gate: "상품(사진·이름·가격)을 먼저 등록해 주세요",
-          teach: "팔 상품의 이름과 가격부터 등록해요. 가격이 보여야 친구가 주문을 결심해요.",
+          teach: V6_TEACH_PRODUCT, // DRIVE-2d — v6 2-5.
           missing: productMissing,
         },
         {
           // 판매기간(seasonal) 또는 수확·발송일(등록 폼 날짜) 중 1 확정.
           label: "발송기준", coach: "shipBasis", block: "seasonal", candidates: ["seasonal"], required: true, done: !!applied["seasonal"] || productShipDateSet,
           gate: "판매기간 또는 수확·발송일을 먼저 확정해 주세요",
-          teach: "언제 받을 수 있는지 알려줘요 — 판매 캘린더나 수확·발송일 중 하나면 돼요.",
+          teach: V6_TEACH_SHIP_BASIS, // DRIVE-2d — v6 2-5b(발송기준 분할).
           missing: "판매기간·발송일 미확정",
         },
         {
@@ -1117,7 +1187,7 @@ export function CardStudioPage45({
           label: "배송", coach: "ship", block: "product", candidates: ["product"], required: false,
           done: !!formProgress.shipMethodSet,
           gate: "",
-          teach: "어떻게 보낼지 알려줘요 — 상품 등록의 배송 칸에서 배송방법·배송비·안내문구를 입력해 주세요.",
+          teach: V6_TEACH_SHIP, // DRIVE-2d — v6 2-5b(배송 분할).
           missing: "배송방법 미선택",
         },
         ...dockStep,
@@ -1135,28 +1205,28 @@ export function CardStudioPage45({
           //   + 원래 문구 복원.
           label: "콘텐츠", coach: "content", block: "content", candidates: ["content", "image"], required: true, done: !!selectedVideo,
           gate: "예약 카드는 아직 영상이 필요해요 — 곧 이미지만으로도 가능해져요",
-          teach: "지금은 영상이 카드의 시작이에요. 대표 이미지는 함께 담을 수 있고, 이미지 단독 발행도 곧 열려요.",
+          teach: V6_TEACH_VIDEO, // DRIVE-2d — v6 2-1.
           missing: "영상 미선택",
         },
         {
           // Duke: 쿠폰이 우선순위 필수 — 콘텐츠 다음 최우선 배치.
           label: "쿠폰", coach: "coupon", block: "coupon", candidates: ["coupon"], required: true, done: !!(applied["coupon"] && selectedCouponId),
           gate: "쿠폰을 먼저 연결해 주세요",
-          teach: "왜 지금 예약해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요.",
+          teach: V6_TEACH_COUPON, // DRIVE-2d — v6 2-3.
           missing: !applied["coupon"] ? "쿠폰 미설정" : "쿠폰 미선택",
         },
         {
           // FIX-62 — done = 실슬롯 존재(get_available_slots ≥1) 기준.
           label: "캘린더", coach: "calendar", block: "calendar", candidates: ["calendar"], required: true, done: !!applied["calendar"] && slotDays > 0,
           gate: "예약 캘린더를 먼저 설정해 주세요",
-          teach: "예약 카드의 심장이에요. 받을 수 있는 날짜를 골라 캘린더를 확정해요.",
+          teach: V6_TEACH_CALENDAR, // DRIVE-2d — v6 2-4.
           missing: !applied["calendar"] ? "캘린더 미설정" : "예약 가능일 미등록",
         },
         {
           // store+facilities — 동일 설정 패널(매장정보)에서 함께 충족: 1묶음 표기.
           label: "매장·시설", coach: "store", block: "link", candidates: ["link"], required: true, done: savedStoreInfo.hasAddress && savedStoreInfo.facilities > 0,
           gate: "매장 정보(주소·시설)를 먼저 저장해 주세요",
-          teach: "주소와 시설 태그를 저장하면 손님이 안심하고 예약해요. 매장정보에서 한 번에 저장돼요.",
+          teach: V6_TEACH_STORE, // DRIVE-2d — v6 2-4b 전문(주소+시설 1묶음 스텝 — 분할 대신 통짜, 보고).
           missing: !savedStoreInfo.hasAddress ? "매장 주소 미저장" : "시설 정보 미저장",
         },
         ...dockStep,
@@ -1167,14 +1237,14 @@ export function CardStudioPage45({
       {
         label: "영상", coach: "content", block: "content", candidates: ["content"], required: true, done: !!selectedVideo,
         gate: "영상을 먼저 담아 주세요",
-        teach: "친구가 0.5초 안에 멈추게 하려면 영상 핵심구간부터. 후크가 없으면 아무도 안 눌러요.",
+        teach: V6_TEACH_VIDEO, // DRIVE-2d — v6 2-1.
         missing: "영상 미선택",
       },
       {
         // 한마디(tagline) — 정보 모드 필수 승격(꾸미기 단계·색은 제거, FIX-28).
         label: "한마디", coach: "tagline", block: "content", candidates: ["content"], required: true, done: !!cfgSubtitle.trim(),
         gate: "내 한마디를 먼저 적어 주세요",
-        teach: "왜 이 영상을 보내는지 한 줄만 적어요. 그 한마디가 카드의 목소리예요.",
+        teach: V6_TEACH_TAGLINE, // DRIVE-2d — v6 2-2.
         missing: "한마디 미입력",
       },
       ...dockStep,
@@ -1193,19 +1263,24 @@ export function CardStudioPage45({
     formProgress.nameSet ||
     formProgress.photoSet ||
     !!cfgSubtitle.trim();
+  // DRIVE-2d — 입장 인사 v6 교체: 빈 카드 = 2-0a(본문 seed + 낭독 축약형 1회) /
+  //   하다 만 카드 = 2-0b(〔번호〕〔스텝 이름〕 동적 치환). seed no-op 계약 유지.
+  const entryGreetSpokeRef = useRef(false);
   useEffect(() => {
     if (!lingoPanelOpen) return;
     if (!cardHasProgress) {
-      chat.seed("대표님, 오늘은 뭘 알려볼까요?"); // DRIVE-2a — 호칭 정본(파트너=대표님).
+      chat.seed(V6_ENTRY_EMPTY);
+      if (!entryGreetSpokeRef.current && chat.messages.length === 0) {
+        entryGreetSpokeRef.current = true;
+        voice.speak(stripMarkdown(V6_ENTRY_EMPTY_VOICE)); // 정책 차단·TTS off 는 speak 내부 무해.
+      }
       return;
     }
     const cur = interviewStates.find((x) => x.state === "current");
     chat.seed(
       cur
-        ? `이어서 할까요? 다음은 ${cur.step.no}번 ${cur.step.label}이에요.`
-        : nextStepLabel
-          ? `이어서 할까요? 다음은 ${nextStepLabel} 단계예요.`
-          : "카드를 같이 완성해 볼까요? 뭐든 물어보세요.",
+        ? v6EntryResume(cur.step.no, cur.step.label)
+        : "카드를 같이 완성해 볼까요? 뭐든 물어보세요.",
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lingoPanelOpen, mode, nextStepLabel, chat.seed]);
@@ -3042,7 +3117,7 @@ export function CardStudioPage45({
       });
     }
     setLingoActUndo(null);
-    chat.notify("방금 적용한 걸 되돌렸어요.");
+    chat.notify(V6_UNDO_DONE); // DRIVE-2d — v6 3-5.
   }
 
   // LINGO-V2 — close 픽스(장기기억 트리거): 실동작 지점 실측 판정 = SPA 라우트 이탈 시
@@ -3180,9 +3255,13 @@ export function CardStudioPage45({
   function startMethodStage() {
     convMethodRef.current = true;
     setConvMethodChips(true);
-    speakConv(
-      "상품 판매로 시작할게요. 어떻게 팔까요? 빠른 등록, 일반 등록, 공동구매 중에 말씀하거나 아래 버튼을 눌러 주세요.",
-    );
+    // DRIVE-2d — v6 2-0c 2계층(표시 본문 + 낭독 축약형). 낭독 종료 후 재청취(speakConv 계약 동일).
+    chat.notify(stripMarkdown(V6_METHOD_PICK));
+    convBusyRef.current = true;
+    voice.speak(stripMarkdown(V6_METHOD_PICK_VOICE), () => {
+      convBusyRef.current = false;
+      convListen();
+    });
   }
   // LINGO-DRIVE-1 D-3 — 방식 확정(칩·음성 공용): 폼 fieldPatch 브리지로 반영(폼이 수동 세그먼트
   //   onSelect 정본 setter 재사용 — 신규 쓰기 경로 0) + 상품 칸으로 이동 + 새 여정 1번 리드.
@@ -5341,20 +5420,32 @@ export function CardStudioPage45({
                     ) : chat.messages.length <= 1 && !chat.streaming ? (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {cardHasProgress ? (
-                          <button
-                            type="button"
-                            onClick={continueFlow}
-                            className="flex h-9 items-center rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
-                            style={{ backgroundColor: accent }}
-                          >
-                            이어하기
-                          </button>
+                          <>
+                            {/* DRIVE-2d — v6 2-0b 칩: 이어하기 = 현 스텝 인입(기존 continueFlow) /
+                                처음부터 새로 = 기존 전체 리셋 경로(doSwitchMode 동일 모드) 재사용. */}
+                            <button
+                              type="button"
+                              onClick={continueFlow}
+                              className="flex h-9 items-center rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+                              style={{ backgroundColor: accent }}
+                            >
+                              이어하기
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => doSwitchMode(mode)}
+                              className="flex h-9 items-center rounded-full bg-white px-3 text-[12px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                            >
+                              처음부터 새로
+                            </button>
+                          </>
                         ) : (
+                          /* DRIVE-2d — v6 2-0a 칩 3종(핸들러 = 기존 pickPurpose 정본). */
                           (
                             [
-                              ["general", "① 정보 알리기"],
-                              ["reserve", "② 예약·쿠폰"],
-                              ["commerce", "③ 상품 판매"],
+                              ["general", "소식 알리기"],
+                              ["reserve", "예약 받기"],
+                              ["commerce", "물건 팔기"],
                             ] as [BuildMode, string][]
                           ).map(([k, l]) => (
                             <button
@@ -5423,9 +5514,10 @@ export function CardStudioPage45({
                     )}
                     {/* KAKAO-LINGO-1 — 인앱 안내 1줄(명세 §3 카피): 텍스트 대화는 살아있고,
                         음성은 [음성으로 만들기] 버튼이 크롬 핸드오프로 잇는다(FIX-47 게이트 대체). */}
+                    {/* DRIVE-2d — v6 3-6 교체(카톡 인앱 음성 불가 안내 4줄). */}
                     {inAppNoMic && (
-                      <p className="mt-1.5 px-1 text-[11px] font-medium text-[#8A8A8A] [word-break:keep-all]">
-                        카톡에서는 글로 도와드려요 — 음성은 이 버튼으로 크롬에서 이어집니다.
+                      <p className="mt-1.5 whitespace-pre-line px-1 text-[11px] font-medium text-[#8A8A8A] [word-break:keep-all]">
+                        {V6_INAPP_NOTICE}
                       </p>
                     )}
                     {/* 음성 상태 1줄 — 미지원·인식 폴백 안내 / 듣는 중 / 말하는 중 (일반 톤). */}
