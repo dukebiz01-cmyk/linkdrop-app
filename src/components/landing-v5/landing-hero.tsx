@@ -85,7 +85,7 @@ export function LandingHero() {
   }, [])
 
   return (
-    <section className="px-5 pt-5 pb-2 text-center">
+    <section className="px-5 pt-6 pb-2 text-center">
       <span className="inline-flex items-center gap-1.5 rounded-full border border-[#DBEAFE] bg-[#EFF6FF] px-3 py-1 text-[12px] font-bold text-[#1D4ED8]">
         <Sparkles className="h-3.5 w-3.5" strokeWidth={2.25} />
         AI 카드 메이커

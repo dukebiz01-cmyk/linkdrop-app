@@ -18,8 +18,19 @@ export function LandingPageV5() {
   return (
     <div className="min-h-dvh bg-[#F8FAFC] font-sans text-[#0F172A]">
       <div className="mx-auto w-full max-w-[390px] bg-[#F8FAFC]">
-        <header className="sticky top-0 z-20 flex items-center justify-center border-b border-[#E8EDF3] bg-[#F8FAFC]/90 px-5 py-3.5 backdrop-blur-sm">
-          <LinkDropLockup script="korean" tone="color" symbolSize={30} />
+        <header className="sticky top-0 z-20 border-b border-[#E8EDF3] bg-[#F8FAFC]/90 backdrop-blur-sm">
+          <div className="flex h-14 items-center justify-between px-5">
+            {/* 좌: 브랜드 락업 */}
+            <LinkDropLockup script="korean" tone="color" symbolSize={26} />
+            {/* 우: 로그인 필 버튼 */}
+            <button
+              type="button"
+              onClick={goLogin}
+              className="flex h-9 items-center rounded-full border border-[#CBD5E1] bg-white px-4 text-[13px] font-bold text-[#0F172A] transition-transform active:scale-[0.97]"
+            >
+              로그인
+            </button>
+          </div>
         </header>
 
         <LandingHero />
