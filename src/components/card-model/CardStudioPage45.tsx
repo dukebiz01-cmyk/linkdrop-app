@@ -960,11 +960,13 @@ export function CardStudioPage45({
     setFormProgress({ nameSet: false, priceSet: false, photoSet: false, name: "" }); // FIX-34 신호 리셋.
     setDockSkipped(false); // FIX-33 — 도킹 건너뛰기도 진행 상태 — 함께 초기화.
   };
-  const switchMode = (next: BuildMode) => {
-    if (next === mode) return;
+  // LINGO-SAY-DO-1 — 결과 반환 추가(게이트 로직 무변경): 링고 회신이 실제 상태(즉시 전환/
+  //   확인 대기/차단)와 일치하도록. 기존 호출부(모드 탭)는 반환값 미사용 — 동작 무변경.
+  const switchMode = (next: BuildMode): "noop" | "blocked" | "pending" | "switched" => {
+    if (next === mode) return "noop";
     if (!isBusiness && next !== "general") {
       toast.info("예약·상품판매 카드는 사업자 인증 후 열려요.");
-      return;
+      return "blocked";
     }
     // FIX-35 — 제작 진행 중(장착·입력·등록 어느 하나라도)이면 확인 1회 후 전환.
     const hasProgress =
@@ -983,9 +985,10 @@ export function CardStudioPage45({
       !!selectedCouponId;
     if (hasProgress) {
       setPendingMode(next);
-      return;
+      return "pending";
     }
     doSwitchMode(next);
+    return "switched";
   };
 
   // 공개/비공개 스와이프 (정본).
@@ -2601,11 +2604,16 @@ export function CardStudioPage45({
         (sw.mode === "general" || sw.mode === "reserve" || sw.mode === "commerce") &&
         sw.mode !== mode;
       if (valid) {
-        switchMode(sw.mode as BuildMode); // FIX-35 확인 게이트 경유(진행 중이면 확인 1회).
+        // LINGO-SAY-DO-1 — FIX-35 게이트 결과에 맞춰 정확 회신(즉시 전환/확인 버튼 대기/차단).
+        const r = switchMode(sw.mode as BuildMode);
+        const modeLabel = LINGO_MODE_LABELS[sw.mode ?? ""] ?? sw.mode;
         chat.notify(
-          rest > 0
-            ? "모드 전환부터 진행할게요 — 전환이 끝나면 나머지는 다시 말씀해 주세요."
-            : "모드 전환을 진행할게요 — 화면의 확인을 눌러 주세요.",
+          (r === "switched"
+            ? `${modeLabel} 모드로 바꿨어요.`
+            : r === "pending"
+              ? "만들던 카드가 있어 확인이 필요해요 — 위의 [바꾸기] 버튼을 눌러 주세요."
+              : "예약·판매 카드는 사업자 인증 후 열려요.") +
+            (rest > 0 ? "\n나머지는 전환이 끝나면 다시 말씀해 주세요." : ""),
         );
       } else {
         chat.notify("그 사이 바뀌었네요, 다시 볼까요?");
@@ -2795,6 +2803,9 @@ export function CardStudioPage45({
     }
     // FIX-48+50 P2 — 상품 배치 부착 요청(폼 fieldPatch). 성공/실패 알림은 handleFieldPatchResult.
     if (productBatch.length > 0) {
+      // LINGO-SAY-DO-1 — 상품 칸으로 이동: 폼 미마운트 시 패치 무동작(침묵 = 말-행동 불일치)
+      //   방지(마운트가 패치 소비를 트리거) + 확정 버튼([상품 등록]) 자리로 사장님 인도.
+      jumpToBlock("product");
       setProductFieldPatch({ seq: ++productPatchSeq.current, fields: productBatch });
     }
   }
@@ -2812,7 +2823,20 @@ export function CardStudioPage45({
         blocks: prev?.blocks ?? [],
         fields: [...(prev?.fields ?? []), ...ok.map((x) => ({ field: x.field, prev: x.prev }))],
       }));
-      chat.notify(`적용했어요: ${ok.map((x) => LINGO_FIELD_LABELS[x.field] ?? x.field).join(" · ")}`);
+      // LINGO-SAY-DO-1 — 상태별 정확 회신: 상품 필드는 폼 상태만 채워진 것 — 카드 부착의 최종
+      //   관문은 [상품 등록](handleSubmit·DB 확정 = 의도적 안전장치)이라 "채워뒀어요 + 버튼 안내".
+      //   판매 방식(salesMethod)은 즉시 반영 — "적용했어요" 유지.
+      const label = (x: { field: string }) => LINGO_FIELD_LABELS[x.field] ?? x.field;
+      const okInstant = ok.filter((x) => !LINGO_PRODUCT_FIELDS.has(x.field));
+      const okPending = ok.filter((x) => LINGO_PRODUCT_FIELDS.has(x.field));
+      const parts: string[] = [];
+      if (okInstant.length > 0) parts.push(`적용했어요: ${okInstant.map(label).join(" · ")}`);
+      if (okPending.length > 0) {
+        parts.push(
+          `채워뒀어요: ${okPending.map(label).join(" · ")} — 아래 [상품 등록] 버튼만 눌러 주세요.`,
+        );
+      }
+      chat.notify(parts.join("\n"));
     }
     if (bad.length > 0) {
       chat.notify(
