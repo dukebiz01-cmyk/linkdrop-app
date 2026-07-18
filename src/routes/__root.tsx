@@ -127,8 +127,39 @@ function RootShell({ children }: { children: React.ReactNode }) {
     <html lang="ko">
       <head>
         <HeadContent />
+        {/* SPLASH-1 — PWA(standalone) 전용 스플래시 표시 규칙. 일반 브라우저 = display:none(절대 미노출). */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html:
+              "#pwa-splash{display:none}" +
+              "@media (display-mode: standalone){" +
+              "#pwa-splash{display:flex;position:fixed;inset:0;z-index:9999;" +
+              "background:#1D4ED8;flex-direction:column;align-items:center;" +
+              "justify-content:center;gap:14px;" +
+              "transition:opacity .35s ease}" +
+              "#pwa-splash .ps-word{color:#fff;font-size:22px;font-weight:700;letter-spacing:-0.02em}" +
+              "#pwa-splash .ps-word b{color:#BFDBFE;font-weight:700}" +
+              "#pwa-splash .ps-tag{color:#BFDBFE;font-size:12.5px}" +
+              "}",
+          }}
+        />
       </head>
       <body>
+        {/* SPLASH-1 — SSR 정적 마크업(JS 로드 전에도 표시). 제거는 RootComponent useEffect. */}
+        <div id="pwa-splash" aria-hidden="true">
+          <svg viewBox="0 0 100 100" width="84" height="84">
+            <path
+              fillRule="evenodd"
+              clipRule="evenodd"
+              fill="#FFFFFF"
+              d="M28 18 H46 A32 32 0 0 1 46 82 H28 A6 6 0 0 1 22 76 V24 A6 6 0 0 1 28 18 Z M53 30 C56 40 65 49 65 58 A12 12 0 1 1 41 58 C41 49 50 40 53 30 Z"
+            />
+          </svg>
+          <span className="ps-word">
+            Link<b>Drop</b>
+          </span>
+          <span className="ps-tag">링크는 목적을 만나 행동이 됩니다</span>
+        </div>
         {children}
         <Scripts />
       </body>
@@ -141,6 +172,26 @@ function RootComponent() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // 공개(비로그인) 경로에서만 사업자 푸터 — 카카오 비즈 심사·전상법 §10 도달점.
   const isApp = APP_PREFIXES.some((p) => pathname.startsWith(p));
+
+  // SPLASH-1 — PWA 스플래시 제거: 마운트 후 최소 400ms 보장 → opacity 0 →
+  //   transitionend(폴백 500ms)에 DOM remove. 비 standalone 은 display:none 이라
+  //   transition 미발화 → 폴백 타이머가 조용히 제거.
+  useEffect(() => {
+    const el = document.getElementById("pwa-splash");
+    if (!el) return;
+    const show = setTimeout(() => {
+      let removed = false;
+      const remove = () => {
+        if (removed) return;
+        removed = true;
+        el.remove();
+      };
+      el.addEventListener("transitionend", remove, { once: true });
+      el.style.opacity = "0";
+      setTimeout(remove, 500);
+    }, 400);
+    return () => clearTimeout(show);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
