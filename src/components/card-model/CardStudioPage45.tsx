@@ -1927,6 +1927,11 @@ export function CardStudioPage45({
         ...clipBlocks,
         ...(applied["image"] && heroImageUrl ? [{ block_kind: "image", block_data: { image_url: heroImageUrl } }] : []),
         ...dockBlocks,
+        // FIX-57 — 제목 WYSIWYG: 미리보기와 같은 산출값(resolvedCardTitle)을 경량 블록으로 항상
+        //   동봉(실값 있을 때만). /api/drops blocks 패스스루 = 서버·RPC·DB 무변경.
+        ...(resolvedCardTitle
+          ? [{ block_kind: "text", block_data: { custom_title: resolvedCardTitle } }]
+          : []),
       ].map((b, i) => ({ ...b, position: i }));
       const isPublic = visibility === "public";
       const body =
@@ -1942,6 +1947,11 @@ export function CardStudioPage45({
               is_public: isPublic,
               blocks: [
                 { block_kind: "product", block_data: { name: productName.trim(), price_krw: productPrice }, position: 0 },
+                // FIX-57 — 제목 WYSIWYG 동봉(커머스 직발행 경로). 재사용 분기(아래 reusedProduct)는
+                //   RPC 미호출이라 미동봉 — 그 경로는 custom(=productName)=commerce.name 동일이라 격차 0.
+                ...(resolvedCardTitle
+                  ? [{ block_kind: "text", block_data: { custom_title: resolvedCardTitle }, position: 1 }]
+                  : []),
               ],
             }
           : {
@@ -2136,6 +2146,16 @@ export function CardStudioPage45({
 
   // 모드별 카드 표시 기본값 — 정본 MODE_CONTENT 의 데모 카피 제거(실값 + 안내 placeholder).
   const storeName = store?.display_name ?? "";
+  // FIX-57 — 제목 단일 산출(거울 소스): 미리보기 titleText 와 발행 custom_title 이 같은 값을
+  //   소비한다. 실값만(안내 placeholder 미포함) — 빈 값이면 발행 시 custom_title 미동봉
+  //   (수신 = source.title 폴백, 구 발행분 동형).
+  const resolvedCardTitle =
+    cfgTitle.trim() ||
+    (mode === "commerce"
+      ? productName.trim()
+      : mode === "reserve"
+        ? storeName.trim()
+        : (selectedVideo?.title ?? "").trim());
   const content = useMemo(() => {
     if (mode === "commerce") {
       return {
@@ -2263,7 +2283,8 @@ export function CardStudioPage45({
       category: content.category,
       categoryIcon: content.categoryIcon,
       source: content.source,
-      titleText: cfgTitle.trim() || (mode === "commerce" ? productName || content.titleFallback : content.titleFallback),
+      // FIX-57 — 미리보기 제목 = resolvedCardTitle(발행 custom_title 과 동일 소스). 빈 값 = 안내 폴백.
+      titleText: resolvedCardTitle || content.titleFallback,
       subtitleText: cfgSubtitle.trim() || content.subtitleFallback,
       ...(cfgClip ? { clip: cfgClip } : {}),
       ...(applied["image"] && heroImagePreview && mode !== "commerce" ? { heroImageUrl: heroImagePreview } : {}),

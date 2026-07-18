@@ -427,6 +427,22 @@ function buildAttachedVideos(d: DropDetailRpc): InfoDropPageProps["attachedVideo
   return items.length > 0 ? items : undefined;
 }
 
+// FIX-57 — 커스텀 제목(text 블록 block_data.custom_title) 추출: 스튜디오 미리보기 산출값
+//   (resolvedCardTitle)이 발행 시 동봉된 것 — 있으면 source.title 보다 우선(제목 WYSIWYG).
+//   block_kind 는 DB enum(11종 고정 — 신규 kind 불가)이라 범용 text 블록에 편승, 식별은
+//   custom_title 키로만. 미주입(구 발행분) = null = 현행 source.title 폴백(회귀 0).
+function customTitleOf(d: DropDetailRpc): string | null {
+  const blocks = Array.isArray(d.blocks) ? d.blocks : [];
+  for (const b of blocks) {
+    const blk = b as { block_kind?: string; block_data?: Record<string, unknown> };
+    if (blk?.block_kind === "text" && typeof blk.block_data?.custom_title === "string") {
+      const t = blk.block_data.custom_title.trim();
+      if (t) return t;
+    }
+  }
+  return null;
+}
+
 // HERO-2 — 대표 이미지 블록(block_kind="image", block_data.image_url) 추출.
 //   수신카드 포스터(videoThumbnailUrl)를 드롭 고유 이미지로 오버라이드 — 영상 재생 기능은 보존,
 //   첫인상(포스터)만 교체. 블록 없으면 null(기존 source 썸네일 그대로).
@@ -462,7 +478,8 @@ export function infoDropAdapter(d: DropDetailRpc): InfoDropPageProps {
       droppedAgo: droppedAgo(d.created_at),
     },
     makerMessage: d.curator_message ?? undefined,
-    title: d.source.title ?? "",
+    // FIX-57 — 커스텀 제목 우선(미리보기=수신 WYSIWYG) → 없으면 source.title(구 발행분 동형).
+    title: customTitleOf(d) ?? d.source.title ?? "",
     description: d.drop.ai_summary ?? d.curator_message ?? "",
     intent: narrowIntent(d.intent?.key ?? null),
     variant: d.drop.purpose ? PURPOSE_TO_VARIANT[d.drop.purpose] : undefined,
