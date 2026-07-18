@@ -814,7 +814,7 @@ export function CardStudioPage45({
   //   강하게" 접힘 섹션 1개로. 기본 접힘, 인라인 펼침(Radix 금지). 점수·레버 로직 무변경 — 표시만.
   const [focusMoreOpen, setFocusMoreOpen] = useState(false);
   // FIX-48+50 P1.5 커밋1d — 코치 부가설명(왜 좋냐면/효과)은 "왜요?" 탭 시 인라인 펼침(기본 접힘).
-  const [coachWhyOpen, setCoachWhyOpen] = useState(false);
+  // LINGO-UI-1 — coachWhyOpen("왜요?" 인라인) 폐지: why/effect 는 서버 컨텍스트로 링고가 답한다.
   // FIX-16 — 링고 표면 통합(하단 스트립 폐지 · 단일 플로팅 캡슐): 상태 리터럴은 승계하되 의미 재정의
   //   "strip" = 캡슐(드래그 플로팅, 기본) / "panel" = 캡슐 자리 기준 확장 패널 / "closed" = 최소 아바타 점.
   //   완전 소멸 없음 — X 는 점까지만, 점 탭 = 캡슐 복귀. FIX-3 계약(자동 사라짐 없음·실상태 결합) 유지.
@@ -1312,8 +1312,12 @@ export function CardStudioPage45({
       const curStep = interviewJourney.find((s) => s.no === interviewCurNo);
       if (curStep && !nudgedStepsRef.current.has(curStep.key)) {
         nudgedStepsRef.current.add(curStep.key);
+        // LINGO-UI-1 — 정적 가이드 박스 폐지분 이관: 새 현재 단계의 규칙 코칭(teach = lingo.text)
+        //   1줄을 넛지에 병합(같은 내용을 하단 링고가 말한다 — 정보량 손실 0).
+        const teach = lingo.text?.trim();
         chat.notify(
-          `${prevStep ? `${prevStep.label} 됐어요. ` : ""}다음은 ${curStep.no}번 ${curStep.label}인데, 해볼까요?`,
+          `${prevStep ? `${prevStep.label} 됐어요. ` : ""}다음은 ${curStep.no}번 ${curStep.label}인데, 해볼까요?` +
+            (teach ? `\n${teach}` : ""),
         );
       }
       setInterviewAdvanceFlash(true);
@@ -1543,6 +1547,24 @@ export function CardStudioPage45({
     }
     return { text: "필수는 다 챙겼어요 — 이제 발행할 수 있어요.", action: null };
   }, [firstRequiredStep, currentTarget, dockCount, formProgress, pendingShipStep]);
+
+  // LINGO-UI-1 — 발행 마무리 코칭(finishCoach) 이관: 정적 박스 폐지분을 발행 시 링고 1회 발화로.
+  //   문구·재료(FIX-29 effect 요약 — 사실 기반) 무변경, 표면만 말풍선.
+  const finishNotifiedRef = useRef(false);
+  useEffect(() => {
+    if (!dropped) {
+      finishNotifiedRef.current = false;
+      return;
+    }
+    if (finishNotifiedRef.current || finishCoach.length === 0) return;
+    finishNotifiedRef.current = true;
+    chat.notify(
+      `발행 완료! 이 카드가 잘 되는 이유예요.\n${finishCoach
+        .map((f) => `- ${f.label} — ${coachEffect(f.key)}`)
+        .join("\n")}`,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dropped, finishCoach]);
 
   // FIX-42 — 링고 능동 안내(§13) 트리거 ①: 잠금 발행 버튼 클릭 시도.
   //   · 발화 = GATE_NOTES 정본(서버 호출 0) → 스트립/캡슐 플래시 채널(기존 stripFlash 재사용,
@@ -5049,116 +5071,14 @@ export function CardStudioPage45({
                     </button>
                   </div>
 
-                  {/* 정적 가이드 문구(규칙 기반 코칭) — FIX-16: 비동기/플래시도 여기서 갱신.
-                      B 보강 — 패딩 다이어트(p-3.5→p-3, mt-3→mt-2) 독 총높이 축소. */}
-                  <div className="mt-2 rounded-2xl bg-[#F7F7F8] p-3">
-                    <p className="flex items-start gap-1.5 text-pretty text-[13px] font-medium leading-relaxed text-[#404040] [word-break:keep-all]">
-                      {stripBusy ? (
-                        <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
-                      ) : (
-                        <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} fill="currentColor" />
-                      )}
-                      <span>{stripBusy ?? stripFlash ?? lingo.text}</span>
-                    </p>
-                    {/* FIX-48+50 P1.5 커밋1d — 코치 = 안내 1문장 기본. 왜/효과 부가설명은 "왜요?" 인라인
-                        펼침(문구 무변경 — 접힘만). {N}=실보유 숫자 치환(진실 경계) 유지. */}
-                    {!stripBusy && !dropped && currentCoachKey && COACH_NOTES[currentCoachKey] && (
-                      <div className="mt-2 space-y-0.5 text-[12px] font-medium leading-relaxed text-[#6B6B6B] [word-break:keep-all]">
-                        <button
-                          type="button"
-                          onClick={() => setCoachWhyOpen((v) => !v)}
-                          aria-expanded={coachWhyOpen}
-                          className="flex items-center gap-1 text-[11px] font-bold" style={{ color: accent }}
-                        >
-                          왜요?
-                          <ChevronDown className={`h-3 w-3 transition-transform ${coachWhyOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
-                        </button>
-                        {coachWhyOpen && <p>왜 좋냐면: {COACH_NOTES[currentCoachKey].why}</p>}
-                        {coachWhyOpen && <p>{coachEffect(currentCoachKey)}</p>}
-                        {/* FIX-33 — 도킹 단계(비필수) 건너뛰기: 캡슐 칩이 닫힌 상태(블록만 장착
-                            후 미연결 등)에서도 항상 도달 가능한 두 번째 창구. */}
-                        {currentCoachKey === "dock" && !dockSkipped && dockedProducts.length === 0 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDockSkipped(true);
-                              setSuggestVisible(false);
-                              flashStrip("도킹은 건너뛰었어요 — 발행으로 마무리해요");
-                            }}
-                            className="mt-1 flex h-8 items-center rounded-lg bg-white px-2.5 text-[11px] font-bold text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
-                          >
-                            이번엔 건너뛰기
-                          </button>
-                        )}
-                        {/* FIX-44 — 콘텐츠 단계 제안(B안 — 정본 상수 문법 · lingo-chat 호출 0):
-                            상시 층 1줄 + [영상 찾기] 열기. 영상 확정 시 소멸 — 무시 시 침묵(§13,
-                            FIX-33 dock 버튼 문법 동형 — 재발화·재촉 없음). */}
-                        {currentCoachKey === "content" && !selectedVideo && (
-                          <>
-                            <p>매장 영상을 찾아볼까요?</p>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                jumpToBlock("content");
-                                if (!finderQuery.trim() && storeName) setFinderQuery(storeName);
-                                setFinderOpen(true);
-                              }}
-                              className="mt-1 flex h-8 items-center rounded-lg bg-white px-2.5 text-[11px] font-bold text-[#525252] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
-                            >
-                              영상 찾기
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {/* FIX-29 — 게시 마무리 코칭: 장착·확정된 항목 상위 3개의 effect 요약(사실 기반). */}
-                    {dropped && finishCoach.length > 0 && (
-                      <div className="mt-2.5 border-t border-[#ECECEE] pt-2.5">
-                        <p className="text-[12px] font-bold text-[#404040]">이 카드가 잘 되는 이유</p>
-                        <ul className="mt-1 space-y-0.5">
-                          {finishCoach.map((f) => (
-                            <li key={f.key} className="text-[12px] font-medium leading-relaxed text-[#6B6B6B] [word-break:keep-all]">
-                              {f.label} — {coachEffect(f.key)}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {/* FIX-16 — 스트립에서 이관: 단계 점 + [계속하기](정보 소실 0). */}
-                    <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[#ECECEE] pt-2.5">
-                      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                        {steps.map((s, i) => (
-                          <span key={s.label} className="flex items-center gap-1">
-                            <span
-                              className="h-1.5 w-1.5 rounded-full"
-                              style={
-                                s.done
-                                  ? { backgroundColor: accent }
-                                  : i === currentStepIdx
-                                    ? { backgroundColor: "#fff", boxShadow: `0 0 0 1.5px ${accent}` }
-                                    : { backgroundColor: "#D4D4D4" }
-                              }
-                            />
-                            <span className="text-[10px] font-bold" style={{ color: s.done ? accent : i === currentStepIdx ? "#0A0A0A" : "#A3A3A3" }}>
-                              {s.label}
-                            </span>
-                          </span>
-                        ))}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLingoView("strip");
-                          continueFlow();
-                        }}
-                        className="flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold text-white active:scale-95"
-                        style={{ backgroundColor: accent }}
-                      >
-                        계속하기
-                        <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
-                      </button>
-                    </div>
-                  </div>
+                  {/* LINGO-UI-1 — 정적 가이드 박스(규칙 코칭 1문장·왜요?·단계 점·[계속하기]) 폐지:
+                      안내는 하단 링고 발화로 단일화(DRIVE-1 오프닝·넛지 + 서버 주행) —
+                      · 코칭 문구(teach) → D-1 넛지 발화에 병합(정보량 손실 0)
+                      · 왜요?(why/effect) → 서버 컨텍스트 current_target 기주입(FIX-29) — 물으면 답함
+                      · 도킹 건너뛰기 → 캡슐 접힘 제안 칩 [건너뛰기] 기존재(FIX-33 제1 창구)
+                      · 영상 찾기 → 콘텐츠 칸 정본 입구 + goToBlock 인도(HANDS-1)
+                      · 발행 마무리 코칭(finishCoach) → 발행 시 링고 1회 발화로 이관
+                      · 단계 점+[계속하기] → 1–9 스테퍼(탭점프)·[이어하기] 칩이 정본. */}
 
                   {/* FIX-48+50 P1.5 — 중복 "바로 장착" 대형 CTA 제거: 장착 기능은 행동 칩("블록 담기"→덱)
                       + 캡슐 접힘 시 [장착] 제안 칩으로 일원화(코치 칩과 기능 중복 해소). */}
