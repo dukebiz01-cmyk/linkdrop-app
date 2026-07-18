@@ -93,12 +93,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "LinkDrop" },
       { property: "og:description", content: "영상 속 정보를 친구와 카톡으로 나누는 가장 빠른 방법" },
       { property: "og:type", content: "website" },
+      // BRAND-1 — 전역 기본 OG 이미지(카톡 미리보기). /d 동적 head 는 자체 og:image 로 덮음.
+      { property: "og:image", content: "https://app.drop.how/og-default.png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
       { name: "twitter:card", content: "summary" },
       // T7 PWA v1 — 상단 톤 실측값(#FFFFFF — home 헤더 bg-white).
       { name: "theme-color", content: "#FFFFFF" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
       // T7 PWA v1 — manifest(서비스워커 없음 — 설치 가능성만).
       { rel: "manifest", href: "/manifest.webmanifest" },
       {
