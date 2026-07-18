@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -19,7 +19,6 @@ import {
   Lock,
   MapPin,
   Megaphone,
-  MessageCircle,
   Mic,
   Minus,
   Palette,
@@ -64,8 +63,7 @@ import { resizeToJpegBlob } from "@/lib/image-upload";
 import { shareToKakao } from "@/lib/kakao";
 import { CardModelBody } from "./CardModelBody";
 import {
-  useLingoChat,
-  useLingoVoice,
+  // LINGO-UI-3b — 훅 직접 호출은 useLingo("studio") 창구로 전환(타입 import 는 현행 유지).
   type LingoContext,
   type LingoStudioAction,
 } from "./useLingoChat";
@@ -105,6 +103,9 @@ import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 import { startVoiceHandoff } from "@/lib/voice-handoff";
 // LINGO-FIX-4b — 표시·낭독 기호 정제(홈과 공용 — 원본 메시지 무변경).
 import { stripMarkdown } from "@/lib/lingo-text";
+// LINGO-UI-3b — 링고 창구 훅 + 물방울 오브(고스트·패널 헤더 공용).
+import { useLingo } from "@/components/lingo/useLingo";
+import { LingoOrb } from "@/components/lingo/LingoOrb";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
 import { buildBoosterChips, buildGroupBuyView, stockUnitLabelFrom } from "./booster45";
@@ -817,14 +818,11 @@ export function CardStudioPage45({
   const [focusMoreOpen, setFocusMoreOpen] = useState(false);
   // FIX-48+50 P1.5 커밋1d — 코치 부가설명(왜 좋냐면/효과)은 "왜요?" 탭 시 인라인 펼침(기본 접힘).
   // LINGO-UI-1 — coachWhyOpen("왜요?" 인라인) 폐지: why/effect 는 서버 컨텍스트로 링고가 답한다.
-  // FIX-16 — 링고 표면 통합(하단 스트립 폐지 · 단일 플로팅 캡슐): 상태 리터럴은 승계하되 의미 재정의
-  //   "strip" = 캡슐(드래그 플로팅, 기본) / "panel" = 캡슐 자리 기준 확장 패널 / "closed" = 최소 아바타 점.
-  //   완전 소멸 없음 — X 는 점까지만, 점 탭 = 캡슐 복귀. FIX-3 계약(자동 사라짐 없음·실상태 결합) 유지.
-  // FIX-48+50 P1.5 — 링고 단일 박스 2상태: strip(접힘 캡슐) ↔ panel(펼침). closed(점) 폐지.
-  const [lingoView, setLingoView] = useState<"strip" | "panel">("strip");
+  // LINGO-UI-3b — 구 이원 상태(FIX-16 캡슐↔패널) → 패널 열림 boolean 단일화(접힘 = 고스트 오브).
+  //   FIX-3 계약(자동 사라짐 없음·실상태 결합)은 오브+말풍선 체계로 승계.
+  const [lingoPanelOpen, setLingoPanelOpen] = useState(false);
   // T5 — 링고 대화 실배선(41창 백엔드 계약): SSE 채팅 + 음성 반이중 v1.
-  const chat = useLingoChat();
-  const voice = useLingoVoice();
+  const { chat, voice } = useLingo("studio"); // LINGO-UI-3b — 창구 경유(계약 동일 통과).
   // FIX-47 — 인앱 WebView(카톡 등) 음성 정직 게이트: 마이크 진입점 미렌더(가짜 버튼·권한
   //   루프 원천 차단) + 안내 1줄. 마운트 후 판정(SSR=null — hydration 안전). 텍스트 대화
   //   무접촉. 일반 브라우저 권한 거부는 기존 폴백(useLingoVoice notice)과 별개 게이트.
@@ -1163,7 +1161,7 @@ export function CardStudioPage45({
     formProgress.photoSet ||
     !!cfgSubtitle.trim();
   useEffect(() => {
-    if (lingoView !== "panel") return;
+    if (!lingoPanelOpen) return;
     if (!cardHasProgress) {
       chat.seed("대표님, 오늘은 뭘 알려볼까요?"); // DRIVE-2a — 호칭 정본(파트너=대표님).
       return;
@@ -1177,7 +1175,7 @@ export function CardStudioPage45({
           : "카드를 같이 완성해 볼까요? 뭐든 물어보세요.",
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lingoView, mode, nextStepLabel, chat.seed]);
+  }, [lingoPanelOpen, mode, nextStepLabel, chat.seed]);
 
   // T5 — 새 말풍선/타자 진행 시 대화 리스트 하단 고정.
   useEffect(() => {
@@ -1297,7 +1295,7 @@ export function CardStudioPage45({
     }
     const cur = interviewStates.find((x) => x.state === "current");
     chat.seed(cur ? `${cur.step.no}번 ${cur.step.label}부터 시작해 볼까요?` : "카드를 같이 완성해 볼까요? 뭐든 물어보세요.");
-    setLingoView("panel");
+    setLingoPanelOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1443,7 +1441,7 @@ export function CardStudioPage45({
   useEffect(() => {
     const t = setTimeout(() => setSuggestVisible(true), 20000);
     return () => clearTimeout(t);
-  }, [applied, deckIndex, mode, lingoView, cfgSubtitle, selectedVideo, collapsedPanels]);
+  }, [applied, deckIndex, mode, lingoPanelOpen, cfgSubtitle, selectedVideo, collapsedPanels]);
   const showSuggest = !stripBusy && !stripFlash && suggestVisible && !!suggestion;
   // FIX-19→23 — 방향등 = 단일 타깃 그 자체(캡슐 기본 문구=해당 단계 티칭과 상시 동행).
   //   단계 완료 시 타깃이 다음 단계 블록으로 넘어가며 불도 즉시 이동(순서대로 켜짐).
@@ -1704,30 +1702,84 @@ export function CardStudioPage45({
     return true;
   }
   // FIX-3 — 액션 수행 후 닫힘 금지: 패널 → 스트립으로 축소(다음 안내로 갱신), 완전 닫기는 X 만.
+  // ── LINGO-UI-3b — 고스트 말풍선(접힘 상태 발화 표면) ──────────────────────
+  //   소스 3종: ①링고 발화(완결 메시지 — 5초, Duke 락 · 낭독 중엔 종료까지 유지)
+  //   ②stripFlash 수렴(장착/적용 피드백 — 2초 그대로) ③규칙 제안 전이(구 캡슐 제안 칩 수렴 —
+  //   문구 정본 = lingo memo, 칩 액션은 말풍선 하단에 그대로 이식 = 기능 소실 0).
+  //   탭 = 패널 소환(전문은 패널 대화). 패널 열림 = 말풍선 불요·소거.
+  const [ghostText, setGhostText] = useState<string | null>(null);
+  const ghostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speakingRef = useRef(voice.speaking);
+  speakingRef.current = voice.speaking;
+  const lingoPanelOpenRef = useRef(lingoPanelOpen);
+  lingoPanelOpenRef.current = lingoPanelOpen;
+  const showGhost = (text: string, ms: number) => {
+    if (lingoPanelOpenRef.current) return;
+    const t = text.trim();
+    if (!t) return;
+    setGhostText(t);
+    if (ghostTimerRef.current) clearTimeout(ghostTimerRef.current);
+    const expire = () => {
+      if (speakingRef.current) {
+        ghostTimerRef.current = setTimeout(expire, 500); // 낭독 중 = 종료까지 유지.
+        return;
+      }
+      ghostTimerRef.current = null;
+      setGhostText(null);
+    };
+    ghostTimerRef.current = setTimeout(expire, ms);
+  };
+  // ①발화 감지 — 마지막 완결 링고 메시지의 신규 도착(접힘 중만 표면화).
+  const lastGhostMsgRef = useRef<string | null>(null);
+  useEffect(() => {
+    const last = [...chat.messages].reverse().find((m) => m.role === "lingo" && !m.streaming && m.text);
+    if (!last || last.id === lastGhostMsgRef.current) return;
+    lastGhostMsgRef.current = last.id;
+    if (!lingoPanelOpen) showGhost(stripMarkdown(last.text), 5000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.messages, lingoPanelOpen]);
+  // ②stripFlash 수렴(2초 유지 그대로 — 기존 플래시 타이머와 독립).
+  useEffect(() => {
+    if (stripFlash && !lingoPanelOpen) showGhost(stripMarkdown(stripFlash), 2000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stripFlash]);
+  // ③규칙 제안 전이 — 제안 문구(정본 lingo.text)로 말풍선 + 아래 칩(장착/건너뛰기 이식).
+  useEffect(() => {
+    if (showSuggest && suggestion && !lingoPanelOpen) showGhost(stripMarkdown(lingo.text), 5000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSuggest, suggestion?.id]);
+  useEffect(() => {
+    if (lingoPanelOpen) setGhostText(null);
+  }, [lingoPanelOpen]);
+  const openGhostPanel = () => {
+    setGhostText(null);
+    setLingoPanelOpen(true);
+  };
+
   function lingoEquipSuggestion() {
     if (!lingo.action) {
       scrollToDeck();
-      setLingoView("strip");
+      setLingoPanelOpen(false);
       return;
     }
     const idx = DECK.findIndex((b) => b.id === lingo.action);
     if (idx < 0) {
       scrollToDeck();
-      setLingoView("strip");
+      setLingoPanelOpen(false);
       return;
     }
     setDeckIndex(idx);
     const block = DECK[idx];
     if (!applied[block.id] && !(block.isPaid && score < ENHANCE_UNLOCK)) equip(block);
     setTimeout(scrollToDeck, 60);
-    setLingoView("strip");
+    setLingoPanelOpen(false);
   }
   function lingoUndo() {
     if (!lastEquipped) return;
     setApplied((p) => ({ ...p, [lastEquipped]: false }));
     jumpToBlock(lastEquipped);
     setLastEquipped(null);
-    setLingoView("strip");
+    setLingoPanelOpen(false);
   }
   function lingoEdit() {
     const priority = ["content", "product", "productimage", "image", "calendar", "seasonal", "coupon", "dock", "link"];
@@ -1740,7 +1792,7 @@ export function CardStudioPage45({
     } else {
       scrollToDeck();
     }
-    setLingoView("strip");
+    setLingoPanelOpen(false);
   }
 
   // FIX-3→23 — [계속하기]: 단일 타깃 블록으로 흐름 복귀(타깃 없음 = 수렴 → 거울 시트).
@@ -1757,7 +1809,7 @@ export function CardStudioPage45({
   // B전환 커밋1 — 스튜디오 링고 드래그 폐기(fabPos·⠿·패널 이동 로직 전량 제거). 펼침 = 하단
   //   고정 독으로 상태 전환만(위치 계산 없음). 호출부(캡슐 탭·마이크·[말 끝났어요])는 이 함수 유지.
   function openPanelAt() {
-    setLingoView("panel");
+    setLingoPanelOpen(true);
   }
 
   // ── 영상 검색 — 실배선 /api/discover. ST2b 스위치 시 원본 제거(studio-build :606-634 발췌). ──
@@ -3317,7 +3369,7 @@ export function CardStudioPage45({
         // B전환 커밋1 — 하단 스택(발행바 + 링고 독/캡슐) 위로 콘텐츠(미리보기)가 스크롤되도록 예약.
         //   펼침=발행바+독(≤34vh, B 보강 다이어트) / 접힘=발행바+캡슐(64px). 미리보기 겹침 0 유지.
         paddingBottom:
-          lingoView === "panel"
+          lingoPanelOpen
             ? `calc(34vh + ${publishBarH + 16}px)`
             : `${publishBarH + 80}px`,
       }}
@@ -5112,7 +5164,7 @@ export function CardStudioPage45({
           않는다 — 액션 후 strip 으로 축소·내용 갱신. 대화(LLM)·음성 = T5 트랙 예약석(배선 0). */}
       {(
         <>
-          {lingoView === "panel" && (
+          {lingoPanelOpen && (
             <>
               {/* B전환 커밋1 — 펼침 = 하단 고정 독(dock). 부유 패널·백드롭·⠿ 드래그·fabPos 위치계산
                   전량 폐기(스튜디오 한정). 화면 하단 고정, 위 영역(스텝퍼+미리보기)은 그대로 노출.
@@ -5125,10 +5177,11 @@ export function CardStudioPage45({
                   <div className="relative max-h-[34vh] overflow-y-auto px-4 pb-3 pt-2">
                   {/* 독 헤더 — 번호 배지(펄스)+지금 N번 라벨+스피커 토글(드래그 폐기 → 정적 행). */}
                   <div className="flex items-center gap-2.5">
-                    <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
-                      <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2.25} />
-                      <Sparkles className="absolute -right-0.5 -top-0.5 h-[11px] w-[11px]" strokeWidth={2.5} fill="currentColor" />
-                    </span>
+                    {/* LINGO-UI-3b — 헤더 아이콘 = 공용 LingoOrb(발화 연동). */}
+                    <LingoOrb
+                      size={36}
+                      state={chat.streaming ? "busy" : voice.speaking ? "speaking" : "active"}
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">링고AI</p>
                       {/* FIX-48+50 P1.5 커밋1g — 현재 번호 = 원형 배지(펄스) + 라벨(정본 인용, 창작 0). */}
@@ -5157,7 +5210,7 @@ export function CardStudioPage45({
                       type="button"
                       aria-label="캡슐로 접기"
                       onPointerDown={(e) => e.stopPropagation()}
-                      onClick={() => setLingoView("strip")}
+                      onClick={() => setLingoPanelOpen(false)}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] transition-transform active:scale-90"
                     >
                       <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
@@ -5379,8 +5432,44 @@ export function CardStudioPage45({
                         방금 적용 되돌리기
                       </button>
                     )}
+                    {/* LINGO-UI-3b — 파형 이관: 패널 내 음성 모드(voiceOpen) 시 표시(구 독립
+                        분기 폐지 — VoiceWavePanel45 컴포넌트 무수정, 호출 위치만 이동). */}
+                    {voiceOpen && (
+                      <div className="mt-2">
+                        <VoiceWavePanel45
+                          listening={voice.listening}
+                          interimText={voiceInterim}
+                          accent={accent}
+                          onCancel={handleVoiceCancel}
+                          onDone={handleVoiceDone}
+                          convMode={convMode}
+                          speaking={voice.speaking}
+                          paused={convPaused}
+                          previewText={convPreview}
+                          onToggleConv={inAppNoMic ? undefined : startConvMode}
+                          onEndConv={endConvMode}
+                          onResume={resumeConvMode}
+                          purposeChoices={
+                            convMethodChips
+                              ? [
+                                  { key: "quick", label: "① 빠른 등록", onPick: () => pickSalesMethod("quick") },
+                                  { key: "full", label: "② 일반 등록", onPick: () => pickSalesMethod("full") },
+                                  { key: "groupBuy", label: "③ 공동구매", onPick: () => pickSalesMethod("groupBuy") },
+                                ]
+                              : convPurposeChips
+                                ? [
+                                    { key: "general", label: "① 정보 알리기", onPick: () => pickPurpose("general") },
+                                    { key: "reserve", label: "② 예약·쿠폰", onPick: () => pickPurpose("reserve") },
+                                    { key: "commerce", label: "③ 상품 판매", onPick: () => pickPurpose("commerce") },
+                                  ]
+                                : undefined
+                          }
+                        />
+                      </div>
+                    )}
                     {/* FIX-48+50 P1.5 커밋1c — 마이크 A안: 56px VoiceOrb 주 버튼(오른쪽 크게) +
-                        텍스트 입력칸(왼쪽 보조 pill: 입력·낭독·전송). !inAppNoMic 게이트 유지. */}
+                        텍스트 입력칸(왼쪽 보조 pill: 입력·낭독·전송). !inAppNoMic 게이트 유지.
+                        LINGO-UI-3b — onStart/onStop = handleOrbTap(파형·interim 경로 — 패널 내 표시). */}
                     <div className="mt-2 flex items-end gap-2">
                       <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5">
                         <input
@@ -5432,8 +5521,8 @@ export function CardStudioPage45({
                           listening={voice.listening}
                           disabled={chat.streaming}
                           accent={accent}
-                          onStart={() => { if (!voice.listening) handleMicTap(); }}
-                          onStop={() => { if (voice.listening) handleMicTap(); }}
+                          onStart={() => { if (!voice.listening) handleOrbTap(); }}
+                          onStop={() => { if (voice.listening) handleOrbTap(); }}
                         />
                       ) : (
                         <button
@@ -5452,7 +5541,7 @@ export function CardStudioPage45({
                   {/* FIX-48+50 P1.5 커밋1d — 행동 칩 = 최대 2개(담기·편집) + 되돌리기(undo 가능 시에만 렌더). */}
                   {(() => {
                   const tools = [
-                    { key: "add", icon: Plus, label: "블록 담기", onClick: () => { scrollToDeck(); setLingoView("strip"); }, disabled: false },
+                    { key: "add", icon: Plus, label: "블록 담기", onClick: () => { scrollToDeck(); setLingoPanelOpen(false); }, disabled: false },
                     { key: "edit", icon: Pencil, label: "내용 편집", onClick: lingoEdit, disabled: !canEdit },
                   ];
                   if (lastEquipped || lingoActUndo) {
@@ -5492,178 +5581,78 @@ export function CardStudioPage45({
           {/* B전환 커밋1 — 접힘 = 하단 고정 캡슐(부유·드래그·⠿·fabPos·엣지스냅 폐기). 아바타/번호
               배지 + 한줄 안내(truncate) + 제안 칩 + 마이크 레일. 탭 = 하단 독 펼침.
               FIX-43 — 듣는 중: 파형 패널(VoiceWavePanel45)로 교체(발행바 위 동일 고정 위치). */}
-          {lingoView === "strip" && !mirrorOpen && voiceOpen && (
-            <div className="fixed inset-x-0 z-40 flex justify-center px-3 pb-3" style={{ bottom: publishBarH }}>
-              {/* B전환 커밋1 — 듣는 중 파형 패널도 하단 중앙 고정(발행바 위 스택, fabPos 폐기). */}
-              <VoiceWavePanel45
-                listening={voice.listening}
-                interimText={voiceInterim}
-                accent={accent}
-                onCancel={handleVoiceCancel}
-                onDone={handleVoiceDone}
-                // FIX-48 — 연속 대화 모드(인앱 게이트 환경은 orb 미렌더라 진입 불가 — 토글도
-                //   이중 가드 미노출).
-                convMode={convMode}
-                speaking={voice.speaking}
-                paused={convPaused}
-                previewText={convPreview}
-                onToggleConv={inAppNoMic ? undefined : startConvMode}
-                onEndConv={endConvMode}
-                onResume={resumeConvMode}
-                // P3 커밋2 — 0단계 목적 칩(말/탭 병행). 사업자 아님이면 예약·판매는 잠금 안내로 흡수되나
-                //   칩은 3종 노출(탭 시 pickPurpose 가 권한 정직 안내). 정본 라벨(①②③)만.
-                purposeChoices={
-                  // LINGO-DRIVE-1 D-3 — 판매방식 스테이지 칩(목적 칩과 동일 슬롯 재사용 — 배타).
-                  convMethodChips
-                    ? [
-                        { key: "quick", label: "① 빠른 등록", onPick: () => pickSalesMethod("quick") },
-                        { key: "full", label: "② 일반 등록", onPick: () => pickSalesMethod("full") },
-                        { key: "groupBuy", label: "③ 공동구매", onPick: () => pickSalesMethod("groupBuy") },
-                      ]
-                    : convPurposeChips
-                      ? [
-                          { key: "general", label: "① 정보 알리기", onPick: () => pickPurpose("general") },
-                          { key: "reserve", label: "② 예약·쿠폰", onPick: () => pickPurpose("reserve") },
-                          { key: "commerce", label: "③ 상품 판매", onPick: () => pickPurpose("commerce") },
-                        ]
-                      : undefined
-                }
-              />
-            </div>
-          )}
-          {lingoView === "strip" && !mirrorOpen && !voiceOpen && (
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label="링고AI — 탭하면 대화 독이 열려요"
-              onClick={() => openPanelAt()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  openPanelAt();
-                }
-              }}
-              className="fixed inset-x-0 z-40 mx-auto flex h-[64px] w-full max-w-md cursor-pointer select-none items-center gap-2 rounded-t-[18px] border-t border-[#E3E1DA] bg-white px-3.5 [box-shadow:0_-3px_12px_rgba(0,0,0,0.05)]"
-              style={{ bottom: publishBarH }}
-            >
-              {/* B전환 커밋1 — 접힘 = 하단 고정 캡슐(부유·드래그·⠿·fabPos 폐기). 탭=독 펼침. 마이크
-                  레일 유지. 우측 칩/마이크는 stopPropagation 으로 바 탭(펼침)과 분리. */}
-              {/* FIX-48+50 P1.5 커밋1g — 캡슐 아바타 자리에 현재 번호 배지(패널과 동일 배지·펄스로 통일).
-                  busy=스피너 / 현재 단계 있음=번호 배지 / 없음(완주)=기존 아바타. */}
-              {stripBusy ? (
-                <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
-                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} style={{ color: accent }} />
-                </span>
-              ) : interviewCurrent ? (
-                renderNumBadge(interviewCurrent.step.no)
-              ) : (
-                <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
-                  <MessageCircle className="h-4 w-4" strokeWidth={2.25} />
-                  <Sparkles className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px]" strokeWidth={2.5} fill="currentColor" />
-                </span>
-              )}
-              <span className="relative min-w-0 flex-1">
-                <span className="block truncate text-[11px] font-semibold leading-tight text-[#0A0A0A]">
-                  {/* FIX-18→23→28→31 — 필수 구간 = step.teach / 권장 구간 = 제안 문구(칩 노출 시) /
-                      필수 전부 충족 = "이제 발행할 수 있어요" 전환. 발행 완료 후 전송(카톡)은 별개 단계. */}
-                  {stripBusy ??
-                    stripFlash ??
-                    (dropped
-                      ? "발행 완료!"
-                      : showSuggest && suggestion
-                        ? lingo.text
-                        : readyToSend
-                          ? "이제 발행할 수 있어요"
-                          : lingo.text)}
-                </span>
-              </span>
-              {/* FIX-48+50 P1.5 커밋1d — 캡슐 점 진행표시·"계속" 버튼 삭제(진행=화면 스텝퍼 단독).
-                  제안 칩([장착]/[연결하기])만 조건부 유지(현재 단계 맞춤). */}
-              {showSuggest && suggestion && (
-                <>
+          {/* LINGO-UI-3b — 고스트 오브(접힘 상태): 우하단 물방울(52px) + 좌측 말풍선(발화 5초·
+              플래시 2초·규칙 제안 수렴 — 낭독 중엔 종료까지 유지). 구 캡슐·독립 파형 분기 철거
+              (파형은 패널 내부로 이관). mirrorOpen 시 숨김(기존 캡슐 관례 승계). 탭 = 패널 소환. */}
+          {!lingoPanelOpen && !mirrorOpen && (
+            <div className="fixed z-40 flex items-end gap-2" style={{ right: 16, bottom: publishBarH + 12 }}>
+              {ghostText && (
+                <div className="max-w-[240px] rounded-2xl rounded-br-md bg-white p-2.5 text-left [box-shadow:0_8px_24px_-8px_rgba(15,23,42,0.35),inset_0_0_0_1px_#ECECEE]">
                   <button
                     type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const idx = DECK.findIndex((b) => b.id === suggestion.id);
-                      if (idx >= 0) setDeckIndex(idx);
-                      equip(suggestion);
-                      // FIX-19 — 장착 즉시 소등(flash 가 showSuggest 를 끔) → flash 종료 후
-                      //   재계산된 다음 제안으로 점등 이동(suggestVisible 유지). 없으면 그대로 소등.
-                      flashStrip(
-                        suggestion.id === "dock"
-                          ? "함께 보낼 카드를 골라 연결해요"
-                          : `+${suggestion.power}점! ${suggestion.label} 장착됐어요`,
-                      );
-                    }}
-                    className="relative flex h-8 shrink-0 items-center rounded-full px-2.5 text-[11px] font-bold text-white active:scale-95"
-                    style={{ backgroundColor: accent }}
+                    onClick={openGhostPanel}
+                    className="block w-full text-left text-[12px] font-medium leading-relaxed text-[#404040] [word-break:keep-all]"
                   >
-                    {suggestion.id === "dock" ? "연결하기" : "장착"}
+                    <span className="line-clamp-2">{ghostText}</span>
                   </button>
-                  {/* FIX-28 — 필수는 거절(쿨다운) 불가: X 는 권장 제안에서만.
-                      FIX-33 — 도킹(정식 단계·비필수)은 X 대신 [건너뛰기]: 단계 done 처리 →
-                      다음 단계(발행)로 진행. 건너뛴 뒤 덱에서 수동 연결해도 done 유지. */}
-                  {!firstRequiredStep &&
-                    (suggestion.id === "dock" ? (
+                  {/* 구 캡슐 제안 칩 이식(기능 소실 0): [장착/연결하기] + [건너뛰기]/[닫기] —
+                      핸들러·문구 원문 그대로(FIX-19/28/33 계약 승계). */}
+                  {showSuggest && suggestion && (
+                    <div className="mt-1.5 flex items-center gap-1.5">
                       <button
                         type="button"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDockSkipped(true);
-                          setSuggestVisible(false);
-                          flashStrip("도킹은 건너뛰었어요 — 발행으로 마무리해요");
+                        onClick={() => {
+                          const idx = DECK.findIndex((b) => b.id === suggestion.id);
+                          if (idx >= 0) setDeckIndex(idx);
+                          equip(suggestion);
+                          flashStrip(
+                            suggestion.id === "dock"
+                              ? "함께 보낼 카드를 골라 연결해요"
+                              : `+${suggestion.power}점! ${suggestion.label} 장착됐어요`,
+                          );
                         }}
-                        className="relative flex h-8 shrink-0 items-center rounded-full bg-[#F4F4F5] px-2.5 text-[11px] font-bold text-[#737373] active:scale-95"
+                        className="flex h-8 shrink-0 items-center rounded-full px-2.5 text-[11px] font-bold text-white active:scale-95"
+                        style={{ backgroundColor: accent }}
                       >
-                        건너뛰기
+                        {suggestion.id === "dock" ? "연결하기" : "장착"}
                       </button>
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label="제안 닫기"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDismissedSuggests((d) => [...d, suggestion.id]);
-                          setSuggestVisible(false);
-                        }}
-                        className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] active:scale-95"
-                      >
-                        <X className="h-3.5 w-3.5" strokeWidth={2.5} />
-                      </button>
-                    ))}
-                </>
+                      {!firstRequiredStep &&
+                        (suggestion.id === "dock" ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDockSkipped(true);
+                              setSuggestVisible(false);
+                              flashStrip("도킹은 건너뛰었어요 — 발행으로 마무리해요");
+                            }}
+                            className="flex h-8 shrink-0 items-center rounded-full bg-[#F4F4F5] px-2.5 text-[11px] font-bold text-[#737373] active:scale-95"
+                          >
+                            건너뛰기
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            aria-label="제안 닫기"
+                            onClick={() => {
+                              setDismissedSuggests((d) => [...d, suggestion.id]);
+                              setSuggestVisible(false);
+                              setGhostText(null);
+                            }}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] active:scale-95"
+                          >
+                            <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
               )}
-              {/* FIX-48+50 P1.5 커밋1c — 캡슐 오른쪽 끝 56px 마이크 상시 노출. 탭=패널 펼침+즉시 듣기.
-                  드래그와 분리(stopPropagation) — 캡슐 이동 중에도 마이크 탭 가능.
-                  KAKAO-LINGO-1 — 인앱은 컴팩트 [음성] 버튼 = 크롬 핸드오프(캡슐 탭 펼침과 분리). */}
-              {!inAppNoMic ? (
-                <SlideToMic
-                  listening={voice.listening}
-                  disabled={chat.streaming}
-                  accent={accent}
-                  onStart={() => { openPanelAt(); if (!voice.listening) handleMicTap(); }}
-                  onStop={() => { if (voice.listening) handleMicTap(); }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  aria-label="음성으로 만들기 — 크롬에서 이어져요"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleVoiceHandoff();
-                  }}
-                  className="flex h-11 shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
-                  style={{ backgroundColor: accent }}
-                >
-                  <Mic className="h-4 w-4" strokeWidth={2.5} />
-                  음성
-                </button>
-              )}
+              <LingoOrb
+                size={52}
+                state={stripBusy ? "busy" : voice.speaking ? "speaking" : "idle"}
+                onClick={openGhostPanel}
+                ariaLabel="링고AI 열기"
+              />
             </div>
           )}
 
