@@ -373,7 +373,9 @@ function getStage(score: number) {
 const DECK_IDS: Record<BuildMode, string[]> = {
   general: ["content", "dock", "bgcolor", "top", "boost", "marketing"],
   reserve: ["calendar", "party", "content", "review", "coupon", "brand", "dock", "image", "link", "bgcolor", "top", "boost", "marketing"],
-  commerce: ["product", "productimage", "aivideo", "seasonal", "review", "delivery", "coupon", "brand", "dock", "link", "bgcolor", "top", "boost", "marketing"],
+  // S4-5c — 커머스 덱 죽은 토글 제거: "link"(매장정보 — S4-4a 로 미리보기 억제 = 죽은 스위치) ·
+  //   "delivery"(배송추적 카드 — 백엔드 부재, S4b 전 죽은 카드). 카드 정의는 보존(부활 대비).
+  commerce: ["product", "productimage", "aivideo", "seasonal", "review", "coupon", "brand", "dock", "bgcolor", "top", "boost", "marketing"],
 };
 const MODE_MAIN_IDS: Record<BuildMode, string[]> = {
   general: [],
