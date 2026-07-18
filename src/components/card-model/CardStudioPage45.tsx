@@ -100,6 +100,8 @@ import { SlideToMic } from "@/components/lingo/SlideToMic";
 import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 // FIX-47 — 인앱 WebView 음성 정직 게이트(pwa-install 공용 판정 재사용 — 중복 정의 0).
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
+// KAKAO-LINGO-1 — 인앱 음성 핸드오프: 마이크 자리 = [음성으로 만들기] → 크롬 탈출 스킴.
+import { escapeToBrowser } from "@/lib/escape-to-browser";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
 import { buildBoosterChips, buildGroupBuyView, stockUnitLabelFrom } from "./booster45";
@@ -2824,6 +2826,25 @@ export function CardStudioPage45({
     });
   }
 
+  // KAKAO-LINGO-1 — 인앱 음성 핸드오프: 1회용 코드 발급(쿠키 세션 인증) → 크롬 탈출 스킴.
+  //   실패·스킴 부재("manual")는 기존 배너와 동일한 수동 안내를 링고 말풍선으로(정직 폴백).
+  async function handleVoiceHandoff() {
+    try {
+      const res = await fetch("/api/handoff/create", { method: "POST" });
+      const json = (await res.json().catch(() => null)) as { code?: string } | null;
+      if (!res.ok || !json?.code) {
+        chat.notify("크롬으로 여는 준비가 안 됐어요 — 오른쪽 위 메뉴의 '다른 브라우저로 열기'로 이어 주세요.");
+        return;
+      }
+      const url = `${window.location.origin}/handoff?code=${json.code}&next=${encodeURIComponent("/studio-build")}`;
+      if (escapeToBrowser(url) === "manual") {
+        chat.notify("오른쪽 위 메뉴의 '다른 브라우저로 열기'를 누르면 음성으로 이어져요.");
+      }
+    } catch {
+      chat.notify("크롬으로 여는 준비가 안 됐어요 — 잠시 후 다시 시도해 주세요.");
+    }
+  }
+
   // FIX-43 — 캡슐 옆 마이크 orb(스트립 뷰): 탭 → 듣는 중 파형 패널로 펼침. 반이중 계약 동일
   //   (인식 텍스트 → 입력창 → 패널에서 [전송] 확인 — 자동 전송 금지). lingo-chat 계약 무변경
   //   (channel 'voice' 는 기존 onText 경로 그대로).
@@ -4904,13 +4925,11 @@ export function CardStudioPage45({
                         ))}
                       </div>
                     )}
-                    {/* FIX-47 — 인앱 WebView 음성 게이트 안내 1줄(카톡 = 락 문구 원문 · 기타
-                        인앱 = 동일 톤 일반형). 텍스트 대화는 그대로 — 음성만 게이트. */}
+                    {/* KAKAO-LINGO-1 — 인앱 안내 1줄(명세 §3 카피): 텍스트 대화는 살아있고,
+                        음성은 [음성으로 만들기] 버튼이 크롬 핸드오프로 잇는다(FIX-47 게이트 대체). */}
                     {inAppNoMic && (
                       <p className="mt-1.5 px-1 text-[11px] font-medium text-[#8A8A8A] [word-break:keep-all]">
-                        {inAppNoMic === "kakao"
-                          ? "카카오톡 브라우저에서는 음성을 쓸 수 없어요. 오른쪽 위 메뉴에서 '다른 브라우저로 열기'를 누르면 쓸 수 있어요"
-                          : "앱 속 브라우저에서는 음성을 쓸 수 없어요 — 크롬·삼성인터넷으로 열면 쓸 수 있어요"}
+                        카톡에서는 글로 도와드려요 — 음성은 이 버튼으로 크롬에서 이어집니다.
                       </p>
                     )}
                     {/* 음성 상태 1줄 — 미지원·인식 폴백 안내 / 듣는 중 / 말하는 중 (일반 톤). */}
@@ -5037,8 +5056,9 @@ export function CardStudioPage45({
                         )}
                       </div>
                       {/* FIX-47 게이트 유지 — 인앱 WebView 는 마이크 미렌더(권한 루프 차단).
-                          B-lite 작업11 — 슬라이드 레일(ON/OFF 각인). handleMicTap 시작/종료 재사용. */}
-                      {!inAppNoMic && (
+                          B-lite 작업11 — 슬라이드 레일(ON/OFF 각인). handleMicTap 시작/종료 재사용.
+                          KAKAO-LINGO-1 — 인앱은 마이크 자리에 [음성으로 만들기] = 크롬 핸드오프. */}
+                      {!inAppNoMic ? (
                         <SlideToMic
                           listening={voice.listening}
                           disabled={chat.streaming}
@@ -5046,6 +5066,16 @@ export function CardStudioPage45({
                           onStart={() => { if (!voice.listening) handleMicTap(); }}
                           onStop={() => { if (voice.listening) handleMicTap(); }}
                         />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void handleVoiceHandoff()}
+                          className="flex h-11 min-w-[44px] shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+                          style={{ backgroundColor: accent }}
+                        >
+                          <Mic className="h-4 w-4" strokeWidth={2.5} />
+                          음성으로 만들기
+                        </button>
                       )}
                     </div>
                   </div>
@@ -5232,8 +5262,9 @@ export function CardStudioPage45({
                 </>
               )}
               {/* FIX-48+50 P1.5 커밋1c — 캡슐 오른쪽 끝 56px 마이크 상시 노출. 탭=패널 펼침+즉시 듣기.
-                  드래그와 분리(stopPropagation) — 캡슐 이동 중에도 마이크 탭 가능. */}
-              {!inAppNoMic && (
+                  드래그와 분리(stopPropagation) — 캡슐 이동 중에도 마이크 탭 가능.
+                  KAKAO-LINGO-1 — 인앱은 컴팩트 [음성] 버튼 = 크롬 핸드오프(캡슐 탭 펼침과 분리). */}
+              {!inAppNoMic ? (
                 <SlideToMic
                   listening={voice.listening}
                   disabled={chat.streaming}
@@ -5241,6 +5272,21 @@ export function CardStudioPage45({
                   onStart={() => { openPanelAt(); if (!voice.listening) handleMicTap(); }}
                   onStop={() => { if (voice.listening) handleMicTap(); }}
                 />
+              ) : (
+                <button
+                  type="button"
+                  aria-label="음성으로 만들기 — 크롬에서 이어져요"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleVoiceHandoff();
+                  }}
+                  className="flex h-11 shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+                  style={{ backgroundColor: accent }}
+                >
+                  <Mic className="h-4 w-4" strokeWidth={2.5} />
+                  음성
+                </button>
               )}
             </div>
           )}

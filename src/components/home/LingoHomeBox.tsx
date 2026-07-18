@@ -8,7 +8,7 @@ import { useLingoChat, useLingoVoice } from "@/components/card-model/useLingoCha
 import { SlideToMic } from "@/components/lingo/SlideToMic";
 import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 import { HomePerformanceFacts } from "@/components/home/HomePerformanceFacts";
-import { getInAppBrowser } from "@/lib/pwa-install";
+import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 
 const ACCENT = "#2563EB"; // 홈 링고 목적색(스튜디오 mode accent 없음 — 브랜드 블루 고정).
 const FAB_MARGIN = 12;
@@ -35,7 +35,12 @@ export function LingoHomeBox({
   const chat = useLingoChat();
   const voice = useLingoVoice();
   const isMaker = cardCount > 0;
-  const inAppNoMic = typeof window !== "undefined" ? getInAppBrowser() : null;
+  // KAKAO-LINGO-1 K-3 — 렌더 중 판정 → 마운트 후 판정(스튜디오 :783-786 패턴 통일).
+  //   SSR(null=마이크 렌더)과 인앱 첫 클라 렌더가 갈리던 hydration 불일치 제거.
+  const [inAppNoMic, setInAppNoMic] = useState<InAppBrowser | null>(null);
+  useEffect(() => {
+    setInAppNoMic(getInAppBrowser());
+  }, []);
 
   const [view, setView] = useState<"strip" | "panel">("strip");
   const [perfOpen, setPerfOpen] = useState(false); // 커밋2 — 메이커 성과 진단(1층 사실+3층 칩) 개시 여부.

@@ -13,6 +13,7 @@ import { Route as TosRouteImport } from './routes/tos'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as HandoffRouteImport } from './routes/handoff'
 import { Route as BusinessInfoRouteImport } from './routes/business-info'
 import { Route as UserRouteImport } from './routes/_user'
 import { Route as PartnerRouteImport } from './routes/_partner'
@@ -56,6 +57,8 @@ import { Route as ApiHectoNotiRouteImport } from './routes/api/hecto/noti'
 import { Route as ApiHectoNextRouteImport } from './routes/api/hecto/next'
 import { Route as ApiHectoCancelTxRouteImport } from './routes/api/hecto/cancel-tx'
 import { Route as ApiHectoCancelRouteImport } from './routes/api/hecto/cancel'
+import { Route as ApiHandoffExchangeRouteImport } from './routes/api/handoff/exchange'
+import { Route as ApiHandoffCreateRouteImport } from './routes/api/handoff/create'
 import { Route as ApiDropsShareCodeRouteImport } from './routes/api/drops/$shareCode'
 import { Route as ApiCouponsClaimRouteImport } from './routes/api/coupons/claim'
 import { Route as ApiCashUseRouteImport } from './routes/api/cash/use'
@@ -102,6 +105,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HandoffRoute = HandoffRouteImport.update({
+  id: '/handoff',
+  path: '/handoff',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BusinessInfoRoute = BusinessInfoRouteImport.update({
@@ -316,6 +324,16 @@ const ApiHectoCancelRoute = ApiHectoCancelRouteImport.update({
   path: '/api/hecto/cancel',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHandoffExchangeRoute = ApiHandoffExchangeRouteImport.update({
+  id: '/api/handoff/exchange',
+  path: '/api/handoff/exchange',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHandoffCreateRoute = ApiHandoffCreateRouteImport.update({
+  id: '/api/handoff/create',
+  path: '/api/handoff/create',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDropsShareCodeRoute = ApiDropsShareCodeRouteImport.update({
   id: '/api/drops/$shareCode',
   path: '/api/drops/$shareCode',
@@ -461,6 +479,7 @@ const PartnerPartnerCalendarDropIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/business-info': typeof BusinessInfoRoute
+  '/handoff': typeof HandoffRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
@@ -515,6 +534,8 @@ export interface FileRoutesByFullPath {
   '/api/cash/use': typeof ApiCashUseRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/handoff/create': typeof ApiHandoffCreateRoute
+  '/api/handoff/exchange': typeof ApiHandoffExchangeRoute
   '/api/hecto/cancel': typeof ApiHectoCancelRoute
   '/api/hecto/cancel-tx': typeof ApiHectoCancelTxRoute
   '/api/hecto/next': typeof ApiHectoNextRoute
@@ -534,6 +555,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/business-info': typeof BusinessInfoRoute
+  '/handoff': typeof HandoffRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
@@ -588,6 +610,8 @@ export interface FileRoutesByTo {
   '/api/cash/use': typeof ApiCashUseRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/handoff/create': typeof ApiHandoffCreateRoute
+  '/api/handoff/exchange': typeof ApiHandoffExchangeRoute
   '/api/hecto/cancel': typeof ApiHectoCancelRoute
   '/api/hecto/cancel-tx': typeof ApiHectoCancelTxRoute
   '/api/hecto/next': typeof ApiHectoNextRoute
@@ -611,6 +635,7 @@ export interface FileRoutesById {
   '/_partner': typeof PartnerRouteWithChildren
   '/_user': typeof UserRouteWithChildren
   '/business-info': typeof BusinessInfoRoute
+  '/handoff': typeof HandoffRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
@@ -665,6 +690,8 @@ export interface FileRoutesById {
   '/api/cash/use': typeof ApiCashUseRoute
   '/api/coupons/claim': typeof ApiCouponsClaimRoute
   '/api/drops/$shareCode': typeof ApiDropsShareCodeRoute
+  '/api/handoff/create': typeof ApiHandoffCreateRoute
+  '/api/handoff/exchange': typeof ApiHandoffExchangeRoute
   '/api/hecto/cancel': typeof ApiHectoCancelRoute
   '/api/hecto/cancel-tx': typeof ApiHectoCancelTxRoute
   '/api/hecto/next': typeof ApiHectoNextRoute
@@ -686,6 +713,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/business-info'
+    | '/handoff'
     | '/login'
     | '/privacy'
     | '/terms'
@@ -740,6 +768,8 @@ export interface FileRouteTypes {
     | '/api/cash/use'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/handoff/create'
+    | '/api/handoff/exchange'
     | '/api/hecto/cancel'
     | '/api/hecto/cancel-tx'
     | '/api/hecto/next'
@@ -759,6 +789,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/business-info'
+    | '/handoff'
     | '/login'
     | '/privacy'
     | '/terms'
@@ -813,6 +844,8 @@ export interface FileRouteTypes {
     | '/api/cash/use'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/handoff/create'
+    | '/api/handoff/exchange'
     | '/api/hecto/cancel'
     | '/api/hecto/cancel-tx'
     | '/api/hecto/next'
@@ -835,6 +868,7 @@ export interface FileRouteTypes {
     | '/_partner'
     | '/_user'
     | '/business-info'
+    | '/handoff'
     | '/login'
     | '/privacy'
     | '/terms'
@@ -889,6 +923,8 @@ export interface FileRouteTypes {
     | '/api/cash/use'
     | '/api/coupons/claim'
     | '/api/drops/$shareCode'
+    | '/api/handoff/create'
+    | '/api/handoff/exchange'
     | '/api/hecto/cancel'
     | '/api/hecto/cancel-tx'
     | '/api/hecto/next'
@@ -912,6 +948,7 @@ export interface RootRouteChildren {
   PartnerRoute: typeof PartnerRouteWithChildren
   UserRoute: typeof UserRouteWithChildren
   BusinessInfoRoute: typeof BusinessInfoRoute
+  HandoffRoute: typeof HandoffRoute
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
   TermsRoute: typeof TermsRoute
@@ -932,6 +969,8 @@ export interface RootRouteChildren {
   ApiCashUseRoute: typeof ApiCashUseRoute
   ApiCouponsClaimRoute: typeof ApiCouponsClaimRoute
   ApiDropsShareCodeRoute: typeof ApiDropsShareCodeRoute
+  ApiHandoffCreateRoute: typeof ApiHandoffCreateRoute
+  ApiHandoffExchangeRoute: typeof ApiHandoffExchangeRoute
   ApiHectoCancelRoute: typeof ApiHectoCancelRoute
   ApiHectoCancelTxRoute: typeof ApiHectoCancelTxRoute
   ApiHectoNextRoute: typeof ApiHectoNextRoute
@@ -971,6 +1010,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/handoff': {
+      id: '/handoff'
+      path: '/handoff'
+      fullPath: '/handoff'
+      preLoaderRoute: typeof HandoffRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/business-info': {
@@ -1272,6 +1318,20 @@ declare module '@tanstack/react-router' {
       path: '/api/hecto/cancel'
       fullPath: '/api/hecto/cancel'
       preLoaderRoute: typeof ApiHectoCancelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/handoff/exchange': {
+      id: '/api/handoff/exchange'
+      path: '/api/handoff/exchange'
+      fullPath: '/api/handoff/exchange'
+      preLoaderRoute: typeof ApiHandoffExchangeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/handoff/create': {
+      id: '/api/handoff/create'
+      path: '/api/handoff/create'
+      fullPath: '/api/handoff/create'
+      preLoaderRoute: typeof ApiHandoffCreateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/drops/$shareCode': {
@@ -1589,6 +1649,7 @@ const rootRouteChildren: RootRouteChildren = {
   PartnerRoute: PartnerRouteWithChildren,
   UserRoute: UserRouteWithChildren,
   BusinessInfoRoute: BusinessInfoRoute,
+  HandoffRoute: HandoffRoute,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
   TermsRoute: TermsRoute,
@@ -1609,6 +1670,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCashUseRoute: ApiCashUseRoute,
   ApiCouponsClaimRoute: ApiCouponsClaimRoute,
   ApiDropsShareCodeRoute: ApiDropsShareCodeRoute,
+  ApiHandoffCreateRoute: ApiHandoffCreateRoute,
+  ApiHandoffExchangeRoute: ApiHandoffExchangeRoute,
   ApiHectoCancelRoute: ApiHectoCancelRoute,
   ApiHectoCancelTxRoute: ApiHectoCancelTxRoute,
   ApiHectoNextRoute: ApiHectoNextRoute,
