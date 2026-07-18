@@ -5,8 +5,9 @@
 //   훅은 useLingo 창구 경유(세션 승계 트랙에서 내부 스토어 교체 예정 — UI는 창구만 바라봄).
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { MessageCircle, Sparkles, ChevronDown, ArrowUp, Square, Loader2, Mic, Rocket, TrendingUp } from "lucide-react";
+import { Sparkles, ChevronDown, ArrowUp, Square, Loader2, Mic, Rocket, TrendingUp } from "lucide-react";
 import { useLingo } from "@/components/lingo/useLingo";
+import { LingoOrb } from "@/components/lingo/LingoOrb";
 import { SlideToMic } from "@/components/lingo/SlideToMic";
 import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 import { HomePerformanceFacts } from "@/components/home/HomePerformanceFacts";
@@ -184,10 +185,11 @@ export function LingoHomeBox({
         aria-expanded={open}
         className="flex min-h-[44px] w-full items-center gap-2.5 px-4 py-3 text-left"
       >
-        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white" style={{ backgroundColor: ACCENT }}>
-          <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2.25} />
-          <Sparkles className="absolute -right-0.5 -top-0.5 h-[11px] w-[11px]" strokeWidth={2.5} fill="currentColor" />
-        </span>
+        {/* LINGO-UI-3a — 공용 LingoOrb 로 통일(발화 연동). onClick 미주입 = span(중첩 button 방지). */}
+        <LingoOrb
+          size={36}
+          state={chat.streaming ? "busy" : voice.speaking ? "speaking" : open ? "active" : "idle"}
+        />
         <span className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#0F172A] [word-break:keep-all]">
           {HEADER_COPY}
         </span>
