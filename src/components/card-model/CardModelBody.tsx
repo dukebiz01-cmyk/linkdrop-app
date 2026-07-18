@@ -199,6 +199,10 @@ export function CardModelBody({
     gridItems.push({ id: "facilities", label: "시설 정보", icon: Store });
   if (applied["link"] && (model.phone || model.map))
     gridItems.push({ id: "store", label: "매장 정보", icon: model.phone ? Phone : MapPin });
+  // S4-6 — 배송정보 셀(additive): 이중 게이트(applied.shipping + 실값 행 존재 — delivery 문법 동형).
+  //   내용 = buildShippingView 산출 표(판매자 고지) — SHIP_STAGES/송장(배송추적)과 무관(§0 S4b 락).
+  if (applied["shipping"] && (model.shipping?.rows.length ?? 0) > 0)
+    gridItems.push({ id: "shipping", label: "배송정보", icon: Truck });
   const hasDockCell = applied["dock"] && dockItems.length > 0;
   const gridCount = gridItems.length + (hasDockCell ? 1 : 0);
 
@@ -925,6 +929,25 @@ export function CardModelBody({
                   {reserveOpen && reserveExecutorSlot ? (
                     <div className="cm-slide-up mt-2">{reserveExecutorSlot}</div>
                   ) : null}
+                </div>
+              )}
+              {/* S4-6 — 배송정보 펼침(표 행 = 모델 산출 그대로 · 실값 행만). */}
+              {openGrid === "shipping" && model.shipping && (
+                <div className="cm-slide-up mt-2 space-y-1.5">
+                  {model.shipping.rows.map((r, i) => (
+                    <div
+                      key={`${r.label}-${i}`}
+                      className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2"
+                      style={{ boxShadow: "inset 0 0 0 1px #EDEDED" }}
+                    >
+                      <span className="shrink-0 text-[11px] font-semibold text-[#6E6E6E]">
+                        {r.label}
+                      </span>
+                      <span className="min-w-0 text-right text-[12px] font-bold leading-relaxed text-[#0A0A0A] [word-break:keep-all]">
+                        {r.value}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
               {openGrid === "facilities" && (

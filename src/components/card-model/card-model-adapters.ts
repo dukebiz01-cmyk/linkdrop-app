@@ -38,6 +38,36 @@ function won(n: number | null | undefined): string {
   return n != null ? `${Math.round(n).toLocaleString("ko-KR")}원` : "";
 }
 
+/** S4-6 — 배송 표시행 산출(★공용 단일 소스): 수신(fromDropDetail)·스튜디오(CardStudioPage45
+ *  preview 주입) 양쪽이 이 헬퍼만 소비한다 — 문구·행 순서·무료배송 규칙이 한 소스(거울 정의).
+ *  실값 있는 행만 산출, 0행 = null(미주입 = 셀 미렌더). SHIP_STAGES/송장 무관(§0 S4b 락). */
+export function buildShippingView(i: {
+  shipMethod?: string | null;
+  freeShip?: boolean;
+  shipFeeKrw?: number | null;
+  shipNote?: string | null;
+  /** 수확·발송 예정일(yyyy-mm-dd) — "M월 D일 수확·발송 예정" 가공도 여기 단일 소스. */
+  harvestDate?: string | null;
+}): { rows: Array<{ label: string; value: string }> } | null {
+  const rows: Array<{ label: string; value: string }> = [];
+  if (i.shipMethod?.trim()) rows.push({ label: "배송방법", value: i.shipMethod.trim() });
+  if (i.freeShip) rows.push({ label: "배송비", value: "무료배송" });
+  else if (i.shipFeeKrw != null && i.shipFeeKrw > 0)
+    rows.push({ label: "배송비", value: `${i.shipFeeKrw.toLocaleString("ko-KR")}원` });
+  if (i.harvestDate?.trim()) {
+    const p = String(i.harvestDate).split("-");
+    rows.push({
+      label: "발송",
+      value:
+        p[1] && p[2]
+          ? `${Number(p[1])}월 ${Number(p[2])}일 수확·발송 예정`
+          : String(i.harvestDate),
+    });
+  }
+  if (i.shipNote?.trim()) rows.push({ label: "안내", value: i.shipNote.trim() });
+  return rows.length > 0 ? { rows } : null;
+}
+
 /** 초 → "m:ss" 클립 라벨 (VideoSlot.durationLabel 부재 시 폴백). */
 function clipLabel(sec: number | null | undefined): string | undefined {
   if (sec == null || !Number.isFinite(sec) || sec <= 0) return undefined;
@@ -104,6 +134,11 @@ export type DropDetailInput = {
     selfUpload?: boolean;
     /** S4 — 수확·발송 예정일(yyyy-mm-dd, 신선 원물만). productDateRangeLabel 가공 재료. */
     harvestDate?: string | null;
+    /** S4-6 — 배송정보 셀 재료(buildShippingView 입력 — 실값만, 미주입 = 셀 미렌더). */
+    shipMethod?: string;
+    freeShip?: boolean;
+    shipFeeKrw?: number | null;
+    shipNote?: string;
     /** S4 — 판매기간 마감(yyyy-mm-dd). 부스터 D-day 근거(booster45 ddayLabel — 스튜디오 동일 모듈). */
     saleEndIso?: string;
     /** S4 — 공동구매 원시 키(buildGroupBuyView 입력 — 스튜디오 :2170 동일 빌더). */
@@ -238,6 +273,16 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
           joinedCount: null,
         })
       : null;
+  // S4-6 — 배송정보 셀(공용 buildShippingView — 스튜디오 주입부와 단일 소스). 실값 0 = null = 미장착.
+  const shippingView = isCommerce
+    ? buildShippingView({
+        shipMethod: input.commerce?.shipMethod,
+        freeShip: input.commerce?.freeShip,
+        shipFeeKrw: input.commerce?.shipFeeKrw,
+        shipNote: input.commerce?.shipNote,
+        harvestDate: input.commerce?.harvestDate,
+      })
+    : null;
   // 수확·발송 칩 — 렌더 접두 "수확·발송 "(:522)과 합쳐 ProductWidget(:130) 문구 동형
   //   ("M월 D일 수확·발송 예정" ↔ "수확·발송 M월 D일 예정"). 파싱 실패 = 원문 그대로(위젯 동일).
   const harvestParts = input.commerce?.harvestDate ? String(input.commerce.harvestDate).split("-") : null;
@@ -272,6 +317,8 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
       // S4-4a — 커머스 그리드 다이어트: purchase 는 매장정보 셀 미장착(스튜디오 주입부와 동형
       //   거울). 잔여 장착물(도킹 등)만 그리드존에 남는다. 타 variant 는 현행 유지.
       link: !isCommerce && !!(input.local?.phone || input.local?.address),
+      // S4-6 — 배송정보 셀 장착(이중 게이트 전단 — 실값 행 존재 시만).
+      shipping: !!shippingView,
       dock: !!dock,
       // ❌ 백엔드 부재 — 켜지 않는다(가짜 렌더 금지): seasonal/delivery/review/brand/
       //    top/boost/marketing/party.
@@ -325,6 +372,8 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
     ...(boosterChips.length > 0 ? { boosterChips } : {}),
     ...(groupBuyView ? { groupBuy: groupBuyView } : {}),
     ...(harvestChip ? { productDateRangeLabel: harvestChip } : {}),
+    // S4-6 — 배송정보 셀 표 행(공용 헬퍼 산출 그대로).
+    ...(shippingView ? { shipping: shippingView } : {}),
     // S4 — CTA 라벨 분기(selfUpload 우선 — 합성 buyUrl 공존 시 "주문예약"이 이김. actions 동일).
     //   그 외 미주입 = 렌더러 "구매" 폴백. 스튜디오(fromStudioState)는 미주입 = 렌더 불변.
     ...(isCommerce && input.commerce?.selfUpload

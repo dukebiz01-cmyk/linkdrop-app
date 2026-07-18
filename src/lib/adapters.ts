@@ -648,6 +648,11 @@ export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
             harvestDate: c.harvestDate,
             saleEndIso: c.saleEndIso,
             groupBuy: c.groupBuy,
+            // S4-6 — 배송정보 셀 재료 관통(buildShippingView 입력).
+            shipMethod: c.shipMethod,
+            freeShip: c.freeShip,
+            shipFeeKrw: c.shipFeeKrw,
+            shipNote: c.shipNote,
           },
         }
       : {}),

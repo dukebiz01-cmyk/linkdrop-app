@@ -158,6 +158,11 @@ export type CardModel = {
   /** S2 — 유효기간 표기 문자열(예: "2026. 8. 5.까지" / "기간 제한 없음"). 미주입 = 미렌더. */
   couponValidText?: string;
 
+  // ── 배송정보(S4-6 — applied["shipping"] 게이트 · 그리드 셀) ──
+  /** 배송 표시행(buildShippingView 산출 — 수신·스튜디오 단일 소스). 실값 0 = 미주입 = 셀 미렌더.
+   *  SHIP_STAGES/송장(배송추적)과 무관 — 판매자 고지 정보만(§0 S4b 락 유지). */
+  shipping?: { rows: Array<{ label: string; value: string }> };
+
   // ── 매장정보(link 블록) ──
   phone?: boolean;
   map?: boolean;
