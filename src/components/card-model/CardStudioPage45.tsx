@@ -79,7 +79,8 @@ import {
 // FIX-62 — 캘린더 스텝 = 검증된 실슬롯 편집기 재사용(embedded — upsert/delete RPC 자체 내장).
 import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 // FIX-42 — 발행 게이트 발화 정본 + 결정 로직(순수 — stage·1상태1발화 dedupe 실측 가능).
-import { decideGateUtterance } from "./gate-notes45";
+// DRIVE-2b — 게이트 발화는 v6 2-6x 정본으로 교체(gate-notes45 decideGateUtterance 미사용화 —
+//   1회 예산 기제는 spokenGateKeysRef 로 승계, 정본 파일은 보존).
 // FIX-48+50 — 번호 인터뷰 좌표계 단일 정본(순서·번호·라벨·앵커 · done 매핑만).
 import {
   getInterviewJourney,
@@ -303,6 +304,38 @@ const LINGO_PRODUCT_FIELDS = new Set([
   "gbTargetCount",
   "gbTargetPrice",
 ]);
+// DRIVE-2b — SAY-DO 표준 회신 3형(대본 v6 3-4 원문 — 〔〕 동적 슬롯만 치환 · 단일 소스).
+const sayDoDone = (field: string) => `${field} 적용했어요. 미리보기에서 확인해 보세요.`;
+const sayDoPending = (field: string, button: string) =>
+  `${field} 채워 드렸어요. 이제 ${button} 버튼만 눌러 주세요.`;
+// 실패형 — 검증 reason 원문이 이미 이유+가이드 정본이라 현행 유지(보고 근거). 향후 소비 대비 보존.
+const sayDoFail = (reason: string, alt: string) =>
+  `${reason} 때문에 안 됐어요. 이렇게 해보시면 돼요. ${alt}`;
+void sayDoFail;
+
+// DRIVE-2b — 한글 주격 조사(이/가) — v6 2-6x 〔빠진 것〕 슬롯 조립용(받침 판정).
+function withSubjectParticle(word: string): string {
+  const c = word.charCodeAt(word.length - 1);
+  const isHangul = c >= 0xac00 && c <= 0xd7a3;
+  const hasJong = isHangul && (c - 0xac00) % 28 > 0;
+  return word + (hasJong ? "이" : "가");
+}
+
+// DRIVE-2b — 대본 v6 정본 상수(한 글자 락 · 【음성】 = 낭독 축약형).
+const V6_PUBLISH_READY = `거의 다 왔어요. 지금 보이는 미리보기가, 손님이 받는 모습 그대로예요.
+위에서 아래로 한 번만 천천히 훑어봐 주세요.
+고칠 곳이 있으면 말씀하세요. 제가 바로 고쳐 드려요.
+준비되셨으면 아래 발행하기 버튼을 눌러 주세요.
+확인 화면이 한 번 더 나와요. 마지막으로 살펴보시고
+거기서 발행하기를 한 번 더 누르면 진짜로 나갑니다.
+발행은 제가 대신 누를 수 없어요. 이 카드의 주인은 대표님이니까요.`;
+const V6_PUBLISH_READY_VOICE =
+  "미리보기 훑어보시고, 발행하기를 누르면 확인 화면에서 한 번 더 눌러 주세요.";
+const v6GateBlocked = (missingLabel: string) =>
+  `발행 버튼이 회색이면 아직 채울 게 남았다는 뜻이에요.
+버튼 옆에 무엇이 필요한지 한 줄로 나와요. ${withSubjectParticle(missingLabel)} 비어 있거든요.
+그 칸으로 제가 데려다 드릴게요. 같이 채울까요? 금방이에요.`;
+
 // LINGO-HANDS-1 — 클립 발화 변환층: "1:20~1:45" · "80~105초" · "1분20초부터 1분45초까지" → 초.
 //   검증(끝>시작·영상길이)은 applyClip 정본 재사용 — 여기는 파싱만(신규 판정 금지).
 function parseClipTimePart(raw: string): number | null {
@@ -1225,6 +1258,30 @@ export function CardStudioPage45({
   const canPublish = !firstRequiredStep;
   const gateMsg = firstRequiredStep?.gate ?? null;
 
+  // DRIVE-2d — 【음성】 2계층 헬퍼: 표시(full)·낭독(voiceShort — 미지정 시 동일 문구).
+  const speakParts = (full: string, voiceShort?: string) => {
+    chat.notify(stripMarkdown(full));
+    voice.speak(stripMarkdown(voiceShort ?? full));
+  };
+
+  // DRIVE-2b — 발행 대기 안내: canPublish false→true 전이 시 1회(v6 2-6 본문 + 낭독 축약형 +
+  //   발행 CTA 인입). 재방문 시 이미 true 로 시작하면 전이 아님 = 침묵(과발화 방지).
+  const prevCanPublishRef = useRef(canPublish);
+  const publishReadyRef = useRef(false);
+  useEffect(() => {
+    const prev = prevCanPublishRef.current;
+    prevCanPublishRef.current = canPublish;
+    if (!canPublish) {
+      publishReadyRef.current = false;
+      return;
+    }
+    if (prev || publishReadyRef.current || dropped) return;
+    publishReadyRef.current = true;
+    speakParts(V6_PUBLISH_READY, V6_PUBLISH_READY_VOICE);
+    document.getElementById("sl-publish-cta")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canPublish, dropped]);
+
   // FIX-48+50 — 번호 인터뷰 좌표계(interview-steps45 단일 정본). 판매방식 = 폼 신호(quick/full/groupBuy).
   //   signals = 기존 steps done·formProgress 재사용(신규 판정 0). 스텝퍼·덱 번호 배지·(P2)폼 마커 공용.
   const interviewMethod: SalesMethod = formProgress.salesMethod ?? "full";
@@ -1627,23 +1684,24 @@ export function CardStudioPage45({
   //   트리거 ②(장시간 무입력)는 전용 막힘 감지 신호 부재로 보류(기존 20초 타이머는 제안 노출
   //   리듬 공용이라 비막힘 상황에도 발화하게 됨 — §13 위반 위험). 보고 후 별도 슬라이스.
   const spokenGateKeysRef = useRef<string[]>([]);
+  // DRIVE-2b — 게이트 차단 발화 강화: v6 2-6x 뼈대(〔빠진 것〕 = 첫 미완 스텝 라벨 — gateMsg 는
+  //   문장형이라 슬롯 문법이 안 맞아 라벨 채택, 근거 보고) + 해당 스텝 goToBlock 제안 칩.
+  //   1회 예산(spokenGateKeysRef — FIX-42 승계)·즉시 점프(기존)는 유지.
+  const [gateChip, setGateChip] = useState<{ label: string; block: string | null } | null>(null);
   function handleGateBlockedClick() {
     const step = firstRequiredStep;
     if (!step) return;
     if (currentTarget && !jumpToBlock(currentTarget.id)) scrollToDeck();
     const key = step.coach || step.label;
-    const text = decideGateUtterance({
-      stage: chat.stage ?? "guide", // 미수신 = guide(서버 lingo_user_state 신규 기본값 동일).
-      coachKey: key,
-      spokenKeys: spokenGateKeysRef.current,
-      unmetRequiredCount: steps.filter((s) => s.required && !s.done).length,
-    });
-    if (!text) return; // 침묵 — 배지·방향등이 이어받는다.
+    if (spokenGateKeysRef.current.includes(key)) return; // 침묵 — 배지·방향등이 이어받는다.
     spokenGateKeysRef.current = [...spokenGateKeysRef.current, key];
-    setStripFlash(text);
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current = setTimeout(() => setStripFlash(null), 5000);
+    chat.notify(stripMarkdown(v6GateBlocked(step.label)));
+    setGateChip({ label: step.label, block: currentTarget?.id ?? step.block });
   }
+  // 발행 가능해지면 게이트 칩 소거.
+  useEffect(() => {
+    if (canPublish) setGateChip(null);
+  }, [canPublish]);
 
   function equip(block: StudioBlock) {
     // ★ 정직 게이트 — 백엔드 부재 블록은 장착 자체를 막는다(카드에 가짜 데이터 표시 금지).
@@ -2713,7 +2771,7 @@ export function CardStudioPage45({
           (r === "switched"
             ? `${modeLabel} 모드로 바꿨어요.`
             : r === "pending"
-              ? "만들던 카드가 있어 확인이 필요해요 — 위의 [바꾸기] 버튼을 눌러 주세요."
+              ? sayDoPending("모드 전환", "바꾸기") // DRIVE-2b — SAY-DO 3형 수렴.
               : "예약·판매 카드는 사업자 인증 후 열려요.") +
             (rest > 0 ? "\n나머지는 전환이 끝나면 다시 말씀해 주세요." : ""),
         );
@@ -2827,7 +2885,7 @@ export function CardStudioPage45({
             setCfgAddress(v.slice(0, LINGO_FIELD_MAX));
             jumpToBlock("link");
             done.push(`주소 = "${v.slice(0, 40)}"`);
-            notes.push("주소를 입력칸에 채웠어요 — 저장 버튼만 눌러 주세요");
+            notes.push(sayDoPending("주소", "저장")); // DRIVE-2b — SAY-DO 3형 수렴.
           } else {
             stale.push(lingoActionLabel(a));
           }
@@ -2932,11 +2990,10 @@ export function CardStudioPage45({
       const okInstant = ok.filter((x) => !LINGO_PRODUCT_FIELDS.has(x.field));
       const okPending = ok.filter((x) => LINGO_PRODUCT_FIELDS.has(x.field));
       const parts: string[] = [];
-      if (okInstant.length > 0) parts.push(`적용했어요: ${okInstant.map(label).join(" · ")}`);
+      // DRIVE-2b — SAY-DO 표준 회신 3형 수렴(v6 3-4 — 의미 동일).
+      if (okInstant.length > 0) parts.push(sayDoDone(okInstant.map(label).join(" · ")));
       if (okPending.length > 0) {
-        parts.push(
-          `채워뒀어요: ${okPending.map(label).join(" · ")} — 아래 [상품 등록] 버튼만 눌러 주세요.`,
-        );
+        parts.push(sayDoPending(okPending.map(label).join(" · "), "상품 등록"));
       }
       chat.notify(parts.join("\n"));
     }
@@ -5344,6 +5401,23 @@ export function CardStudioPage45({
                           className="flex h-9 items-center rounded-full bg-white px-3 text-[12px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
                         >
                           계속 해볼게요
+                        </button>
+                      </div>
+                    )}
+                    {/* DRIVE-2b — 게이트 차단 후 goToBlock 제안 칩(라벨은 UI 요소 — 대본 밖 판단분). */}
+                    {gateChip && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const b = gateChip.block;
+                            setGateChip(null);
+                            if (!b || !jumpToBlock(b)) scrollToDeck();
+                          }}
+                          className="flex h-9 items-center rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+                          style={{ backgroundColor: accent }}
+                        >
+                          {gateChip.label} 채우러 가기
                         </button>
                       </div>
                     )}
