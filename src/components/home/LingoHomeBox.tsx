@@ -23,6 +23,9 @@ const GREETING_COPY =
   "안녕하세요, 링고AI예요. 저는 링크드롭의 안내자이자 어드바이저입니다. 무엇을 도와드릴까요? 링크드롭 사용법, 저와 함께 시작해볼까요?";
 // LINGO-UI-2b-1 — 카드 소개 1줄(한 글자 락).
 const GREETING_COPY_CARD_LINE = "영상 링크 하나로 쿠폰·예약이 되는 카드를 만들어 드려요.";
+// LINGO-UI-2b-2 — 예시 카드(파일럿 실카드: 노을재 예약+쿠폰 풀 구성).
+const DEMO_CARD_URL = "/d/cc5d1d71-ddad-4e2f-a669-d508c4089de5";
+// 예시 카드 교체 시 이 상수만 수정 (파일럿 후 관리자 설정화 예정)
 
 export function LingoHomeBox({
   cardCount,
@@ -135,12 +138,24 @@ export function LingoHomeBox({
     if (chat.messages.length === 0) void chat.send("내 카드 성과 어때?", "text", { performance: true }, "home");
   };
 
+  // LINGO-UI-2b-2 — 예시 카드 열람 흐름(전부 클라 템플릿 — LLM 호출 0 · 2계층 발화 원칙):
+  //   발화(+낭독) → 실카드 새 창 → 후속 발화 + [같이 만들어 볼래요] 칩(기존 렌더 구조 재사용).
+  const [demoFollowChip, setDemoFollowChip] = useState(false);
+  const showDemoCard = () => {
+    const line = "직접 보시는 게 빨라요 — 실제 카드를 새 창으로 열어드릴게요. 구경하고 돌아오세요!";
+    chat.notify(line);
+    voice.speak(line); // ttsOn 게이트는 speak 내부 담당(호출부 검사 불요).
+    window.open(DEMO_CARD_URL, "_blank", "noopener,noreferrer");
+    chat.notify("어때요? 1분이면 만들어요. 같이 해볼까요?");
+    setDemoFollowChip(true);
+  };
+
   // LINGO-UI-2 §3-2 ② — 상태 칩(3분기 로직 재사용). LINGO-UI-2b-1 — 신규 사용자 카피(한 글자 락).
   const chips =
     greet === "starter"
       ? [
-          // LINGO-UI-2b-1 — 임시로 기존 학습형 sendChat 유지(b2에서 예시 카드 흐름으로 교체 예정).
-          { key: "learn", label: "카드가 뭔지 볼래요", primary: true, onTap: () => void sendChat("링크드롭 사용법을 처음부터 알려주세요") },
+          // LINGO-UI-2b-2 — 예시 카드 흐름으로 교체(구 학습형 sendChat 대체).
+          { key: "learn", label: "카드가 뭔지 볼래요", primary: true, onTap: showDemoCard },
           { key: "make", label: "같이 만들어 볼래요", primary: false, onTap: () => onGoStudio() },
         ]
       : greet === "share"
@@ -226,6 +241,20 @@ export function LingoHomeBox({
                   </p>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* LINGO-UI-2b-2 — 예시 카드 후속 칩(구경 후 제작 유도 — 기존 onGoStudio 재사용). */}
+          {demoFollowChip && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => onGoStudio()}
+                className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+                style={{ backgroundColor: ACCENT }}
+              >
+                <Rocket className="h-4 w-4" strokeWidth={2.25} /> 같이 만들어 볼래요
+              </button>
             </div>
           )}
 
