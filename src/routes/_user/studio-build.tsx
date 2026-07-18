@@ -10,6 +10,8 @@ import {
   type StudioLabCoupon,
   type StudioLabStore,
 } from "@/components/card-model/CardStudioPage45";
+// FIX-62 — 실슬롯 행 타입(수신 /d loader 와 동일 RPC get_available_slots 소비).
+import type { ReservationSlotRow } from "@/components/card-model/card-model-adapters";
 
 type StudioBuildStore = {
   id: string;
@@ -43,6 +45,9 @@ type StudioBuildLoaderData = {
   myRewards: number | null;
   /** ST2b-1 — 신 스튜디오(FIX-9) 도킹 가용 카드 실카운트. */
   dockCount: number;
+  /** FIX-62 — 매장 실슬롯(get_available_slots · 수신 /d loader 와 동일 RPC·정렬).
+   *  캘린더 스텝 done 판정 + 미리보기 예약 가능일의 단일 공급원. 실패/매장없음 = []. */
+  slots: ReservationSlotRow[];
 };
 
 export const Route = createFileRoute("/_user/studio-build")({
@@ -65,6 +70,7 @@ export const Route = createFileRoute("/_user/studio-build")({
       manageCoupons: [],
       myRewards: null,
       dockCount: 0,
+      slots: [],
     };
     const supabase = await getAuthClient();
     if (!supabase) return empty;
@@ -172,7 +178,26 @@ export const Route = createFileRoute("/_user/studio-build")({
       // 조회 실패 — 헤더는 표기 생략 대신 0원 렌더 방지 위해 null 유지.
     }
 
-    return { isBusiness, store, coupons, manageCoupons, myRewards, dockCount };
+    // FIX-62 — 실슬롯 프리페치(수신 d.$shareUuid loader :237-252 동형: 동일 RPC·KST 오늘 기준).
+    //   PartnerCalendarPage(캘린더 스텝 임베드) 저장/해제 성공 → router.invalidate() → 이 loader
+    //   재실행 → 미리보기 즉시 갱신. 실패해도 스튜디오는 정상 — slots=[] graceful.
+    let slots: ReservationSlotRow[] = [];
+    try {
+      const kstToday = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Seoul",
+      }).format(new Date());
+      const { data: slotData, error: slotError } = await supabase.rpc("get_available_slots", {
+        p_partner_id: store.id,
+        p_date: kstToday,
+      });
+      if (!slotError && Array.isArray(slotData)) {
+        slots = slotData as unknown as ReservationSlotRow[];
+      }
+    } catch (e) {
+      console.error("[studio-build] slot load failed", e);
+    }
+
+    return { isBusiness, store, coupons, manageCoupons, myRewards, dockCount, slots };
   },
   component: StudioBuild,
 });
@@ -190,6 +215,7 @@ function StudioBuild() {
       manageCoupons={data.manageCoupons}
       dockCount={data.dockCount}
       initialPurpose={search.purpose}
+      initialSlots={data.slots}
     />
   );
 }

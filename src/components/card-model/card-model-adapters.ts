@@ -189,7 +189,7 @@ export type DropDetailInput = {
     reservationUrl?: string | null;
   };
   /** ← InfoDropPageProps.initialSlots (slot_available RPC 행). */
-  initialSlots?: Array<{ slot_date: string; slot_time: string | null; available: number }>;
+  initialSlots?: ReservationSlotRow[];
   /** ← InfoDropPageProps.calendarMode — 현재 date_range 만 구현(운반만). */
   calendarMode?: "date_range" | "date_time_slot";
   /** ← attachedProducts 스냅샷 — 도킹 카드 표기. S3-4: imageUrl(포토 셀 실사진)·refShareUuid
@@ -206,6 +206,26 @@ export type DropDetailInput = {
   /** 🟡 별도 조회 주입 — share_count/SM-3 배치값. */
   shareCount?: number;
 };
+
+/** FIX-62 — get_available_slots 행(RPC 정렬 ORDER BY slot_date, slot_time 그대로 수신). */
+export type ReservationSlotRow = { slot_date: string; slot_time: string | null; available: number };
+
+/** FIX-62 — 예약 슬롯 집계 단일 소스: 수신(fromDropDetail)과 스튜디오 미리보기(CardStudioPage45)
+ *  가 같은 함수로 dates/times/slotsByDate 를 산출한다 — 날짜·좌석·정렬 거울 자동.
+ *  dates = slot_date 등장 순서(= RPC 정렬), slotsByDate = available 합산, times = slot_time 실값만. */
+export function buildReservationSlotView(slots: ReservationSlotRow[]): {
+  dates: string[];
+  times: string[];
+  slotsByDate: Record<string, number>;
+} {
+  const dates = [...new Set(slots.map((s) => s.slot_date))];
+  const times = [...new Set(slots.map((s) => s.slot_time).filter((t): t is string => !!t))];
+  const slotsByDate: Record<string, number> = {};
+  for (const s of slots) {
+    slotsByDate[s.slot_date] = (slotsByDate[s.slot_date] ?? 0) + (s.available ?? 0);
+  }
+  return { dates, times, slotsByDate };
+}
 
 export function fromDropDetail(input: DropDetailInput): CardModel {
   const variant = input.variant ?? "info";
@@ -240,13 +260,8 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
         : Newspaper;
 
   // 예약 — initialSlots(slot_date/slot_time/available) → dates/times/slotsByDate 집계.
-  const slots = input.initialSlots ?? [];
-  const dates = [...new Set(slots.map((s) => s.slot_date))];
-  const times = [...new Set(slots.map((s) => s.slot_time).filter((t): t is string => !!t))];
-  const slotsByDate: Record<string, number> = {};
-  for (const s of slots) {
-    slotsByDate[s.slot_date] = (slotsByDate[s.slot_date] ?? 0) + (s.available ?? 0);
-  }
+  //   FIX-62 — buildReservationSlotView 단일 소스(스튜디오 미리보기와 공유 — 거울 자동).
+  const { dates, times, slotsByDate } = buildReservationSlotView(input.initialSlots ?? []);
 
   const heroImageUrl = isCommerce
     ? (input.commerce?.imageUrl || input.videoThumbnailUrl)
@@ -476,8 +491,10 @@ export type StudioStateInput = {
 };
 
 /**
- * @param preview — ST2a: 스튜디오 로컬 설정(예약 날짜/시간/좌석·시설·브랜드·판매기간 등
- *   미영속 프리뷰 필드)을 마지막에 병합. WYSIWYG 거울 전용 — 발행 payload 와 무관.
+ * @param preview — ST2a: 스튜디오 로컬 설정(시설·브랜드·판매기간 등 프리뷰 필드)을 마지막에
+ *   병합. WYSIWYG 거울 전용 — 발행 payload 와 무관.
+ *   FIX-62 — 예약 dates/times/slotsByDate 는 미영속 프리뷰(구 cfgDates)가 아니라 실슬롯
+ *   (get_available_slots → buildReservationSlotView, 수신과 동일 소스·동일 정렬)이 흐른다.
  */
 export function fromStudioState(input: StudioStateInput, preview?: Partial<CardModel>): CardModel {
   const isCommerce = input.buildMode === "commerce";

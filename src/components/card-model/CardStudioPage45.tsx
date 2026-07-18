@@ -74,7 +74,12 @@ import {
   CARD_CATEGORY_LABELS,
   fromStudioState,
   buildShippingView,
+  // FIX-62 — 예약 슬롯 집계 단일 소스(수신 fromDropDetail 과 공유 — 거울 자동).
+  buildReservationSlotView,
+  type ReservationSlotRow,
 } from "./card-model-adapters";
+// FIX-62 — 캘린더 스텝 = 검증된 실슬롯 편집기 재사용(embedded — upsert/delete RPC 자체 내장).
+import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 // FIX-42 — 발행 게이트 발화 정본 + 결정 로직(순수 — stage·1상태1발화 dedupe 실측 가능).
 import { decideGateUtterance } from "./gate-notes45";
 // FIX-48+50 — 번호 인터뷰 좌표계 단일 정본(순서·번호·라벨·앵커 · done 매핑만).
@@ -361,8 +366,8 @@ function buildDateList(count: number) {
     };
   });
 }
-// 09:00 ~ 21:00, 1시간 단위 (정본).
-const TIME_OPTIONS = Array.from({ length: 13 }, (_, i) => `${String(9 + i).padStart(2, "0")}:00`);
+// FIX-62 — 구 TIME_OPTIONS(예약 시간 레일) 삭제: 캘린더 스텝이 실슬롯 편집기(date_range
+//   모드 = 시간 미지정)로 전환되며 소비처 0. 시간형 슬롯은 Phase 2(PartnerCalendarPage 주석).
 // 배송 택배사 선택지 — S4-5: 단일 소스를 ProductRegisterForm45(COURIERS45)로 이동, 여기선 별칭만.
 const COURIERS = COURIERS45;
 // 설정 UI가 필요한 블록 (정본).
@@ -588,6 +593,7 @@ export function CardStudioPage45({
   manageCoupons = [],
   dockCount = 0,
   initialPurpose,
+  initialSlots = [],
 }: {
   isBusiness: boolean;
   store: StudioLabStore | null;
@@ -599,6 +605,10 @@ export function CardStudioPage45({
   dockCount?: number;
   /** ?purpose 진입 프리셋 — studio-build validateSearch 와 동등(정보|쿠폰|예약|구매). */
   initialPurpose?: "정보" | "쿠폰" | "예약" | "구매";
+  /** FIX-62 — 매장 실슬롯(loader get_available_slots · 수신 /d 와 동일 RPC·정렬).
+   *  캘린더 스텝 done + 미리보기 예약 가능일 공급원. PartnerCalendarPage 저장 →
+   *  router.invalidate → loader 재조회로 갱신된다. */
+  initialSlots?: ReservationSlotRow[];
 }) {
   const router = useRouter();
   // 목적 진입 쿼리 → 초기 모드 (studio-build 프리셋 시맨틱 동등: 초기값만, switchMode 미호출).
@@ -621,18 +631,15 @@ export function CardStudioPage45({
   const visDrag = useRef({ active: false, startX: 0, base: 0 });
   const [deckIndex, setDeckIndex] = useState(0);
 
-  // 예약 캘린더 — 날짜/시간/좌석 (정본 45일 레일). SSR 안전: 날짜 리스트는 클라 마운트 후 생성
+  // 판매 캘린더 날짜 옵션 — SSR 안전: 날짜 리스트는 클라 마운트 후 생성
   // (new Date() 하이드레이션 불일치 방지 — 기존 mounted 게이트 패턴).
   const [dateList, setDateList] = useState<ReturnType<typeof buildDateList>>([]);
   useEffect(() => setDateList(buildDateList(45)), []);
   const DATE_OPTIONS = useMemo(() => dateList.map((d) => d.label), [dateList]);
-  const [cfgDates, setCfgDates] = useState<string[]>([]);
-  const [cfgTimes, setCfgTimes] = useState<string[]>([]);
-  const [cfgSlotsByDate, setCfgSlotsByDate] = useState<Record<string, number>>({});
-  const setSlotForDate = (date: string, next: number) =>
-    setCfgSlotsByDate((prev) => ({ ...prev, [date]: Math.max(0, Math.min(20, next)) }));
-  const dateRailRef = useRef<HTMLDivElement>(null);
-  const [dateRailIdx, setDateRailIdx] = useState(0);
+  // FIX-62 — 예약 캘린더 = 실슬롯(구 cfgDates/cfgTimes/cfgSlotsByDate 미영속 프리뷰 폐기).
+  //   수신 fromDropDetail 과 동일 집계(buildReservationSlotView) — 날짜·좌석·정렬 거울 자동.
+  const slotView = useMemo(() => buildReservationSlotView(initialSlots), [initialSlots]);
+  const slotDays = slotView.dates.length;
   // 판매 캘린더 — 판매 기간(시작~종료 인덱스).
   const [saleStartIdx, setSaleStartIdx] = useState(0);
   const [saleEndIdx, setSaleEndIdx] = useState(6);
@@ -925,7 +932,7 @@ export function CardStudioPage45({
       dockedProducts.length > 0 ||
       !!cfgSubtitle.trim() ||
       !!confirmedClip ||
-      cfgDates.length > 0 ||
+      // FIX-62 — 실슬롯은 매장 소유(초안 진행물 아님) — 모드 전환 확인 트리거에서 제외.
       !!selectedCouponId;
     if (hasProgress) {
       setPendingMode(next);
@@ -1056,10 +1063,11 @@ export function CardStudioPage45({
           missing: !applied["coupon"] ? "쿠폰 미설정" : "쿠폰 미선택",
         },
         {
-          label: "캘린더", coach: "calendar", block: "calendar", candidates: ["calendar"], required: true, done: !!applied["calendar"] && cfgDates.length > 0,
+          // FIX-62 — done = 실슬롯 존재(get_available_slots ≥1) 기준.
+          label: "캘린더", coach: "calendar", block: "calendar", candidates: ["calendar"], required: true, done: !!applied["calendar"] && slotDays > 0,
           gate: "예약 캘린더를 먼저 설정해 주세요",
           teach: "예약 카드의 심장이에요. 받을 수 있는 날짜를 골라 캘린더를 확정해요.",
-          missing: !applied["calendar"] ? "캘린더 미설정" : "예약 날짜 미선택",
+          missing: !applied["calendar"] ? "캘린더 미설정" : "예약 가능일 미등록",
         },
         {
           // store+facilities — 동일 설정 패널(매장정보)에서 함께 충족: 1묶음 표기.
@@ -1089,7 +1097,7 @@ export function CardStudioPage45({
       ...dockStep,
       { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "", missing: null as string | null },
     ];
-  }, [mode, applied, selectedCouponId, selectedVideo, heroImageUrl, attachedProducts, productImageUrl, productName, productPrice, productShipDateSet, cfgSubtitle, cfgDates, savedStoreInfo, dockCount, dockedProducts, dockSkipped, dropped, formProgress.shipMethodSet]);
+  }, [mode, applied, selectedCouponId, selectedVideo, heroImageUrl, attachedProducts, productImageUrl, productName, productPrice, productShipDateSet, cfgSubtitle, slotDays, savedStoreInfo, dockCount, dockedProducts, dockSkipped, dropped, formProgress.shipMethodSet]);
   const currentStepIdx = steps.findIndex((s) => !s.done);
   const nextStepLabel = currentStepIdx >= 0 ? steps[currentStepIdx].label : null;
 
@@ -1177,7 +1185,7 @@ export function CardStudioPage45({
       videoDone: !!selectedVideo,
       taglineDone: !!cfgSubtitle.trim(),
       couponDone: !!(applied["coupon"] && selectedCouponId),
-      calendarDone: !!(applied["calendar"] && cfgDates.length > 0),
+      calendarDone: !!(applied["calendar"] && slotDays > 0), // FIX-62 — 실슬롯 기준.
       storeAddrDone: savedStoreInfo.hasAddress,
       facilitiesDone: savedStoreInfo.facilities > 0,
       publishDone: dropped,
@@ -1191,7 +1199,7 @@ export function CardStudioPage45({
       selectedVideo,
       cfgSubtitle,
       selectedCouponId,
-      cfgDates.length,
+      slotDays,
       savedStoreInfo,
       dropped,
     ],
@@ -1404,7 +1412,7 @@ export function CardStudioPage45({
     if (!dropped) return [] as { key: string; label: string }[];
     const done: { key: string; label: string }[] = [];
     if (applied["coupon"] && selectedCouponId) done.push({ key: "coupon", label: "쿠폰" });
-    if (applied["calendar"] && cfgDates.length > 0) done.push({ key: "calendar", label: "예약 캘린더" });
+    if (applied["calendar"] && slotDays > 0) done.push({ key: "calendar", label: "예약 캘린더" }); // FIX-62.
     if (attachedProducts[0] || (productImageUrl && productName.trim())) done.push({ key: "product", label: "상품" });
     if (applied["seasonal"] || productShipDateSet) done.push({ key: "shipBasis", label: "발송기준" });
     if (savedStoreInfo.hasAddress && savedStoreInfo.facilities > 0) done.push({ key: "store", label: "매장·시설" });
@@ -1413,7 +1421,7 @@ export function CardStudioPage45({
     if (selectedVideo && confirmedClip) done.push({ key: "keymoment", label: "핵심구간" }); // FIX-27 — 실확정 기준.
     if (cfgSubtitle.trim()) done.push({ key: "tagline", label: "한마디" });
     return done.slice(0, 3);
-  }, [dropped, applied, selectedCouponId, cfgDates, attachedProducts, productImageUrl, productName, productShipDateSet, savedStoreInfo, dockedProducts, selectedVideo, confirmedClip, cfgSubtitle]);
+  }, [dropped, applied, selectedCouponId, slotDays, attachedProducts, productImageUrl, productName, productShipDateSet, savedStoreInfo, dockedProducts, selectedVideo, confirmedClip, cfgSubtitle]);
 
   // 링고 코칭 — FIX-28: 필수 구간은 step.teach(필수패키지 정본의 티칭 — 문구·버튼·불 단일
   //   기준), 권장 구간은 항목별 권장 문구. 타깃 없음 = 수렴("이제 게시할 수 있어요").
@@ -2297,9 +2305,13 @@ export function CardStudioPage45({
       ...(applied["image"] && heroImagePreview && mode !== "commerce" ? { heroImageUrl: heroImagePreview } : {}),
       ...(applied["brand"] && cfgBrand.trim() ? { brandText: cfgBrand.trim() } : {}),
       ...(applied["party"] ? { party: cfgParty } : {}),
-      ...(applied["calendar"] && cfgDates.length > 0
-        ? { dates: cfgDates, times: cfgTimes, slotsByDate: cfgSlotsByDate }
+      // FIX-62 — 예약 미리보기 = 실슬롯(get_available_slots → buildReservationSlotView,
+      //   수신 fromDropDetail 과 동일 소스·동일 정렬 — 거울 자동). times 주입도 수신 동형:
+      //   빈 배열 = 미주입(date_range 모드는 slot_time null → times 없음).
+      ...(applied["calendar"] && slotDays > 0
+        ? { dates: slotView.dates, slotsByDate: slotView.slotsByDate }
         : {}),
+      ...(applied["calendar"] && slotView.times.length > 0 ? { times: slotView.times } : {}),
       ...(applied["seasonal"] && DATE_OPTIONS.length > 0
         ? { saleStart: DATE_OPTIONS[saleStartIdx], saleEnd: DATE_OPTIONS[saleEndIdx] }
         : {}),
@@ -3439,7 +3451,7 @@ export function CardStudioPage45({
                     accent={accent}
                     label={
                       activeBlock.id === "calendar"
-                        ? `적용됨 · ${cfgDates.length}일 · ${cfgTimes.length === 0 ? "시간 미지정" : `${cfgTimes.length}개 시간대`}`
+                        ? `적용됨 · ${slotDays}일 · 매장 캘린더` // FIX-62 — 실슬롯 기준.
                         : `적용됨 · ${DATE_OPTIONS[saleStartIdx] ?? ""}${saleEndIdx !== saleStartIdx ? ` ~ ${DATE_OPTIONS[saleEndIdx] ?? ""}` : ""}`
                     }
                     onEdit={() => setCollapsedPanels((p) => ({ ...p, [activeBlock.id]: false }))}
@@ -3503,175 +3515,32 @@ export function CardStudioPage45({
                         </p>
                       </div>
                     ) : (
-                      // 예약 캘린더 — 정본 3단계(날짜→시간→자리수). 프리뷰 반영, 실 슬롯 저장은 매장 캘린더 소관.
-                      <div className="space-y-3">
-                        <section className="rounded-xl border border-[#EDEDED] p-2.5">
-                          <div className="mb-2 flex items-center gap-1.5">
-                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#0A0A0A] text-[9px] font-extrabold text-white">1</span>
-                            <p className="text-[11px] font-bold text-[#0A0A0A]">예약 가능일</p>
-                            {dateList.length > 0 && (
-                              <span className="rounded-md bg-[#F4F4F5] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[#525252]">
-                                {dateList[Math.min(dateRailIdx, dateList.length - 1)].year}.
-                                {String(dateList[Math.min(dateRailIdx, dateList.length - 1)].month).padStart(2, "0")}
-                              </span>
-                            )}
-                            <span className="ml-auto text-[10px] font-semibold text-[#8A8A8A]">{cfgDates.length}일 선택</span>
-                          </div>
-                          <div className="relative">
-                            <div
-                              ref={dateRailRef}
-                              onScroll={(e) =>
-                                setDateRailIdx(Math.min(dateList.length - 1, Math.max(0, Math.round(e.currentTarget.scrollLeft / 46))))
-                              }
-                              className="flex snap-x snap-mandatory gap-1.5 overflow-x-auto scroll-smooth pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                            >
-                              {dateList.map((d) => {
-                                const on = cfgDates.includes(d.label);
-                                const seats = cfgSlotsByDate[d.label] ?? 0;
-                                return (
-                                  <button
-                                    key={d.label}
-                                    type="button"
-                                    onClick={() =>
-                                      setCfgDates((prev) => {
-                                        const isOn = prev.includes(d.label);
-                                        const next = isOn ? prev.filter((x) => x !== d.label) : [...prev, d.label];
-                                        const ordered = DATE_OPTIONS.filter((o) => next.includes(o));
-                                        setCfgSlotsByDate((m) => {
-                                          const copy = { ...m };
-                                          if (isOn) delete copy[d.label];
-                                          else copy[d.label] = copy[d.label] ?? 4;
-                                          return copy;
-                                        });
-                                        return ordered;
-                                      })
-                                    }
-                                    className="relative flex h-[50px] w-10 flex-none snap-start flex-col items-center justify-center gap-0.5 rounded-lg border transition-colors"
-                                    style={{ backgroundColor: on ? "#0A0A0A" : "#F7F7F8", borderColor: on ? "#0A0A0A" : "transparent" }}
-                                  >
-                                    <span className="text-[9px] font-bold leading-none" style={{ color: on ? "rgba(255,255,255,0.75)" : "#8A8A8A" }}>
-                                      {WEEKDAY_KR[d.dow]}
-                                    </span>
-                                    <span className="text-[15px] font-extrabold leading-none tabular-nums" style={{ color: on ? "#fff" : "#0A0A0A" }}>
-                                      {d.day}
-                                    </span>
-                                    {on && (
-                                      <span
-                                        className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-extrabold tabular-nums text-white"
-                                        style={{ backgroundColor: accent }}
-                                      >
-                                        {seats}
-                                      </span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white to-transparent" />
-                          </div>
-                        </section>
-
-                        <section className="rounded-xl border border-[#EDEDED] p-2.5">
-                          <div className="mb-2 flex items-center gap-1.5">
-                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#0A0A0A] text-[9px] font-extrabold text-white">2</span>
-                            <p className="text-[11px] font-bold text-[#0A0A0A]">예약 가능 시간</p>
-                            <span className="ml-auto text-[10px] font-semibold text-[#8A8A8A]">
-                              {cfgTimes.length === 0 ? "시간 미지정" : `${cfgTimes.length}개 시간대`}
-                            </span>
-                          </div>
-                          <div className="relative">
-                            <div className="flex snap-x snap-mandatory gap-1.5 overflow-x-auto scroll-smooth pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                              <button
-                                type="button"
-                                onClick={() => setCfgTimes([])}
-                                className="flex h-10 flex-none snap-start items-center justify-center rounded-xl border px-4 text-[12px] font-bold transition-colors"
-                                style={
-                                  cfgTimes.length === 0
-                                    ? { backgroundColor: "#0A0A0A", borderColor: "#0A0A0A", color: "#fff" }
-                                    : { backgroundColor: "#fff", borderColor: "#E5E5E5", color: "#8A8A8A" }
-                                }
-                              >
-                                해당없음
-                              </button>
-                              {TIME_OPTIONS.map((t) => {
-                                const on = cfgTimes.includes(t);
-                                return (
-                                  <button
-                                    key={t}
-                                    type="button"
-                                    onClick={() =>
-                                      setCfgTimes((prev) => {
-                                        const next = prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t];
-                                        return TIME_OPTIONS.filter((o) => next.includes(o));
-                                      })
-                                    }
-                                    className="flex h-10 flex-none snap-start items-center justify-center rounded-xl border px-4 text-[12px] font-bold tabular-nums transition-colors"
-                                    style={
-                                      on
-                                        ? { backgroundColor: "#0A0A0A", borderColor: "#0A0A0A", color: "#fff" }
-                                        : { backgroundColor: "#F7F7F8", borderColor: "transparent", color: "#525252" }
-                                    }
-                                  >
-                                    {t}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white to-transparent" />
-                          </div>
-                        </section>
-
-                        <section className="rounded-xl border border-[#EDEDED] p-2.5">
-                          <div className="mb-2 flex items-center gap-1.5">
-                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#0A0A0A] text-[9px] font-extrabold text-white">3</span>
-                            <p className="text-[11px] font-bold text-[#0A0A0A]">날짜별 잔여 자리</p>
-                            <span className="ml-auto text-[10px] text-[#8A8A8A]">날짜마다 다르게</span>
-                          </div>
-                          <div className="space-y-1.5">
-                            {DATE_OPTIONS.filter((d) => cfgDates.includes(d)).map((d) => {
-                              const seats = cfgSlotsByDate[d] ?? 4;
-                              return (
-                                <div key={d} className="flex items-center justify-between rounded-lg bg-[#F7F7F8] py-1.5 pl-2.5 pr-2.5">
-                                  <span className="text-[12px] font-bold tabular-nums text-[#0A0A0A]">{d}</span>
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => setSlotForDate(d, seats - 1)}
-                                      className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#0A0A0A] shadow-sm disabled:opacity-40"
-                                      disabled={seats <= 0}
-                                      aria-label={`${d} 좌석 감소`}
-                                    >
-                                      <Minus className="h-3 w-3" strokeWidth={2.5} />
-                                    </button>
-                                    <span className="w-11 text-center text-[13px] font-extrabold tabular-nums" style={{ color: seats === 0 ? "#A3A3A3" : accent }}>
-                                      {seats === 0 ? "마감" : `${seats}석`}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setSlotForDate(d, seats + 1)}
-                                      className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0A0A0A] text-white shadow-sm"
-                                      aria-label={`${d} 좌석 증가`}
-                                    >
-                                      <Plus className="h-3 w-3" strokeWidth={2.5} />
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                            {cfgDates.length === 0 && (
-                              <p className="py-2 text-center text-[11px] text-[#A3A3A3]">위에서 예약 가능일을 먼저 선택하세요</p>
-                            )}
-                          </div>
-                        </section>
-
+                      // FIX-62 — 실슬롯 편집기 전환: 검증된 PartnerCalendarPage(embedded) 재사용
+                      //   (무수술 — 저장/해제 = upsert/delete_reservation_slot RPC 자체 내장).
+                      //   저장 성공 → router.invalidate → studio-build loader 재조회
+                      //   (get_available_slots) → 미리보기 즉시 갱신(수신과 같은 소스 — 거울 자동).
+                      //   구 cfgDates/cfgTimes/cfgSlotsByDate 미영속 프리뷰 3단계 레일은 폐기.
+                      <div className="space-y-2.5">
+                        <p className="rounded-xl bg-[#F7F7F8] px-3 py-2.5 text-[11px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                          매장 캘린더에 저장돼요 — 이 매장의 모든 카드에 적용됩니다
+                        </p>
+                        {store?.id ? (
+                          <PartnerCalendarPage
+                            partnerId={store.id}
+                            partnerName={store.display_name}
+                            embedded
+                          />
+                        ) : (
+                          <p className="py-2 text-center text-[11px] text-[#A3A3A3]">
+                            매장 등록 후 캘린더를 설정할 수 있어요
+                          </p>
+                        )}
                         <div className="flex items-start gap-1.5 rounded-xl bg-[#F7F7F8] px-3 py-2.5">
                           <Sparkles className="mt-0.5 h-3.5 w-3.5 flex-none text-[#A3A3A3]" strokeWidth={2.5} />
                           <p className="text-[11px] font-medium leading-relaxed text-[#404040] [word-break:keep-all]">
                             수신자에게{" "}
-                            <b className="font-bold text-[#0A0A0A]">
-                              {cfgDates.length}일 · {cfgTimes.length === 0 ? "시간 미지정" : `${cfgTimes.length}개 시간대`}
-                            </b>
-                            , 날짜별 잔여 좌석까지 그대로 보여요
+                            <b className="font-bold text-[#0A0A0A]">{slotDays}일</b>, 날짜별 잔여
+                            좌석까지 그대로 보여요
                           </p>
                         </div>
                       </div>
@@ -3687,7 +3556,7 @@ export function CardStudioPage45({
                           }`,
                         );
                       }}
-                      disabled={activeBlock.id === "calendar" && cfgDates.length === 0}
+                      disabled={activeBlock.id === "calendar" && slotDays === 0}
                       className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold text-white transition-transform active:translate-y-px disabled:opacity-40"
                       style={{ backgroundColor: accent, boxShadow: `0 6px 18px -8px ${accent}80` }}
                     >
