@@ -3,12 +3,14 @@
 //   분기(발행 카드 수): 0장=스타터("시작해 볼까요?"→카드 만들기) / 1장+=메이커("성과 볼까요?"→성과 진단).
 //   자동 펼침 없음 — 홈은 사용자 개시(스튜디오 자동 인사와 구분). surface='home'(T-B/T-D 기존 배선 소비).
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, Sparkles, ChevronDown, GripVertical, ArrowUp, Square, Loader2, Rocket, TrendingUp } from "lucide-react";
+import { MessageCircle, Sparkles, ChevronDown, GripVertical, ArrowUp, Square, Loader2, Mic, Rocket, TrendingUp } from "lucide-react";
 import { useLingoChat, useLingoVoice } from "@/components/card-model/useLingoChat";
 import { SlideToMic } from "@/components/lingo/SlideToMic";
 import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 import { HomePerformanceFacts } from "@/components/home/HomePerformanceFacts";
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
+// KAKAO-LINGO-1b — 인앱 [음성으로 만들기] = 크롬 세션 핸드오프(스튜디오와 공용 헬퍼).
+import { startVoiceHandoff } from "@/lib/voice-handoff";
 
 const ACCENT = "#2563EB"; // 홈 링고 목적색(스튜디오 mode accent 없음 — 브랜드 블루 고정).
 const FAB_MARGIN = 12;
@@ -287,7 +289,20 @@ export function LingoHomeBox({
                         <button type="button" aria-label="전송" onClick={() => void sendChat(chatInput)} disabled={!chatInput.trim() || voice.listening} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white active:scale-95 disabled:opacity-40" style={{ backgroundColor: ACCENT }}><ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} /></button>
                       )}
                     </div>
-                    {!inAppNoMic && <SlideToMic listening={voice.listening} disabled={chat.streaming} accent={ACCENT} onStart={startMic} onStop={stopMic} />}
+                    {/* KAKAO-LINGO-1b — 인앱은 마이크 자리에 [음성으로 만들기] = 크롬 핸드오프(next=/home). */}
+                    {!inAppNoMic ? (
+                      <SlideToMic listening={voice.listening} disabled={chat.streaming} accent={ACCENT} onStart={startMic} onStop={stopMic} />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void startVoiceHandoff("/home", chat.notify)}
+                        className="flex h-11 min-w-[44px] shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+                        style={{ backgroundColor: ACCENT }}
+                      >
+                        <Mic className="h-4 w-4" strokeWidth={2.5} />
+                        음성으로 만들기
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -319,7 +334,9 @@ export function LingoHomeBox({
             <span className="block truncate text-[12px] font-bold leading-tight text-[#0A0A0A]">링고AI</span>
             <span className="block truncate text-[11px] font-medium text-[#8A8A8A]">{isMaker ? "성과 볼까요?" : "링고AI와 같이 시작해 볼까요?"}</span>
           </span>
-          {!inAppNoMic && (
+          {/* KAKAO-LINGO-1b — 인앱은 컴팩트 [음성] 버튼 = 크롬 핸드오프. 캡슐 드래그/탭(펼침)과
+              분리(stopPropagation — 스튜디오 캡슐 동일 패턴). */}
+          {!inAppNoMic ? (
             <SlideToMic
               listening={voice.listening}
               disabled={chat.streaming}
@@ -327,6 +344,22 @@ export function LingoHomeBox({
               onStart={() => { openPanel(); startMic(); }}
               onStop={stopMic}
             />
+          ) : (
+            <button
+              type="button"
+              aria-label="음성으로 만들기 — 크롬에서 이어져요"
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                void startVoiceHandoff("/home", chat.notify);
+              }}
+              className="flex h-11 shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+              style={{ backgroundColor: ACCENT }}
+            >
+              <Mic className="h-4 w-4" strokeWidth={2.5} />
+              음성
+            </button>
           )}
         </div>
       )}

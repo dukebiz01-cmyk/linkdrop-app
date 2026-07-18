@@ -101,7 +101,8 @@ import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 // FIX-47 — 인앱 WebView 음성 정직 게이트(pwa-install 공용 판정 재사용 — 중복 정의 0).
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 // KAKAO-LINGO-1 — 인앱 음성 핸드오프: 마이크 자리 = [음성으로 만들기] → 크롬 탈출 스킴.
-import { escapeToBrowser } from "@/lib/escape-to-browser";
+//   KAKAO-LINGO-1b — 발급·탈출·안내 로직은 공용 헬퍼(voice-handoff)로 이관(홈과 공유).
+import { startVoiceHandoff } from "@/lib/voice-handoff";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
 import { buildBoosterChips, buildGroupBuyView, stockUnitLabelFrom } from "./booster45";
@@ -2827,22 +2828,9 @@ export function CardStudioPage45({
   }
 
   // KAKAO-LINGO-1 — 인앱 음성 핸드오프: 1회용 코드 발급(쿠키 세션 인증) → 크롬 탈출 스킴.
-  //   실패·스킴 부재("manual")는 기존 배너와 동일한 수동 안내를 링고 말풍선으로(정직 폴백).
+  //   KAKAO-LINGO-1b — 본문은 공용 헬퍼(voice-handoff.ts)로 이관 — 문구·흐름 동일(동작 변화 0).
   async function handleVoiceHandoff() {
-    try {
-      const res = await fetch("/api/handoff/create", { method: "POST" });
-      const json = (await res.json().catch(() => null)) as { code?: string } | null;
-      if (!res.ok || !json?.code) {
-        chat.notify("크롬으로 여는 준비가 안 됐어요 — 오른쪽 위 메뉴의 '다른 브라우저로 열기'로 이어 주세요.");
-        return;
-      }
-      const url = `${window.location.origin}/handoff?code=${json.code}&next=${encodeURIComponent("/studio-build")}`;
-      if (escapeToBrowser(url) === "manual") {
-        chat.notify("오른쪽 위 메뉴의 '다른 브라우저로 열기'를 누르면 음성으로 이어져요.");
-      }
-    } catch {
-      chat.notify("크롬으로 여는 준비가 안 됐어요 — 잠시 후 다시 시도해 주세요.");
-    }
+    await startVoiceHandoff("/studio-build", chat.notify);
   }
 
   // FIX-43 — 캡슐 옆 마이크 orb(스트립 뷰): 탭 → 듣는 중 파형 패널로 펼침. 반이중 계약 동일
