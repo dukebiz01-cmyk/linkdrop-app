@@ -2304,7 +2304,9 @@ export function CardStudioPage45({
         ? { saleStart: DATE_OPTIONS[saleStartIdx], saleEnd: DATE_OPTIONS[saleEndIdx] }
         : {}),
       // S4-4a — 커머스는 시설 셀 미주입(그리드 다이어트 · fromDropDetail 동형).
-      ...(applied["link"] && mode !== "commerce"
+      // FIX-61 — link 게이트를 fromStudioState 폴백과 동형으로(applied.link 미설정 = reserve 기본
+      //   ON): raw applied["link"]만 보면 예약 모드 기본 상태에서 시설 셀만 빠짐(매장 셀과 비대칭).
+      ...((applied["link"] ?? mode === "reserve") && mode !== "commerce"
         ? { facilities: cfgFacilities.map((f) => f.text.trim()).filter(Boolean) }
         : {}),
       // FIX-15 — 상품 구성 메타 칩(등록 폼 unit_label 미러, 미주입=미렌더).
