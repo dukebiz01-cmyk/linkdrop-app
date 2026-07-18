@@ -22,12 +22,15 @@ const panelWidth = () => Math.min(PANEL_MAXW, Math.round(window.innerWidth * 0.8
 
 export function LingoHomeBox({
   cardCount,
+  conversions30d,
   onGoStudio,
   openSignal,
   onOpenChange,
 }: {
   /** 내 발행 카드 수(user.myCreatedDrops.length). 0=스타터 / 1+=메이커. */
   cardCount: number;
+  /** LINGO-HOME-GREET-1 — 최근 30일 전환 실값(PerformanceBanner 단일 fetch 중계). null=미로드/오류. */
+  conversions30d?: number | null;
   /** 스튜디오 배웅(카드 만들기 · 3층 행동 칩). purpose 선택. */
   onGoStudio: (purpose?: string) => void;
   /** 작업5 — 외부(마케팅 배너 "시작해 볼까요") 개시 신호. 값이 바뀌면 패널 펼침. */
@@ -39,6 +42,19 @@ export function LingoHomeBox({
   const voice = useLingoVoice();
   const navigate = useNavigate(); // LINGO-DRIVE-1 D-4 — explore 인텐트 이동용.
   const isMaker = cardCount > 0;
+  // LINGO-HOME-GREET-1 — 상태 인지형 3분기 오프닝(전부 클라 템플릿 — LLM 0). 폴백(전환 미로드/
+  //   오류) = 카드 0장 문구(스타터 기준이 가장 무해 — 명세 확정). 캡슐·패널 공용.
+  const greet: "starter" | "share" | "perf" =
+    cardCount === 0 || conversions30d == null
+      ? "starter"
+      : conversions30d === 0
+        ? "share"
+        : "perf";
+  const GREET_LINE: Record<typeof greet, string> = {
+    starter: "사장님, 첫 카드를 만들어볼까요? 영상 링크만 있으면 돼요",
+    share: "만든 카드를 카톡으로 공유해볼까요? 공유부터 성과가 시작돼요",
+    perf: "지금까지 성과를 같이 볼까요? 실제 숫자부터 보여드릴게요.",
+  };
   // LINGO-DRIVE-1 D-4 — intent 수신 시 안내 1줄(값당 1회 — 새 send 가 intent 를 리셋하면 재무장).
   const intentNotifiedRef = useRef<"create" | "explore" | null>(null);
   useEffect(() => {
@@ -241,21 +257,53 @@ export function LingoHomeBox({
                     </button>
                   </div>
 
-                  {/* 분기 안내 1문장 + 배웅 칩 (성과 진단 개시 전에만 — 개시 후엔 1층 사실이 대체) */}
+                  {/* LINGO-HOME-GREET-1 — 상태 인지형 3분기 안내 1문장 + 배웅 칩 2개(성과 진단
+                      개시 전에만 — 개시 후엔 1층 사실이 대체). 핸들러 전부 기존 이동 재사용:
+                      onGoStudio / askPerformance / explore / ?activity=made 딥링크(마운트 후에도
+                      HomeActivitySegment 가 동기화 — :64-66 실측). */}
                   {!(isMaker && perfOpen) && (
                     <div className="mt-3 rounded-2xl bg-[#F7F7F8] p-3.5">
                       <p className="flex items-start gap-1.5 text-[13px] font-medium leading-relaxed text-[#404040] [word-break:keep-all]">
                         <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} fill="currentColor" />
-                        <span>{isMaker ? "지금까지 성과를 같이 볼까요? 실제 숫자부터 보여드릴게요." : "첫 카드를 같이 만들어 볼까요? 무엇을 알리고 싶은지 알려주세요."}</span>
+                        <span>{GREET_LINE[greet]}</span>
                       </p>
                       <div className="mt-2.5 flex flex-wrap gap-1.5">
-                        {isMaker ? (
+                        {greet === "perf" ? (
                           <button type="button" onClick={askPerformance} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95" style={{ backgroundColor: ACCENT }}>
-                            <TrendingUp className="h-4 w-4" strokeWidth={2.25} /> 성과 볼까요?
+                            <TrendingUp className="h-4 w-4" strokeWidth={2.25} /> 성과 보기
+                          </button>
+                        ) : greet === "share" ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setView("strip");
+                              void navigate({ to: "/home", search: { activity: "made" } as never });
+                            }}
+                            className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
+                            style={{ backgroundColor: ACCENT }}
+                          >
+                            <TrendingUp className="h-4 w-4" strokeWidth={2.25} /> 공유하러 가기
                           </button>
                         ) : (
                           <button type="button" onClick={() => onGoStudio()} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95" style={{ backgroundColor: ACCENT }}>
                             <Rocket className="h-4 w-4" strokeWidth={2.25} /> 카드 만들기
+                          </button>
+                        )}
+                        {greet === "starter" ? (
+                          <button
+                            type="button"
+                            onClick={() => void navigate({ to: "/explore" })}
+                            className="flex h-9 items-center rounded-full bg-white px-3 text-[12px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                          >
+                            둘러보기
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onGoStudio()}
+                            className="flex h-9 items-center rounded-full bg-white px-3 text-[12px] font-bold text-[#0A0A0A] [box-shadow:inset_0_0_0_1px_#E5E5E5] active:scale-95"
+                          >
+                            새 카드
                           </button>
                         )}
                       </div>
@@ -368,7 +416,8 @@ export function LingoHomeBox({
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[12px] font-bold leading-tight text-[#0A0A0A]">링고AI</span>
-            <span className="block truncate text-[11px] font-medium text-[#8A8A8A]">{isMaker ? "성과 볼까요?" : "링고AI와 같이 시작해 볼까요?"}</span>
+            {/* LINGO-HOME-GREET-1 — 캡슐도 3분기 공용 문구(truncate). */}
+            <span className="block truncate text-[11px] font-medium text-[#8A8A8A]">{GREET_LINE[greet]}</span>
           </span>
           {/* KAKAO-LINGO-1b — 인앱은 컴팩트 [음성] 버튼 = 크롬 핸드오프. 캡슐 드래그/탭(펼침)과
               분리(stopPropagation — 스튜디오 캡슐 동일 패턴). */}

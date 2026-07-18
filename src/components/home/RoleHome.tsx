@@ -304,6 +304,9 @@ export function RoleHome({
   const [lingoOpenSignal, setLingoOpenSignal] = useState(0);
   // 작업5c — 링고 패널 열림 상태(배너 CTA 세모 방향 ▲접힘/▼펼침 동기).
   const [lingoOpen, setLingoOpen] = useState(false);
+  // LINGO-HOME-GREET-1 — 최근 30일 전환 실값(PerformanceBanner 단일 fetch 의 상향 보고 중계 —
+  //   신규 쿼리 0). null = 미로드/오류 → 링고 오프닝은 스타터 폴백.
+  const [conv30d, setConv30d] = useState<number | null>(null);
   // HOME-LINGO — 스타터 라우팅은 홈 링고 박스로 이관(onGoStudio). 기존 onStartPurpose/onWallet/
   //   onExplore 는 LingoStarter 흡수로 소비처 소멸 → 제거. 제작 진입 = /studio-build.
   const openDrop = (shareUuid: string) =>
@@ -344,11 +347,11 @@ export function RoleHome({
         <HomeMarketingBanner onStart={() => setLingoOpenSignal((s) => s + 1)} open={lingoOpen} />
 
         {/* HOME-LINGO — 링고 스타터 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합. 0장=스타터 분기. */}
-        <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
+        <LingoHomeBox cardCount={myCreatedDrops.length} conversions30d={conv30d} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
 
         {/* 성과 2셀 — 전환(get_creator_performance 30d 자체 fetch) / 적립(준비중 락). v0 룩. */}
         <div className="pb-1">
-          <PerformanceBanner />
+          <PerformanceBanner onConversions={setConv30d} />
         </div>
 
         {/* 오늘 공유하기 좋은 — 추천 영상(있을 때만) 가로 스와이프. 빈 박스 방지(L12) — 없으면 숨김. */}
@@ -422,11 +425,11 @@ export function RoleHome({
 
       {/* HOME-LINGO — 링고 스타터·성과진단 셸 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합.
           1장+ = 메이커 분기("성과 볼까요?" → surface:home + performance 발화). 1층 실값 카드·3층 칩 = 커밋2. */}
-      <LingoHomeBox cardCount={myCreatedDrops.length} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
+      <LingoHomeBox cardCount={myCreatedDrops.length} conversions30d={conv30d} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
 
       {/* 성과 3셀 — 전환(get_creator_performance 30d 자체 fetch)·적립(준비중 락)·구독자(실값). */}
       <div className="pb-1">
-        <PerformanceBanner subscriberCount={merchant.subscriberCount} />
+        <PerformanceBanner subscriberCount={merchant.subscriberCount} onConversions={setConv30d} />
       </div>
 
       {/* ✅ 새 제안 보존 (있으면, 컴팩트) — 액션(수락/거절)은 /partner. */}

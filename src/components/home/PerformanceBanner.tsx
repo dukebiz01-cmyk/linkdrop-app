@@ -67,8 +67,11 @@ function StatCell({
 
 export function PerformanceBanner({
   subscriberCount,
+  onConversions,
 }: {
   subscriberCount?: number;
+  /** LINGO-HOME-GREET-1 — 전환 실값 상향 보고(단일 fetch 재사용 — 신규 쿼리 0). null = 미로드/오류. */
+  onConversions?: (n: number | null) => void;
 }) {
   // 전환 = get_creator_performance 30d 실값(자체 fetch). null=로딩, err=실패.
   const [conv, setConv] = useState<number | null>(null);
@@ -77,15 +80,19 @@ export function PerformanceBanner({
   const load = useCallback(async () => {
     setErr(false);
     setConv(null);
+    onConversions?.(null);
     try {
       const { data, error } = await getSupabase().rpc("get_creator_performance", { p_period: "30d" });
-      if (error || !data) { setErr(true); return; }
+      if (error || !data) { setErr(true); onConversions?.(null); return; }
       const totals = (data as { totals?: { conversions?: number } }).totals;
-      setConv(totals?.conversions ?? 0);
+      const n = totals?.conversions ?? 0;
+      setConv(n);
+      onConversions?.(n);
     } catch {
       setErr(true);
+      onConversions?.(null);
     }
-  }, []);
+  }, [onConversions]);
 
   useEffect(() => { void load(); }, [load]);
 
