@@ -42,11 +42,14 @@ export type LingoStudioSnapshot = {
   mode?: string;
   deck?: LingoStudioDeckItem[];
   fields?: Record<string, string>;
+  /** LINGO-HANDS-1 — 선택 가능한 쿠폰 목록(서버는 title 만 프롬프트 주입 — id 해석은 클라). */
+  coupons?: { id: string; title: string }[];
 };
 // 서버 검증 화이트리스트와 동일: type 4종 / mode 3종 / field 11종은 서버가 재검증 —
 //   클라는 type 4종만 경량 재가드(그 외 필드는 적용 시점 최종 가드가 판정).
 export type LingoStudioAction = {
-  type: "switchMode" | "equip" | "detach" | "setField";
+  // LINGO-HANDS-1 — goToBlock(화면 이동) 추가: type 5종.
+  type: "switchMode" | "equip" | "detach" | "setField" | "goToBlock";
   mode?: string;
   blockId?: string;
   field?: string;
@@ -100,8 +103,9 @@ export type LingoInterviewContext = {
 
 const FALLBACK_FRIENDLY = "죄송해요, 지금 답을 만들지 못했어요. 잠시 후 다시 물어봐 주세요.";
 
-// LINGO-V2 — 클라 경량 재가드(서버 §5 재검증이 1차 — 여기선 type 4종·8개 상한만).
-const LINGO_ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField"]);
+// LINGO-V2 — 클라 경량 재가드(서버 §5 재검증이 1차 — 여기선 type·8개 상한만).
+//   LINGO-HANDS-1 — goToBlock 추가(5종).
+const LINGO_ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField", "goToBlock"]);
 
 // id — 세션 내 유일이면 충분(모듈 카운터, 시계 불요).
 let msgSeq = 0;

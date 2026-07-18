@@ -20,6 +20,8 @@ export interface LingoStudioContext {
   mode?: string;
   deck?: LingoStudioDeckItem[];
   fields?: Record<string, string | null | undefined>;
+  /** LINGO-HANDS-1 — 선택 가능한 쿠폰 목록(제목만 프롬프트 주입 — id 해석은 클라 몫). */
+  coupons?: { id?: string; title?: string | null }[];
 }
 
 // FIX-48+50 P2 — 번호 인터뷰 컨텍스트(계약 v2.1 additive · 클라 interview-steps45 정본과 동일 번호).
@@ -91,6 +93,16 @@ const BLOCK_D = `[진실의 경계]
 const BLOCK_H = `[스튜디오 액션 규칙]
 - 아래 [덱 현황]의 블록만 다룰 수 있다. 목록에 없는 blockId 를 만들지 않는다.
 - locked: true 블록은 장착(equip)하지 않는다. 대신 "완성도를 올리면 열려요"라고 안내만 한다.
+- setField 로 실행할 수 있는 필드는 이것뿐이다: title(제목), subtitle(한마디), productName(상품명),
+  productPrice(가격), origin(원산지), stockQty(수량), gbTargetCount(목표인원), gbTargetPrice(달성가),
+  phone(전화 노출), map(지도 노출·주소), coupon(쿠폰 선택), clip(핵심구간).
+- 목록 밖 필드는 setField 를 제안하지 않는다. 직접 입력이 필요한 단계(사진·영상·캘린더·배송·발송기준 등)는
+  goToBlock 으로 그 자리에 데려간 뒤 말로 안내한다.
+- 값 형식: phone·map 켜기/끄기는 value 를 "on" 또는 "off"로. map 에 주소 문자열을 주면 입력까지만 되고
+  저장 버튼은 사장님이 누른다고 안내한다. clip 은 "1:20~1:45" 형식. coupon 은 [쿠폰 목록]의 제목
+  그대로만 — 목록에 없는 쿠폰은 제안하지 않는다.
+- 예약 날짜·시간은 네가 설정할 수 없다 — goToBlock 으로 calendar 에 데려간다. 도킹은 equip 과
+  goToBlock 으로 dock 에 데려가고, 어떤 카드를 연결할지는 사장님이 고른다.
 - setField 의 value 는 사용자가 직접 말한 값, 또는 [현재 작업 정보]에 실제로 있는 값만 쓴다.
   가격(productPrice)·날짜·쿠폰 조건을 지어내지 않는다. 사용자가 값을 말하지 않았으면
   기입하지 말고 어떤 값을 원하는지 되묻는다.
@@ -118,6 +130,12 @@ function buildStudioBlock(studio: LingoStudioContext): string {
       (deckLines.length > 0 ? deckLines.join("\n") : "- (덱 정보 없음)"),
   );
   if (fieldLines.length > 0) parts.push(`[현재 입력값]\n${fieldLines.join("\n")}`);
+  // LINGO-HANDS-1 — 선택 가능한 쿠폰 제목(창작 금지 재료 — 이 목록의 제목만 coupon value 허용).
+  const couponLines = (studio.coupons ?? [])
+    .map((c) => (typeof c?.title === "string" ? c.title.trim() : ""))
+    .filter((t) => t.length > 0)
+    .map((t) => `- ${t}`);
+  if (couponLines.length > 0) parts.push(`[쿠폰 목록]\n${couponLines.join("\n")}`);
   return parts.join("\n\n");
 }
 
@@ -169,7 +187,7 @@ const BLOCK_I = `[번호 인터뷰 규칙]
 - 지금 할 일은 [인터뷰 진행]의 '현재 번호'다. 번호를 입으로도 말한다. 예: "3번 가격이에요. 얼마로 할까요?"
 - 사용자가 값을 말하면 그 값으로 setField 를 제안한다(가격·원산지·목표인원 등). 값을 안 말했으면 지어내지 말고 되묻는다.
 - 부착이 확정되면(적용 완료) 바로 다음 미완 번호를 이어서 묻는다. 끊지 않는다. 마지막은 발행 번호다.
-- can_set: false 단계(사진·영상·쿠폰·캘린더·매장·발송기준 등)는 네가 못 만진다. "이건 화면에서 직접 해주셔야 해요"라고 정직히 말하고 그 자리를 누르도록 안내한 뒤, 완료되면 다음 번호로 넘어간다.
+- can_set: false 단계(사진·영상·캘린더·발송기준 등)는 네가 못 만진다. "이건 화면에서 직접 해주셔야 해요"라고 정직히 말하고 goToBlock 으로 그 자리에 데려간 뒤, 완료되면 다음 번호로 넘어간다. (쿠폰 선택·전화/지도·핵심구간은 [스튜디오 액션 규칙]의 setField 로 가능.)
 - 사용자가 다른 번호를 요청하면 그 번호부터 처리하고, 끝나면 남은 번호로 돌아온다("아까 3번이 남았어요").
 - 검증에 걸리면(예: 달성가가 기본가보다 높음) 지적하고 올바른 값을 다시 묻는다. 임의로 고쳐 넣지 않는다.
 - 공동구매는 카드 모드가 아니라 상품판매(commerce) 안의 판매방식이다. 사용자가 공동구매를 요청하면 모드 전환을 제안하지 말고, gbTargetCount(목표 인원)·gbTargetPrice(달성가) setField 로 설정을 진행한다. 두 값이 없으면 순서대로 물어서 받는다.

@@ -283,6 +283,32 @@ const LINGO_PRODUCT_FIELDS = new Set([
   "gbTargetCount",
   "gbTargetPrice",
 ]);
+// LINGO-HANDS-1 — 클립 발화 변환층: "1:20~1:45" · "80~105초" · "1분20초부터 1분45초까지" → 초.
+//   검증(끝>시작·영상길이)은 applyClip 정본 재사용 — 여기는 파싱만(신규 판정 금지).
+function parseClipTimePart(raw: string): number | null {
+  const t = raw.trim().replace(/까지$/u, "");
+  if (!t) return null;
+  const colon = t.match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (colon) {
+    return colon[3] != null
+      ? Number(colon[1]) * 3600 + Number(colon[2]) * 60 + Number(colon[3])
+      : Number(colon[1]) * 60 + Number(colon[2]);
+  }
+  const ko = t.match(/^(?:(\d+)시간)?(?:(\d+)분)?(?:(\d+)초?)?$/u);
+  if (ko && (ko[1] || ko[2] || ko[3])) {
+    return Number(ko[1] ?? 0) * 3600 + Number(ko[2] ?? 0) * 60 + Number(ko[3] ?? 0);
+  }
+  return null;
+}
+function parseClipValue(value: string): { start: number; end: number } | null {
+  const parts = value.replace(/\s+/gu, "").split(/~|-|부터|에서/u).filter(Boolean);
+  if (parts.length !== 2) return null;
+  const start = parseClipTimePart(parts[0]);
+  const end = parseClipTimePart(parts[1]);
+  if (start == null || end == null || end <= start) return null;
+  return { start, end };
+}
+
 // FIX-28 — 카드 배경색 UI 스위치(재도입 스위치 1개). false = 덱 카드·팔레트 숨김 +
 //   cardColor 기본값 고정 + 게시 시 색 저장 스킵. set_drop_card_color RPC·cardColor
 //   상태·팔레트 코드는 삭제 금지(보존) — true 로 되돌리면 그대로 재활성.
@@ -900,7 +926,8 @@ export function CardStudioPage45({
   //   ② ?purpose 프리셋은 useState 초기값으로만 1회 소비(setMode 재호출 경로 없음 —
   //      remount 외 재적용 불가. 이 계약을 깨는 setMode(initialMode) 재실행 금지),
   //   ③ continueFlow/방향등 점프는 setDeckIndex 만, ④ 등록 성공 리셋 경로에 setMode 없음,
-  //   ⑤ 링고 switchMode 액션은 클라 미배선(useLingoChat 이 actions 이벤트 미소비).
+  //   ⑤ 링고 switchMode 액션은 applyLingoActions 가 switchMode()(이 확인 게이트)를 경유해
+  //      실행 — 게이트 우회 없음(LINGO-HANDS-1 사실 정정 · 구 "클라 미배선" 서술은 폐기).
   //   → 제작 중 스티키 탭 오터치가 즉시 전체 초기화로 이어지던 것이 원인 — 확인 1회 게이트.
   const [pendingMode, setPendingMode] = useState<BuildMode | null>(null);
   const doSwitchMode = (next: BuildMode) => {
@@ -1341,23 +1368,35 @@ export function CardStudioPage45({
   // FIX-27 — 핵심구간 [적용] 확정: 검증(끝>시작·영상 길이 초과 차단) 통과 시에만
   //   confirmedClip 확정 + 미리보기 라벨(cfgClip) + 패널 접힘 + 링고 안내 갱신.
   //   (FIX-32 — 슬라이더/스텝퍼 클램프가 1차 방어, 여기는 확정 직전 재검증 — 계약 유지.)
-  function applyClip() {
-    const startSec = clipSel.start;
-    const endSec = clipSel.end;
+  //   LINGO-HANDS-1 — override(링고 setField clip 경유): setState 비동기라 clipSel 를 못 기다림 →
+  //   같은 검증·커밋 본문에 값만 주입(쓰기 경로 단일 유지). 수동 [적용](onClick={applyClip})은
+  //   MouseEvent 가 인자로 들어오므로 숫자쌍일 때만 override 로 인정. 성공 여부 boolean 반환
+  //   (기존 호출부는 반환값 미사용 — 동작 무변경).
+  function applyClip(override?: unknown): boolean {
+    const ov =
+      override &&
+      typeof (override as { start?: unknown }).start === "number" &&
+      typeof (override as { end?: unknown }).end === "number"
+        ? (override as { start: number; end: number })
+        : null;
+    const startSec = ov ? ov.start : clipSel.start;
+    const endSec = ov ? ov.end : clipSel.end;
     if (endSec <= startSec) {
       setClipError("끝 시점은 시작보다 뒤여야 해요.");
-      return;
+      return false;
     }
     if (clipDurSec != null && (startSec > clipDurSec || endSec > clipDurSec)) {
       setClipError(`영상 길이(${selectedVideo!.durationLabel}) 안에서 골라 주세요.`);
-      return;
+      return false;
     }
     setClipError(null);
+    if (ov) setClipSel({ start: startSec, end: endSec }); // 슬라이더 표시 동기(링고 경유).
     const label = `${formatDuration(startSec)}~${formatDuration(endSec)}`;
     setConfirmedClip({ startSec, endSec, note: clipDraftNote.trim(), label });
     setCfgClip(label); // 미리보기(model.clip) 기존 주입 경로 재사용.
     setCollapsedPanels((p) => ({ ...p, clip: true }));
     flashStrip(`핵심구간이 적용됐어요${nextStepLabel ? ` — 다음은 ${nextStepLabel}` : ""}`);
+    return true;
   }
 
   // FIX-10 — 매장정보 저장(주소 + 시설 → partners UPDATE, RLS partners_owner_all).
@@ -2395,6 +2434,18 @@ export function CardStudioPage45({
             : {}),
           ...(selectedCoupon?.title ? { coupon: selectedCoupon.title } : {}),
         },
+        // LINGO-HANDS-1 — 선택 가능한 쿠폰 목록(id+title · 최대 10) — 서버는 title 만 프롬프트
+        //   주입([쿠폰 목록]), value(title)→id 해석·부착은 클라(applyLingoActions) 몫.
+        ...(coupons.length > 0
+          ? {
+              coupons: coupons.slice(0, 10).map((c) => ({
+                id: c.id,
+                title:
+                  c.title?.trim() ||
+                  `${c.discount_value ?? ""}${c.discount_unit ?? ""} 할인`.trim(),
+              })),
+            }
+          : {}),
       },
       // FIX-48+50 P2 — 번호 인터뷰 상태(계약 v2.1 additive). 스텝퍼와 동일 번호 = 발화 번호 강제
       //   일치. 번호·라벨·done·can_set 은 interview-steps45 정본 파생(창작 금지 재료).
@@ -2452,6 +2503,11 @@ export function CardStudioPage45({
     if (a.type === "switchMode") {
       return `모드 전환 → ${LINGO_MODE_LABELS[a.mode ?? ""] ?? a.mode ?? "?"}`;
     }
+    if (a.type === "goToBlock") {
+      // LINGO-HANDS-1 — 이동 라벨.
+      const b = DECK.find((d) => d.id === a.blockId);
+      return `${b?.label ?? a.blockId ?? "?"} 칸으로 이동`;
+    }
     if (a.type === "equip" || a.type === "detach") {
       const b = DECK.find((d) => d.id === a.blockId);
       return `${b?.label ?? a.blockId ?? "?"} ${a.type === "equip" ? "장착" : "해제"}`;
@@ -2486,6 +2542,8 @@ export function CardStudioPage45({
     const done: string[] = [];
     const stale: string[] = [];
     const manual: string[] = [];
+    // LINGO-HANDS-1 — 정직 안내 모음(파싱 실패·목록 밖 쿠폰·이동 결과 등) — 요약에 병기.
+    const notes: string[] = [];
     const cur: Record<string, boolean> = { ...applied };
     // LINGO-V2b D2 — 정밀 undo 수집: 실제 바꾼 키의 이전 값만(전체 스냅샷 금지).
     const undoBlocks: { id: string; prev: boolean }[] = [];
@@ -2493,7 +2551,24 @@ export function CardStudioPage45({
     // FIX-48+50 P2 — 상품 폼 필드는 스튜디오가 직접 못 만짐 → 배치 수집 후 fieldPatch 로 폼에 부착
     //   요청(폼이 최종 검증·prev 회신). done 요약과 별개(비동기 결과 = handleFieldPatchResult).
     const productBatch: { field: string; value: string }[] = [];
+    // LINGO-HANDS-1 — goToBlock(switchMode 분기와 같은 레벨): 이동은 상태 리셋이 없어 나머지
+    //   액션과 병행 실행(아래 루프에서는 스킵). 단독 액션이면 이동 안내만 하고 종료.
+    const goTo = actions.find((a) => a.type === "goToBlock");
+    if (goTo) {
+      const b = DECK.find((d) => d.id === goTo.blockId);
+      const moved = !!b && jumpToBlock(b.id);
+      if (actions.length === 1) {
+        chat.notify(
+          moved
+            ? `${b!.label} 칸으로 왔어요 — 여기서 이어 주세요.`
+            : "그 칸을 찾지 못했어요 — 화면에서 직접 눌러 주세요.",
+        );
+        return;
+      }
+      notes.push(moved ? `${b!.label} 칸으로 이동했어요` : "이동할 칸은 찾지 못했어요");
+    }
     for (const a of actions) {
+      if (a.type === "goToBlock") continue; // LINGO-HANDS-1 — 위 선처리 완료.
       if (a.type === "equip" || a.type === "detach") {
         const b = DECK.find((d) => d.id === a.blockId);
         const locked = !b || GATED_BLOCK_IDS.has(b.id) || (!!b.isPaid && score < ENHANCE_UNLOCK);
@@ -2534,6 +2609,87 @@ export function CardStudioPage45({
           // FIX-48+50 P2 — 상품 폼 필드: 배치 수집(폼이 마운트돼 있어야 부착됨 — 미마운트 시
           //   폼 미수신 = 무동작, 인터뷰 persona 가 상품 블록으로 먼저 이동시킴).
           productBatch.push({ field: a.field as string, value: a.value ?? "" });
+        } else if (a.field === "phone" || a.field === "map") {
+          // LINGO-HANDS-1 — 노출 토글(value "on"/"off") = 수동 정본 setCfgPhone/setCfgMap 재사용.
+          //   map 은 주소 문자열도 반배선: setCfgAddress 까지만 + 이동 + 저장은 사장님(영속 락 ③).
+          const v = (a.value ?? "").trim();
+          const toggle = v === "on" ? true : v === "off" ? false : null;
+          if (a.field === "phone") {
+            if (toggle === null) {
+              stale.push(lingoActionLabel(a));
+              continue;
+            }
+            if (!store?.contact_phone) {
+              // has 가드(:4238 동일) — 번호 자체가 없으면 켜도 안 보임 = 정직 안내.
+              notes.push("매장 전화번호가 아직 등록돼 있지 않아요 — 파트너 정보에서 먼저 등록해 주세요");
+              continue;
+            }
+            if (!undoFields.some((f) => f.field === "phone")) {
+              undoFields.push({ field: "phone", prev: cfgPhone ? "on" : "off" });
+            }
+            setCfgPhone(toggle);
+            done.push(`전화 걸기 ${toggle ? "켬" : "끔"}`);
+          } else if (toggle !== null) {
+            if (!undoFields.some((f) => f.field === "map")) {
+              undoFields.push({ field: "map", prev: cfgMap ? "on" : "off" });
+            }
+            setCfgMap(toggle);
+            done.push(`위치 보기 ${toggle ? "켬" : "끔"}`);
+          } else if (v) {
+            if (!undoFields.some((f) => f.field === "mapAddress")) {
+              undoFields.push({ field: "mapAddress", prev: cfgAddress });
+            }
+            setCfgAddress(v.slice(0, LINGO_FIELD_MAX));
+            jumpToBlock("link");
+            done.push(`주소 = "${v.slice(0, 40)}"`);
+            notes.push("주소를 입력칸에 채웠어요 — 저장 버튼만 눌러 주세요");
+          } else {
+            stale.push(lingoActionLabel(a));
+          }
+        } else if (a.field === "clip") {
+          // LINGO-HANDS-1 — 변환층(parseClipValue) → applyClip 정본 재사용(검증·커밋 단일 경로).
+          //   실패 계열 = 정직 안내 + goToBlock("content").
+          if (!selectedVideo) {
+            jumpToBlock("content");
+            notes.push("핵심구간은 영상을 먼저 고른 뒤 담을 수 있어요 — 콘텐츠 칸으로 왔어요");
+            continue;
+          }
+          const parsed = parseClipValue(a.value ?? "");
+          if (!parsed) {
+            jumpToBlock("content");
+            notes.push("구간을 못 읽었어요 — '1분 20초부터 1분 45초'처럼 말해 주세요");
+            continue;
+          }
+          if (applyClip(parsed)) {
+            done.push(`핵심구간 = ${formatDuration(parsed.start)}~${formatDuration(parsed.end)}`);
+          } else {
+            jumpToBlock("content");
+            notes.push("그 구간은 영상 길이를 벗어나요 — 화면에서 조정해 주세요");
+          }
+        } else if (a.field === "coupon") {
+          // LINGO-HANDS-1 — value(title)→id 해석(컨텍스트 동봉 목록 한정) → 수동 정본
+          //   setSelectedCouponId(:확정 버튼 동일) + 쿠폰 블록 equip 동반(기존 장착 체인·가드).
+          const v = (a.value ?? "").trim();
+          const found =
+            (v ? coupons.find((c) => (c.title ?? "").trim() === v) : undefined) ??
+            (v ? coupons.find((c) => (c.title ?? "").includes(v)) : undefined) ??
+            (coupons.length === 1 ? coupons[0] : undefined);
+          if (!found) {
+            jumpToBlock("coupon");
+            notes.push("그 쿠폰을 목록에서 못 찾았어요 — 쿠폰 칸에서 골라 주세요");
+            continue;
+          }
+          if (!undoFields.some((f) => f.field === "coupon")) {
+            undoFields.push({ field: "coupon", prev: selectedCouponId ?? "" });
+          }
+          setSelectedCouponId(found.id);
+          const cb = DECK.find((d) => d.id === "coupon");
+          if (cb && !cur[cb.id] && !GATED_BLOCK_IDS.has(cb.id) && !(cb.isPaid && score < ENHANCE_UNLOCK)) {
+            undoBlocks.push({ id: cb.id, prev: !!cur[cb.id] });
+            equip(cb); // 기존 장착 체인(정직 게이트·버스트 포함) — 신규 장착 경로 0.
+            cur[cb.id] = true;
+          }
+          done.push(`쿠폰 = "${(found.title ?? "").trim() || "선택한 쿠폰"}"`);
         } else {
           // 클라 실행 경로가 없는 필드 — 임의 실행 금지(§13), 화면 조작으로 정직 안내.
           manual.push(lingoActionLabel(a));
@@ -2541,10 +2697,13 @@ export function CardStudioPage45({
       }
     }
     if (done.length === 0 && productBatch.length === 0) {
+      // LINGO-HANDS-1 — notes(정직 안내)가 있으면 그게 결과다(파싱 실패·목록 밖 등).
       chat.notify(
-        stale.length > 0
-          ? "그 사이 바뀌었네요, 다시 볼까요?"
-          : "이건 제가 직접 못 만져요 — 화면에서 해주시면 돼요.",
+        notes.length > 0
+          ? notes.join("\n")
+          : stale.length > 0
+            ? "그 사이 바뀌었네요, 다시 볼까요?"
+            : "이건 제가 직접 못 만져요 — 화면에서 해주시면 돼요.",
       );
       return;
     }
@@ -2555,7 +2714,8 @@ export function CardStudioPage45({
       chat.notify(
         `적용했어요: ${done.join(" · ")}` +
           (stale.length > 0 ? `\n그 사이 바뀐 건 그대로 두었어요: ${stale.join(" · ")}` : "") +
-          (manual.length > 0 ? `\n직접 해주셔야 해요: ${manual.join(" · ")}` : ""),
+          (manual.length > 0 ? `\n직접 해주셔야 해요: ${manual.join(" · ")}` : "") +
+          (notes.length > 0 ? `\n${notes.join("\n")}` : ""),
       );
     }
     // FIX-48+50 P2 — 상품 배치 부착 요청(폼 fieldPatch). 성공/실패 알림은 handleFieldPatchResult.
@@ -2596,10 +2756,19 @@ export function CardStudioPage45({
         return next;
       });
     }
-    // title/subtitle = 스튜디오 직접 복원.
+    // title/subtitle = 스튜디오 직접 복원. LINGO-HANDS-1 — phone/map/주소/쿠폰 복원 추가
+    //   (clip 은 undo 미기록 — 콘텐츠 칸에서 재조정이 정본).
     for (const f of lingoActUndo.fields) {
       if (f.field === "title" || f.field === "subtitle") {
         (f.field === "title" ? setCfgTitle : setCfgSubtitle)(f.prev);
+      } else if (f.field === "phone") {
+        setCfgPhone(f.prev === "on");
+      } else if (f.field === "map") {
+        setCfgMap(f.prev === "on");
+      } else if (f.field === "mapAddress") {
+        setCfgAddress(f.prev);
+      } else if (f.field === "coupon") {
+        setSelectedCouponId(f.prev || null);
       }
     }
     // FIX-48+50 P2 — 상품 폼 필드는 restore 패치로 prev 그대로 복원(검증 우회 · 폼 미회신).

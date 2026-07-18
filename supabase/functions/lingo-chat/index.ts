@@ -125,16 +125,16 @@ const APPLY_STUDIO_ACTIONS_TOOL = {
         items: {
           type: "object",
           properties: {
-            type: { enum: ["switchMode", "equip", "detach", "setField"] },
+            // LINGO-HANDS-1 — goToBlock(화면 이동) 신설. blockId = 덱 화이트리스트 재검증.
+            type: { enum: ["switchMode", "equip", "detach", "setField", "goToBlock"] },
             mode: { enum: ["general", "reserve", "commerce"] },
             blockId: { type: "string" },
             field: {
+              // LINGO-HANDS-1 — date/time(FIX-62 유물)·dock(카드 선택은 사장님 영역) 삭제.
               enum: [
                 "title",
                 "subtitle",
                 "clip",
-                "date",
-                "time",
                 "coupon",
                 "productName",
                 "productPrice",
@@ -143,7 +143,6 @@ const APPLY_STUDIO_ACTIONS_TOOL = {
                 "stockQty",
                 "gbTargetCount",
                 "gbTargetPrice",
-                "dock",
                 "phone",
                 "map",
               ],
@@ -181,14 +180,13 @@ const SET_HOME_INTENT_TOOL = {
 const HOME_INTENTS = new Set(["create", "explore"]);
 
 // T-A §5 — 서버측 재검증 화이트리스트(모델 출력 신뢰 금지).
-const ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField"]);
+// LINGO-HANDS-1 — goToBlock 추가 · date/time(FIX-62 유물)·dock(선택은 사장님 영역) 제거.
+const ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField", "goToBlock"]);
 const ACTION_MODES = new Set(["general", "reserve", "commerce"]);
 const ACTION_FIELDS = new Set([
   "title",
   "subtitle",
   "clip",
-  "date",
-  "time",
   "coupon",
   "productName",
   "productPrice",
@@ -197,7 +195,6 @@ const ACTION_FIELDS = new Set([
   "stockQty",
   "gbTargetCount",
   "gbTargetPrice",
-  "dock",
   "phone",
   "map",
 ]);
@@ -235,6 +232,11 @@ function validateStudioActions(
       if (!item) continue; // 요청 deck 에 없는 blockId 제거
       if (a.type === "equip" && item.locked) continue; // locked 블록 equip 제거
       actions.push({ type: a.type, blockId });
+    } else if (a.type === "goToBlock") {
+      // LINGO-HANDS-1 — 화면 이동: 덱 화이트리스트 재검증 재사용(잠금 무관 — 이동은 열람).
+      const blockId = typeof a.blockId === "string" ? a.blockId : "";
+      if (!deckById.get(blockId)) continue; // 요청 deck 에 없는 blockId 제거
+      actions.push({ type: "goToBlock", blockId });
     } else {
       // setField
       const field = typeof a.field === "string" ? a.field : "";
