@@ -300,10 +300,9 @@ export function RoleHome({
   const navigate = useNavigate();
   // v0-45 — DROPY 이벤트 풀스크린 열림 상태(로컬, 양 분기 중 렌더되는 쪽에서 사용).
   const [eventOpen, setEventOpen] = useState(false);
-  // 작업5 — 마케팅 배너 "시작해 볼까요" → 홈 링고 캡슐 펼침 개시 신호(증가마다 1회 펼침).
-  const [lingoOpenSignal, setLingoOpenSignal] = useState(0);
-  // 작업5c — 링고 패널 열림 상태(배너 CTA 세모 방향 ▲접힘/▼펼침 동기).
-  const [lingoOpen, setLingoOpen] = useState(false);
+  // LINGO-UI-2a — 배너 "시작해 볼까요" CTA 폐지에 따라 lingoOpenSignal/lingoOpen 배선 제거
+  //   (펼침은 링고 아코디언 자체 헤더 단독 — LingoHomeBox 의 openSignal/onOpenChange 는
+  //   옵셔널 prop 으로 존치, 소비자 0).
   // LINGO-HOME-GREET-1 — 최근 30일 전환 실값(PerformanceBanner 단일 fetch 의 상향 보고 중계 —
   //   신규 쿼리 0). null = 미로드/오류 → 링고 오프닝은 스타터 폴백.
   const [conv30d, setConv30d] = useState<number | null>(null);
@@ -343,11 +342,11 @@ export function RoleHome({
         </div>
 
         {/* Duke 락 복원 — 홈 상단 마케팅 배너(구 LingoStarter LiveMorphHero). fb5a946 흡수 시 유실 → 독립 복원.
-            작업5 — "시작해 볼까요" → 링고 캡슐 펼침 연결. */}
-        <HomeMarketingBanner onStart={() => setLingoOpenSignal((s) => s + 1)} open={lingoOpen} />
+            LINGO-UI-2a — "시작해 볼까요" CTA 폐지(링고 아코디언 헤더 단독화). */}
+        <HomeMarketingBanner />
 
-        {/* LINGO-UI-2-FIX-1 — 아코디언 = 마케팅배너 바로 밑(수익배너 위). 배선 무변경. */}
-        <LingoHomeBox cardCount={myCreatedDrops.length} conversions30d={conv30d} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
+        {/* LINGO-UI-2-FIX-1 — 아코디언 = 마케팅배너 바로 밑(수익배너 위). */}
+        <LingoHomeBox cardCount={myCreatedDrops.length} conversions30d={conv30d} onGoStudio={() => void navigate({ to: "/studio-build" })} />
 
         {/* 성과 2셀 — 전환(get_creator_performance 30d 자체 fetch) / 적립(준비중 락). v0 룩. */}
         <div className="pb-1">
@@ -420,13 +419,13 @@ export function RoleHome({
       </div>
 
       {/* Duke 락 복원 — 홈 상단 마케팅 배너(구 LingoStarter LiveMorphHero). fb5a946 흡수 시 유실 → 독립 복원.
-          작업5 — "시작해 볼까요" → 링고 캡슐 펼침 연결. */}
-      <HomeMarketingBanner onStart={() => setLingoOpenSignal((s) => s + 1)} open={lingoOpen} />
+          LINGO-UI-2a — "시작해 볼까요" CTA 폐지(링고 아코디언 헤더 단독화). */}
+      <HomeMarketingBanner />
 
-      {/* HOME-LINGO — 링고 스타터·성과진단 셸 흡수: 홈 링고 박스 1개(하단 캡슐)로 통합.
-          1장+ = 메이커 분기("성과 볼까요?" → surface:home + performance 발화). 1층 실값 카드·3층 칩 = 커밋2. */}
-      {/* LINGO-UI-2-FIX-1 — 아코디언 = 마케팅배너 바로 밑(수익배너 위). 배선 무변경. */}
-      <LingoHomeBox cardCount={myCreatedDrops.length} conversions30d={conv30d} onGoStudio={() => void navigate({ to: "/studio-build" })} openSignal={lingoOpenSignal} onOpenChange={setLingoOpen} />
+      {/* HOME-LINGO — 링고 스타터·성과진단 셸 흡수: 홈 링고 박스 1개로 통합.
+          1장+ = 메이커 분기(성과 진단 → surface:home + performance 발화). 1층 실값 카드·3층 칩 = 커밋2. */}
+      {/* LINGO-UI-2-FIX-1 — 아코디언 = 마케팅배너 바로 밑(수익배너 위). */}
+      <LingoHomeBox cardCount={myCreatedDrops.length} conversions30d={conv30d} onGoStudio={() => void navigate({ to: "/studio-build" })} />
 
       {/* 성과 3셀 — 전환(get_creator_performance 30d 자체 fetch)·적립(준비중 락)·구독자(실값). */}
       <div className="pb-1">
