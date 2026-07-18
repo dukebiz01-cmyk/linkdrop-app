@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { HomePageV3 } from "@/components/home-page-v3";
+import { LandingPageV5 } from "@/components/landing-v5/landing-page-v5";
 import { BottomNav } from "@/components/bottom-nav";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getAuthClient } from "@/lib/auth-context";
@@ -31,17 +31,17 @@ function hasAuthCookieTrace(): boolean {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "LinkDrop — 영상을 카드로" },
+      { title: "링크드롭 — 영상 링크 하나로, 예약과 혜택까지" },
       {
         name: "description",
         content:
-          "영상 링크 하나로, 예약·혜택까지. 붙여넣으면 AI가 행동 카드로 만들어드려요.",
+          "영상 링크를 붙여넣으면 AI가 예약·쿠폰·판매 행동 카드로 만들어 카카오톡으로 공유해드려요.",
       },
-      { property: "og:title", content: "LinkDrop" },
+      { property: "og:title", content: "링크드롭 — 영상 링크 하나로, 예약과 혜택까지" },
       {
         property: "og:description",
         content:
-          "영상 링크 하나로, 예약·혜택까지. 붙여넣으면 AI가 행동 카드로 만들어드려요.",
+          "영상 링크를 붙여넣으면 AI가 예약·쿠폰·판매 행동 카드로 만들어 카카오톡으로 공유해드려요.",
       },
     ],
   }),
@@ -93,12 +93,6 @@ function IndexHomePage() {
     };
   }, [navigate]);
 
-  const goLogin = (redirectPath?: string) =>
-    navigate({
-      to: "/login",
-      search: redirectPath ? ({ redirect: redirectPath } as never) : undefined,
-    });
-
   // BUG-3B — 세션 재확인 완료 전(또는 로그인 유저 /home 이동 중): 구 메인 대신 로딩만.
   if (checking) {
     return (
@@ -111,26 +105,12 @@ function IndexHomePage() {
     );
   }
 
-  // phase1-#1 마무리: home-page-v3 내장 nav 제거됨 → CSS 숨김 셀렉터 불필요.
-  // 공통 BottomNav (v0 검정 4탭) 는 무로그인 진입점에서도 렌더 — 탭 클릭 시
-  // goLogin() 또는 placeholder 로 유도.
+  // LAND-1 — 비로그인 랜딩 = LandingPageV5(v0 48 정본). CTA는 컴포넌트 내부에서 /login 유도.
+  // 공통 BottomNav (v0 검정 4탭) 는 무로그인 진입점에서도 렌더.
   return (
     <>
       <div className="pb-[calc(6rem+env(safe-area-inset-bottom))]">
-        <HomePageV3
-          onCreateDrop={(url, purpose) => {
-            const q = new URLSearchParams({ url });
-            if (purpose) q.set("purpose", purpose);
-            goLogin(`/create-wizard?${q.toString()}`);
-          }}
-          onViewDrop={() => goLogin()}
-          onViewAllDrops={() => goLogin()}
-          onTabChange={(tab) => {
-            if (tab === "home") return;
-            goLogin();
-          }}
-          onNotifications={() => goLogin()}
-        />
+        <LandingPageV5 />
         {/* 사업자 푸터는 __root 글로벌 BusinessFooter(공개 경로)로 이전 — 중복 제거. */}
       </div>
       <BottomNav />
