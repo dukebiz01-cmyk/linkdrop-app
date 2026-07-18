@@ -189,6 +189,11 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     group_buy_price_krw?: unknown;
     group_buy_deadline?: unknown;
     sale_end?: unknown;
+    // S4-5 — 배송 정보(additive 키): 방법·안내문구(신규) + 무료배송·배송비(기존 저장 키 소비 개시).
+    ship_method?: unknown;
+    ship_note?: unknown;
+    free_ship?: unknown;
+    ship_fee_krw?: unknown;
   };
   const priceKrw = typeof data.price_krw === "number" ? data.price_krw : null;
   // BADGE-ⓑ(4b)/DR2-ⓑ — Droppy 예상 보상, fixed-우선(정본 우선규칙 · 3면 동일: 피드 RPC
@@ -263,6 +268,14 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
   // ST2b-2b B2 — 판매기간 마감(sale_end · 영속화 additive 키). 부스터 D-day 근거.
   const saleEndIso =
     typeof data.sale_end === "string" && data.sale_end.trim() ? data.sale_end.trim() : null;
+  // S4-5 — 배송 정보(손님 [배송정보] 펼침 재료 · 실값만): 방법·안내(신규 키)·무료배송·배송비(기존 키).
+  const shipMethod =
+    typeof data.ship_method === "string" && data.ship_method.trim() ? data.ship_method.trim() : null;
+  const shipNote =
+    typeof data.ship_note === "string" && data.ship_note.trim() ? data.ship_note.trim() : null;
+  const freeShip = data.free_ship === true;
+  const shipFeeKrw =
+    typeof data.ship_fee_krw === "number" && data.ship_fee_krw > 0 ? data.ship_fee_krw : null;
   return {
     // ST2b-2 — additive 동봉(전부 미주입 = 미렌더).
     ...(noticeRows.length > 0 ? { noticeRows } : {}),
@@ -271,6 +284,11 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
       ? { groupBuy: { targetN: gbTargetN, priceKrw: gbPriceKrw, deadline: gbDeadline } }
       : {}),
     ...(saleEndIso ? { saleEndIso } : {}),
+    // S4-5 — 배송 정보 동봉(미주입 = 미렌더 · freeShip 은 true 일 때만 동봉 = "무료배송" 행 근거).
+    ...(shipMethod ? { shipMethod } : {}),
+    ...(shipNote ? { shipNote } : {}),
+    ...(freeShip ? { freeShip: true } : {}),
+    ...(shipFeeKrw != null ? { shipFeeKrw } : {}),
     name,
     priceKrw,
     buyUrl: d.source.source_url ?? "#",

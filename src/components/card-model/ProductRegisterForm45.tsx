@@ -82,6 +82,10 @@ export type ProductRegisterPayload45 = {
 
 export type ProductRegisterResult45 = { shareUuid: string; shareUrl: string };
 
+// S4-5 — 배송방법 선택지 단일 소스(구 CardStudioPage45:356 COURIERS 이동 — 스튜디오는 재수입).
+//   직접 전달 = 현장 수령 겸용(기존 상수 구성 그대로).
+export const COURIERS45 = ["CJ대한통운", "우체국택배", "한진택배", "롯데택배", "로젠택배", "직접 전달"];
+
 const TYPE_OPTIONS: { id: ProductType45; label: string }[] = [
   { id: "fresh", label: "신선식품" },
   { id: "processed", label: "가공식품" },
@@ -251,6 +255,8 @@ export type ProductFormProgress45 = {
   gbTargetSet?: boolean;
   gbPriceSet?: boolean;
   gbDeadlineSet?: boolean;
+  /** S4-5 — 배송 스텝 신호(배송방법 선택 = done). */
+  shipMethodSet?: boolean;
 };
 
 export function ProductRegisterForm45({
@@ -329,6 +335,9 @@ export function ProductRegisterForm45({
   const [targetProfit, setTargetProfit] = useState("");
   const [freeShip, setFreeShip] = useState(true);
   const [shipFee, setShipFee] = useState("");
+  // S4-5 — 배송 스텝: 배송방법(COURIERS45 · "" = 미선택 = 미저장)·안내문구(선택 입력).
+  const [shipMethod, setShipMethod] = useState("");
+  const [shipNote, setShipNote] = useState("");
   const [droppyMode, setDroppyMode] = useState<"rate" | "fixed">("rate");
   const [droppyRate, setDroppyRate] = useState(0);
   const [droppyFixed, setDroppyFixed] = useState("");
@@ -594,6 +603,8 @@ export function ProductRegisterForm45({
       gbTargetSet: gbTargetN != null && gbTargetN >= 2,
       gbPriceSet: gbPriceNum != null && gbPriceNum > 0 && priceNum > 0 && gbPriceNum < priceNum,
       gbDeadlineSet: !!groupBuyDeadline.trim(),
+      // S4-5 — 배송 스텝 신호(배송방법 선택 = done).
+      shipMethodSet: !!shipMethod,
       ...over,
     });
   // 마운트 시 1회 동기화 — 폼 재마운트(패널 접힘/재장착) 후 호스트의 낡은 진행 상태 초기화.
@@ -606,7 +617,7 @@ export function ProductRegisterForm45({
   useEffect(() => {
     emitProgress();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quickMode, groupBuyOn, origin, groupBuyN, groupBuyPrice, groupBuyDeadline, price, imageUrl, name, nameConfirmed]);
+  }, [quickMode, groupBuyOn, origin, groupBuyN, groupBuyPrice, groupBuyDeadline, price, imageUrl, name, nameConfirmed, shipMethod]);
 
   // FIX-48+50 P2 — 링고 인터뷰 setField 부착: 스튜디오 fieldPatch 수신 → 필드별 검증·부착·prev 회신.
   //   검증 = 폼 handleSubmit 규칙 준용(가격>0 / 목표인원 N≥2 / 달성가 0<x<기본가). restore(undo)는
@@ -954,6 +965,9 @@ export function ProductRegisterForm45({
       ...(type === "goods" && spec.trim() ? { spec: spec.trim() } : {}),
       free_ship: freeShip,
       ...(!freeShip && shipFee ? { ship_fee_krw: Math.floor(Number(shipFee)) } : {}),
+      // S4-5 — 배송방법·안내문구(additive 키 · 미선택/미입력 = 미저장 = 손님 카드 미렌더).
+      ...(shipMethod ? { ship_method: shipMethod } : {}),
+      ...(shipNote.trim() ? { ship_note: shipNote.trim() } : {}),
       // FIX-40 — 공동구매 v1(표시 키만 · 정산 무접촉): 유효 통과분만 저장. 미달 자동 취소·
       //   차액 환불 자동화 없음(v1 락 — 판매자 수동 운영).
       ...(gbValid
@@ -1617,8 +1631,78 @@ export function ProductRegisterForm45({
         )}
       </Field>
 
+      {/* S4-5 — ⑥배송(번호 스텝 · 발송기준 뒤): 배송방법(COURIERS45)·배송비(구 접힘 그룹에서
+          이동 — 저장 키·이익계산 로직 무변경)·안내문구. quick 미노출(여정 미편입 — 기본 무료배송). */}
+      <Field label="배송" stepNo={stepNoOf("ship")} accent={accent} hidden={quickMode}>
+        {/* 배송방법 — 재탭 해제(미선택 = 미저장 = 손님 카드 미렌더). */}
+        <div className="flex flex-wrap gap-1.5">
+          {COURIERS45.map((c) => {
+            const on = shipMethod === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => {
+                  const next = on ? "" : c;
+                  setShipMethod(next);
+                  emitProgress({ shipMethodSet: !!next });
+                }}
+                className="rounded-xl px-3 py-2 text-[12px] font-bold transition-colors"
+                style={
+                  on
+                    ? { backgroundColor: `${accent}14`, color: accent, boxShadow: `inset 0 0 0 1.5px ${accent}` }
+                    : { backgroundColor: "#F4F4F5", color: "#525252" }
+                }
+              >
+                {c}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-2">
+          <Segmented
+            options={[
+              { id: "free", label: "무료배송(내 부담)" },
+              { id: "paid", label: "배송비 별도(구매자 부담)" },
+            ]}
+            value={freeShip ? "free" : "paid"}
+            onSelect={(id) => setFreeShip(id === "free")}
+          />
+        </div>
+        {/* FIX-36 — 배송비 입력을 양 모드 노출: 무료배송 = 내 부담 비용(이익 계산 편입 · 저장 안 함) /
+            구매자 부담 = 손님 카드 "배송비 N원" 표기 근거(ship_fee_krw 저장 — 기존 payload 계약 그대로). */}
+        <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
+          <span className="shrink-0 text-[12px] font-semibold text-[#8A8A8A]">배송비</span>
+          <input
+            id="pd45-ship"
+            value={shipFee}
+            onChange={(e) => setShipFee(onlyDigits(e.target.value))}
+            inputMode="numeric"
+            placeholder="예: 4000"
+            className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+          />
+          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
+        </div>
+        <p className="mt-1 text-[10.5px] font-medium text-[#A3A3A3]">
+          {freeShip
+            ? "내가 부담하는 배송비 — 이익 계산에만 쓰고 저장하지 않아요"
+            : "구매자가 결제 시 함께 내는 금액 — 손님 카드에 배송비로 표기돼요"}
+        </p>
+        {/* 안내문구(선택) — 손님 카드 [배송정보] 펼침에 그대로 표기. */}
+        <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
+          <input
+            id="pd45-shipnote"
+            value={shipNote}
+            onChange={(e) => setShipNote(e.target.value)}
+            placeholder="배송 안내 (선택) — 예: 수확 상황에 따라 발송일이 조정될 수 있어요"
+            className="w-full bg-transparent px-1 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+          />
+        </div>
+      </Field>
+
       {/* FIX-48+50 P1.5 커밋3 — 비필수 비용·보상 필드 "(+) 더 입력" 접힘 그룹(기본 접힘, 인라인 —
-          Radix 금지). 필수(번호) 필드는 위에서 펼침 유지 · quick/full hidden 토글 로직 무변경. */}
+          Radix 금지). 필수(번호) 필드는 위에서 펼침 유지 · quick/full hidden 토글 로직 무변경.
+          S4-5 — 배송 입력은 위 ⑥배송 번호 스텝으로 이동(이중 입력 금지). */}
       <div>
         <button
           type="button"
@@ -1627,7 +1711,7 @@ export function ProductRegisterForm45({
           className="flex w-full items-center justify-between rounded-xl bg-[#F4F4F5] px-3 py-2.5"
         >
           <span className="flex items-center gap-1 text-[12px] font-bold text-[#525252]">
-            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />더 입력 (원가·배송·보상)
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />더 입력 (원가·보상)
           </span>
           <ChevronDown className={`h-4 w-4 text-[#8A8A8A] transition-transform ${moreFieldsOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
         </button>
@@ -1648,36 +1732,8 @@ export function ProductRegisterForm45({
         </div>
       </Field>
 
-      {/* 배송 — FIX-38: 원포토에선 미노출(기본 무료배송 유지). */}
-      <Field label="배송" hidden={quickMode}>
-        <Segmented
-          options={[
-            { id: "free", label: "무료배송(내 부담)" },
-            { id: "paid", label: "배송비 별도(구매자 부담)" },
-          ]}
-          value={freeShip ? "free" : "paid"}
-          onSelect={(id) => setFreeShip(id === "free")}
-        />
-        {/* FIX-36 — 배송비 입력을 양 모드 노출: 무료배송 = 내 부담 비용(이익 계산 편입 · 저장 안 함) /
-            구매자 부담 = 손님 카드 "배송비 N원" 표기 근거(ship_fee_krw 저장 — 기존 payload 계약 그대로). */}
-        <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
-          <span className="shrink-0 text-[12px] font-semibold text-[#8A8A8A]">배송비</span>
-          <input
-            id="pd45-ship"
-            value={shipFee}
-            onChange={(e) => setShipFee(onlyDigits(e.target.value))}
-            inputMode="numeric"
-            placeholder="예: 4000"
-            className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
-          />
-          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
-        </div>
-        <p className="mt-1 text-[10.5px] font-medium text-[#A3A3A3]">
-          {freeShip
-            ? "내가 부담하는 배송비 — 이익 계산에만 쓰고 저장하지 않아요"
-            : "구매자가 결제 시 함께 내는 금액 — 손님 카드에 배송비로 표기돼요"}
-        </p>
-      </Field>
+      {/* S4-5 — 구 배송 Field 는 위 ⑥배송 번호 스텝으로 이동(이중 입력 금지 — 렌더만 이동,
+          freeShip/shipFee 상태·저장 키·이익 계산 로직 무변경). */}
 
       {/* FIX-36c — 공동구매 설정은 ② 분기 + ③ 공동구매 조건으로 이동(FIX-40 UI 원문 재사용). */}
 

@@ -48,6 +48,7 @@ import {
 import { toast } from "sonner";
 import {
   ProductRegisterForm45,
+  COURIERS45,
   type ProductFormProgress45,
   type ProductRegisterPayload45,
   type ProductRegisterResult45,
@@ -302,6 +303,11 @@ const COACH_NOTES: Record<string, { why: string; effect: string }> = {
     why: "언제 받는지 알려주면 기다림이 이해가 돼요",
     effect: "문의와 오해가 줄어요",
   },
+  // S4-5 — 배송 스텝(비필수 · 입력은 상품 등록 폼에서 직접).
+  ship: {
+    why: "어떻게 받는지 보이면 주문 전 망설임이 줄어요 — 배송비는 특히 결제 직전 이탈 사유예요",
+    effect: "배송 문의가 줄고 주문 결심이 빨라져요",
+  },
   dock: {
     why: "카드를 함께 보내면 받는 분은 볼거리가 늘어요",
     effect: "드로피를 더 받을 수 있어요 · 지금 {N}장 연결 가능",
@@ -352,8 +358,8 @@ function buildDateList(count: number) {
 }
 // 09:00 ~ 21:00, 1시간 단위 (정본).
 const TIME_OPTIONS = Array.from({ length: 13 }, (_, i) => `${String(9 + i).padStart(2, "0")}:00`);
-// 배송 택배사 선택지 — 게이트 대상(UI만 유지).
-const COURIERS = ["CJ대한통운", "우체국택배", "한진택배", "롯데택배", "로젠택배", "직접 전달"];
+// 배송 택배사 선택지 — S4-5: 단일 소스를 ProductRegisterForm45(COURIERS45)로 이동, 여기선 별칭만.
+const COURIERS = COURIERS45;
 // 설정 UI가 필요한 블록 (정본).
 const CONFIGURABLE = ["calendar", "seasonal", "coupon", "product", "dock", "link", "content", "aivideo", "image", "productimage", "party", "review", "delivery", "brand"];
 
@@ -1001,6 +1007,15 @@ export function CardStudioPage45({
           teach: "언제 받을 수 있는지 알려줘요 — 판매 캘린더나 수확·발송일 중 하나면 돼요.",
           missing: "판매기간·발송일 미확정",
         },
+        {
+          // S4-5 — 배송(비필수 · 발행 게이트 아님): 배송방법 선택 = done(폼 진행 신호).
+          //   입력은 상품 등록 폼 ⑥배송 섹션에서 직접(can_set:false — 링고는 안내만).
+          label: "배송", coach: "ship", block: "product", candidates: ["product"], required: false,
+          done: !!formProgress.shipMethodSet,
+          gate: "",
+          teach: "어떻게 보낼지 알려줘요 — 상품 등록의 배송 칸에서 배송방법·배송비·안내문구를 입력해 주세요.",
+          missing: "배송방법 미선택",
+        },
         ...dockStep,
         { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "", missing: null as string | null },
       ];
@@ -1060,7 +1075,7 @@ export function CardStudioPage45({
       ...dockStep,
       { label: "발행", coach: "", block: null, candidates: [] as string[], required: false, done: dropped, gate: "", teach: "", missing: null as string | null },
     ];
-  }, [mode, applied, selectedCouponId, selectedVideo, heroImageUrl, attachedProducts, productImageUrl, productName, productPrice, productShipDateSet, cfgSubtitle, cfgDates, savedStoreInfo, dockCount, dockedProducts, dockSkipped, dropped]);
+  }, [mode, applied, selectedCouponId, selectedVideo, heroImageUrl, attachedProducts, productImageUrl, productName, productPrice, productShipDateSet, cfgSubtitle, cfgDates, savedStoreInfo, dockCount, dockedProducts, dockSkipped, dropped, formProgress.shipMethodSet]);
   const currentStepIdx = steps.findIndex((s) => !s.done);
   const nextStepLabel = currentStepIdx >= 0 ? steps[currentStepIdx].label : null;
 
@@ -1141,6 +1156,8 @@ export function CardStudioPage45({
       gbTargetSet: formProgress.gbTargetSet,
       gbPriceSet: formProgress.gbPriceSet,
       gbDeadlineSet: formProgress.gbDeadlineSet,
+      // S4-5 — 배송 스텝 신호(폼 배송방법 선택 = done).
+      shipMethodSet: formProgress.shipMethodSet,
       shipBasisDone: !!applied["seasonal"] || productShipDateSet,
       dockDone: dockedProducts.length > 0 || dockSkipped,
       videoDone: !!selectedVideo,
@@ -1347,11 +1364,15 @@ export function CardStudioPage45({
   }
 
   // FIX-29 — 현재 타깃의 코칭 키: 필수 구간 = 단계의 coach(정본 표), 권장 구간 = 블록 id 매핑.
+  // S4-5 — 배송 단계(비필수)는 타깃 블록이 product 라 블록 id 매핑이 어긋남 → 단계 정본으로 지목.
+  const pendingShipStep = steps.find((s) => s.coach === "ship" && !s.done);
   const currentCoachKey = firstRequiredStep
     ? firstRequiredStep.coach || null
-    : currentTarget && (currentTarget.id === "dock" || currentTarget.id === "coupon")
-      ? currentTarget.id
-      : null;
+    : pendingShipStep && currentTarget?.id === "product"
+      ? "ship"
+      : currentTarget && (currentTarget.id === "dock" || currentTarget.id === "coupon")
+        ? currentTarget.id
+        : null;
   // FIX-29 — effect 의 {N} 치환(진실 경계 — 실제 보유 숫자만): coupon = 게이지 상승폭(블록
   //   power), dock = 도킹 실카운트(0이면 숫자 구간 미노출 — 가짜 유도 금지).
   const coachEffect = (key: string): string | null => {
@@ -1403,16 +1424,19 @@ export function CardStudioPage45({
     }
     if (currentTarget) {
       // 권장 모드 — 도킹은 실카운트 동봉(가짜 숫자 금지: dockCount>0 일 때만 타깃이 됨).
+      // S4-5 — 배송 단계(비필수·타깃=product 블록): 단계 정본 teach 로 안내(블록 라벨 발화 오배선 방지).
       const text =
         currentTarget.id === "dock"
           ? `다른 카드를 함께 보내면 드로피를 더 받을 수 있어요 — ${dockCount}장 연결 가능`
           : currentTarget.id === "coupon"
             ? "왜 지금 행동해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요."
-            : `${currentTarget.label}를 더해보세요.`;
+            : pendingShipStep && currentTarget.id === "product"
+              ? pendingShipStep.teach
+              : `${currentTarget.label}를 더해보세요.`;
       return { text, action: currentTarget.id };
     }
     return { text: "필수는 다 챙겼어요 — 이제 발행할 수 있어요.", action: null };
-  }, [firstRequiredStep, currentTarget, dockCount, formProgress]);
+  }, [firstRequiredStep, currentTarget, dockCount, formProgress, pendingShipStep]);
 
   // FIX-42 — 링고 능동 안내(§13) 트리거 ①: 잠금 발행 버튼 클릭 시도.
   //   · 발화 = GATE_NOTES 정본(서버 호출 0) → 스트립/캡슐 플래시 채널(기존 stripFlash 재사용,

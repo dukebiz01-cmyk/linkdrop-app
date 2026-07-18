@@ -141,6 +141,11 @@ export interface InfoDropPageProps {
     groupBuy?: { targetN: number; priceKrw: number; deadline: string | null };
     /** B2 — 판매기간 마감(sale_end 영속화) — 부스터 D-day 근거. */
     saleEndIso?: string;
+    /** S4-5 — 배송 정보(콘텐츠 존 [배송정보] 펼침 재료 · 실값만): 방법·무료배송·배송비·안내. */
+    shipMethod?: string;
+    freeShip?: boolean;
+    shipFeeKrw?: number | null;
+    shipNote?: string;
   };
   /** ③ 카드 담기 — 담은(관련) 상품. 본체 source 와 무관, 별도 "관련 상품" 섹션. */
   attachedProducts?: Array<{
@@ -1999,6 +2004,10 @@ export function InfoDropPage({
               <PurchaseInfoFolds
                 noticeRows={commerce.noticeRows}
                 harvestDate={commerce.harvestDate}
+                shipMethod={commerce.shipMethod}
+                freeShip={commerce.freeShip}
+                shipFeeKrw={commerce.shipFeeKrw}
+                shipNote={commerce.shipNote}
               />
 
               {/* C13 S3(🅱) — purchase 한마디(콘텐츠 존 유지). */}
@@ -2618,13 +2627,28 @@ export function InfoDropPageReservation() {
 function PurchaseInfoFolds({
   noticeRows,
   harvestDate,
+  shipMethod,
+  freeShip,
+  shipFeeKrw,
+  shipNote,
 }: {
   noticeRows?: Array<{ label: string; value: string }>;
   harvestDate?: string | null;
+  /** S4-5 — 배송방법·배송비·안내문구(실값 있는 행만 렌더 — 가짜값 금지). */
+  shipMethod?: string | null;
+  freeShip?: boolean;
+  shipFeeKrw?: number | null;
+  shipNote?: string | null;
 }) {
   const [open, setOpen] = useState<"notice" | "shipping" | null>(null);
   const rows = noticeRows ?? [];
   const shipRows = rows.filter((r) => /발송|배송|택배/.test(`${r.label} ${r.value}`));
+  // S4-5 — 배송비 행: 무료배송(실저장값) 우선, 아니면 구매자 부담 배송비 실값만.
+  const shipFeeLine = freeShip
+    ? "무료배송"
+    : shipFeeKrw != null && shipFeeKrw > 0
+      ? `${shipFeeKrw.toLocaleString("ko-KR")}원`
+      : null;
   // 수확·발송 문구 — ProductWidget(:130) 규칙 동일(M월 D일 수확·발송 예정 · 파싱 실패 = 원문).
   const harvestLine = (() => {
     if (!harvestDate) return null;
@@ -2634,7 +2658,8 @@ function PurchaseInfoFolds({
     return mm && dd ? `${Number(mm)}월 ${Number(dd)}일 수확·발송 예정` : String(harvestDate);
   })();
   const hasNotice = rows.length > 0;
-  const hasShipping = !!harvestLine || shipRows.length > 0;
+  const hasShipping =
+    !!harvestLine || shipRows.length > 0 || !!shipMethod || !!shipFeeLine || !!shipNote;
   if (!hasNotice && !hasShipping) return null;
   const toggle = (k: "notice" | "shipping") => setOpen((v) => (v === k ? null : k));
   const renderRow = (r: { label: string; value: string }, i: number) => (
@@ -2683,6 +2708,9 @@ function PurchaseInfoFolds({
           {foldButton("shipping", "배송정보")}
           {open === "shipping" ? (
             <div className="mt-2 space-y-1.5 rounded-[12px] border border-[#E8EDF3] bg-white p-3">
+              {/* S4-5 — 배송방법·배송비·수확발송·안내 순(전부 실값 행만). */}
+              {shipMethod ? renderRow({ label: "배송방법", value: shipMethod }, -1) : null}
+              {shipFeeLine ? renderRow({ label: "배송비", value: shipFeeLine }, -2) : null}
               {harvestLine ? (
                 <div className="rounded-lg bg-bg px-3 py-2">
                   <p className="text-[11px] font-semibold tracking-ko text-text-subtle">
@@ -2693,6 +2721,7 @@ function PurchaseInfoFolds({
                   </p>
                 </div>
               ) : null}
+              {shipNote ? renderRow({ label: "배송 안내", value: shipNote }, -3) : null}
               {shipRows.map(renderRow)}
             </div>
           ) : null}
