@@ -3110,7 +3110,7 @@ export function CardStudioPage45({
     await sendChatText(text, channel);
   }
 
-  // T5 — 마이크(반이중): 듣기 시작 → 결과를 입력창에 채움(자동 전송 금지 — [전송]으로 확인).
+  // T5→LINGO-MIC-AUTOSEND-1 — 마이크: 듣기 시작 → final 을 잠깐 표시 후 자동 전송(반이중 해제).
   function handleMicTap() {
     if (chat.streaming) return;
     voice.stopSpeaking();
@@ -3118,10 +3118,27 @@ export function CardStudioPage45({
       voice.stopListening();
       return;
     }
-    voice.startListening((t) => {
-      setChatInput(t);
-      chatChannelRef.current = "voice";
-    });
+    voice.startListening((t) => autoSendVoiceOnce(t));
+  }
+
+  // LINGO-MIC-AUTOSEND-1 — 1회 마이크 자동 전송(반이중 해제): final → 입력창 잠깐 표시(600ms —
+  //   사장님이 뭐가 갔는지 인지) → 기존 공용 전송 sendChatText(conv 자동 전송과 동일 함수 —
+  //   신규 전송 로직 0). 빈 final = 무전송(무음 탭 방지). 표시 창 동안 손 타이핑 개입
+  //   (chatChannelRef 가 "text"로 전환)하면 자동 발사 취소 — 사용자 편집 우선.
+  const micAutoSendRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function autoSendVoiceOnce(t: string) {
+    const text = t.trim();
+    if (!text) return;
+    setChatInput(text);
+    chatChannelRef.current = "voice";
+    if (micAutoSendRef.current) clearTimeout(micAutoSendRef.current);
+    micAutoSendRef.current = setTimeout(() => {
+      micAutoSendRef.current = null;
+      if (chatChannelRef.current !== "voice") return; // 손 편집 개입 = 취소.
+      setChatInput("");
+      chatChannelRef.current = "text";
+      void sendChatText(text, "voice");
+    }, 600);
   }
 
   // KAKAO-LINGO-1 — 인앱 음성 핸드오프: 1회용 코드 발급(쿠키 세션 인증) → 크롬 탈출 스킴.
@@ -3130,9 +3147,9 @@ export function CardStudioPage45({
     await startVoiceHandoff("/studio-build", chat.notify);
   }
 
-  // FIX-43 — 캡슐 옆 마이크 orb(스트립 뷰): 탭 → 듣는 중 파형 패널로 펼침. 반이중 계약 동일
-  //   (인식 텍스트 → 입력창 → 패널에서 [전송] 확인 — 자동 전송 금지). lingo-chat 계약 무변경
-  //   (channel 'voice' 는 기존 onText 경로 그대로).
+  // FIX-43 — 캡슐 옆 마이크 orb(스트립 뷰): 탭 → 듣는 중 파형 패널로 펼침.
+  //   LINGO-MIC-AUTOSEND-1 — 반이중 해제: final = 잠깐 표시 후 자동 전송(autoSendVoiceOnce).
+  //   lingo-chat 계약 무변경(channel 'voice' 그대로).
   function handleOrbTap() {
     if (chat.streaming) return;
     // FIX-48 — 무음 대기 중 마이크 탭 = 대화 재개("계속하려면 마이크를 눌러 주세요").
@@ -3149,13 +3166,7 @@ export function CardStudioPage45({
     }
     setVoiceInterim("");
     setVoiceOpen(true);
-    voice.startListening(
-      (t) => {
-        setChatInput(t);
-        chatChannelRef.current = "voice";
-      },
-      { onInterim: setVoiceInterim },
-    );
+    voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
   }
   // [취소] — 인식 텍스트 폐기 + STT 즉시 종료(파형 AudioContext 는 패널 언마운트가 정리).
   //   FIX-48 — 대화 모드 중이면 전체 정지(endConvMode 동일 경로).
@@ -3163,6 +3174,13 @@ export function CardStudioPage45({
     if (convActiveRef.current) {
       endConvMode();
       return;
+    }
+    // LINGO-MIC-AUTOSEND-1 — 대기 중 자동 발사도 폐기(취소 = 완전 폐기 시맨틱 유지).
+    if (micAutoSendRef.current) {
+      clearTimeout(micAutoSendRef.current);
+      micAutoSendRef.current = null;
+      setChatInput("");
+      chatChannelRef.current = "text";
     }
     voice.stopListening();
     setVoiceInterim("");

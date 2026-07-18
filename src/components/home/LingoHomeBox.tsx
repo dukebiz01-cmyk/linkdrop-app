@@ -182,8 +182,25 @@ export function LingoHomeBox({
     setChatInput("");
     await chat.send(t, "text", isMaker ? { performance: true } : {}, "home");
   };
-  // 작업6 — 슬라이드 토글 트리거(로직 무변경, 시작/종료만 분리 노출).
-  const startMic = () => { voice.stopSpeaking(); if (!voice.listening) voice.startListening((final) => { void sendChat(final); }); };
+  // 작업6 — 슬라이드 토글 트리거(시작/종료만 분리 노출).
+  // LINGO-MIC-AUTOSEND-1 — 스튜디오와 동일 패턴: final → 입력창 잠깐 표시(600ms) → 기존 sendChat.
+  //   빈 final = 무전송. 표시 지연 덕에 sendChat 의 voice.listening 가드와의 경합도 해소
+  //   (final 이 onend 직전에 와도 600ms 뒤엔 청취 종료 상태).
+  const micAutoSendRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startMic = () => {
+    voice.stopSpeaking();
+    if (voice.listening) return;
+    voice.startListening((final) => {
+      const t = final.trim();
+      if (!t) return;
+      setChatInput(t);
+      if (micAutoSendRef.current) clearTimeout(micAutoSendRef.current);
+      micAutoSendRef.current = setTimeout(() => {
+        micAutoSendRef.current = null;
+        void sendChat(t); // sendChat 이 입력창 비움·빈값·streaming 가드 담당(신규 전송 로직 0).
+      }, 600);
+    });
+  };
   const stopMic = () => voice.stopListening();
 
   // 성과 진단 개시(메이커): 1층 사실(RPC 실값) 노출 + 2층 링고 해석 발화 1회(빈 대화면).
