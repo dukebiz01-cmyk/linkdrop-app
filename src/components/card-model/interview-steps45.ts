@@ -36,6 +36,8 @@ export interface InterviewSignals {
   nameSet?: boolean;
   priceSet?: boolean;
   originSet?: boolean;
+  /** S4-5 — 배송 스텝(배송방법 선택 = done). 배송비·안내문구는 선택 입력(신호 미포함). */
+  shipMethodSet?: boolean;
   gbTargetSet?: boolean;
   gbPriceSet?: boolean;
   gbDeadlineSet?: boolean;
@@ -94,6 +96,8 @@ export function getInterviewJourney(
       { no: 0, key: "gbTarget", label: "목표인원", deckBlock: "product", formField: "gbTarget" },
       { no: 0, key: "gbPrice", label: "달성가", deckBlock: "product", formField: "gbPrice" },
       { no: 0, key: "shipBasis", label: "발송기준", deckBlock: "seasonal" },
+      // S4-5 — 배송(어떻게·비용·안내) — 발송기준(언제) 바로 뒤. 스킵 가능(발행 게이트 아님).
+      { no: 0, key: "ship", label: "배송", deckBlock: "product", formField: "ship", skippable: true },
       { no: 0, key: "gbDeadline", label: "모집마감", deckBlock: "product", formField: "gbDeadline", conditional: true },
     ];
   } else {
@@ -104,6 +108,8 @@ export function getInterviewJourney(
       { no: 0, key: "origin", label: "원산지", deckBlock: "product", formField: "origin" },
       { no: 0, key: "price", label: "가격", deckBlock: "product", formField: "price" },
       { no: 0, key: "shipBasis", label: "발송기준", deckBlock: "seasonal" },
+      // S4-5 — 배송(어떻게·비용·안내) — 발송기준(언제) 바로 뒤. 스킵 가능(발행 게이트 아님).
+      { no: 0, key: "ship", label: "배송", deckBlock: "product", formField: "ship", skippable: true },
       { no: 0, key: "dock", label: "도킹", deckBlock: "dock", skippable: true },
     ];
   }
@@ -127,6 +133,8 @@ export function resolveInterviewDone(key: string, s: InterviewSignals): boolean 
       return !!s.gbPriceSet;
     case "gbDeadline":
       return !!s.gbDeadlineSet;
+    case "ship":
+      return !!s.shipMethodSet;
     case "shipBasis":
       return !!s.shipBasisDone;
     case "dock":
