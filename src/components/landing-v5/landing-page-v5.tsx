@@ -1,5 +1,4 @@
 import { useNavigate } from "@tanstack/react-router"
-import { Star } from "lucide-react"
 import { LinkDropLockup } from "@/components/brand/linkdrop-logo"
 import { KakaoButton } from "./kakao-button"
 import { GoogleButton } from "./google-button"
@@ -37,11 +36,7 @@ export function LandingPageV5() {
         <HowItWorks />
         <PurposeCards />
 
-        <section className="px-5 pb-6 pt-5">
-          <p className="mb-3 flex items-center justify-center gap-1.5 text-[12.5px] font-medium text-[#64748B]">
-            <Star className="h-3.5 w-3.5 fill-[#1D4ED8] text-[#1D4ED8]" strokeWidth={0} />
-            괴산·증평·진천 파트너 매장과 함께하고 있어요
-          </p>
+        <section className="px-5 pb-6 pt-2">
           <div className="flex flex-col gap-2.5">
             <KakaoButton size="lg" onClick={goLogin} />
             <GoogleButton size="lg" onClick={goLogin} />
