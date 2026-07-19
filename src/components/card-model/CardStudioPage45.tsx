@@ -107,7 +107,8 @@ import { useLingo } from "@/components/lingo/useLingo";
 import { LingoOrb } from "@/components/lingo/LingoOrb";
 // UI-4d — 음성 탭 문법: 헤더 상시 마이크(내비식) + 청취 효과음(Web Audio 합성).
 import { MicTapButton } from "@/components/lingo/MicTapButton";
-import { playListenStart, playListenStop } from "@/lib/lingo-sound";
+import { playListenStart, playListenStop, primeAudio } from "@/lib/lingo-sound";
+import { canUseSpeechRecognition, speakThenProceed, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 import { InlineDatePicker } from "@/components/lingo/InlineDatePicker";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
@@ -1933,6 +1934,8 @@ export function CardStudioPage45({
   //   자동전송 600ms·interim·에코가드·conv 재개 기존 경로 무변경.
   const MIC_PROMPT = "여기에 대고 말씀하세요";
   function handleHeaderMicTap() {
+    // UI-4d-FIX-1 — 오디오 언락은 제스처 컨텍스트(핸들러 최상단)에서(효과음 suspended 무음 방지).
+    primeAudio();
     if (chat.streaming) return;
     if (convActiveRef.current && convPaused) {
       resumeConvMode();
@@ -1945,15 +1948,26 @@ export function CardStudioPage45({
       setVoiceInterim("");
       return;
     }
+    // UI-4d-FIX-1 — 탭 시점 재판정: 불능이면 1회 안내(한 글자 락) 후 종료.
+    if (!canUseSpeechRecognition()) {
+      showGhost(VOICE_UNSUPPORTED_NOTICE, 5000);
+      return;
+    }
     setLingoPanelOpen(false); // 레이어드 진입(UI-3c) — 화면 잠식 0.
     lingoPanelOpenRef.current = false; // showGhost 게이트 즉시 동기(렌더 전 호출 대비).
     voice.stopSpeaking();
     showGhost(MIC_PROMPT, 5000);
-    voice.speak(MIC_PROMPT, () => {
-      playListenStart();
-      setVoiceInterim("");
-      setVoiceOpen(true);
-      voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
+    // UI-4d-FIX-1 — 낭독 3초 타임아웃 가드 병행(cancel→speak drop 방어) — 청취는 반드시 시작.
+    speakThenProceed({
+      speak: voice.speak,
+      stopSpeaking: voice.stopSpeaking,
+      text: MIC_PROMPT,
+      proceed: () => {
+        playListenStart();
+        setVoiceInterim("");
+        setVoiceOpen(true);
+        voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
+      },
     });
   }
 
@@ -3671,7 +3685,9 @@ export function CardStudioPage45({
                 />
               ))}
             </span>
-            <span className="text-[11px] font-bold text-[#0A0A0A]">{stage.label}</span>
+            {/* UI-4d-FIX-1 — 360px 오버플로 방어: 협폭에선 라벨 숨김(별만) — 마이크가 화면 밖으로
+                밀리는 소실 방지. 헤더 높이·sticky 좌표 무접촉(가로 축약만). */}
+            <span className="hidden text-[11px] font-bold text-[#0A0A0A] min-[400px]:inline">{stage.label}</span>
           </span>
         </div>
       </header>

@@ -37,6 +37,13 @@ function tone(freq: number, dur: number, gainPeak = 0.12) {
   }
 }
 
+/** UI-4d-FIX-1 — 오디오 언락: 탭 핸들러 최상단(제스처 컨텍스트)에서 호출해 AudioContext 를
+ *  생성·resume. 효과음이 비동기 콜백(낭독 완료 뒤 = 제스처 밖) 시점에 최초 생성되면 autoplay
+ *  정책으로 suspended → 무음이 되는 것을 방지. 실패는 조용히(소리는 보조, 사슬 무중단). */
+export function primeAudio() {
+  ensureCtx();
+}
+
 /** 청취 시작 — 밝은 띵(~0.15s). */
 export function playListenStart() {
   tone(880, 0.15);

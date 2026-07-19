@@ -9,7 +9,8 @@ import { Sparkles, ChevronDown, ArrowUp, Square, Loader2, Rocket, TrendingUp } f
 import { useLingo } from "@/components/lingo/useLingo";
 import { LingoOrb } from "@/components/lingo/LingoOrb";
 import { MicTapButton } from "@/components/lingo/MicTapButton"; // UI-4d — 탭 문법 교체.
-import { playListenStart, playListenStop } from "@/lib/lingo-sound";
+import { playListenStart, playListenStop, primeAudio } from "@/lib/lingo-sound";
+import { canUseSpeechRecognition, speakThenProceed, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
 import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 import { HomePerformanceFacts } from "@/components/home/HomePerformanceFacts";
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
@@ -148,11 +149,24 @@ export function LingoHomeBox({
     if (micPromptOn && !voice.listening && !voice.speaking) setMicPromptOn(false);
   }, [micPromptOn, voice.listening, voice.speaking]);
   const startMicSequence = () => {
+    // UI-4d-FIX-1 — ① 오디오 언락은 제스처 컨텍스트(핸들러 최상단)에서. ② 탭 시점 재판정 —
+    //   불능이면 1회 안내 후 종료. ③ 낭독은 3초 타임아웃 가드 병행(onDone drop 방어) —
+    //   낭독 실패·미지원이어도 띵→청취는 반드시 시작.
+    primeAudio();
+    if (!canUseSpeechRecognition()) {
+      chat.notify(VOICE_UNSUPPORTED_NOTICE);
+      return;
+    }
     voice.stopSpeaking();
     setMicPromptOn(true);
-    voice.speak(HOME_MIC_PROMPT, () => {
-      playListenStart();
-      startMic();
+    speakThenProceed({
+      speak: voice.speak,
+      stopSpeaking: voice.stopSpeaking,
+      text: HOME_MIC_PROMPT,
+      proceed: () => {
+        playListenStart();
+        startMic();
+      },
     });
   };
 
