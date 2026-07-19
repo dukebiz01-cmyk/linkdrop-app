@@ -3673,8 +3673,10 @@ export function CardStudioPage45({
             size={36}
             onTap={inAppNoMic ? () => void handleVoiceHandoff() : handleHeaderMicTap}
           />
-          {/* 등급 칩 — 별점 + 라벨 */}
-          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1 pl-2 pr-2.5">
+          {/* 등급 칩 — 별점 + 라벨. UI-4d-FIX-2 — 마이크 > 등급칩 우선순위: 초협폭(<360px)은
+              칩 전체 숨김, 360~400px 별만, 400px+ 별+라벨. shrink 허용(마이크는 shrink-0) —
+              어떤 뷰포트에서도 마이크가 칩에 밀려 화면 밖으로 나가지 않는다. 높이 불변. */}
+          <span className="hidden shrink items-center gap-1.5 overflow-hidden rounded-full bg-[#F4F4F5] py-1 pl-2 pr-2.5 min-[360px]:flex">
             <span className="flex items-center gap-0.5">
               {[0, 1, 2].map((i) => (
                 <Star
