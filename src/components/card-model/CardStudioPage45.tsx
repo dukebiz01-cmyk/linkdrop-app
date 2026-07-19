@@ -1846,10 +1846,14 @@ export function CardStudioPage45({
   speakingRef.current = voice.speaking;
   const lingoPanelOpenRef = useRef(lingoPanelOpen);
   lingoPanelOpenRef.current = lingoPanelOpen;
+  const ghostTextRef = useRef<string | null>(null); // LINGO-UI-3c — 현재 말풍선 미러(전환 판정용).
+  const ghostSourceRef = useRef<"talk" | "interim">("talk");
   const showGhost = (text: string, ms: number) => {
     if (lingoPanelOpenRef.current) return;
     const t = text.trim();
     if (!t) return;
+    ghostSourceRef.current = "talk";
+    ghostTextRef.current = t;
     setGhostText(t);
     if (ghostTimerRef.current) clearTimeout(ghostTimerRef.current);
     const expire = () => {
@@ -1884,10 +1888,44 @@ export function CardStudioPage45({
   useEffect(() => {
     if (lingoPanelOpen) setGhostText(null);
   }, [lingoPanelOpen]);
+  // LINGO-UI-3c — 레이어드 음성: listening 중 interim 을 말풍선으로 실시간 갱신(자동 소멸 없음 —
+  //   타이머 미장전). 청취 종료 시 잔상은 5초 예산으로 전환(응답 말풍선이 오면 자연 교체).
+  useEffect(() => {
+    if (!voice.listening || lingoPanelOpen || !voiceInterim.trim()) return;
+    ghostSourceRef.current = "interim";
+    ghostTextRef.current = voiceInterim;
+    if (ghostTimerRef.current) {
+      clearTimeout(ghostTimerRef.current);
+      ghostTimerRef.current = null;
+    }
+    setGhostText(voiceInterim);
+  }, [voiceInterim, voice.listening, lingoPanelOpen]);
+  useEffect(() => {
+    if (voice.listening || ghostSourceRef.current !== "interim") return;
+    const t = ghostTextRef.current;
+    ghostSourceRef.current = "talk";
+    if (t) showGhost(t, 5000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice.listening]);
   const openGhostPanel = () => {
     setGhostText(null);
     setLingoPanelOpen(true);
   };
+  // LINGO-UI-3c — 음성 레이어드 시작: 패널 자동 접힘 → 오브(listening 링)+말풍선(interim)이
+  //   상태 표현(화면 잠식 0). 음성 계약(자동전송·에코가드·conv 재개)은 기존 경로 그대로.
+  function handleLayeredMicStart() {
+    if (chat.streaming) return;
+    if (convActiveRef.current && convPaused) {
+      resumeConvMode();
+      return;
+    }
+    setLingoPanelOpen(false);
+    voice.stopSpeaking();
+    if (voice.listening) return;
+    setVoiceInterim("");
+    setVoiceOpen(true);
+    voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
+  }
 
   function lingoEquipSuggestion() {
     if (!lingo.action) {
@@ -3492,7 +3530,9 @@ export function CardStudioPage45({
     }
     setVoiceOpen(false);
     setVoiceInterim("");
-    openPanelAt();
+    // LINGO-UI-3c — 레이어드(패널 접힘) 세션은 종료 후에도 패널 미소환(화면 잠식 0 —
+    //   응답은 고스트 말풍선이 표면). 패널 열림 경로(파형 패널 잔존)만 기존 openPanelAt 유지.
+    if (lingoPanelOpenRef.current) openPanelAt();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceOpen, voice.listening, convPaused, chat.streaming]);
 
@@ -5687,7 +5727,7 @@ export function CardStudioPage45({
                           listening={voice.listening}
                           disabled={chat.streaming}
                           accent={accent}
-                          onStart={() => { if (!voice.listening) handleOrbTap(); }}
+                          onStart={() => { if (!voice.listening) handleLayeredMicStart(); }}
                           onStop={() => { if (voice.listening) handleOrbTap(); }}
                         />
                       ) : (
@@ -5815,7 +5855,15 @@ export function CardStudioPage45({
               )}
               <LingoOrb
                 size={52}
-                state={stripBusy ? "busy" : voice.speaking ? "speaking" : "idle"}
+                state={
+                  voice.listening
+                    ? "listening" // LINGO-UI-3c — 레이어드 청취(파형 링).
+                    : stripBusy
+                      ? "busy"
+                      : voice.speaking
+                        ? "speaking"
+                        : "idle"
+                }
                 onClick={openGhostPanel}
                 ariaLabel="링고AI 열기"
               />
