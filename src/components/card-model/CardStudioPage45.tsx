@@ -109,6 +109,7 @@ import { LingoOrb } from "@/components/lingo/LingoOrb";
 import { MicTapButton } from "@/components/lingo/MicTapButton";
 import { playListenStart, playListenStop } from "@/lib/lingo-sound";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
+import { InlineDatePicker } from "@/components/lingo/InlineDatePicker";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
 import { buildBoosterChips, buildGroupBuyView, stockUnitLabelFrom } from "./booster45";
 // FIX-44 — 영상 서치 도우미 순수 모듈(URL 파싱·후보 번역·41창 확정 문구 원문).
@@ -518,21 +519,15 @@ type FacilityItem = { id: string; text: string };
 let facilitySeq = 0;
 const newFacility = (text: string): FacilityItem => ({ id: `fac-${Date.now()}-${facilitySeq++}`, text });
 const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"];
-function buildDateList(count: number) {
-  const base = new Date();
-  base.setHours(0, 0, 0, 0);
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
-    const dow = d.getDay();
-    return {
-      label: `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAY_KR[dow]})`,
-      year: d.getFullYear(),
-      month: d.getMonth() + 1,
-      day: d.getDate(),
-      dow,
-    };
-  });
-}
+// UI-4f — 구 buildDateList(45일 칩) 폐기 → InlineDatePicker(캘린더) 직결. 저장·발행 산출 포맷은
+//   이 두 함수로 통일: ISO "YYYY-MM-DD"(발행 update_drop p_block_patch·부스터 비교)와
+//   라벨 "M/D(요)"(미리보기·적용됨 행) — 구 dateList entry 의 isoOf/label 과 바이트 동일.
+const isoOfDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const labelOfIso = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${m}/${d}(${WEEKDAY_KR[new Date(y, m - 1, d).getDay()]})`;
+};
 // FIX-62 — 구 TIME_OPTIONS(예약 시간 레일) 삭제: 캘린더 스텝이 실슬롯 편집기(date_range
 //   모드 = 시간 미지정)로 전환되며 소비처 0. 시간형 슬롯은 Phase 2(PartnerCalendarPage 주석).
 // 배송 택배사 선택지 — S4-5: 단일 소스를 ProductRegisterForm45(COURIERS45)로 이동, 여기선 별칭만.
@@ -800,18 +795,21 @@ export function CardStudioPage45({
   const visDrag = useRef({ active: false, startX: 0, base: 0 });
   const [deckIndex, setDeckIndex] = useState(0);
 
-  // 판매 캘린더 날짜 옵션 — SSR 안전: 날짜 리스트는 클라 마운트 후 생성
-  // (new Date() 하이드레이션 불일치 방지 — 기존 mounted 게이트 패턴).
-  const [dateList, setDateList] = useState<ReturnType<typeof buildDateList>>([]);
-  useEffect(() => setDateList(buildDateList(45)), []);
-  const DATE_OPTIONS = useMemo(() => dateList.map((d) => d.label), [dateList]);
+  // UI-4f — 판매 기간 = ISO("YYYY-MM-DD") 문자열 상태(InlineDatePicker 직결). SSR 안전:
+  //   오늘 계산은 클라 마운트 후(new Date() 하이드레이션 불일치 방지 — 구 dateList 게이트 동일).
+  //   기본 오늘~+6일(구 칩 기본 saleStartIdx 0 · saleEndIdx 6 과 동일).
+  const [saleStartIso, setSaleStartIso] = useState("");
+  const [saleEndIso, setSaleEndIso] = useState("");
+  useEffect(() => {
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+    setSaleStartIso(isoOfDate(base));
+    setSaleEndIso(isoOfDate(new Date(base.getFullYear(), base.getMonth(), base.getDate() + 6)));
+  }, []);
   // FIX-62 — 예약 캘린더 = 실슬롯(구 cfgDates/cfgTimes/cfgSlotsByDate 미영속 프리뷰 폐기).
   //   수신 fromDropDetail 과 동일 집계(buildReservationSlotView) — 날짜·좌석·정렬 거울 자동.
   const slotView = useMemo(() => buildReservationSlotView(initialSlots), [initialSlots]);
   const slotDays = slotView.dates.length;
-  // 판매 캘린더 — 판매 기간(시작~종료 인덱스).
-  const [saleStartIdx, setSaleStartIdx] = useState(0);
-  const [saleEndIdx, setSaleEndIdx] = useState(6);
 
   // ST2b-0 — 쿠폰 만들기 인라인 펼침(구 Radix Sheet 대체 — 래핑만 교체, View 내부 무수정).
   //   생성 완료(onChanged) = router.invalidate → loader 재실행 → coupons/manageCoupons 갱신
@@ -2469,17 +2467,13 @@ export function CardStudioPage45({
       //    소비)이 자동 점등. 기존 RPC 3종·POST 무접촉(이 호출 1개 추가만).
       if (mode === "commerce" && applied["seasonal"] && supabase) {
         try {
-          const pad2 = (n: number) => String(n).padStart(2, "0");
-          const sd = dateList[saleStartIdx];
-          const ed = dateList[saleEndIdx];
-          const isoOf = (d: { year: number; month: number; day: number }) =>
-            `${d.year}-${pad2(d.month)}-${pad2(d.day)}`;
-          if (sd && ed) {
+          // UI-4f — 캘린더 ISO 상태 직결(구 dateList[idx]→isoOf 와 동일 "YYYY-MM-DD" 산출).
+          if (saleStartIso && saleEndIso) {
             const { error: spanErr } = await supabase.rpc("update_drop" as never, {
               p_share_uuid: publishedShareUuid,
               p_curator_message: null,
               p_curator_note: null,
-              p_block_patch: { sale_start: isoOf(sd), sale_end: isoOf(ed) },
+              p_block_patch: { sale_start: saleStartIso, sale_end: saleEndIso },
             } as never);
             if (spanErr) console.warn("[studio-lab] 판매기간 저장 실패:", (spanErr as { message?: string }).message);
           }
@@ -2611,15 +2605,12 @@ export function CardStudioPage45({
     if (mode !== "commerce") return [];
     const now = new Date();
     const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const end = applied["seasonal"] ? dateList[saleEndIdx] : undefined;
     const couponOn = !!applied["coupon"] && !!selectedCoupon;
     return buildBoosterChips({
       stockLimit: productStockLimit,
       // FIX-45c — 남은수량 단위 = 판매 구성 라벨("N박스 남음") — 기본 '개' 하위호환.
       stockUnitLabel: productStockUnit,
-      saleEndIso: end
-        ? `${end.year}-${String(end.month).padStart(2, "0")}-${String(end.day).padStart(2, "0")}`
-        : null,
+      saleEndIso: applied["seasonal"] && saleEndIso ? saleEndIso : null,
       todayIso,
       orderCount: null,
       // FIX-40 — 공동구매 활성 시 주문 칩은 진행률이 대체(이중 표기 방지 — READ ② 판정).
@@ -2633,7 +2624,7 @@ export function CardStudioPage45({
         freeShipping: productFreeShip,
       },
     });
-  }, [mode, applied, dateList, saleEndIdx, selectedCoupon, productStockLimit, productStockUnit, productFreeShip, productGroupBuy]);
+  }, [mode, applied, saleEndIso, selectedCoupon, productStockLimit, productStockUnit, productFreeShip, productGroupBuy]);
 
   // FIX-40 — 공동구매 표시(순수 모듈): 참여 M = preorders 실집계 입력 없음(미발행 스튜디오)
   //   → null = 진행률 미렌더(조건·고지만). /d 실집계 주입은 ST2b — 같은 모듈 소비.
@@ -2714,8 +2705,8 @@ export function CardStudioPage45({
         ? { dates: slotView.dates, slotsByDate: slotView.slotsByDate }
         : {}),
       ...(applied["calendar"] && slotView.times.length > 0 ? { times: slotView.times } : {}),
-      ...(applied["seasonal"] && DATE_OPTIONS.length > 0
-        ? { saleStart: DATE_OPTIONS[saleStartIdx], saleEnd: DATE_OPTIONS[saleEndIdx] }
+      ...(applied["seasonal"] && saleStartIso && saleEndIso
+        ? { saleStart: labelOfIso(saleStartIso), saleEnd: labelOfIso(saleEndIso) }
         : {}),
       // S4-4a — 커머스는 시설 셀 미주입(그리드 다이어트 · fromDropDetail 동형).
       // FIX-61 — link 게이트를 fromStudioState 폴백과 동형으로(applied.link 미설정 = reserve 기본
@@ -4192,7 +4183,7 @@ export function CardStudioPage45({
                     label={
                       activeBlock.id === "calendar"
                         ? `적용됨 · ${slotDays}일 · 매장 캘린더` // FIX-62 — 실슬롯 기준.
-                        : `적용됨 · ${DATE_OPTIONS[saleStartIdx] ?? ""}${saleEndIdx !== saleStartIdx ? ` ~ ${DATE_OPTIONS[saleEndIdx] ?? ""}` : ""}`
+                        : `적용됨 · ${saleStartIso ? labelOfIso(saleStartIso) : ""}${saleEndIso !== saleStartIso ? ` ~ ${saleEndIso ? labelOfIso(saleEndIso) : ""}` : ""}`
                     }
                     onEdit={() => setCollapsedPanels((p) => ({ ...p, [activeBlock.id]: false }))}
                   />
@@ -4202,54 +4193,19 @@ export function CardStudioPage45({
                   <div className="space-y-2.5">
                     {activeBlock.id === "seasonal" ? (
                       <div className="space-y-3">
-                        <div className="flex items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5">
-                          <Calendar className="h-4 w-4 shrink-0 text-[#525252]" strokeWidth={2.25} />
-                          <span className="text-[12px] font-semibold text-[#525252]">판매 기간</span>
-                          <span className="ml-auto text-[12px] font-bold tabular-nums text-[#0A0A0A]">
-                            {DATE_OPTIONS[saleStartIdx] ?? ""}
-                            {saleEndIdx !== saleStartIdx ? ` ~ ${DATE_OPTIONS[saleEndIdx] ?? ""}` : ""}
-                            <span className="ml-1.5 text-[11px] font-semibold text-[#8A8A8A]">({saleEndIdx - saleStartIdx + 1}일간)</span>
-                          </span>
-                        </div>
-                        <div>
-                          <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">시작일</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {DATE_OPTIONS.slice(0, 10).map((d, i) => (
-                              <button
-                                key={d}
-                                type="button"
-                                onClick={() => {
-                                  setSaleStartIdx(i);
-                                  if (i > saleEndIdx) setSaleEndIdx(i);
-                                }}
-                                className="rounded-lg px-2.5 py-1.5 text-[12px] font-semibold transition-colors"
-                                style={saleStartIdx === i ? { backgroundColor: accent, color: "#fff" } : { backgroundColor: "#F4F4F5", color: "#525252" }}
-                              >
-                                {d}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">종료일</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {DATE_OPTIONS.slice(0, 10).map((d, i) => {
-                              const disabled = i < saleStartIdx;
-                              return (
-                                <button
-                                  key={d}
-                                  type="button"
-                                  disabled={disabled}
-                                  onClick={() => setSaleEndIdx(i)}
-                                  className="rounded-lg px-2.5 py-1.5 text-[12px] font-semibold transition-colors disabled:opacity-35"
-                                  style={saleEndIdx === i ? { backgroundColor: accent, color: "#fff" } : { backgroundColor: "#F4F4F5", color: "#525252" }}
-                                >
-                                  {d}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
+                        {/* UI-4f — 45일 칩(시작/종료 10칩 레일) → 인라인 캘린더(범위 선택).
+                            저장·발행 산출은 isoOfDate/labelOfIso 로 구 포맷과 동일. */}
+                        <InlineDatePicker
+                          mode="range"
+                          accent={accent}
+                          summaryLabel="판매기간"
+                          startIso={saleStartIso || null}
+                          endIso={saleEndIso || null}
+                          onChange={(s, e) => {
+                            setSaleStartIso(s);
+                            setSaleEndIso(e ?? s);
+                          }}
+                        />
                         <p className="rounded-xl bg-[#F7F7F8] px-3 py-2 text-[11px] font-medium leading-relaxed text-[#8A8A8A]">
                           판매 기간은 카드 미리보기에 표시돼요. 기간 자동 마감은 오픈 준비 중이에요.
                         </p>
