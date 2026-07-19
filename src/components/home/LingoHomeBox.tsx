@@ -5,7 +5,7 @@
 //   훅은 useLingo 창구 경유(세션 승계 트랙에서 내부 스토어 교체 예정 — UI는 창구만 바라봄).
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Sparkles, ChevronDown, ArrowUp, Square, Loader2, Mic, Rocket, TrendingUp } from "lucide-react";
+import { Sparkles, ChevronDown, ArrowUp, Square, Loader2, Rocket, TrendingUp } from "lucide-react";
 import { useLingo } from "@/components/lingo/useLingo";
 import { LingoOrb } from "@/components/lingo/LingoOrb";
 import { SlideToMic } from "@/components/lingo/SlideToMic";
@@ -315,19 +315,18 @@ export function LingoHomeBox({
                 <button type="button" aria-label="전송" onClick={() => void sendChat(chatInput)} disabled={!chatInput.trim() || voice.listening} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white active:scale-95 disabled:opacity-40" style={{ backgroundColor: ACCENT }}><ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} /></button>
               )}
             </div>
-            {/* KAKAO-LINGO-1b — 인앱은 마이크 자리에 [음성으로 만들기] = 크롬 핸드오프(next=/home). */}
+            {/* KAKAO-LINGO-1b — 인앱은 마이크 자리에 크롬 핸드오프(next=/home).
+                UI-4c — 밀기 단일 문법: 알약 버튼 → handoff 레일. */}
             {!inAppNoMic ? (
               <SlideToMic listening={voice.listening} disabled={chat.streaming} accent={ACCENT} onStart={startMic} onStop={stopMic} />
             ) : (
-              <button
-                type="button"
-                onClick={() => void startVoiceHandoff("/home", chat.notify)}
-                className="flex h-11 min-w-[44px] shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
-                style={{ backgroundColor: ACCENT }}
-              >
-                <Mic className="h-4 w-4" strokeWidth={2.5} />
-                음성으로 만들기
-              </button>
+              <SlideToMic
+                variant="handoff"
+                listening={false}
+                disabled={chat.streaming}
+                accent={ACCENT}
+                onHandoff={() => void startVoiceHandoff("/home", chat.notify)}
+              />
             )}
           </div>
         </div>

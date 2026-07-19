@@ -19,7 +19,6 @@ import {
   Lock,
   MapPin,
   Megaphone,
-  Mic,
   Minus,
   Palette,
   Phone,
@@ -408,10 +407,8 @@ const V6_TEACH_SHIP = `다음은 배송 방법이에요. 어떤 택배로 보낼
 배송비를 받으실지 무료로 하실지 정해 주세요.
 받는 분 화면에 그대로 보이니, 실제 보내시는 방법 그대로 적는 게 중요해요.
 다 정하면 미리보기 카드에 배송 안내가 나타나요. 그게 성공 신호예요.`;
-const V6_INAPP_NOTICE = `카카오톡 안에서는 음성을 쓸 수 없어요. 카카오톡이 마이크를 막고 있거든요.
-글로 말씀하시면 제가 전부 도와드려요.
-음성으로 하고 싶으시면 음성으로 만들기 버튼을 눌러 보세요.
-크롬이 열리면서 로그인 없이 바로 이어집니다.`;
+// UI-4c — 인앱 안내 1줄(한 글자 락 — 구 3-6 4줄 대체: 밀기 단일 문법).
+const V6_INAPP_NOTICE = "카카오톡에서는 밀면 크롬에서 이어져요.";
 const V6_UNDO_DONE = "네, 방금 것 되돌렸어요. 그 전 모습으로 돌아갔어요.";
 
 // LINGO-HANDS-1 — 클립 발화 변환층: "1:20~1:45" · "80~105초" · "1분20초부터 1분45초까지" → 초.
@@ -1447,7 +1444,8 @@ export function CardStudioPage45({
   const interviewCurrent = interviewStates.find((x) => x.state === "current");
   const interviewCurNo = interviewCurrent?.step.no ?? null;
   const prevInterviewNoRef = useRef<number | null>(interviewCurNo);
-  const [interviewAdvanceFlash, setInterviewAdvanceFlash] = useState(false);
+  // UI-4c — interviewAdvanceFlash·renderNumBadge 폐지(소비처였던 헤더 배지·캡슐 소멸 — 진행
+  //   표시는 상단 스테퍼 정본, 전진 축하는 넛지 발화가 담당).
   // LINGO-DRIVE-1 D-1 — 스텝 완료 넛지 예산(락 ③): 스텝(key)당 1회, 재전이 시 침묵. 세션 내 유지.
   const nudgedStepsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -1465,10 +1463,8 @@ export function CardStudioPage45({
             (teach ? `\n${teach}` : ""),
         );
       }
-      setInterviewAdvanceFlash(true);
-      const t = setTimeout(() => setInterviewAdvanceFlash(false), 700);
       prevInterviewNoRef.current = interviewCurNo;
-      return () => clearTimeout(t);
+      return;
     }
     prevInterviewNoRef.current = interviewCurNo;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1521,15 +1517,6 @@ export function CardStudioPage45({
       scrollToDeck();
     }
   }
-  const renderNumBadge = (no: number) => (
-    <span
-      className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold tabular-nums text-white transition-all duration-300"
-      style={{ backgroundColor: accent, animation: "sl-num-pulse 1.6s ease-out infinite" }}
-    >
-      {interviewAdvanceFlash ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : no}
-    </span>
-  );
-
   // FIX-48+50 — [필수] 배지 파생(requiredBadges) 폐지: 덱 번호 배지는 interview-steps45
   //   blockBadge(interviewJourney, ...) 단일 정본으로 대체(위 render). steps 는 발행 게이트
   //   (firstRequiredStep/canPublish/gateMsg)·방향등·링고 발화 정본으로 계속 사용.
@@ -5376,29 +5363,17 @@ export function CardStudioPage45({
                   <div className="relative max-h-[34vh] overflow-y-auto px-4 pb-3 pt-2">
                   {/* 독 헤더 — 번호 배지(펄스)+지금 N번 라벨+스피커 토글(드래그 폐기 → 정적 행). */}
                   <div className="flex items-center gap-2.5">
-                    {/* LINGO-UI-3b — 헤더 아이콘 = 공용 LingoOrb(발화 연동). */}
+                    {/* UI-4c — 헤더 한 줄: LingoOrb 32(상태 연동) + "N번 스텝명" 통합 텍스트 1개.
+                        "링고AI" 라벨·별도 번호 배지 제거(진행 배지 = 상단 스테퍼 정본). */}
                     <LingoOrb
-                      size={36}
+                      size={32}
                       state={chat.streaming ? "busy" : voice.speaking ? "speaking" : "active"}
                     />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">링고AI</p>
-                      {/* FIX-48+50 P1.5 커밋1g — 현재 번호 = 원형 배지(펄스) + 라벨(정본 인용, 창작 0). */}
-                      <div className="mt-0.5 flex items-center gap-1.5">
-                        {chat.streaming ? (
-                          <span className="text-[11px] font-medium text-[#9A9A9A]">생각 중…</span>
-                        ) : voice.speaking ? (
-                          <span className="text-[11px] font-medium text-[#9A9A9A]">말하는 중…</span>
-                        ) : interviewCurrent ? (
-                          <>
-                            {renderNumBadge(interviewCurrent.step.no)}
-                            <span className="truncate text-[12px] font-bold text-[#0A0A0A]">{interviewCurrent.step.label}</span>
-                          </>
-                        ) : (
-                          <span className="text-[11px] font-medium text-[#9A9A9A]">전환 코칭 · 대화 — 무엇이든 물어보세요</span>
-                        )}
-                      </div>
-                    </div>
+                    <p className="min-w-0 flex-1 truncate text-[13px] font-bold leading-tight text-[#0A0A0A]">
+                      {interviewCurrent
+                        ? `${interviewCurrent.step.no}번 ${interviewCurrent.step.label}`
+                        : "전환 코칭 · 대화 — 무엇이든 물어보세요"}
+                    </p>
                     {/* B-lite 작업10 — 스피커 헤더 토글(공용 부품, 입력줄 낭독 pill 대체). 드래그 제외. */}
                     <span className="flex items-center" onPointerDown={(e) => e.stopPropagation()}>
                       <SpeakerToggle ttsOn={voice.ttsOn} speaking={voice.speaking} onToggle={voice.toggleTts} accent={accent} />
@@ -5757,15 +5732,14 @@ export function CardStudioPage45({
                           onStop={() => { if (voice.listening) handleOrbTap(); }}
                         />
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => void handleVoiceHandoff()}
-                          className="flex h-11 min-w-[44px] shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95"
-                          style={{ backgroundColor: accent }}
-                        >
-                          <Mic className="h-4 w-4" strokeWidth={2.5} />
-                          음성으로 만들기
-                        </button>
+                        /* UI-4c — 밀기 단일 문법: 알약 버튼 → handoff 레일(기존 startVoiceHandoff 경로). */
+                        <SlideToMic
+                          variant="handoff"
+                          listening={false}
+                          disabled={chat.streaming}
+                          accent={accent}
+                          onHandoff={() => void handleVoiceHandoff()}
+                        />
                       )}
                     </div>
                   </div>
