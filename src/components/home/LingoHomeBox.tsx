@@ -8,7 +8,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { Sparkles, ChevronDown, ArrowUp, Square, Loader2, Rocket, TrendingUp } from "lucide-react";
 import { useLingo } from "@/components/lingo/useLingo";
 import { LingoOrb } from "@/components/lingo/LingoOrb";
-import { SlideToMic } from "@/components/lingo/SlideToMic";
+import { MicTapButton } from "@/components/lingo/MicTapButton"; // UI-4d — 탭 문법 교체.
+import { playListenStop } from "@/lib/lingo-sound";
 import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 import { HomePerformanceFacts } from "@/components/home/HomePerformanceFacts";
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
@@ -303,7 +304,7 @@ export function LingoHomeBox({
                 value={chatInput}
                 maxLength={2000}
                 disabled={chat.streaming || voice.listening}
-                placeholder={chat.streaming ? "링고가 생각 중…" : "링고AI에게 물어보기"}
+                placeholder={voice.listening ? "여기에 대고 말씀하세요" : chat.streaming ? "링고가 생각 중…" : "링고AI에게 물어보기"}
                 onChange={(e) => setChatInput(e.target.value)}
                 onFocus={() => voice.stopSpeaking()}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); void sendChat(chatInput); } }}
@@ -316,16 +317,29 @@ export function LingoHomeBox({
               )}
             </div>
             {/* KAKAO-LINGO-1b — 인앱은 마이크 자리에 크롬 핸드오프(next=/home).
-                UI-4c — 밀기 단일 문법: 알약 버튼 → handoff 레일. */}
+                UI-4d — 탭 문법: MicTapButton 교체(청취 중 = accent+파형 링, 재탭 종료). */}
             {!inAppNoMic ? (
-              <SlideToMic listening={voice.listening} disabled={chat.streaming} accent={ACCENT} onStart={startMic} onStop={stopMic} />
-            ) : (
-              <SlideToMic
-                variant="handoff"
-                listening={false}
+              <MicTapButton
+                listening={voice.listening}
                 disabled={chat.streaming}
                 accent={ACCENT}
-                onHandoff={() => void startVoiceHandoff("/home", chat.notify)}
+                size={44}
+                onTap={() => {
+                  if (voice.listening) {
+                    playListenStop();
+                    stopMic();
+                  } else {
+                    startMic();
+                  }
+                }}
+              />
+            ) : (
+              <MicTapButton
+                variant="handoff"
+                disabled={chat.streaming}
+                accent={ACCENT}
+                size={44}
+                onTap={() => void startVoiceHandoff("/home", chat.notify)}
               />
             )}
           </div>

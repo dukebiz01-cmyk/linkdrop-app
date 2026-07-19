@@ -93,7 +93,7 @@ import {
 } from "./interview-steps45";
 // FIX-43/48+50 P1.5 — 링고 음성 마이크(56px 파형 orb 표준). 캡슐·패널 마이크 A안 재사용.
 // B-lite(작업9) — 공용 소리 스위치 부품 장착(마이크 슬라이드 레일 + 스피커 헤더 토글). 홈과 동일.
-import { SlideToMic } from "@/components/lingo/SlideToMic";
+// UI-4d — SlideToMic 소비처 0(탭 문법 전환) — 파일은 보존·미사용화(삭제 금지 락).
 import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 // FIX-47 — 인앱 WebView 음성 정직 게이트(pwa-install 공용 판정 재사용 — 중복 정의 0).
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
@@ -105,6 +105,9 @@ import { stripMarkdown } from "@/lib/lingo-text";
 // LINGO-UI-3b — 링고 창구 훅 + 물방울 오브(고스트·패널 헤더 공용).
 import { useLingo } from "@/components/lingo/useLingo";
 import { LingoOrb } from "@/components/lingo/LingoOrb";
+// UI-4d — 음성 탭 문법: 헤더 상시 마이크(내비식) + 청취 효과음(Web Audio 합성).
+import { MicTapButton } from "@/components/lingo/MicTapButton";
+import { playListenStart, playListenStop } from "@/lib/lingo-sound";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
 import { buildBoosterChips, buildGroupBuyView, stockUnitLabelFrom } from "./booster45";
@@ -414,8 +417,8 @@ const V6_TEACH_SHIP = `다음은 배송 방법이에요. 어떤 택배로 보낼
 배송비를 받으실지 무료로 하실지 정해 주세요.
 받는 분 화면에 그대로 보이니, 실제 보내시는 방법 그대로 적는 게 중요해요.
 다 정하면 미리보기 카드에 배송 안내가 나타나요. 그게 성공 신호예요.`;
-// UI-4c — 인앱 안내 1줄(한 글자 락 — 구 3-6 4줄 대체: 밀기 단일 문법).
-const V6_INAPP_NOTICE = "카카오톡에서는 밀면 크롬에서 이어져요.";
+// UI-4d — 인앱 안내 1줄(한 글자 락 — 탭 문법).
+const V6_INAPP_NOTICE = "카카오톡에서는 누르면 크롬에서 이어져요.";
 const V6_UNDO_DONE = "네, 방금 것 되돌렸어요. 그 전 모습으로 돌아갔어요.";
 
 // LINGO-HANDS-1 — 클립 발화 변환층: "1:20~1:45" · "80~105초" · "1분20초부터 1분45초까지" → 초.
@@ -1912,23 +1915,46 @@ export function CardStudioPage45({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voice.listening]);
   const openGhostPanel = () => {
+    // UI-4d — 청취 중 오브 재탭 = 낮은 톤 + 종료(패널 미소환 — 잠식 0 유지).
+    if (voice.listening) {
+      playListenStop();
+      voice.stopListening();
+      setVoiceOpen(false);
+      setVoiceInterim("");
+      return;
+    }
     setGhostText(null);
     setLingoPanelOpen(true);
   };
-  // LINGO-UI-3c — 음성 레이어드 시작: 패널 자동 접힘 → 오브(listening 링)+말풍선(interim)이
-  //   상태 표현(화면 잠식 0). 음성 계약(자동전송·에코가드·conv 재개)은 기존 경로 그대로.
-  function handleLayeredMicStart() {
+  // UI-4d — 음성 탭 시퀀스(헤더 상시 마이크): 탭 → 말풍선+안내 낭독("여기에 대고 말씀하세요")
+  //   → 낭독 완료 콜백에서 띵(playListenStart) → 청취 시작(레이어드 — 패널 자동 접힘, UI-3c).
+  //   ttsOn OFF/미지원이면 speak 가 onDone 즉시 호출(useLingoVoice 계약) → 표시+띵→청취로
+  //   자연 degrade. 에코 방지: 낭독 종료 후에만 마이크 오픈. 재탭 = 낮은 톤 + 종료.
+  //   자동전송 600ms·interim·에코가드·conv 재개 기존 경로 무변경.
+  const MIC_PROMPT = "여기에 대고 말씀하세요";
+  function handleHeaderMicTap() {
     if (chat.streaming) return;
     if (convActiveRef.current && convPaused) {
       resumeConvMode();
       return;
     }
-    setLingoPanelOpen(false);
+    if (voice.listening) {
+      playListenStop();
+      voice.stopListening();
+      setVoiceOpen(false);
+      setVoiceInterim("");
+      return;
+    }
+    setLingoPanelOpen(false); // 레이어드 진입(UI-3c) — 화면 잠식 0.
+    lingoPanelOpenRef.current = false; // showGhost 게이트 즉시 동기(렌더 전 호출 대비).
     voice.stopSpeaking();
-    if (voice.listening) return;
-    setVoiceInterim("");
-    setVoiceOpen(true);
-    voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
+    showGhost(MIC_PROMPT, 5000);
+    voice.speak(MIC_PROMPT, () => {
+      playListenStart();
+      setVoiceInterim("");
+      setVoiceOpen(true);
+      voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
+    });
   }
 
   function lingoEquipSuggestion() {
@@ -3628,6 +3654,18 @@ export function CardStudioPage45({
               <span className="truncate">{content.store}</span>
             </span>
           </div>
+          {/* UI-4d — 헤더 상시 마이크(내비식): 어느 스크롤 위치에서든 한 탭으로 음성 시퀀스
+              (레이어드 진입). 인앱 = handoff 자동 분기. 36px = 헤더 기존 최대 자식(h-9)과 동일
+              — 헤더 실측 높이 불변(제약 12 — 지시 예상 40~44px 대신 수납 상한 채택, 근거 보고).
+              파형 링은 absolute overflow(레이아웃 0). */}
+          <MicTapButton
+            variant={inAppNoMic ? "handoff" : "listen"}
+            listening={voice.listening}
+            disabled={chat.streaming}
+            accent={accent}
+            size={36}
+            onTap={inAppNoMic ? () => void handleVoiceHandoff() : handleHeaderMicTap}
+          />
           {/* 등급 칩 — 별점 + 라벨 */}
           <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1 pl-2 pr-2.5">
             <span className="flex items-center gap-0.5">
@@ -5786,27 +5824,8 @@ export function CardStudioPage45({
                           </button>
                         )}
                       </div>
-                      {/* FIX-47 게이트 유지 — 인앱 WebView 는 마이크 미렌더(권한 루프 차단).
-                          B-lite 작업11 — 슬라이드 레일(ON/OFF 각인). handleMicTap 시작/종료 재사용.
-                          KAKAO-LINGO-1 — 인앱은 마이크 자리에 [음성으로 만들기] = 크롬 핸드오프. */}
-                      {!inAppNoMic ? (
-                        <SlideToMic
-                          listening={voice.listening}
-                          disabled={chat.streaming}
-                          accent={accent}
-                          onStart={() => { if (!voice.listening) handleLayeredMicStart(); }}
-                          onStop={() => { if (voice.listening) handleOrbTap(); }}
-                        />
-                      ) : (
-                        /* UI-4c — 밀기 단일 문법: 알약 버튼 → handoff 레일(기존 startVoiceHandoff 경로). */
-                        <SlideToMic
-                          variant="handoff"
-                          listening={false}
-                          disabled={chat.streaming}
-                          accent={accent}
-                          onHandoff={() => void handleVoiceHandoff()}
-                        />
-                      )}
+                      {/* UI-4d — 패널 입력줄 마이크 제거(음성 진입 = 상단 헤더 단일 — 이중 마이크
+                          금지). 입력줄 = 텍스트 입력+전송만. */}
                     </div>
                   </div>
 
