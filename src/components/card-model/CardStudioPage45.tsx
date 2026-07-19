@@ -1486,6 +1486,8 @@ export function CardStudioPage45({
   //   정상 흐름. 발화는 클라 템플릿(LLM 0) + stripMarkdown 경유.
   const STUCK_MS = 90_000;
   const stuckRef = useRef<Set<string>>(new Set());
+  // UI-4e-a — 미리보기 오터치 안내(세션 1회).
+  const previewNoticeShownRef = useRef(false);
   const [stuckChips, setStuckChips] = useState<{ key: string; label: string; canFill: boolean } | null>(null);
   const interviewCurKey = interviewCurrent?.step.key ?? null;
   useEffect(() => {
@@ -3857,7 +3859,22 @@ export function CardStudioPage45({
 
         {/* 히어로: 라이브 캔버스 카드 — ST1 CardModelBody(studio) 거울 */}
         <section ref={heroRef} className="pt-2.5">
-          <div>
+          {/* UI-4e-a — 미리보기 명시: 우상단 상시 필 배지 + 오터치 안내(세션 1회 · 낭독 없음 ·
+              내부 인터랙션 button/a/input 제외 — CardModelBody 무접촉, 래퍼만). */}
+          <div
+            className="relative"
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("button, a, input, [role='button']")) return;
+              if (previewNoticeShownRef.current) return;
+              previewNoticeShownRef.current = true;
+              chat.notify(stripMarkdown("여기는 손님에게 보이는 미리보기예요. 만드는 건 아래에서 같이 해요."));
+              const cur = interviewStates.find((x) => x.state === "current");
+              if (!cur?.step.deckBlock || !jumpToBlock(cur.step.deckBlock)) scrollToDeck();
+            }}
+          >
+            <span className="pointer-events-none absolute right-2 top-2 z-10 rounded-full bg-[#0F172A]/55 px-2 py-0.5 text-[10px] font-semibold text-white">
+              미리보기예요
+            </span>
             <CardModelBody
               model={cardModel}
               variant="studio"
