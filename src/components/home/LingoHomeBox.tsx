@@ -9,7 +9,7 @@ import { Sparkles, ChevronDown, ArrowUp, Square, Loader2, Rocket, TrendingUp } f
 import { useLingo } from "@/components/lingo/useLingo";
 import { LingoOrb } from "@/components/lingo/LingoOrb";
 import { MicTapButton } from "@/components/lingo/MicTapButton"; // UI-4d — 탭 문법 교체.
-import { playListenStop } from "@/lib/lingo-sound";
+import { playListenStart, playListenStop } from "@/lib/lingo-sound";
 import { SpeakerToggle } from "@/components/lingo/SpeakerToggle";
 import { HomePerformanceFacts } from "@/components/home/HomePerformanceFacts";
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
@@ -139,6 +139,22 @@ export function LingoHomeBox({
     });
   };
   const stopMic = () => voice.stopListening();
+  // UI-4e-b — 홈도 스튜디오와 동일 탭 시퀀스: 탭 → placeholder 전환+안내 낭독 → 띵 → 청취.
+  //   ttsOn OFF/미지원 = speak 가 onDone 즉시 호출 → 표시+띵→청취 degrade. 에코 방지 =
+  //   낭독 완료 후에만 마이크 오픈. 자동전송(600ms)·재탭 종료 기존 무변경.
+  const HOME_MIC_PROMPT = "여기에 대고 말씀하세요";
+  const [micPromptOn, setMicPromptOn] = useState(false);
+  useEffect(() => {
+    if (micPromptOn && !voice.listening && !voice.speaking) setMicPromptOn(false);
+  }, [micPromptOn, voice.listening, voice.speaking]);
+  const startMicSequence = () => {
+    voice.stopSpeaking();
+    setMicPromptOn(true);
+    voice.speak(HOME_MIC_PROMPT, () => {
+      playListenStart();
+      startMic();
+    });
+  };
 
   // 성과 진단 개시(메이커): 1층 사실(RPC 실값) 노출 + 2층 링고 해석 발화 1회(빈 대화면).
   const askPerformance = () => {
@@ -304,7 +320,7 @@ export function LingoHomeBox({
                 value={chatInput}
                 maxLength={2000}
                 disabled={chat.streaming || voice.listening}
-                placeholder={voice.listening ? "여기에 대고 말씀하세요" : chat.streaming ? "링고가 생각 중…" : "링고AI에게 물어보기"}
+                placeholder={micPromptOn || voice.listening ? "여기에 대고 말씀하세요" : chat.streaming ? "링고가 생각 중…" : "링고AI에게 물어보기"}
                 onChange={(e) => setChatInput(e.target.value)}
                 onFocus={() => voice.stopSpeaking()}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); void sendChat(chatInput); } }}
@@ -328,8 +344,9 @@ export function LingoHomeBox({
                   if (voice.listening) {
                     playListenStop();
                     stopMic();
+                    setMicPromptOn(false);
                   } else {
-                    startMic();
+                    startMicSequence(); // UI-4e-b — 스튜디오 동일 시퀀스.
                   }
                 }}
               />
