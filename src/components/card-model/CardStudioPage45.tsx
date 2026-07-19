@@ -3643,7 +3643,11 @@ export function CardStudioPage45({
 
       {/* 스티키 조립 미니 미리보기 (히어로 카드가 화면 밖일 때 등장)
           FIX-2 — 모드 토글이 스티키 스택(헤더 아래)에 통합돼 미니 미리보기는 그 아래(top-[134px])
-          에서 시작 — 스크롤 전 구간에서 두 요소 비겹침. */}
+          에서 시작 — 스크롤 전 구간에서 두 요소 비겹침.
+          UI-4a — 빈 카드 미노출: 실제 제목 원천 실값(resolvedCardTitle = 직접 입력·영상 제목·
+          매장명·상품명 — FIX-57 정본, placeholder 미포함)이 있을 때만 렌더. 폴백 세트·titleText
+          산출·CardModelBody·서버 컨텍스트·입력 placeholder 무접촉. */}
+      {!!resolvedCardTitle && (
       <div
         aria-hidden={heroVisible}
         className={`pointer-events-none fixed inset-x-0 top-[134px] z-[31] transition-all duration-300 ease-out ${
@@ -3686,6 +3690,7 @@ export function CardStudioPage45({
           </div>
         </div>
       </div>
+      )}
 
       <div className="mx-auto max-w-md px-5">
         {/* 모드 전환 (퍼블릭 / 예약·쿠폰 / 상품판매) — 비사업자는 사업자 모드 잠금(studio-build P6-3 동등)
