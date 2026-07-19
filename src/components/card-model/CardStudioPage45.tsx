@@ -22,7 +22,6 @@ import {
   Mic,
   Minus,
   Palette,
-  Pencil,
   Phone,
   Play,
   Plus,
@@ -1963,19 +1962,8 @@ export function CardStudioPage45({
     setLastEquipped(null);
     setLingoPanelOpen(false);
   }
-  function lingoEdit() {
-    const priority = ["content", "product", "productimage", "image", "calendar", "seasonal", "coupon", "dock", "link"];
-    const target =
-      priority.find((id) => DECK.some((b) => b.id === id) && applied[id]) ??
-      DECK.find((b) => CONFIGURABLE.includes(b.id) && !GATED_BLOCK_IDS.has(b.id))?.id;
-    if (target) {
-      if (!applied[target] && !(blockById(target).isPaid && score < ENHANCE_UNLOCK)) equip(blockById(target));
-      jumpToBlock(target);
-    } else {
-      scrollToDeck();
-    }
-    setLingoPanelOpen(false);
-  }
+  // UI-4b — lingoEdit([내용 편집] 단축)·canEdit 폐지: 소비처가 행동 칩뿐이었음 —
+  //   편집 진입은 스테퍼 탭·goToBlock·덱 탭이 정본.
 
   // FIX-3→23 — [계속하기]: 단일 타깃 블록으로 흐름 복귀(타깃 없음 = 수렴 → 거울 시트).
   //   안내 문구·방향등과 같은 소스라 항상 같은 카드로 점프한다.
@@ -1986,7 +1974,6 @@ export function CardStudioPage45({
     }
     if (!jumpToBlock(currentTarget.id)) scrollToDeck();
   }
-  const canEdit = DECK.some((b) => CONFIGURABLE.includes(b.id) && !GATED_BLOCK_IDS.has(b.id));
 
   // B전환 커밋1 — 스튜디오 링고 드래그 폐기(fabPos·⠿·패널 이동 로직 전량 제거). 펼침 = 하단
   //   고정 독으로 상태 전환만(위치 계산 없음). 호출부(캡슐 탭·마이크·[말 끝났어요])는 이 함수 유지.
@@ -5783,12 +5770,10 @@ export function CardStudioPage45({
                     </div>
                   </div>
 
-                  {/* FIX-48+50 P1.5 커밋1d — 행동 칩 = 최대 2개(담기·편집) + 되돌리기(undo 가능 시에만 렌더). */}
+                  {/* UI-4b — [블록 담기]·[내용 편집] 단축 칩 제거(진입은 스테퍼·goToBlock·덱 스크롤이
+                      정본). [되돌리기]만 유지(undo 가능 시에만 렌더). */}
                   {(() => {
-                  const tools = [
-                    { key: "add", icon: Plus, label: "블록 담기", onClick: () => { scrollToDeck(); setLingoPanelOpen(false); }, disabled: false },
-                    { key: "edit", icon: Pencil, label: "내용 편집", onClick: lingoEdit, disabled: !canEdit },
-                  ];
+                  const tools: { key: string; icon: LucideIcon; label: string; onClick: () => void; disabled: boolean }[] = [];
                   if (lastEquipped || lingoActUndo) {
                     tools.push({ key: "undo", icon: Undo2, label: "되돌리기", onClick: lingoUndo, disabled: false });
                   }
