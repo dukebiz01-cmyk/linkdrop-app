@@ -29,6 +29,7 @@ import { PriceBandAdvisor, type PriceBandResult } from "@/components/commerce/Pr
 import { buildPricePositionLines } from "./price-position45";
 // FIX-48+50 — 번호 인터뷰 좌표계(폼 필수 마커 번호 = 판매방식별 단일 정본).
 import { getInterviewJourney, type SalesMethod } from "./interview-steps45";
+import { InlineDatePicker } from "@/components/lingo/InlineDatePicker";
 
 /**
  * ProductRegisterForm45 — v0-45 정본 3유형(신선/가공/공산품) 상품 등록 폼 실배선 이식.
@@ -1620,39 +1621,31 @@ export function ProductRegisterForm45({
 
       <Field label={copy.dateLabel} hint={copy.dateHint}>
         {type === "processed" ? (
-          // 소비기한 — 기한은 하나(단일 유지).
-          <input type="date" value={harvestDate} onChange={(e) => setHarvestDate(e.target.value)} className={inputCls} style={{ boxShadow: "inset 0 0 0 1px transparent" }} onFocus={focusRing} onBlur={blurRing} />
+          // 소비기한 — 기한은 하나(단일 유지). UI-4f — 네이티브 date → 인라인 캘린더
+          //   (저장 포맷 ISO "YYYY-MM-DD" 동일 — 페이로드·검증 무변경).
+          <InlineDatePicker
+            mode="single"
+            accent={accent}
+            summaryLabel={copy.dateLabel}
+            startIso={harvestDate || null}
+            onChange={(s) => setHarvestDate(s)}
+          />
         ) : (
           // FIX-24 — 예약판매 농산물·수제품은 "수확(준비) 후 순차배송"이 본질 — 기간이 기본.
-          //   시작일 선택 시 종료일 자동 = 시작일(단일), 종료는 min 으로 뒤로만 확장.
+          //   UI-4f — 시작·종료 2입력 → 캘린더 범위 1개. 첫 탭 시작·둘째 탭 종료(시작≤종료 강제
+          //   = 구 min/자동보정과 동일 결과). 저장 포맷 ISO "YYYY-MM-DD" 동일.
           <>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="date"
-                value={harvestDate}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setHarvestDate(v);
-                  if (!v) setHarvestDateEnd("");
-                  else if (!harvestDateEnd || harvestDateEnd < v) setHarvestDateEnd(v);
-                }}
-                className={inputCls}
-                style={{ boxShadow: "inset 0 0 0 1px transparent" }}
-                onFocus={focusRing}
-                onBlur={blurRing}
-              />
-              <span className="shrink-0 text-[13px] font-bold text-[#A3A3A3]">~</span>
-              <input
-                type="date"
-                value={harvestDateEnd}
-                min={harvestDate || undefined}
-                onChange={(e) => setHarvestDateEnd(e.target.value)}
-                className={inputCls}
-                style={{ boxShadow: "inset 0 0 0 1px transparent" }}
-                onFocus={focusRing}
-                onBlur={blurRing}
-              />
-            </div>
+            <InlineDatePicker
+              mode="range"
+              accent={accent}
+              summaryLabel={copy.dateLabel}
+              startIso={harvestDate || null}
+              endIso={harvestDateEnd || null}
+              onChange={(s, e) => {
+                setHarvestDate(s);
+                setHarvestDateEnd(e ?? s);
+              }}
+            />
             {!!harvestDate && !!harvestDateEnd && harvestDateEnd > harvestDate && (
               <p className="mt-1.5 text-[11px] font-medium text-[#8A8A8A]">
                 {type === "fresh"
@@ -1661,6 +1654,19 @@ export function ProductRegisterForm45({
               </p>
             )}
           </>
+        )}
+        {/* UI-4f — 선택 해제 경로 보존(구 네이티브 input 의 ✕ 지우기 대체 — 선택 필드 되돌리기). */}
+        {!!harvestDate && (
+          <button
+            type="button"
+            onClick={() => {
+              setHarvestDate("");
+              setHarvestDateEnd("");
+            }}
+            className="mt-1.5 text-[11px] font-semibold text-[#8A8A8A] underline underline-offset-2"
+          >
+            선택 지우기
+          </button>
         )}
       </Field>
 
