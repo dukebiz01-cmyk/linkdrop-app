@@ -19,6 +19,7 @@ import {
   Lock,
   MapPin,
   Megaphone,
+  Mic,
   Minus,
   Palette,
   Phone,
@@ -39,6 +40,7 @@ import {
   Undo2,
   Users,
   Video,
+  Volume2,
   X,
   Zap,
 } from "lucide-react";
@@ -107,7 +109,7 @@ import { useLingo } from "@/components/lingo/useLingo";
 import { LingoOrb } from "@/components/lingo/LingoOrb";
 // UI-4d — 음성 탭 문법: 헤더 상시 마이크(내비식) + 청취 효과음(Web Audio 합성).
 import { playListenStart, playListenStop, primeAudio } from "@/lib/lingo-sound";
-import { canUseSpeechRecognition, speakThenProceed, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
+import { canUseSpeechRecognition, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
 import { InlineDatePicker } from "@/components/lingo/InlineDatePicker";
 // FIX-39/40 — 판매 부스터·공동구매(전부 실값·0=미렌더). 순수 모듈(ST2b /d 공용).
@@ -3476,12 +3478,12 @@ export function CardStudioPage45({
   }
 
   // UI-5-S2 — 오브 짧은 탭 = 마이크 시퀀스(헤더 마이크 철회분 흡수). 인앱 = 크롬 핸드오프.
-  //   청취 중 = 중지 / 발화 중 = 끊고 바로 듣기 / 평시 = 안내 낭독 후 청취(speakThenProceed).
+  //   UI-5-S2b — 청취 중 = 중지 / 그 외 = 낭독 없이 즉시 청취(띠딩 → startListening, 텍스트 안내만).
   //   primeAudio 는 제스처 컨텍스트 최상단(오디오 언락 — 효과음 suspended 무음 방지).
   //   자동전송 600ms·interim·에코가드·conv 재개 기존 경로 무변경.
-  const ORB_MIC_PROMPT = "말씀해 주세요, 대표님";
   const orbPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const orbLongPressedRef = useRef(false);
+  const [orbPressed, setOrbPressed] = useState(false); // UI-5-S2b — pointerDown 즉시 눌림 피드백.
   function handleOrbTap() {
     // UI-5-S2 — 오디오 언락은 제스처 컨텍스트(핸들러 최상단)에서.
     primeAudio();
@@ -3510,22 +3512,16 @@ export function CardStudioPage45({
       setLingoPanelOpen(true);
       return;
     }
-    // 발화 중이면 끊고(stopSpeaking) 바로 마이크 시퀀스 진입.
+    // UI-5-S2b — 낭독 지연 제거: speakThenProceed(최대 3초) 삭제. 발화 중이면 끊고(stopSpeaking)
+    //   즉시 청취. 안내는 낭독 대신 텍스트 말풍선만(띠딩 → 바로 마이크 오픈 — 반응 0.1초).
     voice.stopSpeaking();
     setLingoPanelOpen(false); // 레이어드 진입 — 화면 잠식 0.
     lingoPanelOpenRef.current = false; // showGhost 게이트 즉시 동기.
-    showGhost(ORB_MIC_PROMPT, 5000);
-    speakThenProceed({
-      speak: voice.speak,
-      stopSpeaking: voice.stopSpeaking,
-      text: ORB_MIC_PROMPT,
-      proceed: () => {
-        playListenStart();
-        setVoiceInterim("");
-        setVoiceOpen(true);
-        voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
-      },
-    });
+    playListenStart(); // 띠딩(청취 시작음).
+    setVoiceInterim("");
+    setVoiceOpen(true);
+    voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
+    showGhost("듣고 있어요 — 말씀하세요", 5000);
   }
   // [취소] — 인식 텍스트 폐기 + STT 즉시 종료(파형 AudioContext 는 패널 언마운트가 정리).
   //   FIX-48 — 대화 모드 중이면 전체 정지(endConvMode 동일 경로).
@@ -5903,6 +5899,7 @@ export function CardStudioPage45({
                 type="button"
                 aria-label="링고AI — 짧게 눌러 말하기, 길게 눌러 창 열기"
                 onPointerDown={() => {
+                  setOrbPressed(true); // UI-5-S2b — 누르는 순간 즉시 피드백.
                   orbLongPressedRef.current = false;
                   if (orbPressTimerRef.current) clearTimeout(orbPressTimerRef.current);
                   orbPressTimerRef.current = setTimeout(() => {
@@ -5913,31 +5910,47 @@ export function CardStudioPage45({
                   }, 500);
                 }}
                 onPointerUp={() => {
+                  setOrbPressed(false);
                   if (!orbPressTimerRef.current) return; // 이미 길게 발동 → 탭 무시(상호배타).
                   clearTimeout(orbPressTimerRef.current);
                   orbPressTimerRef.current = null;
                   if (!orbLongPressedRef.current) handleOrbTap(); // 짧게 = 말하기.
                 }}
                 onPointerLeave={() => {
+                  setOrbPressed(false);
                   if (orbPressTimerRef.current) {
                     clearTimeout(orbPressTimerRef.current);
                     orbPressTimerRef.current = null;
                   }
                 }}
-                className="rounded-full"
+                className={`relative rounded-full transition-transform duration-100 ${orbPressed ? "scale-95" : ""}`}
               >
-                <LingoOrb
-                  size={52}
-                  state={
-                    voice.listening
-                      ? "listening" // LINGO-UI-3c — 레이어드 청취(파형 링).
-                      : stripBusy
-                        ? "busy"
-                        : voice.speaking
-                          ? "speaking"
-                          : "idle"
-                  }
-                />
+                {voice.listening ? (
+                  /* UI-5-S2b — 청취 중 = 오브 대신 마이크 뷰(흰 원 + 빨강 Mic + 바깥 빨간 펄스 링).
+                     크기 52px 동일 — 레이아웃 점프 0. LingoOrb.tsx 무수정(wrapper 레벨 전환). */
+                  <span className="relative flex h-[52px] w-[52px] items-center justify-center">
+                    <span className="absolute inset-0 rounded-full bg-[#DC2626]/40 animate-ping" aria-hidden="true" />
+                    <span className="relative flex h-[52px] w-[52px] items-center justify-center rounded-full bg-white [box-shadow:0_8px_24px_-8px_rgba(15,23,42,0.35),inset_0_0_0_1px_#ECECEE]">
+                      <Mic className="h-6 w-6 text-[#DC2626]" strokeWidth={2.25} />
+                    </span>
+                  </span>
+                ) : (
+                  <LingoOrb
+                    size={52}
+                    state={stripBusy ? "busy" : voice.speaking ? "speaking" : "idle"}
+                  />
+                )}
+                {/* UI-5-S2b — 상시 마이크 배지(어포던스): 평시 Mic(빨강) / 발화 중 Volume2.
+                    청취 중엔 본체가 마이크가 되므로 숨김. 20px 흰 원 + 12px 아이콘 + 테두리. */}
+                {!voice.listening && (
+                  <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white [box-shadow:0_2px_6px_-1px_rgba(15,23,42,0.3),inset_0_0_0_1px_#E5E5E5]">
+                    {voice.speaking ? (
+                      <Volume2 className="h-3 w-3 text-[#525252]" strokeWidth={2.5} />
+                    ) : (
+                      <Mic className="h-3 w-3 text-[#DC2626]" strokeWidth={2.5} />
+                    )}
+                  </span>
+                )}
               </button>
             </div>
           )}
