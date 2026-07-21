@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react"
-import { Hand } from "lucide-react"
 import { LingoAvatar } from "@/components/brand/LingoMascot"
 
 export interface AssembleStep {
@@ -70,12 +69,13 @@ export function LingoAssembleOverlay({
     const place = () => {
       if (cancelled) return
       const r = el.getBoundingClientRect()
-      // 대상 강조 — 임시 파란 링(ring-2 ring-[#3B82F6] + offset 상당의 boxShadow).
+      // 대상 강조 — 임시 파란 링(#1D4ED8 계열 저채도 + offset 상당의 boxShadow).
       if (highlightedRef.current !== el) {
         el.dataset.prevShadow = el.style.boxShadow
         el.dataset.prevTransition = el.style.transition
         el.style.transition = "box-shadow 0.25s ease"
-        el.style.boxShadow = "0 0 0 2px #FFFFFF, 0 0 0 4px #3B82F6, 0 0 0 9px rgba(59,130,246,0.25)"
+        // UI-5-T1d — 대상 강조 링: #1D4ED8 계열 저채도(0.25~0.35).
+        el.style.boxShadow = "0 0 0 2px #FFFFFF, 0 0 0 4px rgba(29,78,216,0.35), 0 0 0 9px rgba(29,78,216,0.16)"
         highlightedRef.current = el
       }
       setMarker({
@@ -112,28 +112,44 @@ export function LingoAssembleOverlay({
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[76]">
-      {/* UI-5-T1d — 지목 순간 탭 모션(짚는 느낌): 이동(0.5s) 완료 후 scale 1→0.85→1(0.3s). */}
-      <style>{`@keyframes lingo-marker-tap{0%{transform:scale(1)}40%{transform:scale(0.85)}100%{transform:scale(1)}}`}</style>
-      {/* 코치 마커 — 실좌표 배치. 스텝 간 이동은 transition 0.5s(순간이동 금지). */}
+      {/* UI-5-T1d — 짚는 모션: 이동(0.5s) 완료 후 검지 방향(좌상단)으로 3px 전진→복귀(0.3s).
+          물결 = 링고 손길(#1D4ED8) 저채도(opacity 0.32→0). */}
+      <style>{`
+        @keyframes lingo-marker-tap{0%{transform:translate(0,0)}50%{transform:translate(-1.7px,-2.5px)}100%{transform:translate(0,0)}}
+        @keyframes lingo-coach-ripple{0%{transform:scale(0.5);opacity:0.32}100%{transform:scale(2.1);opacity:0}}
+      `}</style>
+      {/* 코치 마커 — 실좌표 배치(손끝이 대상 중심에 닿도록 +10/+14 오프셋). 이동 transition 0.5s. */}
       {marker && (
         <div
           className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-out"
-          style={{ left: marker.x, top: marker.y }}
+          style={{ left: marker.x + 10, top: marker.y + 14 }}
         >
           <span className="relative flex items-center justify-center">
-            <span className="lingo-ripple absolute h-11 w-11 rounded-full bg-[#3B82F6]" aria-hidden="true" />
+            {/* 물결(링고 손길 · #1D4ED8, 저채도) */}
             <span
-              className="lingo-ripple absolute h-11 w-11 rounded-full bg-[#3B82F6]"
-              style={{ animationDelay: "0.55s" }}
+              className="absolute h-11 w-11 rounded-full bg-[#1D4ED8]"
+              style={{ animation: "lingo-coach-ripple 1.1s cubic-bezier(0.19,1,0.22,1) infinite" }}
               aria-hidden="true"
             />
-            {/* UI-5-T1d — 손가락(Hand) 마커. key={current} 로 스텝마다 탭 모션 재생. */}
+            <span
+              className="absolute h-11 w-11 rounded-full bg-[#1D4ED8]"
+              style={{ animation: "lingo-coach-ripple 1.1s cubic-bezier(0.19,1,0.22,1) 0.55s infinite" }}
+              aria-hidden="true"
+            />
+            {/* 받침 원(흰색+#12233D 테두리 2px) + 커스텀 검지 손가락 SVG(#12233D). key={current}=스텝마다 탭. */}
             <span
               key={current}
-              className="relative flex h-10 w-10 items-center justify-center rounded-full border-[2.5px] border-white bg-[#1D4ED8] shadow-lg"
+              className="relative flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#12233D] bg-white shadow-lg"
               style={{ animation: "lingo-marker-tap 0.3s ease 0.5s" }}
             >
-              <Hand className="h-5 w-5 text-white" strokeWidth={2.5} />
+              <svg viewBox="0 0 40 40" className="h-6 w-6" aria-hidden="true">
+                {/* 검지를 좌상단(-35°)으로 뻗은 포인팅 핸드: 검지 캡슐 + 말아쥔 주먹 + 엄지 (3패스). */}
+                <g transform="rotate(-35 20 20)" fill="#12233D">
+                  <rect x="16.5" y="4" width="7" height="19" rx="3.5" />
+                  <path d="M12.5 19 C12.5 16.2 14.5 15 16.5 15 L24 15 C27 15 29.5 17.2 29.5 21 L29.5 29 C29.5 33 26.8 35 23 35 L18 35 C14.5 35 12.5 32.2 12.5 29 Z" />
+                  <path d="M12.5 21.5 C10 21.5 8.5 23.5 9.4 26 C10.2 28 12.4 28.4 13.4 26.5 L14.2 24 C14.7 22.7 13.8 21.5 12.5 21.5 Z" />
+                </g>
+              </svg>
             </span>
           </span>
         </div>

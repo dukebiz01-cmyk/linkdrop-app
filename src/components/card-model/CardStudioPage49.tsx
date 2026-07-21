@@ -1027,7 +1027,13 @@ export function CardStudioPage() {
     reserve: { accent: POINT },
     commerce: { accent: "#0F766E" },
   } as const;
-  const accent = MODE_SKIN[mode].accent;
+  // UI-5-T1d(T-C) — 색 다이어트: 크롬 유채색 전량 무채색화. 유채 역할 2개만 —
+  //   cardAccent(카드/CardBody · WYSIWYG 유지) · LINGO(링고의 손길 · 블루).
+  //   accent=CHROME 로 기존 크롬 사용처(69개)를 일괄 무채색화하고, 링고 요소만 LINGO 로 승격.
+  const cardAccent = MODE_SKIN[mode].accent; // 카드 모드 색 — cardModel.accent 로만 소비(CardBody).
+  const LINGO = "#1D4ED8"; // 링고의 손길(블루) — FAB·오브·연출 링·링고 패널 강조 전용.
+  const CHROME = "#16161D"; // 스튜디오 크롬 강조(무채 잉크).
+  const accent = CHROME;
   const pageBg = PAGE_BG;
 
   // 모드별 카드 내용 (category = 상단 카드에 표시할 카테고리)
@@ -1082,7 +1088,7 @@ export function CardStudioPage() {
 
   // 제작=공유=수신 거울: 현재 스튜디오 상태를 단일 CardModel로 확정
   const cardModel: CardModel = {
-    accent,
+    accent: cardAccent, // T-C — 카드(CardBody) 는 모드 색 유지(WYSIWYG · 다이어트 제외).
     cardColor,
     pageBg,
     category: content.category,
@@ -1281,7 +1287,7 @@ export function CardStudioPage() {
           <div className="flex items-center gap-2">
             <span
               className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"
-              style={{ backgroundColor: accent }}
+              style={{ backgroundColor: LINGO }}
             >
               <MessageCircle className="h-[17px] w-[17px]" strokeWidth={2.25} />
               <Sparkles className="absolute -right-0.5 -top-0.5 h-3 w-3" strokeWidth={2.5} fill="currentColor" />
@@ -1361,7 +1367,7 @@ export function CardStudioPage() {
               active={assembling}
               steps={assembleSteps}
               step={assembleStep}
-              accent={accent}
+              accent={LINGO}
               onSkip={skipAssembly}
             />
           </div>
@@ -2345,7 +2351,7 @@ export function CardStudioPage() {
                           />
                           <button
                             onClick={() => removeFacility(f.id)}
-                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#A3A3A3] transition-colors hover:bg-[#FEE2E2] hover:text-[#DC2626] active:scale-90"
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#A3A3A3] transition-colors hover:bg-[#F0F0F0] hover:text-[#525252] active:scale-90"
                             aria-label="시설 삭제"
                           >
                             <Trash2 className="h-3.5 w-3.5" strokeWidth={2.25} />
@@ -2764,7 +2770,7 @@ export function CardStudioPage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">링고AI</p>
                       <p className="flex items-center gap-1 text-[11px] font-medium text-[#9A9A9A]">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
+                        <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: LINGO }} />
                         입력하거나 말하면 카드를 편집해드려요
                       </p>
                     </div>
@@ -2865,7 +2871,7 @@ export function CardStudioPage() {
                           disabled={thinking}
                           aria-label={listening ? "음성 입력 종료" : "음성으로 말하기"}
                           className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-90 disabled:opacity-50"
-                          style={{ backgroundColor: listening ? "#DC2626" : accent }}
+                          style={{ backgroundColor: listening ? "#DC2626" : LINGO }}
                         >
                           {listening && (
                             <span className="absolute inset-0 animate-ping rounded-full" style={{ backgroundColor: "rgba(220,38,38,0.4)" }} />
@@ -2878,7 +2884,7 @@ export function CardStudioPage() {
                           disabled={thinking || lingoText.trim() === ""}
                           aria-label="보내기"
                           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-90 disabled:opacity-40"
-                          style={{ backgroundColor: accent }}
+                          style={{ backgroundColor: LINGO }}
                         >
                           <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
                         </button>
@@ -2910,8 +2916,8 @@ export function CardStudioPage() {
               className={`fixed z-40 flex h-14 w-14 touch-none items-center justify-center rounded-full text-white ring-[3px] ring-white ${fabDragging ? "scale-110 cursor-grabbing" : "cursor-grab transition-all duration-300 ease-out active:scale-90"}`}
               style={
                 fabPos
-                  ? { left: fabPos.x, top: fabPos.y, backgroundColor: accent, boxShadow: `0 14px 30px -8px ${accent}, 0 4px 12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.25)` }
-                  : { right: 20, bottom: 196, backgroundColor: accent, boxShadow: `0 14px 30px -8px ${accent}, 0 4px 12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.25)` }
+                  ? { left: fabPos.x, top: fabPos.y, backgroundColor: LINGO, boxShadow: `0 14px 30px -8px ${LINGO}, 0 4px 12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.25)` }
+                  : { right: 20, bottom: 196, backgroundColor: LINGO, boxShadow: `0 14px 30px -8px ${LINGO}, 0 4px 12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.25)` }
               }
             >
               <MessageCircle className="h-6 w-6" strokeWidth={2} />
@@ -2920,7 +2926,7 @@ export function CardStudioPage() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
                   <span
                     className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold"
-                    style={{ color: accent }}
+                    style={{ color: LINGO }}
                   >
                     !
                   </span>
