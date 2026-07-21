@@ -106,7 +106,6 @@ import { stripMarkdown } from "@/lib/lingo-text";
 import { useLingo } from "@/components/lingo/useLingo";
 import { LingoOrb } from "@/components/lingo/LingoOrb";
 // UI-4d — 음성 탭 문법: 헤더 상시 마이크(내비식) + 청취 효과음(Web Audio 합성).
-import { MicTapButton } from "@/components/lingo/MicTapButton";
 import { playListenStart, playListenStop, primeAudio } from "@/lib/lingo-sound";
 import { canUseSpeechRecognition, speakThenProceed, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
 import { VoiceWavePanel45 } from "@/components/lingo/VoiceWavePanel45";
@@ -1927,49 +1926,6 @@ export function CardStudioPage45({
     setGhostText(null);
     setLingoPanelOpen(true);
   };
-  // UI-4d — 음성 탭 시퀀스(헤더 상시 마이크): 탭 → 말풍선+안내 낭독("여기에 대고 말씀하세요")
-  //   → 낭독 완료 콜백에서 띵(playListenStart) → 청취 시작(레이어드 — 패널 자동 접힘, UI-3c).
-  //   ttsOn OFF/미지원이면 speak 가 onDone 즉시 호출(useLingoVoice 계약) → 표시+띵→청취로
-  //   자연 degrade. 에코 방지: 낭독 종료 후에만 마이크 오픈. 재탭 = 낮은 톤 + 종료.
-  //   자동전송 600ms·interim·에코가드·conv 재개 기존 경로 무변경.
-  const MIC_PROMPT = "여기에 대고 말씀하세요";
-  function handleHeaderMicTap() {
-    // UI-4d-FIX-1 — 오디오 언락은 제스처 컨텍스트(핸들러 최상단)에서(효과음 suspended 무음 방지).
-    primeAudio();
-    if (chat.streaming) return;
-    if (convActiveRef.current && convPaused) {
-      resumeConvMode();
-      return;
-    }
-    if (voice.listening) {
-      playListenStop();
-      voice.stopListening();
-      setVoiceOpen(false);
-      setVoiceInterim("");
-      return;
-    }
-    // UI-4d-FIX-1 — 탭 시점 재판정: 불능이면 1회 안내(한 글자 락) 후 종료.
-    if (!canUseSpeechRecognition()) {
-      showGhost(VOICE_UNSUPPORTED_NOTICE, 5000);
-      return;
-    }
-    setLingoPanelOpen(false); // 레이어드 진입(UI-3c) — 화면 잠식 0.
-    lingoPanelOpenRef.current = false; // showGhost 게이트 즉시 동기(렌더 전 호출 대비).
-    voice.stopSpeaking();
-    showGhost(MIC_PROMPT, 5000);
-    // UI-4d-FIX-1 — 낭독 3초 타임아웃 가드 병행(cancel→speak drop 방어) — 청취는 반드시 시작.
-    speakThenProceed({
-      speak: voice.speak,
-      stopSpeaking: voice.stopSpeaking,
-      text: MIC_PROMPT,
-      proceed: () => {
-        playListenStart();
-        setVoiceInterim("");
-        setVoiceOpen(true);
-        voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
-      },
-    });
-  }
 
   function lingoEquipSuggestion() {
     if (!lingo.action) {
@@ -3519,32 +3475,57 @@ export function CardStudioPage45({
     }, 600);
   }
 
-  // KAKAO-LINGO-1 — 인앱 음성 핸드오프: 1회용 코드 발급(쿠키 세션 인증) → 크롬 탈출 스킴.
-  //   KAKAO-LINGO-1b — 본문은 공용 헬퍼(voice-handoff.ts)로 이관 — 문구·흐름 동일(동작 변화 0).
-  async function handleVoiceHandoff() {
-    await startVoiceHandoff("/studio-build", chat.notify);
-  }
-
-  // FIX-43 — 캡슐 옆 마이크 orb(스트립 뷰): 탭 → 듣는 중 파형 패널로 펼침.
-  //   LINGO-MIC-AUTOSEND-1 — 반이중 해제: final = 잠깐 표시 후 자동 전송(autoSendVoiceOnce).
-  //   lingo-chat 계약 무변경(channel 'voice' 그대로).
+  // UI-5-S2 — 오브 짧은 탭 = 마이크 시퀀스(헤더 마이크 철회분 흡수). 인앱 = 크롬 핸드오프.
+  //   청취 중 = 중지 / 발화 중 = 끊고 바로 듣기 / 평시 = 안내 낭독 후 청취(speakThenProceed).
+  //   primeAudio 는 제스처 컨텍스트 최상단(오디오 언락 — 효과음 suspended 무음 방지).
+  //   자동전송 600ms·interim·에코가드·conv 재개 기존 경로 무변경.
+  const ORB_MIC_PROMPT = "말씀해 주세요, 대표님";
+  const orbPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const orbLongPressedRef = useRef(false);
   function handleOrbTap() {
+    // UI-5-S2 — 오디오 언락은 제스처 컨텍스트(핸들러 최상단)에서.
+    primeAudio();
     if (chat.streaming) return;
-    // FIX-48 — 무음 대기 중 마이크 탭 = 대화 재개("계속하려면 마이크를 눌러 주세요").
+    // B-4 — 인앱(마이크 불가) = 기존 크롬 핸드오프 유지(동작 변화 0). lib 무접촉.
+    if (inAppNoMic) {
+      void startVoiceHandoff("/studio-build", chat.notify);
+      return;
+    }
+    // FIX-48 — 무음 대기 중 마이크 탭 = 대화 재개.
     if (convActiveRef.current && convPaused) {
       resumeConvMode();
       return;
     }
-    voice.stopSpeaking();
+    // 청취 중 재탭 = 중지(낮은 톤 + 종료).
     if (voice.listening) {
+      playListenStop();
       voice.stopListening();
       setVoiceOpen(false);
       setVoiceInterim("");
       return;
     }
-    setVoiceInterim("");
-    setVoiceOpen(true);
-    voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
+    // 탭 시점 재판정 — 불능이면 안내 말풍선 + 패널 폴백 후 종료.
+    if (!canUseSpeechRecognition()) {
+      showGhost(VOICE_UNSUPPORTED_NOTICE, 5000);
+      setLingoPanelOpen(true);
+      return;
+    }
+    // 발화 중이면 끊고(stopSpeaking) 바로 마이크 시퀀스 진입.
+    voice.stopSpeaking();
+    setLingoPanelOpen(false); // 레이어드 진입 — 화면 잠식 0.
+    lingoPanelOpenRef.current = false; // showGhost 게이트 즉시 동기.
+    showGhost(ORB_MIC_PROMPT, 5000);
+    speakThenProceed({
+      speak: voice.speak,
+      stopSpeaking: voice.stopSpeaking,
+      text: ORB_MIC_PROMPT,
+      proceed: () => {
+        playListenStart();
+        setVoiceInterim("");
+        setVoiceOpen(true);
+        voice.startListening((t) => autoSendVoiceOnce(t), { onInterim: setVoiceInterim });
+      },
+    });
   }
   // [취소] — 인식 텍스트 폐기 + STT 즉시 종료(파형 AudioContext 는 패널 언마운트가 정리).
   //   FIX-48 — 대화 모드 중이면 전체 정지(endConvMode 동일 경로).
@@ -3661,22 +3642,9 @@ export function CardStudioPage45({
               <span className="truncate">{content.store}</span>
             </span>
           </div>
-          {/* UI-4d — 헤더 상시 마이크(내비식): 어느 스크롤 위치에서든 한 탭으로 음성 시퀀스
-              (레이어드 진입). 인앱 = handoff 자동 분기. 36px = 헤더 기존 최대 자식(h-9)과 동일
-              — 헤더 실측 높이 불변(제약 12 — 지시 예상 40~44px 대신 수납 상한 채택, 근거 보고).
-              파형 링은 absolute overflow(레이아웃 0). */}
-          <MicTapButton
-            variant={inAppNoMic ? "handoff" : "listen"}
-            listening={voice.listening}
-            disabled={chat.streaming}
-            accent={accent}
-            size={36}
-            onTap={inAppNoMic ? () => void handleVoiceHandoff() : handleHeaderMicTap}
-          />
-          {/* 등급 칩 — 별점 + 라벨. UI-4d-FIX-2 — 마이크 > 등급칩 우선순위: 초협폭(<360px)은
-              칩 전체 숨김, 360~400px 별만, 400px+ 별+라벨. shrink 허용(마이크는 shrink-0) —
-              어떤 뷰포트에서도 마이크가 칩에 밀려 화면 밖으로 나가지 않는다. 높이 불변. */}
-          <span className="hidden shrink items-center gap-1.5 overflow-hidden rounded-full bg-[#F4F4F5] py-1 pl-2 pr-2.5 min-[360px]:flex">
+          {/* UI-5-S2 — 헤더 상시 마이크 철회(음성 진입 = 우하단 오브 단일화). 등급 칩만 잔류. */}
+          {/* 등급 칩 — 별점 + 라벨(마이크 철회로 폭 경쟁 소멸 → 상시 표시·shrink-0 원복). */}
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1 pl-2 pr-2.5">
             <span className="flex items-center gap-0.5">
               {[0, 1, 2].map((i) => (
                 <Star
@@ -3687,9 +3655,8 @@ export function CardStudioPage45({
                 />
               ))}
             </span>
-            {/* UI-4d-FIX-1 — 360px 오버플로 방어: 협폭에선 라벨 숨김(별만) — 마이크가 화면 밖으로
-                밀리는 소실 방지. 헤더 높이·sticky 좌표 무접촉(가로 축약만). */}
-            <span className="hidden text-[11px] font-bold text-[#0A0A0A] min-[400px]:inline">{stage.label}</span>
+            {/* UI-5-S2 — 마이크 철회로 라벨 상시 표시 원복(협폭 숨김 제거). */}
+            <span className="text-[11px] font-bold text-[#0A0A0A]">{stage.label}</span>
           </span>
         </div>
       </header>
@@ -5929,20 +5896,49 @@ export function CardStudioPage45({
                   )}
                 </div>
               )}
-              <LingoOrb
-                size={52}
-                state={
-                  voice.listening
-                    ? "listening" // LINGO-UI-3c — 레이어드 청취(파형 링).
-                    : stripBusy
-                      ? "busy"
-                      : voice.speaking
-                        ? "speaking"
-                        : "idle"
-                }
-                onClick={openGhostPanel}
-                ariaLabel="링고AI 열기"
-              />
+              {/* UI-5-S2 — 오브 탭 계약: 짧게 = 말하기(handleOrbTap) / 길게(500ms) = 패널 열기.
+                  라이브러리 없이 pointer 이벤트로 직접 구현(상호배타). S3에서 패널→기록실 시트 교체 예정.
+                  말풍선(위)의 openGhostPanel(패널 소환)은 그대로 유지. */}
+              <button
+                type="button"
+                aria-label="링고AI — 짧게 눌러 말하기, 길게 눌러 창 열기"
+                onPointerDown={() => {
+                  orbLongPressedRef.current = false;
+                  if (orbPressTimerRef.current) clearTimeout(orbPressTimerRef.current);
+                  orbPressTimerRef.current = setTimeout(() => {
+                    orbLongPressedRef.current = true;
+                    orbPressTimerRef.current = null;
+                    setGhostText(null);
+                    setLingoPanelOpen(true); // 길게 = 패널 소환(이때 탭 시퀀스 발화 금지).
+                  }, 500);
+                }}
+                onPointerUp={() => {
+                  if (!orbPressTimerRef.current) return; // 이미 길게 발동 → 탭 무시(상호배타).
+                  clearTimeout(orbPressTimerRef.current);
+                  orbPressTimerRef.current = null;
+                  if (!orbLongPressedRef.current) handleOrbTap(); // 짧게 = 말하기.
+                }}
+                onPointerLeave={() => {
+                  if (orbPressTimerRef.current) {
+                    clearTimeout(orbPressTimerRef.current);
+                    orbPressTimerRef.current = null;
+                  }
+                }}
+                className="rounded-full"
+              >
+                <LingoOrb
+                  size={52}
+                  state={
+                    voice.listening
+                      ? "listening" // LINGO-UI-3c — 레이어드 청취(파형 링).
+                      : stripBusy
+                        ? "busy"
+                        : voice.speaking
+                          ? "speaking"
+                          : "idle"
+                  }
+                />
+              </button>
             </div>
           )}
 
