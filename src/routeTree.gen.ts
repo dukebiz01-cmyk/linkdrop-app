@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TosRouteImport } from './routes/tos'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as StudioBuild49RouteImport } from './routes/studio-build49'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HandoffRouteImport } from './routes/handoff'
@@ -95,6 +96,11 @@ const TosRoute = TosRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudioBuild49Route = StudioBuild49RouteImport.update({
+  id: '/studio-build49',
+  path: '/studio-build49',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -482,6 +488,7 @@ export interface FileRoutesByFullPath {
   '/handoff': typeof HandoffRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/studio-build49': typeof StudioBuild49Route
   '/terms': typeof TermsRoute
   '/tos': typeof TosRoute
   '/create': typeof UserCreateRoute
@@ -558,6 +565,7 @@ export interface FileRoutesByTo {
   '/handoff': typeof HandoffRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/studio-build49': typeof StudioBuild49Route
   '/terms': typeof TermsRoute
   '/tos': typeof TosRoute
   '/create': typeof UserCreateRoute
@@ -638,6 +646,7 @@ export interface FileRoutesById {
   '/handoff': typeof HandoffRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/studio-build49': typeof StudioBuild49Route
   '/terms': typeof TermsRoute
   '/tos': typeof TosRoute
   '/_user/create': typeof UserCreateRoute
@@ -716,6 +725,7 @@ export interface FileRouteTypes {
     | '/handoff'
     | '/login'
     | '/privacy'
+    | '/studio-build49'
     | '/terms'
     | '/tos'
     | '/create'
@@ -792,6 +802,7 @@ export interface FileRouteTypes {
     | '/handoff'
     | '/login'
     | '/privacy'
+    | '/studio-build49'
     | '/terms'
     | '/tos'
     | '/create'
@@ -871,6 +882,7 @@ export interface FileRouteTypes {
     | '/handoff'
     | '/login'
     | '/privacy'
+    | '/studio-build49'
     | '/terms'
     | '/tos'
     | '/_user/create'
@@ -951,6 +963,7 @@ export interface RootRouteChildren {
   HandoffRoute: typeof HandoffRoute
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
+  StudioBuild49Route: typeof StudioBuild49Route
   TermsRoute: typeof TermsRoute
   TosRoute: typeof TosRoute
   AllianceSlugRoute: typeof AllianceSlugRoute
@@ -996,6 +1009,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/studio-build49': {
+      id: '/studio-build49'
+      path: '/studio-build49'
+      fullPath: '/studio-build49'
+      preLoaderRoute: typeof StudioBuild49RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -1652,6 +1672,7 @@ const rootRouteChildren: RootRouteChildren = {
   HandoffRoute: HandoffRoute,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
+  StudioBuild49Route: StudioBuild49Route,
   TermsRoute: TermsRoute,
   TosRoute: TosRoute,
   AllianceSlugRoute: AllianceSlugRoute,

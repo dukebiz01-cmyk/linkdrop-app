@@ -234,3 +234,25 @@
 .ai-breathe { animation:ai-breathe 3.2s ease-in-out infinite; }
 @keyframes intro-rise { 0%{opacity:0;transform:translateY(14px)} 100%{opacity:1;transform:translateY(0)} }
 .intro-rise { opacity:0;animation:intro-rise 0.55s cubic-bezier(0.19,1,0.22,1) forwards; }
+
+/* UI-5-T1 — v0-49 studio motion (CardStudioPage49 / assemble overlay / CardBody49). */
+@keyframes fade-in { from{opacity:0} to{opacity:1} }
+.animate-fade-in { animation:fade-in 300ms ease-out forwards; }
+@keyframes scale-in { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
+.animate-scale-in { animation:scale-in 300ms cubic-bezier(0.34,1.56,0.64,1) forwards; }
+@keyframes slide-up { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+.animate-slide-up { animation:slide-up 400ms cubic-bezier(0.16,1,0.3,1) forwards; }
+@keyframes pulse-subtle { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.85;transform:scale(0.98)} }
+.animate-pulse-subtle { animation:pulse-subtle 2s ease-in-out infinite; }
+@keyframes forge-burst { 0%{transform:scale(0.6);opacity:0} 35%{opacity:1} 100%{transform:scale(1.9);opacity:0} }
+.forge-burst { animation:forge-burst 0.7s cubic-bezier(0.19,1,0.22,1) forwards; }
+@keyframes chip-pop { 0%{transform:scale(0.5);opacity:0} 60%{transform:scale(1.12)} 100%{transform:scale(1);opacity:1} }
+.chip-pop { animation:chip-pop 0.32s cubic-bezier(0.19,1,0.22,1) forwards; }
+@keyframes lingo-tap { 0%,100%{transform:translate(0,0) rotate(-8deg)} 45%{transform:translate(0,7px) rotate(-2deg)} 60%{transform:translate(0,4px) rotate(-4deg)} }
+.lingo-tap { animation:lingo-tap 1.05s ease-in-out infinite; }
+@keyframes lingo-ripple { 0%{transform:scale(0.4);opacity:0.55} 100%{transform:scale(2.1);opacity:0} }
+.lingo-ripple { animation:lingo-ripple 1.05s cubic-bezier(0.19,1,0.22,1) infinite; }
+@keyframes lingo-hover { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+.lingo-hover { animation:lingo-hover 2.8s ease-in-out infinite; }
+@keyframes lingo-bubble-in { 0%{opacity:0;transform:translateY(6px) scale(0.94)} 100%{opacity:1;transform:translateY(0) scale(1)} }
+.lingo-bubble-in { animation:lingo-bubble-in 0.34s cubic-bezier(0.19,1,0.22,1) forwards; }
