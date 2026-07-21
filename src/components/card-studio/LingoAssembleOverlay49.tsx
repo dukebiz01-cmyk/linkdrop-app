@@ -98,8 +98,11 @@ export function LingoAssembleOverlay({
   const centerY = rect ? rect.y + rect.h / 2 : vh / 2
   const below = centerY < vh / 2
   // 마커: 손끝(좌상단 -35°)이 대상 중심에 닿도록 오프셋(+10/+14).
+  // UI-5-T1g — 손끝 오프셋 재계산(새 지오메트리 viewBox 40×48 · 렌더 34×40 · 회전 -35° 기준 20,24 · 검지끝 로컬 21,2):
+  //   회전 후 검지끝 = 중심 기준 (-11.80,-18.60)viewBox → 스케일(0.85, 0.833) → (-10.03,-15.50)px.
+  //   손끝이 대상 중심에 닿으려면 마커 중심(=div left/top) = 대상 + (+10, +15.5). (구 +10/+14 갱신.)
   const markerX = rect ? rect.x + rect.w / 2 + 10 : 0
-  const markerY = rect ? rect.y + rect.h / 2 + 14 : 0
+  const markerY = rect ? rect.y + rect.h / 2 + 15.5 : 0
 
   return (
     <div className="fixed inset-0 z-[70]">
@@ -137,12 +140,24 @@ export function LingoAssembleOverlay({
             className="relative flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#16161D] bg-white shadow-xl"
             style={{ animation: "lingo-marker-tap 0.3s ease 0.5s" }}
           >
-            <svg viewBox="0 0 40 40" className="h-6 w-6" aria-hidden="true">
-              {/* 검지를 좌상단(-35°)으로 뻗은 포인팅 핸드: 흰 채움 + #16161D 2.5 윤곽(딤 위 최대 대비). */}
-              <g transform="rotate(-35 20 20)" fill="#FFFFFF" stroke="#16161D" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round">
-                <rect x="16.5" y="4" width="7" height="19" rx="3.5" />
-                <path d="M12.5 19 C12.5 16.2 14.5 15 16.5 15 L24 15 C27 15 29.5 17.2 29.5 21 L29.5 29 C29.5 33 26.8 35 23 35 L18 35 C14.5 35 12.5 32.2 12.5 29 Z" />
-                <path d="M12.5 21.5 C10 21.5 8.5 23.5 9.4 26 C10.2 28 12.4 28.4 13.4 26.5 L14.2 24 C14.7 22.7 13.8 21.5 12.5 21.5 Z" />
+            {/* UI-5-T1g — 2층 페인트 손가락: ①잉크 윤곽(굵은 스트로크+잉크 채움) → ②흰 채움(스트로크 無)
+                → 내부 이음새 0. 검지 하나 뻗은 흰 손 + 잉크 외곽 실루엣. 사양 그대로. */}
+            <svg viewBox="0 0 40 48" width="34" height="40" aria-hidden="true">
+              <g transform="rotate(-35 20 24)">
+                {/* 1층: 실루엣 윤곽 (전 도형 잉크 굵은 스트로크+잉크 채움) */}
+                <g fill="#16161D" stroke="#16161D" strokeWidth="5" strokeLinejoin="round">
+                  <rect x="17.5" y="2" width="7" height="24" rx="3.5" />
+                  <rect x="11" y="18" width="22" height="22" rx="10" />
+                  <rect x="6.5" y="22" width="7" height="12" rx="3.5" transform="rotate(38 10 28)" />
+                </g>
+                {/* 2층: 같은 도형 흰 채움(스트로크 없음) → 내부 이음새 소멸 */}
+                <g fill="#FFFFFF">
+                  <rect x="17.5" y="2" width="7" height="24" rx="3.5" />
+                  <rect x="11" y="18" width="22" height="22" rx="10" />
+                  <rect x="6.5" y="22" width="7" height="12" rx="3.5" transform="rotate(38 10 28)" />
+                </g>
+                {/* 검지 관절 힌트 선 1개 (은은하게) */}
+                <line x1="19" y1="14" x2="23" y2="14" stroke="#16161D" strokeWidth="1" strokeLinecap="round" opacity="0.25" />
               </g>
             </svg>
           </span>
