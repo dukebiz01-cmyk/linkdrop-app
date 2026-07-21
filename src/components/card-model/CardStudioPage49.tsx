@@ -769,23 +769,27 @@ export function CardStudioPage() {
     sendToLingo(t);
   }
 
-  // 모드별 "한 줄 설명" 예시 — 성과 중심 문장 (탭하면 바로 생성)
+  // UI-5-T1f(2) — 역할별 예시 분리: 일반(퍼블릭=내 채널/개인)=개인 공유 문구,
+  //   예약·상품(파트너/매장)=매장 문구. 매장 성격 문구의 일반 모드 오염 제거.
   const heroExamples = useMemo(() => {
     if (mode === "reserve") {
+      // 매장(파트너) — 예약·쿠폰
       return [
         "가을 라떼 신메뉴 홍보하고 주말 예약도 받고 싶어",
         "네일샵 첫 방문 손님한테 웰컴 쿠폰 주고 예약받기",
       ];
     }
     if (mode === "commerce") {
+      // 매장(파트너) — 상품 판매
       return [
         "우리 농장 사과 5kg 팔고 싶어, 무료배송으로",
         "핸드메이드 캔들 2만원에 판매하고 배송 안내까지",
       ];
     }
+    // 일반(퍼블릭=내 채널/개인) — 개인 공유 문구(매장 문구 금지)
     return [
-      "신메뉴 소개 영상 카드 만들어줘, 핵심구간부터 보이게",
-      "우리 가게 오픈 소식 카드로 알리고 싶어",
+      "여행 브이로그 하이라이트만 모아 카드로 만들어줘",
+      "친구들에게 맛집 영상 공유 카드 만들어줘",
     ];
   }, [mode]);
 
@@ -1021,7 +1025,7 @@ export function CardStudioPage() {
   const activeLocked = !!activeBlock.isPaid && score < ENHANCE_UNLOCK;
 
   // 화면 배경은 하나로 통일 — 목적(모드)별 포인트 컬러로만 카테고리를 분기
-  const PAGE_BG = "#FAFAFA";
+  const PAGE_BG = "#F7F7F9"; // UI-5-T1f(3) — 조용한 페이지 배경(흰 섹션 카드와 명도차로 구획).
   const MODE_SKIN = {
     general: { accent: "#475569" },
     reserve: { accent: POINT },
@@ -1150,7 +1154,7 @@ export function CardStudioPage() {
   return (
       <div className="min-h-screen pb-[120px] transition-colors duration-300" style={{ backgroundColor: pageBg }}>
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-[#EDEDED] bg-white/90 backdrop-blur-lg">
+      <header className="sticky top-0 z-40 border-b border-[#E8E8EC] bg-white/90 backdrop-blur-lg">
         <div className="mx-auto flex max-w-md items-center gap-3 px-5 py-3">
           <button
             aria-label="닫기"
@@ -1197,61 +1201,11 @@ export function CardStudioPage() {
         </div>
       </header>
 
-      {/* ───────── 스티키 조립 미니 미리보기 (히어로 카드가 화면 밖일 때 등장) ───────── */}
-      {/* UI-5-T1d — 조립 연출 중(assembling)엔 숨김: 이 스티키 미니가 게이지 위를 가리던 상단 부유물.
-          v0-49 기능 요소(히어로 이탈 시 카드 유지)라 제거 대신 연출 중에만 숨김 → 종료 시 자동 원복. */}
-      <div
-        aria-hidden={heroVisible || assembling}
-        className={`pointer-events-none fixed inset-x-0 top-[57px] z-30 transition-all duration-300 ease-out ${
-          heroVisible || assembling ? "-translate-y-2 opacity-0" : "translate-y-0 opacity-100"
-        }`}
-      >
-        <div className="mx-auto max-w-md px-5 pt-2">
-          <div className="flex items-center gap-3 rounded-2xl bg-white/95 p-2.5 pr-3 backdrop-blur-lg [box-shadow:0_10px_28px_-10px_rgba(15,23,42,0.22),0_0_0_1px_#EAEAEA]">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F4F4F5] text-[#525252]">
-              <content.categoryIcon className="h-5 w-5" strokeWidth={2.25} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-bold leading-tight text-[#0A0A0A]">{content.title}</p>
-              <div className="mt-1 flex items-center gap-1">
-                {DECK.filter((b) => applied[b.id]).length ? (
-                  <>
-                    {DECK.filter((b) => applied[b.id])
-                      .slice(0, 4)
-                      .map((b) => {
-                        const BIcon = b.icon;
-                        return (
-                          <span
-                            key={b.id}
-                            className="flex h-5 w-5 items-center justify-center rounded-md bg-[#F0F0F0] text-[#525252]"
-                            title={b.label}
-                          >
-                            <BIcon className="h-3 w-3" strokeWidth={2.5} />
-                          </span>
-                        );
-                      })}
-                    {DECK.filter((b) => applied[b.id]).length > 4 && (
-                      <span className="text-[10px] font-bold text-[#A3A3A3]">
-                        +{DECK.filter((b) => applied[b.id]).length - 4}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-[11px] font-medium text-[#8A8A8A]">덱에서 블록을 장착하면 여기 조립돼요</span>
-                )}
-              </div>
-            </div>
-            <span className="flex shrink-0 items-baseline gap-0.5 rounded-full bg-[#F4F4F5] px-2.5 py-1 text-[13px] font-bold tabular-nums text-[#0A0A0A]">
-              {score}
-              <span className="text-[10px] font-semibold text-[#A3A3A3]">/100</span>
-            </span>
-          </div>
-        </div>
-      </div>
+      {/* UI-5-T1f(1a) — 스티키 조립 미니 미리보기 완전 삭제(평시 부유물 제거). 카드 확인 = 스크롤 업. */}
 
       <div className="mx-auto max-w-md px-5">
         {/* ───────── 모드 전환 (퍼블릭 / 예약·쿠폰 / 상품판매) ───────── */}
-        <div className="mt-5 flex rounded-2xl bg-white p-1 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
+        <div className="mt-5 flex rounded-2xl bg-white p-1 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
           {[
             { key: "general", label: "퍼블릭", Icon: Globe },
             { key: "reserve", label: "예약·쿠폰", Icon: Calendar },
@@ -1282,66 +1236,8 @@ export function CardStudioPage() {
           })}
         </div>
 
-        {/* ───────── AI 빌더 — 한 줄로 말하면 카드를 만들어줌 ───────── */}
-        <section className="mt-4 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
-          <div className="flex items-center gap-2">
-            <span
-              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"
-              style={{ backgroundColor: LINGO }}
-            >
-              <MessageCircle className="h-[17px] w-[17px]" strokeWidth={2.25} />
-              <Sparkles className="absolute -right-0.5 -top-0.5 h-3 w-3" strokeWidth={2.5} fill="currentColor" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">AI로 카드 만들기</p>
-              <p className="text-[11px] font-medium text-[#8A8A8A]">한 줄로 설명하면 카드를 통째로 구성해드려요</p>
-            </div>
-          </div>
-
-          <div className="mt-3 flex items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5">
-            <input
-              value={heroPrompt}
-              onChange={(e) => setHeroPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing && (e as any).keyCode !== 229) {
-                  e.preventDefault();
-                  buildWithAI();
-                }
-              }}
-              disabled={thinking}
-              placeholder="어떤 카드를 만들까요?"
-              className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#9A9A9A]"
-            />
-            <button
-              onClick={() => buildWithAI()}
-              disabled={thinking || heroPrompt.trim() === ""}
-              aria-label="AI로 카드 만들기"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-90 disabled:opacity-40"
-              style={{ backgroundColor: accent }}
-            >
-              {thinking ? (
-                <Loader2 className="h-[18px] w-[18px] animate-spin" strokeWidth={2.5} />
-              ) : (
-                <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
-              )}
-            </button>
-          </div>
-
-          <div className="mt-2.5 flex flex-col gap-1.5">
-            {heroExamples.map((ex) => (
-              <button
-                key={ex}
-                onClick={() => buildWithAI(ex)}
-                disabled={thinking}
-                className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-left text-[12px] font-medium text-[#404040] transition-transform active:scale-[0.98] disabled:opacity-40 [word-break:keep-all] [box-shadow:0_0_0_1px_#EDEDED]"
-              >
-                <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} />
-                <span className="min-w-0 flex-1 text-pretty">{ex}</span>
-                <ArrowUp className="h-3.5 w-3.5 shrink-0 rotate-45 text-[#C4C4C4]" strokeWidth={2.5} />
-              </button>
-            ))}
-          </div>
-        </section>
+        {/* UI-5-T1f(1b·1c) — 상단 AI 빌더 섹션 제거: AI 진입은 우하단 FAB→링고 패널 단일화.
+            역할별 예시 문구(heroExamples)는 패널 첫 진입 화면으로 이동. 헤더 아래 = 바로 미리보기. */}
 
         {/* ───────── 라이브 프리뷰 라벨 (WYSIWYG 캔버스 안내) ───────── */}
         <div className="mt-5 flex items-center justify-between px-0.5">
@@ -1375,7 +1271,7 @@ export function CardStudioPage() {
 
         {/* ───────── 전환력 게이지 ───────── */}
         {/* UI-5-T1c — 조립 포인터 앵커(gauge): 완성도 스텝 지목 대상. */}
-        <section data-assemble-anchor="gauge" className="mt-5 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
+        <section data-assemble-anchor="gauge" className="mt-5 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F4F4F5] text-[#525252]">
@@ -1408,7 +1304,7 @@ export function CardStudioPage() {
         {/* ───────── 링고AI 코칭 (탭하면 어시스턴트 열림) ───────── */}
         <button
           onClick={() => setLingoOpen(true)}
-          className="mt-3 flex w-full items-start gap-3 rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)] transition-transform duration-150 active:scale-[0.99] animate-fade-in"
+          className="mt-3 flex w-full items-start gap-3 rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform duration-150 active:scale-[0.99] animate-fade-in"
         >
           <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
             <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2.25} />
@@ -1488,8 +1384,8 @@ export function CardStudioPage() {
                     boxShadow: isCenter
                       ? isOn
                         ? `0 16px 36px -14px rgba(15,23,42,0.28), 0 0 0 2px ${accent}`
-                        : "0 16px 36px -14px rgba(15,23,42,0.22), 0 0 0 1px #EDEDED"
-                      : "0 8px 20px -12px rgba(15,23,42,0.18), 0 0 0 1px #EDEDED",
+                        : "0 16px 36px -14px rgba(15,23,42,0.22), 0 0 0 1px #E8E8EC"
+                      : "0 8px 20px -12px rgba(15,23,42,0.18), 0 0 0 1px #E8E8EC",
                   }}
                 >
                   {/* 상단: 파워 + 카테고리 */}
@@ -1626,7 +1522,7 @@ export function CardStudioPage() {
           {activeApplied && CONFIGURABLE.includes(activeBlock.id) && (
             <div
               className="mb-3 rounded-2xl bg-white p-3.5 animate-fade-in"
-              style={{ boxShadow: "inset 0 0 0 1px #EDEDED" }}
+              style={{ boxShadow: "inset 0 0 0 1px #E8E8EC" }}
             >
               <p className="mb-2.5 flex items-center gap-1.5 text-[12px] font-bold text-[#0A0A0A]">
                 <activeBlock.icon className="h-3.5 w-3.5 text-[#525252]" strokeWidth={2.5} />
@@ -1706,7 +1602,7 @@ export function CardStudioPage() {
                     // 예약 캘린더 — 정돈된 3단계: 날짜 → 시간 → 자리수
                     <div className="space-y-3">
                       {/* STEP 1 — 날짜: 좌우로 밀어서 선택 */}
-                      <section className="rounded-xl border border-[#EDEDED] p-2.5">
+                      <section className="rounded-xl border border-[#E8E8EC] p-2.5">
                         <div className="mb-2 flex items-center gap-1.5">
                           <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#0A0A0A] text-[9px] font-extrabold text-white">
                             1
@@ -1794,7 +1690,7 @@ export function CardStudioPage() {
                       </section>
 
                       {/* STEP 2 — 시간: 좌우로 밀어서 선택 */}
-                      <section className="rounded-xl border border-[#EDEDED] p-2.5">
+                      <section className="rounded-xl border border-[#E8E8EC] p-2.5">
                         <div className="mb-2 flex items-center gap-1.5">
                           <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#0A0A0A] text-[9px] font-extrabold text-white">
                             2
@@ -1858,7 +1754,7 @@ export function CardStudioPage() {
                       </section>
 
                       {/* STEP 3 — 날짜별 잔여 자리 */}
-                      <section className="rounded-xl border border-[#EDEDED] p-2.5">
+                      <section className="rounded-xl border border-[#E8E8EC] p-2.5">
                         <div className="mb-2 flex items-center gap-1.5">
                           <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#0A0A0A] text-[9px] font-extrabold text-white">
                             3
@@ -2563,7 +2459,7 @@ export function CardStudioPage() {
             disabled={activeLocked}
             className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-bold tracking-[-0.01em] transition-all duration-200 active:scale-[0.98] ${
               activeLocked
-                ? "cursor-not-allowed bg-white text-[#C4C4C4] [box-shadow:0_0_0_1px_#EDEDED]"
+                ? "cursor-not-allowed bg-white text-[#C4C4C4] [box-shadow:0_0_0_1px_#E8E8EC]"
                 : activeApplied
                 ? "bg-white"
                 : "text-white"
@@ -2648,7 +2544,7 @@ export function CardStudioPage() {
         {/* 수신자 화면 미리보기 — 눈에 띄게 강조 */}
         <button
           onClick={() => setMirrorOpen(true)}
-          className="group flex w-full items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left transition-transform active:translate-y-px [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]"
+          className="group flex w-full items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left transition-transform active:translate-y-px [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]"
         >
           <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-[#F4F4F5] text-[#525252]">
             <Eye className="h-[18px] w-[18px]" strokeWidth={2.25} />
@@ -2664,9 +2560,9 @@ export function CardStudioPage() {
       </div>
 
       {/* ───────── 카드 드롭하기 (기본 CTA만 고정) ───────── */}
-      {/* UI-5-T1d — 조립 연출 중 하단 CTA 숨김(연출 화면 단독 점유). 종료 시 자동 원복. */}
+      {/* UI-5-T1f(4) — 연출 중 개별 숨김 제거: 딤(오버레이 z-70)이 하단 CTA를 덮어 무대화 대체. */}
       <div
-        className={`fixed inset-x-0 bottom-0 z-50 border-t border-[#EDEDED] pb-[env(safe-area-inset-bottom)] transition-opacity duration-200 ${assembling ? "pointer-events-none opacity-0" : ""}`}
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-[#E8E8EC] pb-[env(safe-area-inset-bottom)]"
         style={{ backgroundColor: pageBg }}
       >
         <div style={{ backgroundColor: pageBg }}>
@@ -2746,7 +2642,7 @@ export function CardStudioPage() {
               />
               <div className="fixed inset-x-0 bottom-[188px] z-40 px-5 animate-slide-up">
                 <div
-                  className={`mx-auto max-w-md rounded-3xl bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.4),0_0_0_1px_#EDEDED] ${
+                  className={`mx-auto max-w-md rounded-3xl bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.4),0_0_0_1px_#E8E8EC] ${
                     panelDragging ? "" : "transition-transform duration-200 ease-out"
                   }`}
                   style={{ transform: `translate(${panelOffset.x}px, ${panelOffset.y}px)` }}
@@ -2791,13 +2687,28 @@ export function CardStudioPage() {
                           <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} fill="currentColor" />
                           <span>{lingo.text}</span>
                         </p>
+                        {/* UI-5-T1f(1b·2) — 역할별 AI 제안(구 상단 heroExamples 이동): 탭 = 바로 생성. */}
+                        <p className="mt-2 text-[11px] font-semibold text-[#6B7686]">이렇게 부탁해보세요</p>
+                        <div className="mt-1.5 flex flex-col gap-1.5">
+                          {heroExamples.map((ex) => (
+                            <button
+                              key={ex}
+                              onClick={() => submitLingoText(ex)}
+                              disabled={thinking}
+                              className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-left text-[12px] font-medium text-[#404040] transition-transform active:scale-[0.98] disabled:opacity-40 [word-break:keep-all] [box-shadow:0_0_0_1px_#E8E8EC]"
+                            >
+                              <Sparkles className="h-3.5 w-3.5 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} />
+                              <span className="min-w-0 flex-1 text-pretty">{ex}</span>
+                            </button>
+                          ))}
+                        </div>
                         {/* UI-5-T1(T-D) — 퀵명령 칩 미이식. */}
                         {/* UI-5-T1b — 데모 칩: mock 조립 연출 트리거(검수용). T-2 실배선 시 제거 예정. */}
                         <div className="mt-2.5">
                           <button
                             onClick={() => submitLingoText("조립 연출 보기")}
                             disabled={thinking}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#404040] transition-transform active:scale-95 disabled:opacity-40 [word-break:keep-all] [box-shadow:0_0_0_1px_#EDEDED]"
+                            className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#404040] transition-transform active:scale-95 disabled:opacity-40 [word-break:keep-all] [box-shadow:0_0_0_1px_#E8E8EC]"
                           >
                             <Sparkles className="h-3 w-3 text-[#A3A3A3]" strokeWidth={2.5} fill="currentColor" />
                             조립 연출 보기
@@ -2903,9 +2814,8 @@ export function CardStudioPage() {
             </>
           )}
 
-          {/* UI-5-T1d — 조립 연출 중 FAB 숨김(연출 화면 단독 점유). assembling 종료 시 자동 원복.
-              패널은 runAssembly 가 setLingoOpen(false) 로 이미 닫음(연출 중 lingoOpen=false). */}
-          {!lingoOpen && !assembling && (
+          {/* UI-5-T1f(4) — 연출 중 개별 숨김 제거: 딤이 FAB를 덮어 무대화 대체(중복 로직 정리). */}
+          {!lingoOpen && (
             <button
               ref={fabRef}
               aria-label="링고AI 열기 · 길게 눌러 옮기기"
