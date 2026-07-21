@@ -4,16 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-Package manager is **bun** (`bun.lock` is checked in). Scripts:
-
-- `bun run dev` — Vite dev server (TanStack Start). The Lovable Vite preset auto-detects sandbox port/host.
-- `bun run build` — production build (Vite + Cloudflare Workers via `@cloudflare/vite-plugin`).
-- `bun run build:dev` — build in development mode.
-- `bun run preview` — serve the built output.
-- `bun run lint` — ESLint over the repo.
-- `bun run format` — Prettier write.
-
-There is no test runner configured.
+Package manager is **bun** (`bun.lock` is checked in); see `package.json` scripts for the standard `dev` / `build` / `build:dev` / `preview` / `lint` / `format` invocations. Two non-obvious notes: `bun run dev` relies on the Lovable Vite preset auto-detecting sandbox port/host, and there is no test runner configured.
 
 Required env vars (see `.env.example`): `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`. Server-only code additionally reads `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` from `process.env` (Workers) / `Deno.env` (Edge Functions). **V2 key migration (2026-05-16)**: legacy `VITE_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are deprecated and no longer read by any code path. Set the V2 publishable / secret keys (`sb_publishable_*` / `sb_secret_*`) in Cloudflare Workers Secrets and Supabase Edge Function Secrets respectively.
 
