@@ -369,7 +369,7 @@ const MODE_CARD_COLOR: Record<"general" | "reserve" | "commerce", string> = {
 // UI-5-T1b — /api/lingo mock 치환(실네트워크 미발신). 실배선(useLingoChat)은 T-2 소관.
 //   데모 시나리오 하드코딩: 어떤 입력이 와도 steps>=2 반환 → sendToLingo 가 runAssembly 재생.
 //   actions 는 제목·설명·쿠폰·판매기간을 채워 조립 과정을 보여줌(로컬 상태만 — 발행·네트워크 무관).
-type LingoReply = { reply: string; actions: any[]; steps: { label: string; note: string }[] };
+type LingoReply = { reply: string; actions: any[]; steps: { label: string; note: string; anchor?: string }[] };
 async function mockLingoReply(_payload: {
   transcript: string;
   mode: string;
@@ -387,11 +387,12 @@ async function mockLingoReply(_payload: {
       { type: "setField", field: "coupon", value: "c1" },
       { type: "equip", blockId: "seasonal" },
     ],
+    // UI-5-T1c — 각 스텝의 anchor = data-assemble-anchor 값(hero/deck/gauge). 실좌표 지목.
     steps: [
-      { label: "제목을 정했어요", note: "핵심 메시지를 한 줄로 담았어요." },
-      { label: "설명을 붙였어요", note: "왜 지금 눌러야 하는지 알려요." },
-      { label: "쿠폰을 연결했어요", note: "누를 이유를 만들었어요." },
-      { label: "판매 기간을 설정했어요", note: "지금이 구매 적기라고 알려요." },
+      { label: "카드 제목을 정했어요", note: "핵심 메시지를 한 줄로 담았어요.", anchor: "hero" },
+      { label: "설명 문구를 더했어요", note: "왜 지금 눌러야 하는지 알려요.", anchor: "hero" },
+      { label: "쿠폰·판매기간을 붙였어요", note: "누를 이유와 구매 적기를 만들어요.", anchor: "deck" },
+      { label: "완성도가 올라갔어요", note: "전환 준비가 그만큼 탄탄해져요.", anchor: "gauge" },
     ],
   };
 }
@@ -497,7 +498,7 @@ export function CardStudioPage() {
   // 링고AI 조립 연출 — 카드 위에서 손가락으로 가리키며 단계별로 조립
   const [assembling, setAssembling] = useState(false);
   const [assembleStep, setAssembleStep] = useState(0);
-  const [assembleSteps, setAssembleSteps] = useState<{ label: string; note: string }[]>([]);
+  const [assembleSteps, setAssembleSteps] = useState<{ label: string; note: string; anchor?: string }[]>([]);
   const assembleTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [lingoText, setLingoText] = useState("");
   const recognitionRef = useRef<any>(null);
@@ -927,7 +928,7 @@ export function CardStudioPage() {
   }
 
   // 링고AI가 손가락으로 카드를 가리키며 단계별로 조립하는 연출을 재생
-  function runAssembly(actions: any[], steps: { label: string; note: string }[]) {
+  function runAssembly(actions: any[], steps: { label: string; note: string; anchor?: string }[]) {
     // 이전 연출 타이머 정리
     assembleTimers.current.forEach(clearTimeout);
     assembleTimers.current = [];
@@ -1351,7 +1352,8 @@ export function CardStudioPage() {
 
         {/* ───────── 히어로: 라이브 캔버스 카드 ───────── */}
         <section ref={heroRef} className="pt-2.5">
-          <div className="relative">
+          {/* UI-5-T1c — 조립 포인터 앵커(hero): 제목·설명 스텝 지목 대상. */}
+          <div className="relative" data-assemble-anchor="hero">
             <CardBody model={cardModel} variant="studio" burstKey={burstKey} />
             <LingoAssembleOverlay
               active={assembling}
@@ -1364,7 +1366,8 @@ export function CardStudioPage() {
         </section>
 
         {/* ───────── 전환력 게이지 ───────── */}
-        <section className="mt-5 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
+        {/* UI-5-T1c — 조립 포인터 앵커(gauge): 완성도 스텝 지목 대상. */}
+        <section data-assemble-anchor="gauge" className="mt-5 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F4F4F5] text-[#525252]">
@@ -1420,7 +1423,8 @@ export function CardStudioPage() {
       </div>
 
       {/* ───────── 강화 카드 덱 (스와이프 → 탭 장착) ───────── */}
-      <section ref={deckRef} className="mt-6">
+      {/* UI-5-T1c — 조립 포인터 앵커(deck): 쿠폰·판매기간 스텝 지목 대상. */}
+      <section ref={deckRef} data-assemble-anchor="deck" className="mt-6">
         <div className="mx-auto flex max-w-md items-center justify-between px-5">
           <p className="text-[12px] font-bold uppercase tracking-wider text-[#737373]">강화 카드 덱</p>
           <span className="text-[11px] font-medium text-[#9A9A9A]">밀어서 고르고 · 탭해서 장착</span>

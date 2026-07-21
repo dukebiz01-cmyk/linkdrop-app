@@ -1,18 +1,20 @@
-import { Pointer } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { MousePointer2 } from "lucide-react"
 import { LingoAvatar } from "@/components/brand/LingoMascot"
 
 export interface AssembleStep {
   label: string
   note: string
+  /** UI-5-T1c — 실좌표 지목 대상. document 의 [data-assemble-anchor="{anchor}"] 를 실측해 포인터 배치.
+   *  미지정/미발견 시 포인터를 숨기고 말풍선만 진행(엉뚱한 곳 지목 금지). */
+  anchor?: string
 }
 
 /**
- * 링고AI 조립 연출 오버레이 — 카드 본체 위에 레이어드.
- *  - 링고 아바타가 카드 위를 따라다니며 말풍선으로 현재 단계를 설명
- *  - 손가락(Pointer)이 카드를 톡톡 두드리며 "여기 넣는 중" 지시
- *  - 카드 본체는 건드리지 않고(포인터 이벤트 통과) 그 위에 얹힘
- *
- * 부모(히어로 카드 컨테이너)는 relative 여야 하며, 이 오버레이는 absolute inset-0.
+ * 링고AI 조립 연출 오버레이 — UI-5-T1c 실좌표 앵커 방식.
+ *  - 뷰포트 고정(fixed) 레이어. 스텝마다 대상 앵커를 querySelector→getBoundingClientRect 로 실측.
+ *  - 코치 마커(브랜드 블루 원 + 흰 포인터) 를 대상 중심에 배치, 대상엔 파란 링 임시 강조.
+ *  - 대상이 화면 밖이면 먼저 scrollIntoView 후 300ms 뒤 배치. 못 찾으면 포인터 숨김(말풍선만).
  */
 export function LingoAssembleOverlay({
   active,
@@ -27,96 +29,154 @@ export function LingoAssembleOverlay({
   accent: string
   onSkip: () => void
 }) {
-  if (!active || steps.length === 0) return null
-
   const total = steps.length
-  const current = Math.min(step, total - 1)
-  const cur = steps[current]
+  const current = Math.min(Math.max(0, step), Math.max(0, total - 1))
+  const cur: AssembleStep | undefined = steps[current]
 
-  // 손가락이 단계마다 카드의 다른 지점을 가리키도록 앵커를 순환
-  const ANCHORS = [
-    { left: "30%", top: "46%" },
-    { left: "62%", top: "58%" },
-    { left: "44%", top: "70%" },
-    { left: "68%", top: "38%" },
-    { left: "36%", top: "62%" },
-  ]
-  const anchor = ANCHORS[current % ANCHORS.length]
+  // 실측 포인터 좌표(뷰포트 기준). below = 대상이 화면 위쪽 → 말풍선을 아래로.
+  const [marker, setMarker] = useState<{ x: number; y: number; below: boolean } | null>(null)
+  const highlightedRef = useRef<HTMLElement | null>(null)
+
+  function clearHighlight() {
+    const el = highlightedRef.current
+    if (el) {
+      el.style.boxShadow = el.dataset.prevShadow ?? ""
+      el.style.transition = el.dataset.prevTransition ?? ""
+      delete el.dataset.prevShadow
+      delete el.dataset.prevTransition
+      highlightedRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    if (!active || !cur) {
+      clearHighlight()
+      setMarker(null)
+      return
+    }
+    let cancelled = false
+    clearHighlight()
+
+    const el = cur.anchor
+      ? (document.querySelector(`[data-assemble-anchor="${cur.anchor}"]`) as HTMLElement | null)
+      : null
+
+    // 폴백: 앵커 미지정/미발견 → 포인터 숨김(말풍선만 진행, 엉뚱한 곳 지목 금지).
+    if (!el) {
+      setMarker(null)
+      return
+    }
+
+    const place = () => {
+      if (cancelled) return
+      const r = el.getBoundingClientRect()
+      // 대상 강조 — 임시 파란 링(ring-2 ring-[#3B82F6] + offset 상당의 boxShadow).
+      if (highlightedRef.current !== el) {
+        el.dataset.prevShadow = el.style.boxShadow
+        el.dataset.prevTransition = el.style.transition
+        el.style.transition = "box-shadow 0.25s ease"
+        el.style.boxShadow = "0 0 0 2px #FFFFFF, 0 0 0 4px #3B82F6, 0 0 0 9px rgba(59,130,246,0.25)"
+        highlightedRef.current = el
+      }
+      setMarker({
+        x: r.left + r.width / 2,
+        y: r.top + r.height / 2,
+        below: r.top + r.height / 2 < window.innerHeight / 2,
+      })
+    }
+
+    // 대상이 화면 밖이면 먼저 스크롤(중앙) 후 300ms 뒤 배치 — 지목 전에 화면이 따라감.
+    const r0 = el.getBoundingClientRect()
+    const offscreen = r0.top < 56 || r0.bottom > window.innerHeight - 56
+    if (offscreen) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" })
+      const t = setTimeout(place, 300)
+      return () => {
+        cancelled = true
+        clearTimeout(t)
+      }
+    }
+    place()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, current, cur?.anchor])
+
+  // 언마운트/비활성 시 강조 확실히 해제.
+  useEffect(() => () => clearHighlight(), [])
+
+  if (!active || total === 0 || !cur) return null
+
+  const vh = typeof window !== "undefined" ? window.innerHeight : 0
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 overflow-visible">
-      {/* 카드 포커스 링 — 본체를 가리지 않는 은은한 강조 */}
-      <span
-        className="absolute inset-0 rounded-[26px] animate-pulse-subtle"
-        style={{ boxShadow: `0 0 0 2px ${accent}, 0 0 0 8px ${accent}22` }}
-        aria-hidden="true"
-      />
-
-      {/* 손가락 지시 + 물결 */}
-      <div
-        className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-out"
-        style={{ left: anchor.left, top: anchor.top }}
-      >
-        <span className="relative flex items-center justify-center">
-          <span
-            className="lingo-ripple absolute h-10 w-10 rounded-full"
-            style={{ backgroundColor: accent }}
-            aria-hidden="true"
-          />
-          <span
-            className="lingo-ripple absolute h-10 w-10 rounded-full"
-            style={{ backgroundColor: accent, animationDelay: "0.5s" }}
-            aria-hidden="true"
-          />
-          <span className="lingo-tap relative flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-[0_6px_16px_-4px_rgba(15,23,42,0.5)]">
-            <Pointer className="h-[18px] w-[18px]" strokeWidth={2.25} style={{ color: accent }} />
-          </span>
-        </span>
-      </div>
-
-      {/* 링고 아바타 + 말풍선 — 카드 상단에 떠서 따라다님 */}
-      <div className="lingo-hover absolute left-2 right-2 top-2 flex items-start gap-2">
-        <span className="mt-0.5 shrink-0">
-          <LingoAvatar size={40} background="solid" />
-        </span>
+    <div className="pointer-events-none fixed inset-0 z-[76]">
+      {/* 코치 마커 — 실좌표 배치. 스텝 간 이동은 transition 0.5s(순간이동 금지). */}
+      {marker && (
         <div
-          key={current}
-          className="lingo-bubble-in relative min-w-0 flex-1 rounded-2xl bg-white p-3 shadow-[0_14px_34px_-12px_rgba(15,23,42,0.42),0_0_0_1px_rgba(15,23,42,0.05)]"
+          className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-out"
+          style={{ left: marker.x, top: marker.y }}
         >
-          {/* 말풍선 꼬리 */}
-          <span className="absolute -left-1.5 top-3 h-3 w-3 rotate-45 bg-white" aria-hidden="true" />
-          <div className="relative flex items-center justify-between gap-2">
+          <span className="relative flex items-center justify-center">
+            <span className="lingo-ripple absolute h-11 w-11 rounded-full bg-[#3B82F6]" aria-hidden="true" />
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-              style={{ backgroundColor: accent }}
-            >
-              링고AI · 조립 중
+              className="lingo-ripple absolute h-11 w-11 rounded-full bg-[#3B82F6]"
+              style={{ animationDelay: "0.55s" }}
+              aria-hidden="true"
+            />
+            <span className="relative flex h-10 w-10 items-center justify-center rounded-full border-[2.5px] border-white bg-[#1D4ED8] shadow-lg">
+              <MousePointer2 className="h-[18px] w-[18px] text-white" strokeWidth={2.5} />
             </span>
-            <span className="text-[10.5px] font-bold tabular-nums text-[#94A3B8]">
-              {current + 1} / {total}
-            </span>
-          </div>
-          <p className="relative mt-1.5 text-[13px] font-bold leading-tight text-[#0F172A] [word-break:keep-all]">
-            {cur.label}
-          </p>
-          {cur.note && (
-            <p className="relative mt-1 text-[11.5px] font-medium leading-relaxed text-[#64748B] [word-break:keep-all] text-pretty">
-              {cur.note}
-            </p>
-          )}
+          </span>
+        </div>
+      )}
 
-          {/* 진행 도트 */}
-          <div className="relative mt-2 flex items-center gap-1">
-            {steps.map((_, i) => (
+      {/* 말풍선 — 포인터와 겹치지 않게 대상 반대편(위/아래 자동). 마커 없으면 상단 고정. */}
+      <div
+        key={current}
+        className="lingo-bubble-in absolute left-1/2 w-[min(88vw,340px)] -translate-x-1/2 rounded-2xl bg-white p-3 shadow-[0_14px_34px_-12px_rgba(15,23,42,0.42),0_0_0_1px_rgba(15,23,42,0.05)]"
+        style={
+          marker
+            ? marker.below
+              ? { top: Math.min(marker.y + 44, vh - 150) }
+              : { bottom: Math.min(vh - marker.y + 44, vh - 150) }
+            : { top: 88 }
+        }
+      >
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5 shrink-0">
+            <LingoAvatar size={36} background="solid" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
               <span
-                key={i}
-                className="h-1 rounded-full transition-all duration-300"
-                style={{
-                  width: i === current ? 16 : 6,
-                  backgroundColor: i <= current ? accent : "#E2E8F0",
-                }}
-              />
-            ))}
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+                style={{ backgroundColor: accent }}
+              >
+                링고AI · 조립 중
+              </span>
+              <span className="text-[10.5px] font-bold tabular-nums text-[#94A3B8]">
+                {current + 1} / {total}
+              </span>
+            </div>
+            <p className="mt-1.5 text-[13px] font-bold leading-tight text-[#0F172A] [word-break:keep-all]">
+              {cur.label}
+            </p>
+            {cur.note && (
+              <p className="mt-1 text-[11.5px] font-medium leading-relaxed text-[#64748B] [word-break:keep-all] text-pretty">
+                {cur.note}
+              </p>
+            )}
+            <div className="mt-2 flex items-center gap-1">
+              {steps.map((_, i) => (
+                <span
+                  key={i}
+                  className="h-1 rounded-full transition-all duration-300"
+                  style={{ width: i === current ? 16 : 6, backgroundColor: i <= current ? accent : "#E2E8F0" }}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -124,7 +184,7 @@ export function LingoAssembleOverlay({
       {/* 건너뛰기 — 유일하게 탭 가능한 요소 */}
       <button
         onClick={onSkip}
-        className="pointer-events-auto absolute bottom-2 right-2 rounded-full bg-[#0F172A]/80 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm transition-transform active:scale-95"
+        className="pointer-events-auto absolute bottom-6 right-4 rounded-full bg-[#0F172A]/80 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm transition-transform active:scale-95"
       >
         건너뛰기
       </button>
