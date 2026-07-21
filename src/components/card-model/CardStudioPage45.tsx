@@ -3747,7 +3747,7 @@ export function CardStudioPage45({
       {!!resolvedCardTitle && (
       <div
         aria-hidden={heroVisible}
-        className={`pointer-events-none fixed inset-x-0 top-[134px] z-[31] transition-all duration-300 ease-out ${
+        className={`pointer-events-none fixed inset-x-0 top-[134px] z-[34] transition-all duration-300 ease-out ${
           heroVisible ? "-translate-y-2 opacity-0" : "translate-y-0 opacity-100"
         }`}
       >
@@ -3792,8 +3792,10 @@ export function CardStudioPage45({
       <div className="mx-auto max-w-md px-5">
         {/* 모드 전환 (퍼블릭 / 예약·쿠폰 / 상품판매) — 비사업자는 사업자 모드 잠금(studio-build P6-3 동등)
             FIX-2 — 스티키 스택 상단 통합: 헤더(57px) 바로 아래 고정 + 페이지 배경으로 아래 콘텐츠 가림. */}
-        {/* FIX-8 z-스택: 모드탭(z-30) < 미니 미리보기(z-31) < 스트립(z-38) < 패널(z-40) < 거울 시트(z-60) */}
-        <div className="sticky top-[57px] z-30 -mx-5 px-5 pb-2 pt-4" style={{ backgroundColor: pageBg }}>
+        {/* z-stack 정본(UI-5): nav 30 < modeTab 32 < mini 34 < header 40 < publishBar 50
+           < orb/dock 55 < mirrorSheet 60 | 예약: dim 70 < heroLift 72 < overlay 74
+           < tutorialOrb 76 < recordSheet 80 (S3~S5에서 사용) */}
+        <div className="sticky top-[57px] z-[32] -mx-5 px-5 pb-2 pt-4" style={{ backgroundColor: pageBg }}>
         <div className="flex rounded-2xl bg-white p-1 [box-shadow:0_0_0_1px_#EDEDED,0_1px_2px_rgba(15,23,42,0.04)]">
           {(
             [
@@ -5428,7 +5430,7 @@ export function CardStudioPage45({
                   전량 폐기(스튜디오 한정). 화면 하단 고정, 위 영역(스텝퍼+미리보기)은 그대로 노출.
                   내부 스크롤(대화가 길어져도 독 높이 ≤52vh). 접기=헤더 ChevronDown(백드롭 클릭 없음).
                   시안 정본 .lingo: 흰 배경·상단 보더 #E3E1DA·상단 그림자·라운드 18px 상단만. */}
-              <div className="sl-slide-up fixed inset-x-0 z-40" style={{ bottom: publishBarH }}>
+              <div className="sl-slide-up fixed inset-x-0 z-[55]" style={{ bottom: publishBarH }}>
                 <div className="mx-auto w-full max-w-md rounded-t-[18px] border-t border-[#E3E1DA] bg-white [box-shadow:0_-3px_12px_rgba(0,0,0,0.05)]">
                   {/* B 보강 — 독 높이 다이어트: 콘텐츠 기반 + 상한 34vh(화면 1/3 초과 금지). 초과분은
                       이 컨테이너 내부 스크롤. 상하 패딩 8pt 그리드 최소(pt-2/pb-3). */}
@@ -5865,7 +5867,7 @@ export function CardStudioPage45({
               플래시 2초·규칙 제안 수렴 — 낭독 중엔 종료까지 유지). 구 캡슐·독립 파형 분기 철거
               (파형은 패널 내부로 이관). mirrorOpen 시 숨김(기존 캡슐 관례 승계). 탭 = 패널 소환. */}
           {!lingoPanelOpen && !mirrorOpen && (
-            <div className="fixed z-40 flex items-end gap-2" style={{ right: 16, bottom: publishBarH + 12 }}>
+            <div className="fixed z-[55] flex items-end gap-2" style={{ right: 16, bottom: publishBarH + 12 }}>
               {ghostText && (
                 <div className="max-w-[240px] rounded-2xl rounded-br-md bg-white p-2.5 text-left [box-shadow:0_8px_24px_-8px_rgba(15,23,42,0.35),inset_0_0_0_1px_#ECECEE]">
                   <button
