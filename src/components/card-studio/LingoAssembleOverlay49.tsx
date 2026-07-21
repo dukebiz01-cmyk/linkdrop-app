@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { MousePointer2 } from "lucide-react"
+import { Hand } from "lucide-react"
 import { LingoAvatar } from "@/components/brand/LingoMascot"
 
 export interface AssembleStep {
@@ -112,6 +112,8 @@ export function LingoAssembleOverlay({
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[76]">
+      {/* UI-5-T1d — 지목 순간 탭 모션(짚는 느낌): 이동(0.5s) 완료 후 scale 1→0.85→1(0.3s). */}
+      <style>{`@keyframes lingo-marker-tap{0%{transform:scale(1)}40%{transform:scale(0.85)}100%{transform:scale(1)}}`}</style>
       {/* 코치 마커 — 실좌표 배치. 스텝 간 이동은 transition 0.5s(순간이동 금지). */}
       {marker && (
         <div
@@ -125,8 +127,13 @@ export function LingoAssembleOverlay({
               style={{ animationDelay: "0.55s" }}
               aria-hidden="true"
             />
-            <span className="relative flex h-10 w-10 items-center justify-center rounded-full border-[2.5px] border-white bg-[#1D4ED8] shadow-lg">
-              <MousePointer2 className="h-[18px] w-[18px] text-white" strokeWidth={2.5} />
+            {/* UI-5-T1d — 손가락(Hand) 마커. key={current} 로 스텝마다 탭 모션 재생. */}
+            <span
+              key={current}
+              className="relative flex h-10 w-10 items-center justify-center rounded-full border-[2.5px] border-white bg-[#1D4ED8] shadow-lg"
+              style={{ animation: "lingo-marker-tap 0.3s ease 0.5s" }}
+            >
+              <Hand className="h-5 w-5 text-white" strokeWidth={2.5} />
             </span>
           </span>
         </div>

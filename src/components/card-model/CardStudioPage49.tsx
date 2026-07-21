@@ -940,7 +940,7 @@ export function CardStudioPage() {
     // 히어로 카드를 화면 중앙으로
     heroRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    const STEP_MS = 1500;
+    const STEP_MS = 2200; // UI-5-T1d — 완속(과속 수정): 스텝당 체류 ≥2.2s(이동0.5s + 링·말풍선 + 읽기1.5s).
     const n = steps.length;
     const totalActions = actions.length;
 
@@ -959,7 +959,7 @@ export function CardStudioPage() {
     }
 
     // 마무리 — 오버레이 닫기
-    const done = setTimeout(() => setAssembling(false), n * STEP_MS + 900);
+    const done = setTimeout(() => setAssembling(false), n * STEP_MS + 800); // 마지막 스텝 후 0.8s 여운.
     assembleTimers.current.push(done);
   }
 
@@ -1192,10 +1192,12 @@ export function CardStudioPage() {
       </header>
 
       {/* ───────── 스티키 조립 미니 미리보기 (히어로 카드가 화면 밖일 때 등장) ───────── */}
+      {/* UI-5-T1d — 조립 연출 중(assembling)엔 숨김: 이 스티키 미니가 게이지 위를 가리던 상단 부유물.
+          v0-49 기능 요소(히어로 이탈 시 카드 유지)라 제거 대신 연출 중에만 숨김 → 종료 시 자동 원복. */}
       <div
-        aria-hidden={heroVisible}
+        aria-hidden={heroVisible || assembling}
         className={`pointer-events-none fixed inset-x-0 top-[57px] z-30 transition-all duration-300 ease-out ${
-          heroVisible ? "-translate-y-2 opacity-0" : "translate-y-0 opacity-100"
+          heroVisible || assembling ? "-translate-y-2 opacity-0" : "translate-y-0 opacity-100"
         }`}
       >
         <div className="mx-auto max-w-md px-5 pt-2">
@@ -2656,7 +2658,11 @@ export function CardStudioPage() {
       </div>
 
       {/* ───────── 카드 드롭하기 (기본 CTA만 고정) ───────── */}
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#EDEDED] pb-[env(safe-area-inset-bottom)]" style={{ backgroundColor: pageBg }}>
+      {/* UI-5-T1d — 조립 연출 중 하단 CTA 숨김(연출 화면 단독 점유). 종료 시 자동 원복. */}
+      <div
+        className={`fixed inset-x-0 bottom-0 z-50 border-t border-[#EDEDED] pb-[env(safe-area-inset-bottom)] transition-opacity duration-200 ${assembling ? "pointer-events-none opacity-0" : ""}`}
+        style={{ backgroundColor: pageBg }}
+      >
         <div style={{ backgroundColor: pageBg }}>
           <div className="mx-auto flex max-w-md flex-col gap-3 px-5 pb-5 pt-4">
             {/* UI-5-T1b — 발행 비활성(실발행 미연결·오발행 차단). 항상 렌더(조건분기 없음),
@@ -2891,7 +2897,9 @@ export function CardStudioPage() {
             </>
           )}
 
-          {!lingoOpen && (
+          {/* UI-5-T1d — 조립 연출 중 FAB 숨김(연출 화면 단독 점유). assembling 종료 시 자동 원복.
+              패널은 runAssembly 가 setLingoOpen(false) 로 이미 닫음(연출 중 lingoOpen=false). */}
+          {!lingoOpen && !assembling && (
             <button
               ref={fabRef}
               aria-label="링고AI 열기 · 길게 눌러 옮기기"
