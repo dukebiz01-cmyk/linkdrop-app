@@ -366,8 +366,9 @@ const MODE_CARD_COLOR: Record<"general" | "reserve" | "commerce", string> = {
   commerce: CARD_BASE,
 };
 
-// UI-5-T1 — /api/lingo mock 치환(실네트워크 미발신). 실배선(useLingoChat)은 T-2 소관.
-//   하드코딩 응답 — actions·steps 비움 → 즉시 텍스트 회신만(오작동·오발행 원천 차단).
+// UI-5-T1b — /api/lingo mock 치환(실네트워크 미발신). 실배선(useLingoChat)은 T-2 소관.
+//   데모 시나리오 하드코딩: 어떤 입력이 와도 steps>=2 반환 → sendToLingo 가 runAssembly 재생.
+//   actions 는 제목·설명·쿠폰·판매기간을 채워 조립 과정을 보여줌(로컬 상태만 — 발행·네트워크 무관).
 type LingoReply = { reply: string; actions: any[]; steps: { label: string; note: string }[] };
 async function mockLingoReply(_payload: {
   transcript: string;
@@ -378,9 +379,20 @@ async function mockLingoReply(_payload: {
 }): Promise<LingoReply> {
   await new Promise((r) => setTimeout(r, 400));
   return {
-    reply: "미리보기 빌드예요. 실제 편집 연결은 다음 단계에서 붙습니다.",
-    actions: [],
-    steps: [],
+    reply: "이렇게 카드를 구성했어요 — 제목·설명·쿠폰·판매기간을 넣었어요.",
+    actions: [
+      { type: "setField", field: "title", value: "가을 신메뉴 출시" },
+      { type: "setField", field: "subtitle", value: "지금 예약하면 웰컴 쿠폰" },
+      { type: "equip", blockId: "coupon" },
+      { type: "setField", field: "coupon", value: "c1" },
+      { type: "equip", blockId: "seasonal" },
+    ],
+    steps: [
+      { label: "제목을 정했어요", note: "핵심 메시지를 한 줄로 담았어요." },
+      { label: "설명을 붙였어요", note: "왜 지금 눌러야 하는지 알려요." },
+      { label: "쿠폰을 연결했어요", note: "누를 이유를 만들었어요." },
+      { label: "판매 기간을 설정했어요", note: "지금이 구매 적기라고 알려요." },
+    ],
   };
 }
 
@@ -2643,19 +2655,16 @@ export function CardStudioPage() {
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#EDEDED] pb-[env(safe-area-inset-bottom)]" style={{ backgroundColor: pageBg }}>
         <div style={{ backgroundColor: pageBg }}>
           <div className="mx-auto flex max-w-md flex-col gap-3 px-5 pb-5 pt-4">
-            {/* UI-5-T1 — 발행 비활성(실발행 로직 미연결 · 오발행 원천 차단). 라벨 = 미리보기 빌드. */}
+            {/* UI-5-T1b — 발행 비활성(실발행 미연결·오발행 차단). 항상 렌더(조건분기 없음),
+                회색 disabled 표기로 명확화. 라벨 = 미리보기 빌드 · 발행 비활성. */}
             <button
               type="button"
               disabled
-              aria-label="미리보기 빌드"
-              className="relative flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 overflow-hidden rounded-xl text-[14px] font-bold tracking-[-0.01em] text-white opacity-60"
-              style={{
-                backgroundColor: accent,
-                boxShadow: `0 6px 18px -8px ${accent}80`,
-              }}
+              aria-label="미리보기 빌드 (발행 비활성)"
+              className="flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-[#E5E5E5] bg-[#F0F0F0] text-[14px] font-bold tracking-[-0.01em] text-[#9A9A9A]"
             >
-              <Eye className="h-4 w-4" strokeWidth={2.25} />
-              미리보기 빌드
+              <Lock className="h-4 w-4" strokeWidth={2.25} />
+              미리보기 빌드 · 발행 비활성
             </button>
           </div>
         </div>
@@ -2767,6 +2776,17 @@ export function CardStudioPage() {
                           <span>{lingo.text}</span>
                         </p>
                         {/* UI-5-T1(T-D) — 퀵명령 칩 미이식. */}
+                        {/* UI-5-T1b — 데모 칩: mock 조립 연출 트리거(검수용). T-2 실배선 시 제거 예정. */}
+                        <div className="mt-2.5">
+                          <button
+                            onClick={() => submitLingoText("조립 연출 보기")}
+                            disabled={thinking}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#404040] transition-transform active:scale-95 disabled:opacity-40 [word-break:keep-all] [box-shadow:0_0_0_1px_#EDEDED]"
+                          >
+                            <Sparkles className="h-3 w-3 text-[#A3A3A3]" strokeWidth={2.5} fill="currentColor" />
+                            조립 연출 보기
+                          </button>
+                        </div>
                       </div>
                     )}
                     {messages.map((m, i) => (
