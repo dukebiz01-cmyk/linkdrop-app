@@ -682,6 +682,10 @@ export function CardStudioPage() {
   const [burstKey, setBurstKey] = useState(0);
   // 링고AI 플로팅 어시스턴트 — 어디서나 따라다니며 장착·탈착·편집을 도움
   const [lingoOpen, setLingoOpen] = useState(false);
+  // UI-5-T2-E4c — 자동 양보: 링고가 화면 조작을 요구하면 패널이 스스로 닫힘. 닫힘 직후 FAB 옆 재소환 말풍선 1회.
+  const [yieldBubble, setYieldBubble] = useState(false);
+  const yieldBubbleShownRef = useRef(false); // 1회성(반복 금지).
+  const yieldBubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lastEquipped, setLastEquipped] = useState<string | null>(null);
   // UI-5-T1j — 링고 손길 기록(blockId|fieldKey) · 연출 시작 스냅샷 · 적용 액션 로그 · 종료 요약.
   const [lingoTouched, setLingoTouched] = useState<Set<string>>(() => new Set());
@@ -1449,7 +1453,19 @@ export function CardStudioPage() {
 
   // UI-5-T1k(B1)·T1m — 칩 탭/관문 → 딤 종료 → 해당 블록 이동 + 스포트라이트 1회 깜빡 + 도우미 말풍선(guide).
   //   copyKey = 안내 문구 오버라이드(예: 영상 관문 "video"). 미지정 시 블록 기본 안내.
+  // UI-5-T2-E4c — 손 우선: 링고가 칸 조작을 유도하는 순간 패널을 비워 뒤 화면을 손에 넘긴다.
+  //   도우미 말풍선(칸 부착형·helper)이 안내를 이어받음. 양보로 닫혔을 때만 재소환 말풍선 1회.
+  function yieldToHand() {
+    if (!lingoOpen) return;
+    setLingoOpen(false);
+    if (yieldBubbleShownRef.current) return;
+    yieldBubbleShownRef.current = true;
+    setYieldBubble(true);
+    if (yieldBubbleTimer.current) clearTimeout(yieldBubbleTimer.current);
+    yieldBubbleTimer.current = setTimeout(() => setYieldBubble(false), 3000);
+  }
   function onEditField(blockId: string, copyKey?: string) {
+    yieldToHand(); // E4c — 칸 이동(=화면 조작 요구) 진입 = 자동 양보. enterStep/insertStep/칩/관문 전부 포섭.
     setAssembleSummary(null); // 딤 종료(오버레이 cleanup 이 스크롤 잠금 원복).
     if (typeof document !== "undefined") document.body.style.overflow = ""; // T1k(C) — B 진입 시 잠금 확실 원복.
     const b = STUDIO_BLOCKS.find((x) => x.id === blockId);
@@ -4081,6 +4097,17 @@ export function CardStudioPage() {
                         </button>
                       </div>
                     )}
+                    {/* UI-5-T2-E4c(1d) — 행동 지시로 끝난 응답 + 현재 스텝 미완 시 상시 [하러 가기] 칩(→양보 경로). */}
+                    {!greetingChipsOpen && messages.length > 0 && !thinking && !isStepDone(currentStep) && (
+                      <div className="flex pl-1">
+                        <button
+                          onClick={() => enterStep(currentStep)}
+                          className="min-h-[44px] rounded-xl bg-[#EEF2FF] px-3.5 text-[13px] font-bold text-[#1D4ED8] transition-transform active:scale-95"
+                        >
+                          {stepPlanState[currentStep]?.label} 하러 가기
+                        </button>
+                      </div>
+                    )}
                     {interim && (
                       <div className="flex justify-end">
                         <span className="max-w-[82%] rounded-2xl bg-[#F4F4F5] px-3 py-2 text-[13px] italic text-[#A3A3A3]">
@@ -4160,6 +4187,16 @@ export function CardStudioPage() {
                 </div>
               </div>
             </>
+          )}
+
+          {/* UI-5-T2-E4c(2) — 재소환 미니 말풍선(양보로 닫힘 직후 1회 · 3s 소멸). FAB는 항상 접근(z-40·백드롭 없음). */}
+          {!lingoOpen && yieldBubble && (
+            <div className="fixed bottom-[262px] right-5 z-40 max-w-[220px] animate-fade-in rounded-2xl bg-[#16161D] px-3.5 py-2.5 [box-shadow:0_16px_36px_-14px_rgba(15,23,42,0.5)]">
+              <p className="text-[12px] font-bold leading-snug text-white tracking-ko [word-break:keep-all]">
+                저는 여기 있어요 — 필요하면 불러 주세요
+              </p>
+              <span className="absolute -bottom-1 right-7 h-3 w-3 rotate-45 bg-[#16161D]" />
+            </div>
           )}
 
           {/* UI-5-T1f(4) — 연출 중 개별 숨김 제거: 딤이 FAB를 덮어 무대화 대체(중복 로직 정리). */}
