@@ -1608,6 +1608,10 @@ export function CardStudioPage() {
                       : "0 8px 20px -12px rgba(15,23,42,0.18), 0 0 0 1px #E8E8EC",
                   }}
                 >
+                  {/* UI-5-T1j(3) — 덱 장착 표시 우상단 손길 배지(장착 + 링고 손길). 카드 프리뷰(CardBody) 아님 — 덱 크롬. */}
+                  {isOn && lingoTouched.has(block.id) && (
+                    <LingoTouchBadge needsConfirm={NUMBER_CRITICAL_BLOCKS.has(block.id)} />
+                  )}
                   {/* 상단: 파워 + 카테고리 */}
                   <div className="flex items-center justify-between">
                     <span
