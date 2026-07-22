@@ -365,6 +365,36 @@ function isAiActionAllowed(mode: "general" | "reserve" | "commerce", a: any): bo
   }
   return true;
 }
+
+// UI-5-T1j — 조립 마킹: 필드 표시 라벨 + 숫자 불가침(항상 확인) 필드/블록 집합.
+const FIELD_LABEL: Record<string, string> = {
+  title: "제목",
+  subtitle: "한마디",
+  clip: "핵심 구간",
+  coupon: "쿠폰",
+  productName: "상품명",
+  productPrice: "가격",
+  date: "예약일",
+  time: "예약 시간",
+  dock: "도킹 카드",
+  phone: "전화",
+  map: "지도",
+};
+const NUMBER_FIELDS = new Set(["productPrice", "date", "time"]); // 가격·기간 계열 → 항상 확인(숫자 불가침).
+const NUMBER_CRITICAL_BLOCKS = new Set(["product", "seasonal", "calendar", "party"]); // 가격·수량·기간·인원.
+
+// UI-5-T1j — 링고 손길 배지(스튜디오 크롬 전용 — 카드 프리뷰 내부 렌더 금지). 확인 필요 = 주황.
+function LingoTouchBadge({ needsConfirm }: { needsConfirm: boolean }) {
+  return needsConfirm ? (
+    <span className="pointer-events-none absolute -right-1.5 -top-1.5 z-10 inline-flex items-center gap-0.5 rounded-full border border-[#FDBA74] bg-[#FFF4EC] px-1.5 py-0.5 text-[10px] font-bold text-[#C2410C]">
+      ● 확인 필요
+    </span>
+  ) : (
+    <span className="pointer-events-none absolute -right-1.5 -top-1.5 z-10 inline-flex items-center gap-0.5 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-1.5 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+      ✦ 링고
+    </span>
+  );
+}
 // 모드별 "핵심" 블록 — 이 목록의 블록은 덱에서 핵심 배지로 강조됨
 // 예약·쿠폰(reserve)은 예약 캘린더와 쿠폰 두 가지가 핵심
 const MODE_MAIN_IDS: Record<"general" | "reserve" | "commerce", string[]> = {
@@ -550,6 +580,25 @@ export function CardStudioPage() {
   // 링고AI 플로팅 어시스턴트 — 어디서나 따라다니며 장착·탈착·편집을 도움
   const [lingoOpen, setLingoOpen] = useState(false);
   const [lastEquipped, setLastEquipped] = useState<string | null>(null);
+  // UI-5-T1j — 링고 손길 기록(blockId|fieldKey) · 연출 시작 스냅샷 · 적용 액션 로그 · 종료 요약.
+  const [lingoTouched, setLingoTouched] = useState<Set<string>>(() => new Set());
+  const assembleSnapshot = useRef<any>(null);
+  const appliedActionsRef = useRef<any[]>([]);
+  const [assembleSummary, setAssembleSummary] = useState<
+    null | { count: number; items: { label: string; value: string; needsConfirm: boolean }[] }
+  >(null);
+  const touch = (keys: string[]) =>
+    setLingoTouched((s) => {
+      const n = new Set(s);
+      keys.forEach((k) => n.add(k));
+      return n;
+    });
+  const untouch = (keys: string[]) =>
+    setLingoTouched((s) => {
+      const n = new Set(s);
+      keys.forEach((k) => n.delete(k));
+      return n;
+    });
   const deckRef = useRef<HTMLElement>(null);
   // 음성 대화
   const [listening, setListening] = useState(false);
@@ -688,6 +737,7 @@ export function CardStudioPage() {
 
   function equip(block: StudioBlock) {
     if (block.isPaid && score < ENHANCE_UNLOCK) return;
+    untouch([block.id]); // UI-5-T1j — 직접 장착/해제 = 손길 소멸(AI 경로는 applyOneLingoAction 이 직후 재기록).
     if (block.id === "bgcolor") {
       setShowColorPicker((v) => !v);
       setApplied((p) => ({ ...p, bgcolor: true }));
@@ -949,6 +999,8 @@ export function CardStudioPage() {
         if (b && !applied[b.id] && !(b.isPaid && score < ENHANCE_UNLOCK)) {
           equip(b);
           jumpToBlock(b.id);
+          appliedActionsRef.current.push(a); // T1j — 적용 로그(요약).
+          touch([b.id]); // T1j — 링고 손길 기록.
         }
       } else if (a.type === "detach" && a.blockId) {
         if (applied[a.blockId]) setApplied((p) => ({ ...p, [a.blockId]: false }));
@@ -993,6 +1045,8 @@ export function CardStudioPage() {
             setCfgMap(v === "true");
             break;
         }
+        appliedActionsRef.current.push(a); // T1j — 적용 로그(요약).
+        touch([a.field, ...(FIELD_TO_BLOCK[a.field] ? [FIELD_TO_BLOCK[a.field]] : [])]); // T1j — 필드+블록 손길 기록.
       }
     }
   }
@@ -1007,6 +1061,27 @@ export function CardStudioPage() {
     setAssembleSteps(steps);
     setAssembleStep(0);
     setAssembling(true);
+    // UI-5-T1j(2A) — 연출 시작 전 스냅샷 1회 저장(전체 되돌리기용) + 적용 액션 로그 초기화.
+    assembleSnapshot.current = {
+      applied: { ...applied },
+      cfgTitle,
+      cfgSubtitle,
+      cfgClip,
+      cfgCoupon,
+      cfgProductName,
+      cfgProductPrice,
+      cfgDock,
+      cfgDate,
+      cfgTime,
+      cfgDates: [...cfgDates],
+      cfgTimes: [...cfgTimes],
+      cfgPhone,
+      cfgMap,
+      saleStartIdx,
+      saleEndIdx,
+      lingoTouched: new Set(lingoTouched),
+    };
+    appliedActionsRef.current = [];
     // 히어로 카드를 화면 중앙으로
     heroRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
 
@@ -1028,15 +1103,81 @@ export function CardStudioPage() {
       assembleTimers.current.push(t);
     }
 
-    // 마무리 — 오버레이 닫기
-    const done = setTimeout(() => setAssembling(false), n * STEP_MS + 800); // 마지막 스텝 후 0.8s 여운.
+    // 마무리 — 딤 유지한 채 요약 카드로 전환(T1j-2) + 패널 요약 1줄.
+    const done = setTimeout(() => {
+      setAssembling(false);
+      const summary = buildAssembleSummary();
+      setAssembleSummary(summary);
+      const filled = summary.items.filter((i) => !i.needsConfirm).map((i) => i.label);
+      const need = summary.items.filter((i) => i.needsConfirm).map((i) => i.label);
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          text: `조립 완료 — ${filled.join("·") || "구성"} 채움${need.length ? `, ${need.join("·")} 확인 필요` : ""}.`,
+        },
+      ]);
+    }, n * STEP_MS + 800); // 마지막 스텝 후 0.8s 여운.
     assembleTimers.current.push(done);
+  }
+
+  // UI-5-T1j(2) — 적용 로그(appliedActionsRef)로 종료 요약 구성. 숫자·가격·기간은 항상 확인 줄.
+  function buildAssembleSummary() {
+    const seen = new Set<string>();
+    const items: { label: string; value: string; needsConfirm: boolean }[] = [];
+    for (const a of appliedActionsRef.current) {
+      if (a.type === "equip" && a.blockId) {
+        if (seen.has("b:" + a.blockId)) continue;
+        seen.add("b:" + a.blockId);
+        const b = STUDIO_BLOCKS.find((x) => x.id === a.blockId);
+        if (b) items.push({ label: b.label, value: "장착 완료", needsConfirm: NUMBER_CRITICAL_BLOCKS.has(b.id) });
+      } else if (a.type === "setField" && a.field) {
+        if (seen.has("f:" + a.field)) continue;
+        seen.add("f:" + a.field);
+        const raw = String(a.value ?? "");
+        items.push({
+          label: FIELD_LABEL[a.field] ?? a.field,
+          value: raw.length > 20 ? raw.slice(0, 20) + "…" : raw,
+          needsConfirm: NUMBER_FIELDS.has(a.field),
+        });
+      }
+    }
+    return { count: items.length, items };
+  }
+
+  // UI-5-T1j(2A) — [전체 되돌리기]: 연출 시작 전 스냅샷으로 일괄 복원.
+  function undoAssembly() {
+    const s = assembleSnapshot.current;
+    if (s) {
+      setApplied(s.applied);
+      setCfgTitle(s.cfgTitle);
+      setCfgSubtitle(s.cfgSubtitle);
+      setCfgClip(s.cfgClip);
+      setCfgCoupon(s.cfgCoupon);
+      setCfgProductName(s.cfgProductName);
+      setCfgProductPrice(s.cfgProductPrice);
+      setCfgDock(s.cfgDock);
+      setCfgDate(s.cfgDate);
+      setCfgTime(s.cfgTime);
+      setCfgDates(s.cfgDates);
+      setCfgTimes(s.cfgTimes);
+      setCfgPhone(s.cfgPhone);
+      setCfgMap(s.cfgMap);
+      setSaleStartIdx(s.saleStartIdx);
+      setSaleEndIdx(s.saleEndIdx);
+      setLingoTouched(s.lingoTouched);
+    }
+    setAssembleSummary(null);
+  }
+  function confirmAssembly() {
+    setAssembleSummary(null);
   }
 
   function skipAssembly() {
     assembleTimers.current.forEach(clearTimeout);
     assembleTimers.current = [];
     setAssembling(false);
+    setAssembleSummary(buildAssembleSummary()); // 중단 = 적용된 데까지만 요약.
   }
 
   async function sendToLingo(text: string) {
@@ -1341,6 +1482,9 @@ export function CardStudioPage() {
               step={assembleStep}
               accent={LINGO}
               onSkip={skipAssembly}
+              summary={assembleSummary}
+              onUndo={undoAssembly}
+              onConfirm={confirmAssembly}
             />
           </div>
         </section>
@@ -1597,9 +1741,17 @@ export function CardStudioPage() {
           {/* 블록 설정 패널 — 장착과 동시에 여기서 값을 채우면 카드에 바로 반영 */}
           {activeApplied && CONFIGURABLE.includes(activeBlock.id) && (
             <div
-              className="mb-3 rounded-2xl bg-white p-3.5 animate-fade-in"
-              style={{ boxShadow: "inset 0 0 0 1px #E8E8EC" }}
+              className="relative mb-3 rounded-2xl bg-white p-3.5 animate-fade-in"
+              style={{
+                boxShadow: `inset 0 0 0 1px ${
+                  lingoTouched.has(activeBlock.id) && NUMBER_CRITICAL_BLOCKS.has(activeBlock.id) ? "#FDBA74" : "#E8E8EC"
+                }`,
+              }}
             >
+              {/* UI-5-T1j(3) — 링고 손길 배지(폼 섹션 우상단). 숫자 계열 = 확인 필요(주황). 직접 수정 시 소멸. */}
+              {lingoTouched.has(activeBlock.id) && (
+                <LingoTouchBadge needsConfirm={NUMBER_CRITICAL_BLOCKS.has(activeBlock.id)} />
+              )}
               <p className="mb-2.5 flex items-center gap-1.5 text-[12px] font-bold text-[#0A0A0A]">
                 <activeBlock.icon className="h-3.5 w-3.5 text-[#525252]" strokeWidth={2.5} />
                 {activeBlock.label} 설정

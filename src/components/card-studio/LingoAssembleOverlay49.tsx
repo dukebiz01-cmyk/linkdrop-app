@@ -9,6 +9,12 @@ export interface AssembleStep {
   anchor?: string
 }
 
+// UI-5-T1j(2) — 종료 요약 데이터(딤 유지한 채 말풍선 → 요약 카드).
+export interface AssembleSummary {
+  count: number
+  items: { label: string; value: string; needsConfirm: boolean }[]
+}
+
 /**
  * 링고AI 조립 연출 오버레이 — UI-5-T1f 무대화(딤 + 컷아웃 스포트라이트).
  *  - active 동안 페이지 스크롤 잠금(body overflow hidden, 종료 시 원복 · 정상/건너뛰기 공통).
@@ -22,12 +28,18 @@ export function LingoAssembleOverlay({
   step,
   accent,
   onSkip,
+  summary,
+  onUndo,
+  onConfirm,
 }: {
   active: boolean
   steps: AssembleStep[]
   step: number
   accent: string
   onSkip: () => void
+  summary?: AssembleSummary | null
+  onUndo?: () => void
+  onConfirm?: () => void
 }) {
   const total = steps.length
   const current = Math.min(Math.max(0, step), Math.max(0, total - 1))
@@ -36,15 +48,15 @@ export function LingoAssembleOverlay({
   // 대상 rect(뷰포트 기준) — 스포트라이트 구멍·마커·말풍선 배치의 단일 공급원.
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
 
-  // UI-5-T1f(4a) — active 동안 스크롤 잠금. 종료(정상/건너뛰기 = active=false)·언마운트 시 원복(try-finally 등가).
+  // UI-5-T1f(4a)·T1j(2) — 연출/요약 동안 스크롤 잠금(요약 카드도 딤 유지). 원복 = 확인/되돌리기/언마운트.
   useEffect(() => {
-    if (!active) return
+    if (!active && !summary) return
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = "hidden"
     return () => {
       document.body.style.overflow = prevOverflow
     }
-  }, [active])
+  }, [active, summary])
 
   useEffect(() => {
     if (!active || !cur) {
@@ -91,7 +103,7 @@ export function LingoAssembleOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, current, cur?.anchor])
 
-  if (!active || total === 0 || !cur) return null
+  if (!summary && (!active || total === 0 || !cur)) return null
 
   const vh = typeof window !== "undefined" ? window.innerHeight : 0
   // 대상이 화면 위쪽이면 말풍선을 아래로(스포트라이트와 미겹침).
@@ -183,62 +195,128 @@ export function LingoAssembleOverlay({
         </div>
       )}
 
-      {/* 말풍선 — 딤 위 흰 카드(shadow-xl). 스포트라이트 반대편(위/아래), 구멍과 미겹침. */}
-      <div
-        key={`bubble-${current}`}
-        className="absolute left-1/2 w-[min(88vw,340px)] -translate-x-1/2 rounded-2xl bg-white p-3 shadow-xl [box-shadow:0_20px_50px_-12px_rgba(10,14,22,0.6),0_0_0_1px_rgba(255,255,255,0.06)]"
-        style={
-          rect
-            ? below
-              ? { top: Math.min(rect.y + rect.h + 20, vh - 150) }
-              : { bottom: Math.min(vh - rect.y + 20, vh - 150) }
-            : { top: 88 }
-        }
-      >
-        <div className="flex items-start gap-2">
-          <span className="mt-0.5 shrink-0">
-            <LingoAvatar size={36} background="solid" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2">
-              <span
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-                style={{ backgroundColor: accent }}
-              >
-                링고AI · 조립 중
-              </span>
-              <span className="text-[10.5px] font-bold tabular-nums text-[#94A3B8]">
-                {current + 1} / {total}
-              </span>
-            </div>
-            <p className="mt-1.5 text-[13px] font-bold leading-tight text-[#0F172A] [word-break:keep-all]">
-              {cur.label}
-            </p>
-            {cur.note && (
-              <p className="mt-1 text-[11.5px] font-medium leading-relaxed text-[#64748B] [word-break:keep-all] text-pretty">
-                {cur.note}
-              </p>
-            )}
-            <div className="mt-2 flex items-center gap-1">
-              {steps.map((_, i) => (
+      {/* 말풍선 + 스텝 체크리스트 — 연출 중(!summary)만. 딤 위 흰 카드, 스포트라이트 반대편(위/아래). */}
+      {!summary && (
+        <div
+          key={`bubble-${current}`}
+          className="absolute left-1/2 w-[min(88vw,340px)] -translate-x-1/2 rounded-2xl bg-white p-3 shadow-xl [box-shadow:0_20px_50px_-12px_rgba(10,14,22,0.6),0_0_0_1px_rgba(255,255,255,0.06)]"
+          style={
+            rect
+              ? below
+                ? { top: Math.min(rect.y + rect.h + 20, vh - 150) }
+                : { bottom: Math.min(vh - rect.y + 20, vh - 150) }
+              : { top: 88 }
+          }
+        >
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 shrink-0">
+              <LingoAvatar size={36} background="solid" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
                 <span
-                  key={i}
-                  className="h-1 rounded-full transition-all duration-300"
-                  style={{ width: i === current ? 16 : 6, backgroundColor: i <= current ? accent : "#E2E8F0" }}
-                />
-              ))}
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+                  style={{ backgroundColor: accent }}
+                >
+                  링고AI · 조립 중
+                </span>
+                <span className="text-[10.5px] font-bold tabular-nums text-[#94A3B8]">
+                  {current + 1} / {total}
+                </span>
+              </div>
+              {cur && (
+                <p className="mt-1.5 text-[13px] font-bold leading-tight text-[#0F172A] [word-break:keep-all]">
+                  {cur.label}
+                </p>
+              )}
+              {cur?.note && (
+                <p className="mt-1 text-[11.5px] font-medium leading-relaxed text-[#64748B] [word-break:keep-all] text-pretty">
+                  {cur.note}
+                </p>
+              )}
+              {/* UI-5-T1j(1) — 스텝 체크리스트(진행 도트 대체). 구분선 위 8px. 완료 ✓ 잉크 / 진행 ⟳ 블루 / 대기 ○ 회색. */}
+              <div className="mt-2 flex flex-col gap-1 border-t border-[#EEF0F3] pt-2">
+                {steps.map((s, i) => {
+                  const st = i < current ? "done" : i === current ? "doing" : "todo"
+                  return (
+                    <div
+                      key={i}
+                      className="flex items-center gap-1.5 text-[11px] font-semibold [word-break:keep-all]"
+                      style={{ color: st === "done" ? "#16161D" : st === "doing" ? "#1D4ED8" : "#B4B4BC" }}
+                    >
+                      <span className="w-3 shrink-0 text-center">{st === "done" ? "✓" : st === "doing" ? "⟳" : "○"}</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {s.label}
+                        {st === "doing" ? " 중…" : ""}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* 건너뛰기 — 딤 위 z-76 우하단 상시(유일 탭 가능). */}
-      <button
-        onClick={onSkip}
-        className="absolute bottom-6 right-4 z-[76] rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-bold text-[#16161D] shadow-lg backdrop-blur-sm transition-transform active:scale-95"
-      >
-        건너뛰기
-      </button>
+      {/* UI-5-T1j(2) — 종료 요약 카드(딤 유지). 항목별 채운 값 / 숫자 계열 확인 줄 + [되돌리기]·[확인]. */}
+      {summary && (
+        <div className="absolute left-1/2 top-1/2 w-[min(90vw,360px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(10,14,22,0.7)]">
+          <div className="flex items-center gap-2">
+            <LingoAvatar size={32} background="solid" />
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+              style={{ backgroundColor: accent }}
+            >
+              링고AI · 조립 완료
+            </span>
+          </div>
+          <p className="mt-2.5 text-[15px] font-extrabold text-[#0F172A]">{summary.count}가지를 채워 뒀어요</p>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {summary.items.map((it, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-1.5 text-[12px] font-semibold [word-break:keep-all]"
+                style={{ color: it.needsConfirm ? "#C2410C" : "#16161D" }}
+              >
+                <span className="w-3 shrink-0 text-center">{it.needsConfirm ? "○" : "✓"}</span>
+                {it.needsConfirm ? (
+                  <span className="min-w-0 flex-1">{it.label}은 대표님이 정해 주세요</span>
+                ) : (
+                  <span className="min-w-0 flex-1">
+                    {it.label}
+                    {it.value ? <span className="font-medium text-[#64748B]"> — {it.value}</span> : null}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="mt-3.5 flex gap-2">
+            <button
+              onClick={onUndo}
+              className="flex h-10 flex-1 items-center justify-center gap-1 rounded-xl border border-[#E8E8EC] bg-white text-[13px] font-bold text-[#525252] transition-transform active:scale-[0.98]"
+            >
+              ↩ 전체 되돌리기
+            </button>
+            <button
+              onClick={onConfirm}
+              className="flex h-10 flex-[1.4] items-center justify-center rounded-xl text-[13px] font-bold text-white transition-transform active:scale-[0.98]"
+              style={{ backgroundColor: "#16161D" }}
+            >
+              확인했어요
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 건너뛰기 — 연출 중(!summary)에만. 딤 위 z-76 우하단. */}
+      {!summary && (
+        <button
+          onClick={onSkip}
+          className="absolute bottom-6 right-4 z-[76] rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-bold text-[#16161D] shadow-lg backdrop-blur-sm transition-transform active:scale-95"
+        >
+          건너뛰기
+        </button>
+      )}
     </div>
   )
 }
