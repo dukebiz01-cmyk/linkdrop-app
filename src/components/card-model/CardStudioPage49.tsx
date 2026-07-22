@@ -493,6 +493,30 @@ const MODE_MAIN_IDS: Record<StudioMode, string[]> = {
 };
 const blockById = (id: string) => STUDIO_BLOCKS.find((b) => b.id === id)!;
 
+// UI-5-T2-E3e — 기본 코스(STEP_PLAN) 밖 잔여 블록의 생활어 라벨(실블록 기준). 추가 스텝 편입용.
+const EXTRA_LABELS: Record<string, string> = {
+  review: "리뷰",
+  link: "전화·위치",
+  image: "사진",
+  brand: "가게 소개",
+  party: "인원",
+  coupon: "쿠폰",
+  dock: "다른 링크",
+  delivery: "배송 안내",
+  aivideo: "AI 영상",
+};
+
+// 해당 모드에서 STEP_PLAN에 없는, 붙일 수 있는 잔여 블록(강화/유료 제외 · 생활어 라벨 보유).
+function extraBlocksFor(m: StudioMode): string[] {
+  const planBlocks = new Set(STEP_PLAN[m].map((s) => s.block).filter(Boolean) as string[]);
+  return DECK_IDS[m].filter((id) => {
+    if (planBlocks.has(id)) return false;
+    const b = blockById(id);
+    if (!b || b.isPaid || b.category === "enhance") return false;
+    return !!EXTRA_LABELS[id];
+  });
+}
+
 // 공유지도(공유 여정) — 익명 노드 체인. 신원 마스킹 + 기여도만 집계(모집 개념 없음)
 const SHARE_JOURNEY: {
   name: string;
@@ -618,6 +642,13 @@ export function CardStudioPage() {
   // UI-5-T2-E2a — 순차 진행: 현재 스텝·완료 집합·잠금 토스트.
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(() => new Set());
+  // UI-5-T2-E3e — 런타임 플랜 사본(기본 코스 + 사용자 유래 추가 스텝). 진행 지도·isStepDone·릴레이 통일 근거.
+  const [stepPlanState, setStepPlanState] = useState<PlanStep[]>(() => STEP_PLAN.general);
+  const stepPlanRef = useRef<PlanStep[]>(stepPlanState); // SSE 사슬·다중 삽입 정합(modeRef와 동일 패턴).
+  stepPlanRef.current = stepPlanState;
+  // 확인 스텝 잔여-블록 제안: 1회만(재진입 반복 금지). used=이번 카드에서 이미 제안함.
+  const [showReviewSuggest, setShowReviewSuggest] = useState(false);
+  const reviewSuggestUsedRef = useRef(false);
   const [stepToast, setStepToast] = useState<string | null>(null);
   // UI-5-T2-E3b — 작업물 있는 상태에서 목적 전환 시도 시 확인 대상 모드(null=게이트 닫힘).
   const [pendingModeSwitch, setPendingModeSwitch] = useState<StudioMode | null>(null);
@@ -809,6 +840,11 @@ export function CardStudioPage() {
     // ── 진행 상태·마킹·연출 ─────────────────────────────────────────
     setCurrentStep(0);
     setCompletedSteps(new Set());
+    // E3e — 런타임 플랜을 기본 코스로 복원(추가 스텝 폐기) + 제안 1회 플래그 리셋.
+    setStepPlanState(STEP_PLAN[next]);
+    stepPlanRef.current = STEP_PLAN[next];
+    reviewSuggestUsedRef.current = false;
+    setShowReviewSuggest(false);
     setLingoTouched(new Set());
     setPendingConfirm([]);
     setHelperTarget(null);
@@ -1275,6 +1311,7 @@ export function CardStudioPage() {
       currentStep, // T2-E2a(5) — 스텝 진행도 스냅샷.
       completedSteps: new Set(completedSteps),
       lingoTouched: new Set(lingoTouched),
+      stepPlan: [...stepPlanState], // E3e — 추가 스텝 포함 플랜 스냅샷(되돌리기 정합).
     };
     appliedActionsRef.current = [];
     // 히어로 카드를 화면 중앙으로
@@ -1382,6 +1419,10 @@ export function CardStudioPage() {
       setSelectedVideo(s.selectedVideo ?? null); // T1n — 영상 선택 복원.
       if (typeof s.currentStep === "number") setCurrentStep(s.currentStep); // T2-E2a — 스텝 진행 복원.
       if (s.completedSteps) setCompletedSteps(new Set(s.completedSteps));
+      if (s.stepPlan) {
+        setStepPlanState(s.stepPlan); // E3e — 추가 스텝 포함 플랜 복원.
+        stepPlanRef.current = s.stepPlan;
+      }
       setLingoTouched(s.lingoTouched);
     }
     setAssembleSummary(null);
@@ -1593,7 +1634,7 @@ export function CardStudioPage() {
 
   // UI-5-T2-E2a — 스텝 완료 조건(블록별 확정 신호). review = 항상 완료(훑어보기).
   function isStepDone(idx: number): boolean {
-    const s = STEP_PLAN[mode][idx];
+    const s = stepPlanState[idx]; // E3e — 런타임 플랜(추가 스텝 포함) 기준.
     if (!s) return false;
     switch (s.key) {
       case "video":
@@ -1615,22 +1656,32 @@ export function CardStudioPage() {
       case "review":
         return true;
       default:
-        return !!(s.block && applied[s.block]);
+        return !!(s.block && applied[s.block]); // 추가 스텝(extra-*) = 해당 블록 장착 시 완료.
     }
+  }
+  // 잔여(붙일 수 있는) 블록 — 플랜에 없고 아직 미장착. 확인 스텝 제안·인트로 예시 공용.
+  function remainingExtras(plan: PlanStep[]): string[] {
+    const inPlan = new Set(plan.map((s) => s.block).filter(Boolean) as string[]);
+    return extraBlocksFor(mode).filter((id) => !inPlan.has(id) && !applied[id]);
   }
   // 스텝 진입 = 해당 칸 이동 + 도우미(T1k 릴레이를 스텝 전환 기본 동작으로 승격).
   function enterStep(idx: number) {
-    const plan = STEP_PLAN[mode];
+    const plan = stepPlanState;
     if (idx < 0 || idx >= plan.length) return;
     setCurrentStep(idx);
     const s = plan[idx];
     if (s.block) onEditField(s.block, s.key === "video" ? "video" : undefined);
+    // E3e(4) — 확인 스텝 진입 1회 제안(잔여 블록 있을 때만). 재진입 반복 금지.
+    if (s.key === "review" && !reviewSuggestUsedRef.current && remainingExtras(plan).length > 0) {
+      reviewSuggestUsedRef.current = true;
+      setShowReviewSuggest(true);
+    }
   }
   // 미니 번호열 탭: 완료/현재/이전 = 재방문 허용, 미완 미래 = 토스트(순서 강제 · 자동 점프 없음).
   function goToStep(idx: number) {
     if (idx === currentStep) return;
     if (idx > currentStep && !completedSteps.has(currentStep) && !isStepDone(currentStep)) {
-      setStepToast(`순서대로 가요 — 지금은 ${STEP_PLAN[mode][currentStep].label}부터`);
+      setStepToast(`순서대로 가요 — 지금은 ${stepPlanState[currentStep].label}부터`);
       return;
     }
     enterStep(idx);
@@ -1639,12 +1690,36 @@ export function CardStudioPage() {
   function nextStep() {
     if (!isStepDone(currentStep)) return;
     setCompletedSteps((prev) => new Set(prev).add(currentStep));
-    const plan = STEP_PLAN[mode];
+    const plan = stepPlanState;
     if (currentStep < plan.length - 1) enterStep(currentStep + 1);
   }
-  // 릴레이 큐·액션 정렬용 플랜 순서(블록 → STEP_PLAN 인덱스). 미포함 = 뒤로.
+  // E3e(2) — 추가 스텝 삽입: 확인(review) 앞에 편입 · 중복 시 이동만 · 다중 삽입 정합(ref 즉시 반영).
+  //   트리거는 사용자 유래뿐 — 칩 탭(4) · 사용자 발화 유래 equip(3). 자동/타이머 호출 없음.
+  function insertStep(blockId: string) {
+    const cur = stepPlanRef.current;
+    const existingIdx = cur.findIndex((s) => s.block === blockId);
+    if (existingIdx >= 0) {
+      // 이미 플랜에 있으면 그 칸으로 이동만(중복 삽입 방지).
+      setCurrentStep(existingIdx);
+      const s = cur[existingIdx];
+      if (s.block) onEditField(s.block, s.key === "video" ? "video" : undefined);
+      return;
+    }
+    const label = EXTRA_LABELS[blockId] ?? blockById(blockId)?.label ?? blockId;
+    const reviewIdx = cur.findIndex((s) => s.key === "review");
+    const at = reviewIdx < 0 ? cur.length : reviewIdx; // 확인 스텝 앞(없으면 끝).
+    const step: PlanStep = { key: `extra-${blockId}`, label, block: blockId };
+    const nextPlan = [...cur.slice(0, at), step, ...cur.slice(at)];
+    stepPlanRef.current = nextPlan; // 즉시 반영 → 같은 tick 다중 삽입 인덱스 정합.
+    setStepPlanState(nextPlan);
+    setShowReviewSuggest(false);
+    setStepToast(`${nextPlan.length}단계가 됐어요 — ${label}은 ${at + 1}번째에 채울게요.`);
+    setCurrentStep(at);
+    onEditField(blockId, undefined); // 새 칸 블록으로 이동·장착.
+  }
+  // 릴레이 큐·액션 정렬용 플랜 순서(블록 → 플랜 인덱스). 미포함 = 뒤로. ref = 렌더·SSE 사슬 공용.
   function planOrder(blockId: string): number {
-    const idx = STEP_PLAN[mode].findIndex((s) => s.block === blockId);
+    const idx = stepPlanRef.current.findIndex((s) => s.block === blockId);
     return idx < 0 ? 99 : idx;
   }
   // 연출 스텝 → data-assemble-anchor 도출(플랜 블록 1:1): content=hero / review=gauge / 그 외=deck.
@@ -1654,8 +1729,12 @@ export function CardStudioPage() {
     return "deck";
   }
   function stepPlanIntro(m: StudioMode): string {
-    const plan = STEP_PLAN[m];
-    return `이 카드는 ${plan.length}단계로 만들어요: ${plan.map((s, i) => `${i + 1} ${s.label}`).join(" → ")}`;
+    const plan = STEP_PLAN[m]; // 인트로 = 기본 코스 소개(추가 스텝 편입 전 시점).
+    const base = `이 카드는 ${plan.length}단계로 만들어요: ${plan.map((s, i) => `${i + 1} ${s.label}`).join(" → ")}`;
+    // E3e(1) — 열린 문 안내: 잔여 블록 생활어 라벨 2~3개 예시.
+    const extras = extraBlocksFor(m).slice(0, 3).map((id) => EXTRA_LABELS[id]);
+    if (extras.length === 0) return base;
+    return `${base}. 더 넣고 싶은 게 있으면 말씀하세요 — ${extras.join("·")}도 붙일 수 있어요.`;
   }
 
   // UI-5-T2-E2 — 49 컨텍스트 → LingoContext(45 페이로드 형태 계승: studio_state + studio{deck,fields}).
@@ -1668,7 +1747,7 @@ export function CardStudioPage() {
     const m = modeRef.current;
     if (m !== mode) console.error("[studio49] mode 클로저/실모드 desync — stale 경로 재발", { closure: mode, live: m });
     const applied_blocks = STUDIO_BLOCKS.filter((b) => applied[b.id]).map((b) => b.id);
-    const cur = STEP_PLAN[m][currentStep];
+    const cur = stepPlanRef.current[currentStep]; // E3e — 런타임 플랜(추가 스텝 포함) 라이브.
     const deck = DECK.map((b) => ({
       id: b.id,
       label: b.label,
@@ -1700,7 +1779,7 @@ export function CardStudioPage() {
       studio: { mode: m, deck, fields },
       ...(selectedVideo ? { video_summary: selectedVideo.title } : {}),
       // UI-5-T2-E2a(8a) — 현재 스텝 컨텍스트: Edge v6 대본이 "지금 몇 번째"를 인지.
-      step_plan: STEP_PLAN[m].map((s) => s.label),
+      step_plan: stepPlanRef.current.map((s) => s.label),
       current_step: { index: currentStep, key: cur?.key ?? "", block: cur?.block ?? null },
     };
   }
@@ -1733,13 +1812,24 @@ export function CardStudioPage() {
       onEditField(photo ? "productimage" : "content", photo ? "productimage" : "video");
       return;
     }
-    // UI-5-T2-E2a(8b·8c·4) — 연출 = STEP_PLAN 순회(1:1). 실응답 액션도 플랜 순 정렬 후 재생.
+    // E3e(3) — 플랜 밖·모드 허용(DECK_IDS[m]) 블록 equip = 사용자 발화 유래 "추가 의사" → 스텝 편입.
+    //   트리거는 유저 메시지 응답의 equip뿐(자동 증설 아님). stepPlanRef 즉시 반영 → 아래 connut 정합.
+    {
+      const inPlan = new Set(stepPlanRef.current.map((s) => s.block).filter(Boolean) as string[]);
+      for (const a of okActions) {
+        if (a?.type === "equip" && a.blockId && DECK_IDS[m].includes(a.blockId) && !inPlan.has(a.blockId) && EXTRA_LABELS[a.blockId]) {
+          insertStep(a.blockId);
+          inPlan.add(a.blockId);
+        }
+      }
+    }
+    // UI-5-T2-E2a(8b·8c·4) — 연출 = 런타임 플랜 순회(1:1). 실응답 액션도 플랜 순 정렬 후 재생.
     //   anchor = 플랜 블록 1:1 도출(content=hero/review=gauge/그 외=deck) → Edge anchor 부재 폴백 해소.
     if (steps.length >= 2) {
       const actionBlock = (a: any): string =>
         a?.type === "equip" ? (a.blockId ?? "") : a?.type === "setField" ? (FIELD_TO_BLOCK[a.field] ?? a.field ?? "") : (a?.blockId ?? "");
       const sortedActions = [...okActions].sort((x, y) => planOrder(actionBlock(x)) - planOrder(actionBlock(y)));
-      const planConnut = STEP_PLAN[m].map((s) => ({ label: s.label, note: "", anchor: planAnchor(s) }));
+      const planConnut = stepPlanRef.current.map((s) => ({ label: s.label, note: "", anchor: planAnchor(s) }));
       runAssembly(sortedActions, planConnut); // 연출(T1b 분기 유지).
     } else {
       applyLingoActions(okActions); // 단순 편집 즉시 적용.
@@ -2032,10 +2122,10 @@ export function CardStudioPage() {
           완료 ✓ 잉크 / 현재 블루 / 대기 회색 번호. 미니열 탭 = 재방문/토스트, [다음] = 완료 시만 활성. */}
       <div className="sticky top-0 z-[33] flex h-11 items-center gap-2 border-b border-[#E8E8EC] bg-[#F7F7F9]/95 px-4 backdrop-blur">
         <span className="shrink-0 text-[12px] font-bold text-[#16161D]">
-          {currentStep + 1} / {STEP_PLAN[mode].length} · {STEP_PLAN[mode][currentStep]?.label}
+          {currentStep + 1} / {stepPlanState.length} · {stepPlanState[currentStep]?.label}
         </span>
         <div className="mx-auto flex items-center gap-1">
-          {STEP_PLAN[mode].map((s, i) => {
+          {stepPlanState.map((s, i) => {
             const done = completedSteps.has(i) || isStepDone(i);
             const cur = i === currentStep;
             return (
@@ -2059,7 +2149,7 @@ export function CardStudioPage() {
         </div>
         <button
           onClick={nextStep}
-          disabled={!isStepDone(currentStep) || currentStep >= STEP_PLAN[mode].length - 1}
+          disabled={!isStepDone(currentStep) || currentStep >= stepPlanState.length - 1}
           className="shrink-0 rounded-lg bg-[#16161D] px-2.5 py-1 text-[11px] font-bold text-white transition-transform active:scale-95 disabled:opacity-30"
         >
           다음
@@ -2408,6 +2498,37 @@ export function CardStudioPage() {
 
         {/* 장착 액션 (가운데 카드 대상) */}
         <div className="mx-auto mt-4 max-w-md px-5">
+          {/* UI-5-T2-E3e(4) — 확인 스텝 1회 제안: 잔여 블록 칩(최대 3) + [이대로 좋아요]. 칩=insertStep. */}
+          {showReviewSuggest && stepPlanState[currentStep]?.key === "review" && (
+            <div className="mb-3 rounded-2xl bg-white p-3.5 animate-fade-in [box-shadow:inset_0_0_0_1px_#E8E8EC]">
+              <p className="text-[13px] font-bold text-[#16161D] tracking-ko [word-break:keep-all]">
+                더 넣고 싶은 게 있나요?
+              </p>
+              <p className="mt-1 text-[12px] font-medium text-[#737373] tracking-ko [word-break:keep-all]">
+                원하는 걸 고르면 확인 앞에 한 칸 더 만들어요.
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {remainingExtras(stepPlanState)
+                  .slice(0, 3)
+                  .map((id) => (
+                    <button
+                      key={id}
+                      onClick={() => insertStep(id)}
+                      className="min-h-[36px] rounded-xl bg-[#EEF2FF] px-3 text-[12px] font-bold text-[#1D4ED8] transition-transform active:scale-95"
+                    >
+                      + {EXTRA_LABELS[id]}
+                    </button>
+                  ))}
+                <button
+                  onClick={() => setShowReviewSuggest(false)}
+                  className="min-h-[36px] rounded-xl border border-[#E8E8EC] px-3 text-[12px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                >
+                  이대로 좋아요
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 블록 설정 패널 — 장착과 동시에 여기서 값을 채우면 카드에 바로 반영 */}
           {activeApplied && CONFIGURABLE.includes(activeBlock.id) && (
             <div
