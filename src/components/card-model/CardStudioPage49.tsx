@@ -336,6 +336,35 @@ const DECK_IDS: Record<"general" | "reserve" | "commerce", string[]> = {
   reserve: ["calendar", "party", "content", "review", "coupon", "brand", "dock", "image", "link", "bgcolor", "top", "boost", "marketing"],
   commerce: ["product", "productimage", "aivideo", "seasonal", "review", "delivery", "coupon", "brand", "dock", "link", "bgcolor", "top", "boost", "marketing"],
 };
+
+// UI-5-T1h — AI 액션 모드 권한 가드(§0 역할 경계). 허용 블록 = 그 모드의 덱 구성(DECK_IDS) 자체(임의 창작 아님).
+//   퍼블릭(general)=content/dock/bgcolor/… → coupon·calendar·product·seasonal 등 매장 기능 사용 불가.
+//   필드는 그 필드를 지배하는 블록으로 환산해 심사(엔진의 setField↔블록 결합 반영).
+const FIELD_TO_BLOCK: Record<string, string> = {
+  title: "content",
+  subtitle: "content",
+  clip: "content",
+  date: "calendar",
+  time: "calendar",
+  coupon: "coupon",
+  productName: "product",
+  productPrice: "product",
+  dock: "dock",
+  phone: "link",
+  map: "link",
+};
+function isAiActionAllowed(mode: "general" | "reserve" | "commerce", a: any): boolean {
+  if (!a || typeof a.type !== "string") return false;
+  const allowed = DECK_IDS[mode];
+  if (a.type === "switchMode") return false; // 사용자 확인 없는 AI 모드 전환 금지.
+  if (a.type === "detach") return true; // 해제(제거)는 항상 안전.
+  if (a.type === "equip") return typeof a.blockId === "string" && allowed.includes(a.blockId);
+  if (a.type === "setField") {
+    const blk = FIELD_TO_BLOCK[a.field];
+    return !blk || allowed.includes(blk); // 매핑 없는 필드는 블록 게이트 없음(허용).
+  }
+  return true;
+}
 // 모드별 "핵심" 블록 — 이 목록의 블록은 덱에서 핵심 배지로 강조됨
 // 예약·쿠폰(reserve)은 예약 캘린더와 쿠폰 두 가지가 핵심
 const MODE_MAIN_IDS: Record<"general" | "reserve" | "commerce", string[]> = {
@@ -366,11 +395,11 @@ const MODE_CARD_COLOR: Record<"general" | "reserve" | "commerce", string> = {
   commerce: CARD_BASE,
 };
 
-// UI-5-T1b — /api/lingo mock 치환(실네트워크 미발신). 실배선(useLingoChat)은 T-2 소관.
-//   데모 시나리오 하드코딩: 어떤 입력이 와도 steps>=2 반환 → sendToLingo 가 runAssembly 재생.
-//   actions 는 제목·설명·쿠폰·판매기간을 채워 조립 과정을 보여줌(로컬 상태만 — 발행·네트워크 무관).
+// UI-5-T1h(2) — /api/lingo mock 치환(실네트워크 미발신). 실배선(useLingoChat)은 T-2 소관.
+//   모드별 데모 시나리오: 각 모드의 DECK_IDS 허용 액션만 반환(퍼블릭=개인 공유, 매장 모드만 쿠폰·예약·판매).
+//   steps>=2 → sendToLingo 가 runAssembly 재생(로컬 상태만 — 발행·네트워크 무관).
 type LingoReply = { reply: string; actions: any[]; steps: { label: string; note: string; anchor?: string }[] };
-async function mockLingoReply(_payload: {
+async function mockLingoReply(payload: {
   transcript: string;
   mode: string;
   deck: unknown;
@@ -378,21 +407,55 @@ async function mockLingoReply(_payload: {
   history: unknown;
 }): Promise<LingoReply> {
   await new Promise((r) => setTimeout(r, 400));
+  // 예약·쿠폰(매장) — 예약 캘린더 + 쿠폰.
+  if (payload.mode === "reserve") {
+    return {
+      reply: "이렇게 카드를 구성했어요 — 제목·예약 캘린더·쿠폰을 붙였어요.",
+      actions: [
+        { type: "setField", field: "title", value: "가을 캠핑 예약 받아요" },
+        { type: "equip", blockId: "calendar" },
+        { type: "equip", blockId: "coupon" },
+        { type: "setField", field: "coupon", value: "c1" },
+      ],
+      steps: [
+        { label: "카드 제목을 정했어요", note: "핵심 메시지를 한 줄로.", anchor: "hero" },
+        { label: "예약 캘린더를 붙였어요", note: "카드 안에서 바로 예약받아요.", anchor: "deck" },
+        { label: "쿠폰을 연결했어요", note: "누를 이유를 만들어요.", anchor: "deck" },
+        { label: "완성도가 올라갔어요", note: "예약 전환 준비가 탄탄해져요.", anchor: "gauge" },
+      ],
+    };
+  }
+  // 상품판매(매장) — 상품 정보 + 판매 기간.
+  if (payload.mode === "commerce") {
+    return {
+      reply: "이렇게 카드를 구성했어요 — 상품 정보와 판매 기간을 넣었어요.",
+      actions: [
+        { type: "setField", field: "productName", value: "괴산 햇사과 5kg" },
+        { type: "setField", field: "productPrice", value: "32,000" },
+        { type: "equip", blockId: "product" },
+        { type: "equip", blockId: "seasonal" },
+      ],
+      steps: [
+        { label: "상품 정보를 넣었어요", note: "이름과 가격을 담았어요.", anchor: "hero" },
+        { label: "가격을 설정했어요", note: "보는 사람이 바로 확인해요.", anchor: "hero" },
+        { label: "판매 기간을 붙였어요", note: "지금이 구매 적기라고 알려요.", anchor: "deck" },
+        { label: "완성도가 올라갔어요", note: "판매 전환 준비가 탄탄해져요.", anchor: "gauge" },
+      ],
+    };
+  }
+  // 일반(퍼블릭=개인 공유) — 콘텐츠·하이라이트만. 쿠폰·예약·판매 없음(§0 역할 경계).
   return {
-    reply: "이렇게 카드를 구성했어요 — 제목·설명·쿠폰·판매기간을 넣었어요.",
+    reply: "이렇게 카드를 구성했어요 — 제목·설명·하이라이트를 골랐어요.",
     actions: [
-      { type: "setField", field: "title", value: "가을 신메뉴 출시" },
-      { type: "setField", field: "subtitle", value: "지금 예약하면 웰컴 쿠폰" },
-      { type: "equip", blockId: "coupon" },
-      { type: "setField", field: "coupon", value: "c1" },
-      { type: "equip", blockId: "seasonal" },
+      { type: "setField", field: "title", value: "가을 여행 브이로그" },
+      { type: "setField", field: "subtitle", value: "괴산 호수 캠핑 하이라이트" },
+      { type: "setField", field: "clip", value: "0:42" },
     ],
-    // UI-5-T1c — 각 스텝의 anchor = data-assemble-anchor 값(hero/deck/gauge). 실좌표 지목.
     steps: [
-      { label: "카드 제목을 정했어요", note: "핵심 메시지를 한 줄로 담았어요.", anchor: "hero" },
-      { label: "설명 문구를 더했어요", note: "왜 지금 눌러야 하는지 알려요.", anchor: "hero" },
-      { label: "쿠폰·판매기간을 붙였어요", note: "누를 이유와 구매 적기를 만들어요.", anchor: "deck" },
-      { label: "완성도가 올라갔어요", note: "전환 준비가 그만큼 탄탄해져요.", anchor: "gauge" },
+      { label: "카드 제목을 정했어요", note: "핵심 메시지를 한 줄로.", anchor: "hero" },
+      { label: "설명 문구를 더했어요", note: "무슨 영상인지 알려줘요.", anchor: "hero" },
+      { label: "하이라이트 구간을 골랐어요", note: "가장 좋은 장면부터 보여요.", anchor: "deck" },
+      { label: "공유 준비가 됐어요", note: "카드가 그만큼 탄탄해져요.", anchor: "gauge" },
     ],
   };
 }
@@ -875,6 +938,9 @@ export function CardStudioPage() {
 
   // 액션 하나를 적용 (조립 연출에서 단계별로 호출)
   function applyOneLingoAction(a: any) {
+    // UI-5-T1h(1b) — 엔진 레벨 최종 가드: 현재 모드 비허용 액션은 무적용(mock·실배선 공통 방어).
+    //   안내(말풍선)는 sendToLingo 사전 필터(1c)가 1회 담당 — 여기선 조용히 스킵(이중 방어).
+    if (!isAiActionAllowed(mode, a)) return;
     {
       if (a.type === "switchMode" && a.mode) {
         switchMode(a.mode);
@@ -1003,12 +1069,22 @@ export function CardStudioPage() {
       const steps = Array.isArray(data.steps)
         ? data.steps.filter((s: any) => s && s.label)
         : [];
+      // UI-5-T1h(1c) — 조립/적용 전 사전 필터: 현재 모드 비허용 액션 제거(스텝 문구·실적용 불일치 방지).
+      const rawActions = Array.isArray(data.actions) ? data.actions : [];
+      const okActions = rawActions.filter((a: any) => isAiActionAllowed(mode, a));
+      if (okActions.length < rawActions.length) {
+        // 무언 드롭 금지 — 안내 1줄.
+        setMessages((m) => [
+          ...m,
+          { role: "assistant", text: "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요." },
+        ]);
+      }
       if (steps.length >= 2) {
         // 여러 요소를 구성 → 링고가 손가락으로 가리키며 단계별로 조립 연출(runAssembly).
-        runAssembly(data.actions ?? [], steps);
+        runAssembly(okActions, steps);
       } else {
         // 단순 편집 → 즉시 반영
-        applyLingoActions(data.actions);
+        applyLingoActions(okActions);
       }
       const reply = data.reply || "네, 반영했어요.";
       setMessages((m) => [...m, { role: "assistant", text: reply }]);
