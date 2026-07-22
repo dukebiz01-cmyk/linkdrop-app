@@ -638,6 +638,8 @@ export function CardStudioPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(() => new Set());
   const [stepToast, setStepToast] = useState<string | null>(null);
+  // UI-5-T2-E3b — 작업물 있는 상태에서 목적 전환 시도 시 확인 대상 모드(null=게이트 닫힘).
+  const [pendingModeSwitch, setPendingModeSwitch] = useState<"general" | "reserve" | "commerce" | null>(null);
   useEffect(() => {
     if (!stepToast) return;
     const t = setTimeout(() => setStepToast(null), 1800);
@@ -760,21 +762,118 @@ export function CardStudioPage() {
   const isMainBlock = (id: string) => MODE_MAIN_IDS[mode].includes(id);
 
   // 모드 전환: 장착·진행 상태를 초기화해 새 덱부터 시작
-  const switchMode = (next: "general" | "reserve" | "commerce") => {
-    if (next === mode) return;
+  // UI-5-T2-E3b — 목적 전환 = 새 카드 새로 시작(45 엔진 계약 "전환=전체 리셋" 계승).
+  //   전 리셋을 단일 함수로 집약 — 흩어진 개별 set 나열 금지. 스냅샷 구조(1182~)와 키 정합.
+  const MODE_NAME: Record<"general" | "reserve" | "commerce", string> = {
+    general: "퍼블릭",
+    reserve: "예약·쿠폰",
+    commerce: "상품판매",
+  };
+
+  function resetForMode(next: "general" | "reserve" | "commerce") {
+    // ── 카드 상태(스냅샷 키 + 나머지 전 필드) ───────────────────────
     setMode(next);
     setApplied({});
-    setDeckIndex(0);
-    setDropped(false);
+    setCardColor(MODE_CARD_COLOR[next]); // 모드별 고정 배경색(기본값)
     setShowColorPicker(false);
-    setCardColor(MODE_CARD_COLOR[next]); // 모드별 고정 배경색 적용
-    // UI-5-T2-E2a — 모드 진입: 미디어·스텝 초기화 + 플랜 제시(패널 메시지).
+    setDropped(false);
+    setMirrorOpen(false);
+    setVisibility("public");
+    setDeckIndex(0);
+    setBurstKey(0);
+    setLastEquipped(null);
+    // 미디어·검색
     setSelectedVideo(null);
+    setVideoQuery("");
+    setVideoLink("");
+    setVideoResults([]);
+    setVideoSearching(false);
+    setVideoSearched(false);
+    setVideoError(null);
     setCatImgReady(false);
+    setCatStatus("idle");
+    setAivStyle("dynamic");
+    setAivLength("15s");
+    setAivStatus("idle");
+    // cfg 전 필드
+    setCfgDate(DATE_OPTIONS[0]);
+    setCfgTime(TIME_OPTIONS[1]);
+    setSaleStartIdx(0);
+    setSaleEndIdx(6);
+    setCfgDates([DATE_OPTIONS[0]]);
+    setCfgTimes([TIME_OPTIONS[1]]);
+    setCfgSlotsByDate({ [DATE_OPTIONS[0]]: 4 });
+    setDateRailIdx(0);
+    setCfgCoupon(COUPON_OPTIONS[0].id);
+    setCfgDock(DOCK_OPTIONS[0].id);
+    setCfgProductName("");
+    setCfgProductPrice("");
+    setCfgProduct(EMPTY_PRODUCT);
+    setCfgPhone(true);
+    setCfgMap(true);
+    setCfgFacilities([newFacility("주차 가능"), newFacility("무료 와이파이")]);
+    setCfgTitle("");
+    setCfgSubtitle("");
+    setCfgClip("0:42");
+    setCfgParty(2);
+    setCfgRating(5);
+    setCfgReview("");
+    setCfgShipFee("무료");
+    setCfgShipEta("2~3일");
+    setCfgCourier(COURIERS[0]);
+    setCfgShipStage(0);
+    setCfgTrackingNo("");
+    setCfgBrand("");
+    // ── 진행 상태·마킹·연출 ─────────────────────────────────────────
     setCurrentStep(0);
     setCompletedSteps(new Set());
-    setStepToast(null);
-    setMessages((m) => [...m, { role: "assistant", text: stepPlanIntro(next) }]);
+    setLingoTouched(new Set());
+    setPendingConfirm([]);
+    setHelperTarget(null);
+    setHelperCopyKey(null);
+    setHelperPhase("guide");
+    setBlinkBlock(null);
+    setAssembleSummary(null);
+    setAssembling(false);
+    setAssembleSteps([]);
+    setAssembleStep(0);
+    assembleSnapshot.current = null; // 되돌리기 스냅샷 폐기(이전 목적 작업물 유입 차단)
+    appliedActionsRef.current = [];
+    // ── 링고 패널: 대화 이력 유지 + 새 플랜 인사 ───────────────────
+    setMessages((m) => [...m, { role: "assistant", text: `새로 시작할게요 — ${stepPlanIntro(next)}` }]);
+    // ── 안내 토스트 ─────────────────────────────────────────────────
+    setStepToast(`새 ${MODE_NAME[next]} 카드를 시작했어요`);
+  }
+
+  // 작업물 존재 판정 — 하나라도 있으면 전환 시 확인 게이트.
+  function hasWork(): boolean {
+    return (
+      !!selectedVideo ||
+      catImgReady ||
+      videoSearched ||
+      Object.values(applied).some(Boolean) ||
+      completedSteps.size > 0 ||
+      currentStep > 0 ||
+      cfgTitle.trim() !== "" ||
+      cfgSubtitle.trim() !== "" ||
+      cfgProductName.trim() !== "" ||
+      cfgProductPrice.trim() !== "" ||
+      cfgBrand.trim() !== "" ||
+      cfgReview.trim() !== ""
+    );
+  }
+
+  // 모드 탭·전환 지점 단일 진입 — hasWork면 확인 게이트, 아니면 즉시 리셋.
+  function attemptSwitchMode(next: "general" | "reserve" | "commerce") {
+    if (next === mode) return; // 같은 모드 재탭 = 무동작(리셋 금지).
+    if (hasWork()) setPendingModeSwitch(next);
+    else resetForMode(next);
+  }
+
+  // switchMode 경로 통일 — 리셋을 resetForMode로 경유(AI switchMode는 상위에서 이미 차단·T1h).
+  const switchMode = (next: "general" | "reserve" | "commerce") => {
+    if (next === mode) return;
+    resetForMode(next);
   };
 
   // 공개/비공개 스와이프 — 손가락으로 좌우로 밀어서 전환
@@ -1989,6 +2088,39 @@ export function CardStudioPage() {
         </div>
       )}
 
+      {/* UI-5-T2-E3b — 목적 전환 확인 게이트(Radix 금지 · 기존 시트/카드 패턴). */}
+      {pendingModeSwitch && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center px-8">
+          <div className="absolute inset-0 bg-black/35" onClick={() => setPendingModeSwitch(null)} />
+          <div className="relative w-full max-w-[320px] rounded-2xl bg-white p-5 [box-shadow:0_24px_60px_-16px_rgba(10,14,22,0.5)]">
+            <p className="text-[15px] font-extrabold tracking-ko text-[#16161D] [word-break:keep-all]">
+              목적을 바꾸면 새 카드로 새로 시작해요
+            </p>
+            <p className="mt-2 text-[13px] font-medium leading-relaxed tracking-ko text-[#737373] [word-break:keep-all]">
+              지금 만들던 <b className="font-bold text-[#525252]">{MODE_NAME[mode]}</b> 카드 내용은 사라져요.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => {
+                  const n = pendingModeSwitch;
+                  setPendingModeSwitch(null);
+                  if (n) resetForMode(n);
+                }}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#16161D] text-[13px] font-bold text-white transition-transform active:scale-[0.98]"
+              >
+                새로 시작
+              </button>
+              <button
+                onClick={() => setPendingModeSwitch(null)}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E8E8EC] bg-white text-[13px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+              >
+                계속 만들기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-md px-5">
         {/* ───────── 모드 전환 (퍼블릭 / 예약·쿠폰 / 상품판매) ───────── */}
         <div className="mt-5 flex rounded-2xl bg-white p-1 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
@@ -2001,7 +2133,7 @@ export function CardStudioPage() {
             return (
               <button
                 key={key}
-                onClick={() => switchMode(key as "general" | "reserve" | "commerce")}
+                onClick={() => attemptSwitchMode(key as "general" | "reserve" | "commerce")}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-bold transition-all duration-200 ${
                   isOn ? "text-white" : "text-[#737373]"
                 }`}
