@@ -386,7 +386,18 @@ const NUMBER_CRITICAL_BLOCKS = new Set(["product", "seasonal", "calendar", "part
 // UI-5-T1k(D) — 핵심구간(clip): "장착은 링고, 선택은 대표님". content = 선택 필요(needsConfirm 동급).
 //   구간 값(clip) setField 는 AI 화이트리스트에서 제외 → 링고가 시도해도 가드에 걸림(T-2 실배선 방어).
 const CLIP_BLOCKS = new Set(["content"]); // 구간 선택 필요 블록(선택은 대표님).
-const AI_BLOCKED_FIELDS = new Set(["clip"]); // 링고 자동 설정 금지 필드(구간 숫자).
+// UI-5-T1m — 영상=조립 관문(content=영상·핵심구간 블록, hasVideo=applied.content). 이미지=선택 필요.
+const IMAGE_BLOCKS = new Set(["image", "productimage"]); // 사진 선택 필요 블록.
+// 링고 자동 설정 금지 필드: 구간(clip)·영상 링크·사진 = 콘텐츠 대리 선택 금지(장착·안내만).
+const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "image", "imageUrl", "photo"]);
+// UI-5-T1m — 미확정 릴레이 큐 정렬 우선순위: 영상 → 이미지 → 숫자(product/party/…) → 구간(content) → 기타.
+function confirmRank(id: string): number {
+  if (id === "__video") return 0;
+  if (IMAGE_BLOCKS.has(id)) return 1;
+  if (NUMBER_CRITICAL_BLOCKS.has(id)) return 2;
+  if (CLIP_BLOCKS.has(id)) return 3;
+  return 4;
+}
 
 // UI-5-T1k(B2) — 미확정 칸 도우미 안내(블록별). 값 제안·자동입력 금지 — 링고는 안내만(숫자 불가침).
 const HELPER_COPY: Record<string, string> = {
@@ -396,6 +407,9 @@ const HELPER_COPY: Record<string, string> = {
   party: "예약 인원을 정해 주세요.",
   coupon: "할인 금액을 확인해 주세요.",
   content: "영상에서 가장 보여주고 싶은 장면을 골라 주세요 — 시작과 끝을 움직이면 카드에 바로 반영돼요.",
+  video: "유튜브·인스타 링크를 붙여넣으면 카드에 영상이 들어가요.",
+  image: "매장 사진을 올려 주세요 — 첫 사진이 대표 이미지가 돼요.",
+  productimage: "상품 사진을 올려 주세요 — 첫 사진이 카드의 얼굴이 돼요.",
   dock: "함께 보낼 카드를 골라 주세요.",
   link: "전화·위치를 확인해 주세요.",
 };
@@ -500,8 +514,8 @@ async function mockLingoReply(payload: {
       { type: "setField", field: "subtitle", value: "괴산 호수 캠핑 하이라이트" },
     ],
     steps: [
+      { label: "담아주신 영상을 카드에 넣었어요", note: "이 영상이 카드의 얼굴이 돼요.", anchor: "hero" }, // T1m — 1스텝 = 영상 프리뷰.
       { label: "카드 제목을 정했어요", note: "핵심 메시지를 한 줄로.", anchor: "hero" },
-      { label: "설명 문구를 더했어요", note: "무슨 영상인지 알려줘요.", anchor: "hero" },
       { label: "핵심구간 도구를 붙였어요", note: "어느 장면을 보여줄지는 대표님이 골라 주세요.", anchor: "deck" },
       { label: "공유 준비가 됐어요", note: "카드가 그만큼 탄탄해져요.", anchor: "gauge" },
     ],
@@ -619,6 +633,7 @@ export function CardStudioPage() {
     });
   // UI-5-T1k(B) — 미확정 칸 도우미 릴레이(동행 선행). 대상 블록·단계·미확정 큐·스포트라이트 깜빡.
   const [helperTarget, setHelperTarget] = useState<string | null>(null);
+  const [helperCopyKey, setHelperCopyKey] = useState<string | null>(null); // T1m — 안내 문구 오버라이드(예: 영상 관문).
   const [helperPhase, setHelperPhase] = useState<"guide" | "done" | "allDone">("guide");
   const [pendingConfirm, setPendingConfirm] = useState<string[]>([]);
   const [blinkBlock, setBlinkBlock] = useState<string | null>(null);
@@ -632,6 +647,7 @@ export function CardStudioPage() {
     if (helperPhase !== "allDone") return;
     const t = setTimeout(() => {
       setHelperTarget(null);
+      setHelperCopyKey(null);
       setHelperPhase("guide");
     }, 3000);
     return () => clearTimeout(t);
@@ -1034,10 +1050,10 @@ export function CardStudioPage() {
         switchMode(a.mode);
       } else if (a.type === "equip" && a.blockId) {
         const b = STUDIO_BLOCKS.find((x) => x.id === a.blockId);
-        if (b && !applied[b.id] && !(b.isPaid && score < ENHANCE_UNLOCK)) {
-          equip(b);
+        if (b && !(b.isPaid && score < ENHANCE_UNLOCK)) {
+          if (!applied[b.id]) equip(b); // 이미 장착(예: 영상 관문 선행)이면 요약·손길만 기록.
           jumpToBlock(b.id);
-          appliedActionsRef.current.push(a); // T1j — 적용 로그(요약).
+          appliedActionsRef.current.push(a); // T1j·T1m — 적용 로그(요약) — 선(先)장착 블록도 포함.
           touch([b.id]); // T1j — 링고 손길 기록.
         }
       } else if (a.type === "detach" && a.blockId) {
@@ -1096,6 +1112,9 @@ export function CardStudioPage() {
     assembleTimers.current = [];
 
     setLingoOpen(false); // 패널을 닫아 카드+연출이 온전히 보이게
+    // T1m — 연출 시작 시 영상 관문 도우미(guide) 정리(장착 후 재요청으로 진입한 경우).
+    setHelperTarget(null);
+    setHelperCopyKey(null);
     setAssembleSteps(steps);
     setAssembleStep(0);
     setAssembling(true);
@@ -1146,7 +1165,12 @@ export function CardStudioPage() {
       setAssembling(false);
       const summary = buildAssembleSummary();
       setAssembleSummary(summary);
-      setPendingConfirm(summary.items.filter((i) => i.needsConfirm).map((i) => i.id)); // T1k — 미확정 큐.
+      setPendingConfirm(
+        summary.items
+          .filter((i) => i.needsConfirm)
+          .map((i) => i.id)
+          .sort((a, b) => confirmRank(a) - confirmRank(b)),
+      ); // T1k·T1m — 미확정 큐(영상→이미지→숫자→구간→기타).
       const filled = summary.items.filter((i) => !i.needsConfirm).map((i) => i.label);
       const need = summary.items.filter((i) => i.needsConfirm).map((i) => i.label);
       setMessages((m) => [
@@ -1170,10 +1194,12 @@ export function CardStudioPage() {
         seen.add("b:" + a.blockId);
         const b = STUDIO_BLOCKS.find((x) => x.id === a.blockId);
         if (b) {
-          const isSelect = CLIP_BLOCKS.has(b.id); // T1k(D) — 구간 = 선택 필요(장착은 링고, 선택은 대표님).
+          const isClip = CLIP_BLOCKS.has(b.id); // 구간 = 선택 필요(장착은 링고, 선택은 대표님).
+          const isImage = IMAGE_BLOCKS.has(b.id); // T1m — 사진 = 선택 필요.
+          const isSelect = isClip || isImage;
           items.push({
             id: b.id,
-            label: isSelect ? "핵심구간" : b.label,
+            label: isClip ? "핵심구간" : isImage ? "매장 사진" : b.label,
             value: "장착 완료",
             needsConfirm: NUMBER_CRITICAL_BLOCKS.has(b.id) || isSelect,
             select: isSelect,
@@ -1223,8 +1249,9 @@ export function CardStudioPage() {
     setAssembleSummary(null);
   }
 
-  // UI-5-T1k(B1) — 칩 탭 → 딤 종료 → 해당 블록 이동 + 스포트라이트 1회 깜빡 + 도우미 말풍선(guide).
-  function onEditField(blockId: string) {
+  // UI-5-T1k(B1)·T1m — 칩 탭/관문 → 딤 종료 → 해당 블록 이동 + 스포트라이트 1회 깜빡 + 도우미 말풍선(guide).
+  //   copyKey = 안내 문구 오버라이드(예: 영상 관문 "video"). 미지정 시 블록 기본 안내.
+  function onEditField(blockId: string, copyKey?: string) {
     setAssembleSummary(null); // 딤 종료(오버레이 cleanup 이 스크롤 잠금 원복).
     if (typeof document !== "undefined") document.body.style.overflow = ""; // T1k(C) — B 진입 시 잠금 확실 원복.
     const b = STUDIO_BLOCKS.find((x) => x.id === blockId);
@@ -1234,17 +1261,20 @@ export function CardStudioPage() {
     if (helperTimer.current) clearTimeout(helperTimer.current);
     helperTimer.current = setTimeout(() => setBlinkBlock(null), 1600); // 0.8s×2 깜빡 후 상주 금지.
     setHelperTarget(blockId);
+    setHelperCopyKey(copyKey ?? null);
     setHelperPhase("guide");
   }
   // 사용자가 그 칸을 직접 확정(장착/필드 확정) → 완료 말풍선 + 릴레이(강제 이동 없음).
   function confirmHelper(blockId: string) {
     if (helperTarget !== blockId || helperPhase !== "guide") return;
     untouch([blockId]); // 배지 소멸 로직 연동.
+    setHelperCopyKey(null);
     setPendingConfirm((q) => q.filter((id) => id !== blockId));
     setHelperPhase("done");
   }
   function dismissHelper() {
     setHelperTarget(null);
+    setHelperCopyKey(null);
     setHelperPhase("guide");
   }
 
@@ -1254,7 +1284,12 @@ export function CardStudioPage() {
     setAssembling(false);
     const sum = buildAssembleSummary(); // 중단 = 적용된 데까지만 요약.
     setAssembleSummary(sum);
-    setPendingConfirm(sum.items.filter((i) => i.needsConfirm).map((i) => i.id));
+    setPendingConfirm(
+      sum.items
+        .filter((i) => i.needsConfirm)
+        .map((i) => i.id)
+        .sort((a, b) => confirmRank(a) - confirmRank(b)),
+    );
   }
 
   async function sendToLingo(text: string) {
@@ -1296,6 +1331,17 @@ export function CardStudioPage() {
           ...m,
           { role: "assistant", text: "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요." },
         ]);
+      }
+      // UI-5-T1m(1) — 영상 = 조립 관문. 영상 미장착(content 블록)이면 연출 미시작 → 안내 + 영상 칸 이동(도우미).
+      //   장착 후 재요청하면 조립 진행. (hasVideo = applied["content"] — 49의 영상 상태 = content 블록 장착.)
+      const hasVideo = !!applied["content"];
+      if (steps.length >= 2 && !hasVideo) {
+        setMessages((m) => [
+          ...m,
+          { role: "assistant", text: "영상부터 담아야 카드가 시작돼요 — 링크를 붙여넣어 주세요." },
+        ]);
+        onEditField("content", "video"); // 영상 칸 이동 + 도우미(guide). 값 자동입력 없음(안내만).
+        return;
       }
       if (steps.length >= 2) {
         // 여러 요소를 구성 → 링고가 손가락으로 가리키며 단계별로 조립 연출(runAssembly).
@@ -1827,7 +1873,7 @@ export function CardStudioPage() {
               style={{
                 boxShadow: `inset 0 0 0 1px ${
                   lingoTouched.has(activeBlock.id) &&
-                  (NUMBER_CRITICAL_BLOCKS.has(activeBlock.id) || CLIP_BLOCKS.has(activeBlock.id))
+                  (NUMBER_CRITICAL_BLOCKS.has(activeBlock.id) || CLIP_BLOCKS.has(activeBlock.id) || IMAGE_BLOCKS.has(activeBlock.id))
                     ? "#FDBA74"
                     : "#E8E8EC"
                 }`,
@@ -1841,7 +1887,7 @@ export function CardStudioPage() {
               {/* UI-5-T1j(3) — 링고 손길 배지(폼 섹션 우상단). 숫자 계열 = 확인 필요(주황). 직접 수정 시 소멸. */}
               {lingoTouched.has(activeBlock.id) && (
                 <LingoTouchBadge
-                  needsConfirm={NUMBER_CRITICAL_BLOCKS.has(activeBlock.id) || CLIP_BLOCKS.has(activeBlock.id)}
+                  needsConfirm={NUMBER_CRITICAL_BLOCKS.has(activeBlock.id) || CLIP_BLOCKS.has(activeBlock.id) || IMAGE_BLOCKS.has(activeBlock.id)}
                 />
               )}
               {/* UI-5-T1k(B2·3·4·5) — 미확정 칸 도우미 말풍선(패널 상단 부착 · 화면 미추종). 값 자동입력 없음(안내만). */}
@@ -1856,7 +1902,7 @@ export function CardStudioPage() {
                       <div className="min-w-0 flex-1">
                         {helperPhase === "guide" && (
                           <p className="text-[12px] font-semibold leading-relaxed text-[#16161D] [word-break:keep-all]">
-                            {HELPER_COPY[activeBlock.id] ?? "여기에서 값을 정해 주세요."}
+                            {HELPER_COPY[helperCopyKey ?? activeBlock.id] ?? HELPER_COPY[activeBlock.id] ?? "여기에서 값을 정해 주세요."}
                           </p>
                         )}
                         {helperPhase === "done" && (
@@ -2453,7 +2499,10 @@ export function CardStudioPage() {
                   </div>
                   <div className="flex gap-1.5">
                     <button
-                      onClick={() => activeBlock.id === "productimage" && setCatImgReady(true)}
+                      onClick={() => {
+                        if (activeBlock.id === "productimage") setCatImgReady(true);
+                        confirmHelper(activeBlock.id); // UI-5-T1m — 사진 선택 = 도우미 완료(콘텐츠 선택은 대표님).
+                      }}
                       className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-white transition-transform active:translate-y-px"
                       style={{ backgroundColor: accent }}
                     >
@@ -2461,7 +2510,10 @@ export function CardStudioPage() {
                       갤러리에서 선택
                     </button>
                     <button
-                      onClick={() => activeBlock.id === "productimage" && setCatImgReady(true)}
+                      onClick={() => {
+                        if (activeBlock.id === "productimage") setCatImgReady(true);
+                        confirmHelper(activeBlock.id); // UI-5-T1m — 사진 선택 = 도우미 완료(콘텐츠 선택은 대표님).
+                      }}
                       className="flex items-center justify-center gap-1.5 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[12px] font-semibold text-[#404040] transition-transform active:translate-y-px"
                     >
                       촬영
