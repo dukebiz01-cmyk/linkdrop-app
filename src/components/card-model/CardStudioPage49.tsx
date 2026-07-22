@@ -562,6 +562,11 @@ export function CardStudioPage() {
   modeRef.current = mode;
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [dropped, setDropped] = useState(false);
+  // UI-5-T2-E4 — 발행 실배선(45 handlePublish 계승 · 비커머스 지원 필드 한정). 오발행 방지·무언 실패 금지.
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedUrl, setSavedUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [mirrorOpen, setMirrorOpen] = useState(false);
   const [visibility, setVisibility] = useState<"public" | "private">("public");
   // 공개/비공개 — 손가락으로 좌우로 밀어서 전환
@@ -790,6 +795,10 @@ export function CardStudioPage() {
     setMode(next);
     setApplied({});
     setDropped(false);
+    setSaving(false); // E4 — 발행 상태도 새 카드로 초기화.
+    setSaveError(null);
+    setSavedUrl(null);
+    setCopied(false);
     setMirrorOpen(false);
     setVisibility("public");
     setDeckIndex(0);
@@ -1950,9 +1959,93 @@ export function CardStudioPage() {
   // E3c — 매 렌더 최신 sendToLingo를 ref에 게시(음성 onresult가 이 최신본을 호출).
   sendToLingoRef.current = sendToLingo;
 
+  // UI-5-T2-E4 — 발행 실행(2단 수동의 2단째). 45 handlePublish(:2251) 비커머스 body 계승.
+  //   지원 필드 한정: media_url·purpose·curator_message·is_public·partner_id. 45 계약 준수·오발행 방지.
+  //   호출처 = 거울 시트 [발행하기] 버튼뿐(자동/링고/연출/타이머 유래 0 — 헌장 ⑨).
+  async function doPublish(): Promise<boolean> {
+    // 커머스 = 실 이미지·상품등록 인프라 부재 → 이번 슬라이스 보류(E5 승계).
+    if (mode === "commerce") {
+      setSaveError("상품 발행은 준비 중이에요");
+      return false;
+    }
+    // 검증(45 :2252 계승 — 비커머스는 영상 필수).
+    if (!selectedVideo) {
+      setSaveError("영상을 먼저 담아 주세요");
+      return false;
+    }
+    if (saving) return false; // 이중 탭 방지(45 :2271).
+    setSaving(true);
+    setSaveError(null);
+    try {
+      // 45 :2275·2277·2342 body 형태 동일(비커머스). 지원 필드만 — 45 대조 근거는 커밋 보고 대조표.
+      const mediaUrl = `https://www.youtube.com/watch?v=${selectedVideo.videoId}`;
+      const hasReservation = !!applied["calendar"];
+      // 쿠폰 연결(실 UUID) 이번 생략 → 45의 selectedCouponId 부재 상태와 동형(hasCoupon=false) = purpose "예약"/"정보".
+      const dropPurpose = hasReservation ? "예약" : "정보";
+      const isPublic = visibility === "public";
+      const body = {
+        media_url: mediaUrl,
+        purpose: dropPurpose,
+        curator_message: cfgSubtitle.trim() || null,
+        is_public: isPublic, // BUG-1(S1-b): 신규 생성 경로라 body.is_public 로 실려나감(재사용 분기 없음 = 함정 회피).
+        partner_id: null, // 49 store=목업 문자열(실 파트너 id 없음) → 45의 store?.id ?? null 와 동형(null).
+        // blocks 생략: 49 무 실입력(clip 초/구간·image·dock·custom_title) → 45 extraBlocks.length===0 분기와 동일(blocks 키 부재).
+      };
+      const res = await fetch("/api/drops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json()) as {
+        drop?: { id?: string; share_uuid?: string };
+        shareable_url?: string;
+        message?: string;
+      };
+      if (!res.ok || !json.drop?.share_uuid) {
+        setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요."); // 무언 실패 금지.
+        return false;
+      }
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
+      setSavedUrl(json.shareable_url ?? `${origin}/d/${json.drop.share_uuid}`); // 45 :2471 동형.
+      setDropped(true);
+      setMirrorOpen(false);
+      return true;
+    } catch (e) {
+      console.error("[studio49] doPublish", e);
+      setSaveError("카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function copyShareLink() {
+    if (!savedUrl) return;
+    try {
+      await navigator.clipboard.writeText(savedUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   const activeBlock = DECK[deckIndex];
   const activeApplied = !!applied[activeBlock.id];
   const activeLocked = !!activeBlock.isPaid && score < ENHANCE_UNLOCK;
+
+  // UI-5-T2-E4 — 발행 게이트: 비커머스 지원 필드(영상+제목) 충족 시 활성. 커머스는 보류(비활성).
+  //   쿠폰·예약 슬롯은 이번 생략 → 게이트에서 제외(쿠폰 없는 예약 카드 발행 허용).
+  const hasTitleForPublish = cfgTitle.trim().length > 0 || cfgProductName.trim().length > 0;
+  const canPublish = mode !== "commerce" && !dropped && !!selectedVideo && hasTitleForPublish;
+  const publishGateMsg =
+    mode === "commerce"
+      ? "상품 발행은 준비 중이에요"
+      : !selectedVideo
+        ? "영상을 먼저 담아 주세요"
+        : !hasTitleForPublish
+          ? "제목·한마디를 채워 주세요"
+          : null;
 
   // 화면 배경은 하나로 통일 — 목적(모드)별 포인트 컬러로만 카테고리를 분기
   const PAGE_BG = "#F7F7F9"; // UI-5-T1f(3) — 조용한 페이지 배경(흰 섹션 카드와 명도차로 구획).
@@ -3751,17 +3844,26 @@ export function CardStudioPage() {
       >
         <div style={{ backgroundColor: pageBg }}>
           <div className="mx-auto flex max-w-md flex-col gap-3 px-5 pb-5 pt-4">
-            {/* UI-5-T1b — 발행 비활성(실발행 미연결·오발행 차단). 항상 렌더(조건분기 없음),
-                회색 disabled 표기로 명확화. 라벨 = 미리보기 빌드 · 발행 비활성. */}
+            {/* UI-5-T2-E4 — 발행 실배선(2단 수동 1단째). 조건 충족 시 활성 → 거울 시트에서 최종 확인.
+                미충족·커머스 = 비활성 + 사유 1줄(45 게이트 문구 계승). 자동 트리거 없음(탭 유래만). */}
             <button
               type="button"
-              disabled
-              aria-label="미리보기 빌드 (발행 비활성)"
-              className="flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-[#E5E5E5] bg-[#F0F0F0] text-[14px] font-bold tracking-[-0.01em] text-[#9A9A9A]"
+              disabled={!canPublish}
+              onClick={() => canPublish && setMirrorOpen(true)}
+              aria-label={canPublish ? "발행하기 (확인 화면으로)" : "발행 조건 미충족"}
+              className={
+                canPublish
+                  ? "flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-bold tracking-[-0.01em] text-white transition-transform active:translate-y-px"
+                  : "flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-[#E5E5E5] bg-[#F0F0F0] text-[14px] font-bold tracking-[-0.01em] text-[#9A9A9A]"
+              }
+              style={canPublish ? { backgroundColor: accent, boxShadow: `0 10px 30px -8px ${accent}80` } : undefined}
             >
-              <Lock className="h-4 w-4" strokeWidth={2.25} />
-              미리보기 빌드 · 발행 비활성
+              {canPublish ? <Send className="h-4 w-4" strokeWidth={2.25} /> : <Lock className="h-4 w-4" strokeWidth={2.25} />}
+              {canPublish ? "발행하기" : "발행하기 · 조건 미충족"}
             </button>
+            {!canPublish && publishGateMsg && (
+              <p className="text-center text-[12px] font-medium text-[#8A8A8A] tracking-ko">{publishGateMsg}</p>
+            )}
           </div>
         </div>
       </div>
@@ -3799,16 +3901,56 @@ export function CardStudioPage() {
             </div>
 
             <div className="border-t border-[#EAEAEA] bg-white px-5 py-3.5">
-              {/* UI-5-T1 — 미리보기 전용: 실발행 미연결(오발행 원천 차단·dropped 미설정). */}
+              {/* UI-5-T2-E4 — 2단 수동의 2단째(재확인). 탭 = doPublish 실행. 발행 중 이중 탭 방지·무언 실패 금지. */}
+              {saveError && (
+                <p className="mb-2 text-center text-[12px] font-medium text-[#DC2626] tracking-ko">{saveError}</p>
+              )}
               <button
                 type="button"
-                disabled
-                aria-label="미리보기 전용"
-                className="flex h-[52px] w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl text-[15px] font-bold text-white opacity-60"
+                disabled={saving || mode === "commerce"}
+                onClick={() => doPublish()}
+                aria-label="발행하기"
+                className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-[15px] font-bold text-white transition-transform active:translate-y-px disabled:opacity-60"
                 style={{ backgroundColor: accent, boxShadow: `0 10px 30px -8px ${accent}80` }}
               >
-                <Eye className="h-[18px] w-[18px]" strokeWidth={2.25} />
-                미리보기 전용
+                <Send className="h-[18px] w-[18px]" strokeWidth={2.25} />
+                {saving ? "발행하는 중…" : "발행하기"}
+              </button>
+              <p className="mt-2 text-center text-[11px] font-medium text-[#8A8A8A] tracking-ko">
+                발행은 대표님이 직접 눌러야 나가요
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UI-5-T2-E4 — 발행 성공: share 링크 표시·복사(45 :2471 savedUrl 계승). 오버레이 1개. */}
+      {dropped && savedUrl && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center px-8">
+          <div className="absolute inset-0 bg-black/45" />
+          <div className="relative w-full max-w-[340px] rounded-2xl bg-white p-5 [box-shadow:0_24px_60px_-16px_rgba(10,14,22,0.5)]">
+            <p className="text-[16px] font-extrabold tracking-ko text-[#16161D]">발행 완료! 🎉</p>
+            <p className="mt-1.5 text-[13px] font-medium leading-relaxed tracking-ko text-[#737373] [word-break:keep-all]">
+              이 링크로 카드를 공유하세요.
+            </p>
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5">
+              <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#525252]">{savedUrl}</span>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={copyShareLink}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#16161D] text-[13px] font-bold text-white transition-transform active:scale-[0.98]"
+              >
+                {copied ? "복사됨 ✓" : "링크 복사"}
+              </button>
+              <button
+                onClick={() => {
+                  setDropped(false);
+                  setSavedUrl(null);
+                }}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E8E8EC] bg-white text-[13px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+              >
+                닫기
               </button>
             </div>
           </div>
