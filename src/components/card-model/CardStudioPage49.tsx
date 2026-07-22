@@ -346,8 +346,12 @@ function getStage(score: number) {
   return { stars: 1, label: "기본", tone: "아직 약해요" };
 }
 
+// UI-5-T2-E3c — 모드 식별자 단일 정본. 전 소비 지점(Record 키·함수 인자·상태)이 이 타입만 사용.
+//   실제 값 집합 = 이 세 리터럴. 하드코딩 유니온 제거 → 표기 불일치 원천 차단.
+type StudioMode = "general" | "reserve" | "commerce";
+
 // 모드별 덱 구성 (주 제작 → 일반 레버 → 강화)
-const DECK_IDS: Record<"general" | "reserve" | "commerce", string[]> = {
+const DECK_IDS: Record<StudioMode, string[]> = {
   general: ["content", "dock", "bgcolor", "top", "boost", "marketing"],
   reserve: ["calendar", "party", "content", "review", "coupon", "brand", "dock", "image", "link", "bgcolor", "top", "boost", "marketing"],
   commerce: ["product", "productimage", "aivideo", "seasonal", "review", "delivery", "coupon", "brand", "dock", "link", "bgcolor", "top", "boost", "marketing"],
@@ -369,7 +373,7 @@ const FIELD_TO_BLOCK: Record<string, string> = {
   phone: "link",
   map: "link",
 };
-function isAiActionAllowed(mode: "general" | "reserve" | "commerce", a: any): boolean {
+function isAiActionAllowed(mode: StudioMode, a: any): boolean {
   if (!a || typeof a.type !== "string") return false;
   const allowed = DECK_IDS[mode];
   if (a.type === "switchMode") return false; // 사용자 확인 없는 AI 모드 전환 금지.
@@ -417,7 +421,7 @@ function confirmRank(id: string): number {
 
 // UI-5-T2-E2a — 모드별 제작 순서 플랜(생활어 라벨 · 개발용어 화면 금지). 마지막 = 확인(훑어보기 · 발행 별개 수동).
 type PlanStep = { key: string; label: string; block?: string };
-const STEP_PLAN: Record<"general" | "reserve" | "commerce", PlanStep[]> = {
+const STEP_PLAN: Record<StudioMode, PlanStep[]> = {
   general: [
     { key: "video", label: "영상 담기", block: "content" },
     { key: "title", label: "제목·한마디", block: "content" },
@@ -501,7 +505,7 @@ function LingoTouchBadge({ needsConfirm }: { needsConfirm: boolean }) {
 }
 // 모드별 "핵심" 블록 — 이 목록의 블록은 덱에서 핵심 배지로 강조됨
 // 예약·쿠폰(reserve)은 예약 캘린더와 쿠폰 두 가지가 핵심
-const MODE_MAIN_IDS: Record<"general" | "reserve" | "commerce", string[]> = {
+const MODE_MAIN_IDS: Record<StudioMode, string[]> = {
   general: [],
   reserve: ["calendar", "coupon"],
   commerce: ["product", "productimage", "seasonal"],
@@ -523,7 +527,7 @@ const SHARE_JOURNEY: {
 
 // 둥둥 떠 있는 기본 프레임 배경 — 모드와 무관하게 화이트 베이스로 통일
 const CARD_BASE = "#FFFFFF";
-const MODE_CARD_COLOR: Record<"general" | "reserve" | "commerce", string> = {
+const MODE_CARD_COLOR: Record<StudioMode, string> = {
   general: CARD_BASE,
   reserve: CARD_BASE,
   commerce: CARD_BASE,
@@ -552,7 +556,11 @@ function parseSseBlock(block: string): { event: string; data: string } | null {
 }
 
 export function CardStudioPage() {
-  const [mode, setMode] = useState<"general" | "reserve" | "commerce">("general");
+  const [mode, setMode] = useState<StudioMode>("general");
+  // UI-5-T2-E3c — 실모드 라이브 ref. 렌더마다 동기화 → stale 클로저(마운트 1회 음성 effect 등)도
+  //   modeRef.current 로 현재 실모드를 본다. 요청·응답 간 전환·E3b 리셋 레이스 정합의 단일 근거.
+  const modeRef = useRef<StudioMode>(mode);
+  modeRef.current = mode;
   const [applied, setApplied] = useState<Record<string, boolean>>({});
   const [cardColor, setCardColor] = useState(MODE_CARD_COLOR.general);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -639,7 +647,7 @@ export function CardStudioPage() {
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(() => new Set());
   const [stepToast, setStepToast] = useState<string | null>(null);
   // UI-5-T2-E3b — 작업물 있는 상태에서 목적 전환 시도 시 확인 대상 모드(null=게이트 닫힘).
-  const [pendingModeSwitch, setPendingModeSwitch] = useState<"general" | "reserve" | "commerce" | null>(null);
+  const [pendingModeSwitch, setPendingModeSwitch] = useState<StudioMode | null>(null);
   useEffect(() => {
     if (!stepToast) return;
     const t = setTimeout(() => setStepToast(null), 1800);
@@ -722,6 +730,9 @@ export function CardStudioPage() {
   const assembleTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [lingoText, setLingoText] = useState("");
   const recognitionRef = useRef<any>(null);
+  // UI-5-T2-E3c — 음성 effect는 마운트 1회([] deps)라 onresult가 첫 렌더 sendToLingo(mode="general")를
+  //   고정 캡처 → 상품판매에서도 퍼블릭으로 요청·가드되는 버그의 근원. 최신 sendToLingo를 ref로 릴레이.
+  const sendToLingoRef = useRef<(t: string) => void>(() => {});
   const lingoLogRef = useRef<HTMLDivElement>(null);
   // 링고AI 플로팅 버튼 — 손가락으로 옮기기
   const FAB_SIZE = 56;
@@ -764,13 +775,13 @@ export function CardStudioPage() {
   // 모드 전환: 장착·진행 상태를 초기화해 새 덱부터 시작
   // UI-5-T2-E3b — 목적 전환 = 새 카드 새로 시작(45 엔진 계약 "전환=전체 리셋" 계승).
   //   전 리셋을 단일 함수로 집약 — 흩어진 개별 set 나열 금지. 스냅샷 구조(1182~)와 키 정합.
-  const MODE_NAME: Record<"general" | "reserve" | "commerce", string> = {
+  const MODE_NAME: Record<StudioMode, string> = {
     general: "퍼블릭",
     reserve: "예약·쿠폰",
     commerce: "상품판매",
   };
 
-  function resetForMode(next: "general" | "reserve" | "commerce") {
+  function resetForMode(next: StudioMode) {
     // ── 카드 상태(스냅샷 키 + 나머지 전 필드) ───────────────────────
     setMode(next);
     setApplied({});
@@ -864,14 +875,14 @@ export function CardStudioPage() {
   }
 
   // 모드 탭·전환 지점 단일 진입 — hasWork면 확인 게이트, 아니면 즉시 리셋.
-  function attemptSwitchMode(next: "general" | "reserve" | "commerce") {
+  function attemptSwitchMode(next: StudioMode) {
     if (next === mode) return; // 같은 모드 재탭 = 무동작(리셋 금지).
     if (hasWork()) setPendingModeSwitch(next);
     else resetForMode(next);
   }
 
   // switchMode 경로 통일 — 리셋을 resetForMode로 경유(AI switchMode는 상위에서 이미 차단·T1h).
-  const switchMode = (next: "general" | "reserve" | "commerce") => {
+  const switchMode = (next: StudioMode) => {
     if (next === mode) return;
     resetForMode(next);
   };
@@ -1153,7 +1164,7 @@ export function CardStudioPage() {
       setInterim(live);
       if (final) {
         setInterim("");
-        sendToLingo(final.trim());
+        sendToLingoRef.current(final.trim()); // E3c — 최신 sendToLingo(현재 실모드) 경유. stale 캡처 회피.
       }
     };
     rec.onend = () => setListening(false);
@@ -1203,7 +1214,7 @@ export function CardStudioPage() {
   function applyOneLingoAction(a: any) {
     // UI-5-T1h(1b) — 엔진 레벨 최종 가드: 현재 모드 비허용 액션은 무적용(mock·실배선 공통 방어).
     //   안내(말풍선)는 sendToLingo 사전 필터(1c)가 1회 담당 — 여기선 조용히 스킵(이중 방어).
-    if (!isAiActionAllowed(mode, a)) return;
+    if (!isAiActionAllowed(modeRef.current, a)) return; // E3c — 연출은 setTimeout 지연 재생 → 실모드 라이브 가드.
     {
       if (a.type === "switchMode" && a.mode) {
         switchMode(a.mode);
@@ -1677,7 +1688,7 @@ export function CardStudioPage() {
     if (s.block === "content") return "hero";
     return "deck";
   }
-  function stepPlanIntro(m: "general" | "reserve" | "commerce"): string {
+  function stepPlanIntro(m: StudioMode): string {
     const plan = STEP_PLAN[m];
     return `이 카드는 ${plan.length}단계로 만들어요: ${plan.map((s, i) => `${i + 1} ${s.label}`).join(" → ")}`;
   }
@@ -1688,8 +1699,11 @@ export function CardStudioPage() {
     step_plan?: string[];
     current_step?: { index: number; key: string; block: string | null };
   } {
+    // E3c — 요청 mode = 실모드 라이브 ref(stale 클로저 방어). 아래 단언으로 클로저·실모드 정합 검증.
+    const m = modeRef.current;
+    if (m !== mode) console.error("[studio49] mode 클로저/실모드 desync — stale 경로 재발", { closure: mode, live: m });
     const applied_blocks = STUDIO_BLOCKS.filter((b) => applied[b.id]).map((b) => b.id);
-    const cur = STEP_PLAN[mode][currentStep];
+    const cur = STEP_PLAN[m][currentStep];
     const deck = DECK.map((b) => ({
       id: b.id,
       label: b.label,
@@ -1711,25 +1725,27 @@ export function CardStudioPage() {
     };
     return {
       studio_state: {
-        mode,
+        mode: m, // E3c — 실모드 라이브(studio_state.mode 항상 현재 실모드와 일치).
         applied_blocks,
         score,
         card_title: cfgTitle.trim() || (applied["product"] && cfgProductName ? cfgProductName : content.title),
         ...(cfgProductName ? { product_name: cfgProductName } : {}),
         ...(cfgProductPrice ? { product_price: Number(cfgProductPrice.replace(/[^0-9]/g, "")) || undefined } : {}),
       },
-      studio: { mode, deck, fields },
+      studio: { mode: m, deck, fields },
       ...(selectedVideo ? { video_summary: selectedVideo.title } : {}),
       // UI-5-T2-E2a(8a) — 현재 스텝 컨텍스트: Edge v6 대본이 "지금 몇 번째"를 인지.
-      step_plan: STEP_PLAN[mode].map((s) => s.label),
+      step_plan: STEP_PLAN[m].map((s) => s.label),
       current_step: { index: currentStep, key: cur?.key ?? "", block: cur?.block ?? null },
     };
   }
 
   // UI-5-T2-E2·T1h(1c)·T1m — 응답 처리 정합(방어벽 실전 가동): 사전 필터(가드) → 관문 → runAssembly/즉시 적용.
   function dispatchProposal(rawActions: any[], rawSteps: { label: string; note?: string }[]) {
+    // E3c — 응답 처리 = 수신 시점 실모드 라이브 ref(요청·응답 간 모드 전환·E3b 리셋 레이스 정합).
+    const m = modeRef.current;
     const steps = (rawSteps ?? []).filter((s) => s && s.label);
-    const okActions = (rawActions ?? []).filter((a: any) => isAiActionAllowed(mode, a)); // AI_BLOCKED_FIELDS·MODE_ALLOWED·switchMode 차단.
+    const okActions = (rawActions ?? []).filter((a: any) => isAiActionAllowed(m, a)); // AI_BLOCKED_FIELDS·MODE_ALLOWED·switchMode 차단.
     if (okActions.length < (rawActions?.length ?? 0)) {
       setMessages((m) => [
         ...m,
@@ -1737,9 +1753,9 @@ export function CardStudioPage() {
       ]);
     }
     // 관문은 클라 선처리(T1m·T1n). 미디어 = general/reserve 영상(selectedVideo) · commerce 상품 사진(catImgReady).
-    const mediaReady = mode === "commerce" ? catImgReady : !!selectedVideo;
+    const mediaReady = m === "commerce" ? catImgReady : !!selectedVideo;
     if (steps.length >= 2 && !mediaReady) {
-      const photo = mode === "commerce";
+      const photo = m === "commerce";
       setMessages((m) => [
         ...m,
         {
@@ -1758,7 +1774,7 @@ export function CardStudioPage() {
       const actionBlock = (a: any): string =>
         a?.type === "equip" ? (a.blockId ?? "") : a?.type === "setField" ? (FIELD_TO_BLOCK[a.field] ?? a.field ?? "") : (a?.blockId ?? "");
       const sortedActions = [...okActions].sort((x, y) => planOrder(actionBlock(x)) - planOrder(actionBlock(y)));
-      const planConnut = STEP_PLAN[mode].map((s) => ({ label: s.label, note: "", anchor: planAnchor(s) }));
+      const planConnut = STEP_PLAN[m].map((s) => ({ label: s.label, note: "", anchor: planAnchor(s) }));
       runAssembly(sortedActions, planConnut); // 연출(T1b 분기 유지).
     } else {
       applyLingoActions(okActions); // 단순 편집 즉시 적용.
@@ -1875,6 +1891,9 @@ export function CardStudioPage() {
       setThinking(false);
     }
   }
+
+  // E3c — 매 렌더 최신 sendToLingo를 ref에 게시(음성 onresult가 이 최신본을 호출).
+  sendToLingoRef.current = sendToLingo;
 
   const activeBlock = DECK[deckIndex];
   const activeApplied = !!applied[activeBlock.id];
@@ -2133,7 +2152,7 @@ export function CardStudioPage() {
             return (
               <button
                 key={key}
-                onClick={() => attemptSwitchMode(key as "general" | "reserve" | "commerce")}
+                onClick={() => attemptSwitchMode(key as StudioMode)}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-bold transition-all duration-200 ${
                   isOn ? "text-white" : "text-[#737373]"
                 }`}
