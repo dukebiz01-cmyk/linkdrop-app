@@ -8,6 +8,7 @@ import {
   Palette,
   Ticket,
   Rocket,
+  Search,
   TrendingUp,
   Megaphone,
   Sparkles,
@@ -399,6 +400,20 @@ function confirmRank(id: string): number {
   return 4;
 }
 
+// UI-5-T1n — 영상 검색 mock(T-1 한정, 실네트워크 0). 썸네일 = 플레이스홀더 도형/색(외부 URL 금지).
+//   T-2 실배선 시 45 파이프로 교체: CardStudioPage45 handleVideoSearch(/api/discover, :1977) ·
+//   youtube-search Edge invoke(:2059) · /api/oembed(:1990/2104) → videoResults → handleSelectVideo(:2086).
+type MockVideo = { id: string; title: string; channel: string; duration: string; hue: number };
+function mockVideoSearch(query: string): MockVideo[] {
+  const q = query.trim() || "우리 가게";
+  return [
+    { id: "mv1", title: `${q} 브이로그 하이라이트`, channel: "내 채널", duration: "3:24", hue: 212 },
+    { id: "mv2", title: `${q} 소개 영상`, channel: "우리 가게 공식", duration: "1:12", hue: 158 },
+    { id: "mv3", title: `${q} 둘러보기`, channel: "여행 로그", duration: "5:03", hue: 28 },
+    { id: "mv4", title: `${q} 다녀왔어요`, channel: "동네 브이로거", duration: "2:41", hue: 280 },
+  ];
+}
+
 // UI-5-T1k(B2) — 미확정 칸 도우미 안내(블록별). 값 제안·자동입력 금지 — 링고는 안내만(숫자 불가침).
 const HELPER_COPY: Record<string, string> = {
   product: "가격과 수량을 정해 주세요 — 여기에 적으면 카드에 바로 들어가요.",
@@ -407,7 +422,7 @@ const HELPER_COPY: Record<string, string> = {
   party: "예약 인원을 정해 주세요.",
   coupon: "할인 금액을 확인해 주세요.",
   content: "영상에서 가장 보여주고 싶은 장면을 골라 주세요 — 시작과 끝을 움직이면 카드에 바로 반영돼요.",
-  video: "유튜브·인스타 링크를 붙여넣으면 카드에 영상이 들어가요.",
+  video: "가게 이름이나 메뉴로 검색해도 되고, 유튜브·인스타 링크를 붙여넣어도 돼요.",
   image: "매장 사진을 올려 주세요 — 첫 사진이 대표 이미지가 돼요.",
   productimage: "상품 사진을 올려 주세요 — 첫 사진이 카드의 얼굴이 돼요.",
   dock: "함께 보낼 카드를 골라 주세요.",
@@ -596,6 +611,13 @@ export function CardStudioPage() {
   const [cfgTitle, setCfgTitle] = useState("");
   const [cfgSubtitle, setCfgSubtitle] = useState("");
   const [cfgClip, setCfgClip] = useState("0:42");
+  // UI-5-T1n — 영상 검색 흐름(45 계승). 실검색은 T-2(45 /api/discover 파이프). hasVideo = !!selectedVideo.
+  const [videoQuery, setVideoQuery] = useState("");
+  const [videoLink, setVideoLink] = useState("");
+  const [videoResults, setVideoResults] = useState<MockVideo[]>([]);
+  const [videoSearching, setVideoSearching] = useState(false);
+  const [videoSearched, setVideoSearched] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<MockVideo | null>(null);
   // 추가 카드 편집값
   const [cfgParty, setCfgParty] = useState(2);
   const [cfgRating, setCfgRating] = useState(5);
@@ -1136,6 +1158,7 @@ export function CardStudioPage() {
       cfgMap,
       saleStartIdx,
       saleEndIdx,
+      selectedVideo, // T1n — 영상 선택도 스냅샷(전체 되돌리기 정합).
       lingoTouched: new Set(lingoTouched),
     };
     appliedActionsRef.current = [];
@@ -1241,6 +1264,7 @@ export function CardStudioPage() {
       setCfgMap(s.cfgMap);
       setSaleStartIdx(s.saleStartIdx);
       setSaleEndIdx(s.saleEndIdx);
+      setSelectedVideo(s.selectedVideo ?? null); // T1n — 영상 선택 복원.
       setLingoTouched(s.lingoTouched);
     }
     setAssembleSummary(null);
@@ -1268,14 +1292,40 @@ export function CardStudioPage() {
   function confirmHelper(blockId: string) {
     if (helperTarget !== blockId || helperPhase !== "guide") return;
     untouch([blockId]); // 배지 소멸 로직 연동.
-    setHelperCopyKey(null);
     setPendingConfirm((q) => q.filter((id) => id !== blockId));
-    setHelperPhase("done");
+    setHelperPhase("done"); // helperCopyKey 는 done 문구용으로 유지(다음 이동/닫기 시 갱신·소멸).
   }
   function dismissHelper() {
     setHelperTarget(null);
     setHelperCopyKey(null);
     setHelperPhase("guide");
+  }
+
+  // UI-5-T1n — 영상 검색(mock, 실네트워크 0). T-2: 45 handleVideoSearch(/api/discover)로 교체.
+  function runVideoSearch() {
+    const k = videoQuery.trim();
+    if (!k || videoSearching) return;
+    setVideoSearched(true);
+    setVideoResults([]);
+    setVideoSearching(true);
+    window.setTimeout(() => {
+      setVideoResults(mockVideoSearch(k)); // 하드코딩 결과(외부 네트워크·이미지 URL 0).
+      setVideoSearching(false);
+    }, 600);
+  }
+  // 영상 선택 = content 장착 + 프리뷰 제목 반영 + hasVideo 충족(관문 통과) + 도우미 완료. (선택은 대표님.)
+  function selectVideo(v: MockVideo) {
+    setSelectedVideo(v);
+    if (!applied["content"]) equip(blockById("content"));
+    setCfgTitle((t) => (t.trim() ? t : v.title)); // 비어있을 때만(사용자 제목 존중).
+    confirmHelper("content");
+  }
+  // 링크 직접 붙여넣기 — URL 감지 시 즉시 장착 경로.
+  function onVideoLinkChange(v: string) {
+    setVideoLink(v);
+    if (/^https?:\/\/\S+/.test(v.trim())) {
+      selectVideo({ id: "link", title: "붙여넣은 영상", channel: "링크", duration: "", hue: 258 });
+    }
   }
 
   function skipAssembly() {
@@ -1332,15 +1382,15 @@ export function CardStudioPage() {
           { role: "assistant", text: "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요." },
         ]);
       }
-      // UI-5-T1m(1) — 영상 = 조립 관문. 영상 미장착(content 블록)이면 연출 미시작 → 안내 + 영상 칸 이동(도우미).
-      //   장착 후 재요청하면 조립 진행. (hasVideo = applied["content"] — 49의 영상 상태 = content 블록 장착.)
-      const hasVideo = !!applied["content"];
+      // UI-5-T1m·T1n(1) — 영상 = 조립 관문. 영상 미선택이면 연출 미시작 → 안내 + 영상 칸 이동(검색/링크 도우미).
+      //   검색·선택(또는 링크)으로 영상 담은 뒤 재요청하면 조립 진행. hasVideo = !!selectedVideo(실제 선택 여부).
+      const hasVideo = !!selectedVideo;
       if (steps.length >= 2 && !hasVideo) {
         setMessages((m) => [
           ...m,
-          { role: "assistant", text: "영상부터 담아야 카드가 시작돼요 — 링크를 붙여넣어 주세요." },
+          { role: "assistant", text: "영상부터 담아야 카드가 시작돼요 — 검색하거나 링크를 붙여넣어 주세요." },
         ]);
-        onEditField("content", "video"); // 영상 칸 이동 + 도우미(guide). 값 자동입력 없음(안내만).
+        onEditField("content", "video"); // 영상 칸 이동 + 도우미(guide). 값 자동입력 없음(검색·선택은 대표님).
         return;
       }
       if (steps.length >= 2) {
@@ -1908,7 +1958,7 @@ export function CardStudioPage() {
                         {helperPhase === "done" && (
                           <>
                             <p className="text-[12px] font-bold text-[#16161D] [word-break:keep-all]">
-                              좋아요, {activeBlock.label} 정해졌어요 ✓
+                              {helperCopyKey === "video" ? "좋아요, 영상이 담겼어요 ✓" : `좋아요, ${activeBlock.label} 정해졌어요 ✓`}
                             </p>
                             {pendingConfirm.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -2309,6 +2359,87 @@ export function CardStudioPage() {
 
               {activeBlock.id === "content" && (
                 <div className="space-y-2">
+                  {/* UI-5-T1n — 영상 검색 흐름(45 계승·49 디자인). 실검색은 T-2(45 /api/discover 파이프). */}
+                  <div className="space-y-1.5">
+                    <div className="flex gap-1.5">
+                      <input
+                        value={videoQuery}
+                        onChange={(e) => setVideoQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            runVideoSearch();
+                          }
+                        }}
+                        placeholder="가게 이름·메뉴로 영상 검색"
+                        className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                      />
+                      <button
+                        onClick={runVideoSearch}
+                        disabled={videoSearching || !videoQuery.trim()}
+                        className="flex shrink-0 items-center gap-1 rounded-xl bg-[#16161D] px-3 text-[12px] font-bold text-white transition-transform active:scale-95 disabled:opacity-40"
+                      >
+                        <Search className="h-4 w-4" strokeWidth={2.5} />
+                        검색
+                      </button>
+                    </div>
+                    <input
+                      value={videoLink}
+                      onChange={(e) => onVideoLinkChange(e.target.value)}
+                      placeholder="또는 유튜브·인스타 링크 붙여넣기"
+                      className="w-full rounded-xl bg-[#F4F4F5] px-3 py-2 text-[12px] font-medium text-[#0A0A0A] outline-none placeholder:text-[#A3A3A3] focus:bg-white"
+                    />
+                    {videoSearching && (
+                      <div className="flex items-center justify-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[12px] font-semibold text-[#8A8A8A]">
+                        <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+                        영상을 찾고 있어요…
+                      </div>
+                    )}
+                    {videoSearched && !videoSearching && videoResults.length === 0 && (
+                      <p className="rounded-xl bg-[#F4F4F5] px-3 py-3 text-center text-[12px] font-medium text-[#8A8A8A]">
+                        검색 결과가 없어요 — 다른 말로 찾아볼까요?
+                      </p>
+                    )}
+                    {!videoSearching && videoResults.length > 0 && (
+                      <div className="flex flex-col gap-1.5">
+                        {videoResults.slice(0, 5).map((v) => (
+                          <button
+                            key={v.id}
+                            onClick={() => selectVideo(v)}
+                            className="flex min-h-[56px] items-center gap-2.5 rounded-xl bg-white px-2.5 py-2 text-left transition-transform active:scale-[0.99]"
+                            style={{ boxShadow: `inset 0 0 0 1px ${selectedVideo?.id === v.id ? "#1D4ED8" : "#E8E8EC"}` }}
+                          >
+                            {/* 썸네일 = 플레이스홀더 도형/색(외부 이미지 URL 금지). */}
+                            <span
+                              className="flex h-11 w-16 shrink-0 items-center justify-center rounded-lg"
+                              style={{ background: `linear-gradient(135deg, hsl(${v.hue} 68% 54%), hsl(${v.hue + 24} 68% 40%))` }}
+                            >
+                              <Play className="h-4 w-4 text-white" strokeWidth={2.5} fill="currentColor" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[12.5px] font-bold text-[#0A0A0A]">{v.title}</span>
+                              <span className="mt-0.5 block truncate text-[11px] font-medium text-[#8A8A8A]">
+                                {v.channel}
+                                {v.duration ? ` · ${v.duration}` : ""}
+                              </span>
+                            </span>
+                            {selectedVideo?.id === v.id && <Check className="h-4 w-4 shrink-0 text-[#1D4ED8]" strokeWidth={2.5} />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {selectedVideo && (
+                      <div className="flex items-center gap-2 rounded-xl bg-[#EEF3FE] px-2.5 py-2 [box-shadow:inset_0_0_0_1px_#C7D7FB]">
+                        <span
+                          className="flex h-8 w-12 shrink-0 items-center justify-center rounded-md"
+                          style={{ background: `linear-gradient(135deg, hsl(${selectedVideo.hue} 68% 54%), hsl(${selectedVideo.hue + 24} 68% 40%))` }}
+                        >
+                          <Play className="h-3.5 w-3.5 text-white" strokeWidth={2.5} fill="currentColor" />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#1D4ED8]">담긴 영상: {selectedVideo.title}</span>
+                      </div>
+                    )}
+                  </div>
                   <input
                     value={cfgTitle}
                     onChange={(e) => setCfgTitle(e.target.value)}
