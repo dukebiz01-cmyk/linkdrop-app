@@ -10,6 +10,8 @@ import {
   parseYouTubeId,
   type YoutubeSearchItem,
 } from "@/components/card-model/video-finder45";
+// UI-5-T2-E2 — lingo-chat 실배선. 계약 타입만 import(useLingoChat 무수정 · 훅 소비는 49 구조 비호환 → 경량 클라).
+import type { LingoContext } from "@/components/card-model/useLingoChat";
 import {
   Calendar,
   Video,
@@ -499,70 +501,26 @@ const MODE_CARD_COLOR: Record<"general" | "reserve" | "commerce", string> = {
   commerce: CARD_BASE,
 };
 
-// UI-5-T1h(2) — /api/lingo mock 치환(실네트워크 미발신). 실배선(useLingoChat)은 T-2 소관.
-//   모드별 데모 시나리오: 각 모드의 DECK_IDS 허용 액션만 반환(퍼블릭=개인 공유, 매장 모드만 쿠폰·예약·판매).
-//   steps>=2 → sendToLingo 가 runAssembly 재생(로컬 상태만 — 발행·네트워크 무관).
-type LingoReply = { reply: string; actions: any[]; steps: { label: string; note: string; anchor?: string }[] };
-async function mockLingoReply(payload: {
-  transcript: string;
-  mode: string;
-  deck: unknown;
-  fields: unknown;
-  history: unknown;
-}): Promise<LingoReply> {
-  await new Promise((r) => setTimeout(r, 400));
-  // 예약·쿠폰(매장) — 예약 캘린더 + 쿠폰.
-  if (payload.mode === "reserve") {
-    return {
-      reply: "이렇게 카드를 구성했어요 — 제목·예약 캘린더·쿠폰을 붙였어요.",
-      actions: [
-        { type: "setField", field: "title", value: "가을 캠핑 예약 받아요" },
-        { type: "equip", blockId: "calendar" },
-        { type: "equip", blockId: "coupon" },
-        { type: "setField", field: "coupon", value: "c1" },
-      ],
-      steps: [
-        { label: "카드 제목을 정했어요", note: "핵심 메시지를 한 줄로.", anchor: "hero" },
-        { label: "예약 캘린더를 붙였어요", note: "카드 안에서 바로 예약받아요.", anchor: "deck" },
-        { label: "쿠폰을 연결했어요", note: "누를 이유를 만들어요.", anchor: "deck" },
-        { label: "완성도가 올라갔어요", note: "예약 전환 준비가 탄탄해져요.", anchor: "gauge" },
-      ],
-    };
+// UI-5-T2-E2 — lingo-chat SSE 파서·경량 재가드(useLingoChat :110/116/126 동형 — 훅 비export 함수라 복제).
+const LINGO_ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField", "goToBlock"]);
+function safeJson(raw: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
   }
-  // 상품판매(매장) — 상품 정보 + 판매 기간.
-  if (payload.mode === "commerce") {
-    return {
-      reply: "이렇게 카드를 구성했어요 — 상품 정보와 판매 기간을 넣었어요.",
-      actions: [
-        { type: "setField", field: "productName", value: "괴산 햇사과 5kg" },
-        { type: "setField", field: "productPrice", value: "32,000" },
-        { type: "equip", blockId: "product" },
-        { type: "equip", blockId: "seasonal" },
-      ],
-      steps: [
-        { label: "상품 정보를 넣었어요", note: "이름과 가격을 담았어요.", anchor: "hero" },
-        { label: "가격을 설정했어요", note: "보는 사람이 바로 확인해요.", anchor: "hero" },
-        { label: "판매 기간을 붙였어요", note: "지금이 구매 적기라고 알려요.", anchor: "deck" },
-        { label: "완성도가 올라갔어요", note: "판매 전환 준비가 탄탄해져요.", anchor: "gauge" },
-      ],
-    };
+}
+function parseSseBlock(block: string): { event: string; data: string } | null {
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const raw of block.split("\n")) {
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
   }
-  // 일반(퍼블릭=개인 공유) — 콘텐츠·핵심구간만. 쿠폰·예약·판매 없음(§0 역할 경계).
-  //   D — 구간은 "장착만" 링고: 구간 값(setField clip) 자동 설정 금지 → 선택은 대표님.
-  return {
-    reply: "이렇게 카드를 구성했어요 — 제목·설명과 핵심구간 도구를 붙였어요.",
-    actions: [
-      { type: "equip", blockId: "content" }, // 구간 도구 장착만(값 미설정).
-      { type: "setField", field: "title", value: "가을 여행 브이로그" },
-      { type: "setField", field: "subtitle", value: "괴산 호수 캠핑 하이라이트" },
-    ],
-    steps: [
-      { label: "담아주신 영상을 카드에 넣었어요", note: "이 영상이 카드의 얼굴이 돼요.", anchor: "hero" }, // T1m — 1스텝 = 영상 프리뷰.
-      { label: "카드 제목을 정했어요", note: "핵심 메시지를 한 줄로.", anchor: "hero" },
-      { label: "핵심구간 도구를 붙였어요", note: "어느 장면을 보여줄지는 대표님이 골라 주세요.", anchor: "deck" },
-      { label: "공유 준비가 됐어요", note: "카드가 그만큼 탄탄해져요.", anchor: "gauge" },
-    ],
-  };
+  if (dataLines.length === 0 && event === "message") return null;
+  return { event, data: dataLines.join("\n") };
 }
 
 export function CardStudioPage() {
@@ -711,6 +669,7 @@ export function CardStudioPage() {
   const [interim, setInterim] = useState("");
   const [voiceSupported, setVoiceSupported] = useState(true);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
+  const lingoSessionRef = useRef<string | null>(null); // UI-5-T2-E2 — lingo-chat 세션 id(meta 수신 시 보관).
   // UI-5-T1(T-D) — 조립순서 번호도(lingoSteps) 미이식.
   // 링고AI 조립 연출 — 카드 위에서 손가락으로 가리키며 단계별로 조립
   const [assembling, setAssembling] = useState(false);
@@ -1504,69 +1463,174 @@ export function CardStudioPage() {
     );
   }
 
+  // UI-5-T2-E2 — 49 컨텍스트 → LingoContext(45 페이로드 형태 계승: studio_state + studio{deck,fields}).
+  //   hasVideo 신호 = video_summary 존재. Edge v6 대본이 상황 인지.
+  function buildLingoContext(): LingoContext {
+    const applied_blocks = STUDIO_BLOCKS.filter((b) => applied[b.id]).map((b) => b.id);
+    const deck = DECK.map((b) => ({
+      id: b.id,
+      label: b.label,
+      applied: !!applied[b.id],
+      locked: !!b.isPaid && score < ENHANCE_UNLOCK,
+    }));
+    const fields: Record<string, string> = {
+      title: cfgTitle,
+      subtitle: cfgSubtitle,
+      date: cfgDate,
+      time: cfgTime,
+      saleStart: DATE_OPTIONS[saleStartIdx],
+      saleEnd: DATE_OPTIONS[saleEndIdx],
+      coupon: cfgCoupon,
+      productName: cfgProductName,
+      productPrice: cfgProductPrice,
+      clip: cfgClip,
+      dock: cfgDock,
+    };
+    return {
+      studio_state: {
+        mode,
+        applied_blocks,
+        score,
+        card_title: cfgTitle.trim() || (applied["product"] && cfgProductName ? cfgProductName : content.title),
+        ...(cfgProductName ? { product_name: cfgProductName } : {}),
+        ...(cfgProductPrice ? { product_price: Number(cfgProductPrice.replace(/[^0-9]/g, "")) || undefined } : {}),
+      },
+      studio: { mode, deck, fields },
+      ...(selectedVideo ? { video_summary: selectedVideo.title } : {}),
+    };
+  }
+
+  // UI-5-T2-E2·T1h(1c)·T1m — 응답 처리 정합(방어벽 실전 가동): 사전 필터(가드) → 관문 → runAssembly/즉시 적용.
+  function dispatchProposal(rawActions: any[], rawSteps: { label: string; note?: string }[]) {
+    const steps = (rawSteps ?? []).filter((s) => s && s.label);
+    const okActions = (rawActions ?? []).filter((a: any) => isAiActionAllowed(mode, a)); // AI_BLOCKED_FIELDS·MODE_ALLOWED·switchMode 차단.
+    if (okActions.length < (rawActions?.length ?? 0)) {
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", text: "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요." },
+      ]);
+    }
+    // 관문은 클라 선처리(T1m·T1n): 영상 미선택이면 연출 미시작 + 영상 칸 도우미. Edge 응답과 충돌 없음.
+    const hasVideo = !!selectedVideo;
+    if (steps.length >= 2 && !hasVideo) {
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", text: "영상부터 담아야 카드가 시작돼요 — 검색하거나 링크를 붙여넣어 주세요." },
+      ]);
+      onEditField("content", "video");
+      return;
+    }
+    // Edge steps 는 note 옵셔널·anchor 없음(실 대본) → note 정규화. anchor 부재 = 오버레이 전체 딤 폴백.
+    if (steps.length >= 2) runAssembly(okActions, steps.map((s) => ({ label: s.label, note: s.note ?? "" }))); // 연출(T1b 분기 유지).
+    else applyLingoActions(okActions); // 단순 편집 즉시 적용.
+  }
+
+  // UI-5-T2-E2 — lingo-chat Edge SSE 직결(45 useLingoChat send :195–312 동형). 텍스트 delta 스트리밍 + event:actions 1회.
   async function sendToLingo(text: string) {
-    if (!text) return;
-    setMessages((m) => [...m, { role: "user", text }]);
+    if (!text || thinking) return;
+    setMessages((m) => [...m, { role: "user", text }, { role: "assistant", text: "" }]);
     setThinking(true);
+    // 마지막 assistant(스트리밍 자리) 갱신 헬퍼.
+    const appendBot = (t: string) =>
+      setMessages((prev) => {
+        const next = [...prev];
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i].role === "assistant") {
+            next[i] = { ...next[i], text: next[i].text + t };
+            break;
+          }
+        }
+        return next;
+      });
+    const setBot = (t: string) =>
+      setMessages((prev) => {
+        const next = [...prev];
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i].role === "assistant") {
+            next[i] = { ...next[i], text: t };
+            break;
+          }
+        }
+        return next;
+      });
+    let acc = "";
+    let proposalActions: any[] = [];
+    let proposalSteps: { label: string; note?: string }[] = [];
     try {
-      const deck = DECK.map((b) => ({
-        id: b.id,
-        label: b.label,
-        desc: b.desc,
-        applied: !!applied[b.id],
-        locked: !!b.isPaid && score < ENHANCE_UNLOCK,
-      }));
-      const fields = {
-        title: cfgTitle,
-        subtitle: cfgSubtitle,
-        date: cfgDate,
-        time: cfgTime,
-        saleStart: DATE_OPTIONS[saleStartIdx],
-        saleEnd: DATE_OPTIONS[saleEndIdx],
-        coupon: cfgCoupon,
-        productName: cfgProductName,
-        productPrice: cfgProductPrice,
-        clip: cfgClip,
-        dock: cfgDock,
-      };
-      // UI-5-T1 — mock 치환: 실제 네트워크로 나가지 않음(T-2에서 useLingoChat 실배선).
-      const data = await mockLingoReply({ transcript: text, mode, deck, fields, history: messages });
-      const steps = Array.isArray(data.steps)
-        ? data.steps.filter((s: any) => s && s.label)
-        : [];
-      // UI-5-T1h(1c) — 조립/적용 전 사전 필터: 현재 모드 비허용 액션 제거(스텝 문구·실적용 불일치 방지).
-      const rawActions = Array.isArray(data.actions) ? data.actions : [];
-      const okActions = rawActions.filter((a: any) => isAiActionAllowed(mode, a));
-      if (okActions.length < rawActions.length) {
-        // 무언 드롭 금지 — 안내 1줄.
-        setMessages((m) => [
-          ...m,
-          { role: "assistant", text: "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요." },
-        ]);
-      }
-      // UI-5-T1m·T1n(1) — 영상 = 조립 관문. 영상 미선택이면 연출 미시작 → 안내 + 영상 칸 이동(검색/링크 도우미).
-      //   검색·선택(또는 링크)으로 영상 담은 뒤 재요청하면 조립 진행. hasVideo = !!selectedVideo(실제 선택 여부).
-      const hasVideo = !!selectedVideo;
-      if (steps.length >= 2 && !hasVideo) {
-        setMessages((m) => [
-          ...m,
-          { role: "assistant", text: "영상부터 담아야 카드가 시작돼요 — 검색하거나 링크를 붙여넣어 주세요." },
-        ]);
-        onEditField("content", "video"); // 영상 칸 이동 + 도우미(guide). 값 자동입력 없음(검색·선택은 대표님).
+      const res = await fetch("/api/lingo/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(lingoSessionRef.current ? { session_id: lingoSessionRef.current } : {}),
+          message: text,
+          context: buildLingoContext(),
+          input_channel: "text",
+          surface: "studio",
+        }),
+      });
+      const ct = res.headers.get("content-type") ?? "";
+      if (!ct.includes("text/event-stream")) {
+        // JSON 경로(quota·검증) — friendly 를 말풍선으로(무언 실패 금지).
+        const json = (await res.json().catch(() => null)) as { friendly?: string } | null;
+        setBot(json?.friendly ?? "링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요.");
         return;
       }
-      if (steps.length >= 2) {
-        // 여러 요소를 구성 → 링고가 손가락으로 가리키며 단계별로 조립 연출(runAssembly).
-        runAssembly(okActions, steps);
-      } else {
-        // 단순 편집 → 즉시 반영
-        applyLingoActions(okActions);
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setBot("링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요.");
+        return;
       }
-      const reply = data.reply || "네, 반영했어요.";
-      setMessages((m) => [...m, { role: "assistant", text: reply }]);
-      speak(reply);
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let sep: number;
+        while ((sep = buf.indexOf("\n\n")) >= 0) {
+          const ev = parseSseBlock(buf.slice(0, sep));
+          buf = buf.slice(sep + 2);
+          if (!ev) continue;
+          if (ev.event === "meta") {
+            const d = safeJson(ev.data);
+            if (typeof d?.session_id === "string") lingoSessionRef.current = d.session_id;
+          } else if (ev.event === "delta") {
+            const d = safeJson(ev.data);
+            if (typeof d?.text === "string" && d.text) {
+              acc += d.text;
+              appendBot(d.text); // 패널 대화 스트리밍.
+            }
+          } else if (ev.event === "actions") {
+            // 액션 제안 수신(서버 §5 재검증분) → 클라 경량 재가드(type 5종 + 8개 상한, steps 5개 상한).
+            const d = safeJson(ev.data);
+            const raw = Array.isArray(d?.actions) ? (d!.actions as unknown[]) : [];
+            const acts: any[] = [];
+            for (const r of raw) {
+              if (acts.length >= 8) break;
+              if (!r || typeof r !== "object") continue;
+              const a = r as { type?: unknown };
+              if (typeof a.type !== "string" || !LINGO_ACTION_TYPES.has(a.type)) continue;
+              acts.push(r);
+            }
+            const rs = Array.isArray(d?.steps) ? (d!.steps as unknown[]) : [];
+            proposalActions = acts;
+            proposalSteps = rs
+              .filter((s): s is { label: string; note?: unknown } => !!s && typeof s === "object" && typeof (s as { label?: unknown }).label === "string")
+              .slice(0, 5)
+              .map((s) => ({ label: s.label, ...(typeof s.note === "string" && s.note ? { note: s.note } : {}) }));
+          } else if (ev.event === "error") {
+            const d = safeJson(ev.data);
+            if (typeof d?.friendly === "string" && d.friendly && !acc) setBot(d.friendly);
+          }
+          // intent/done — 무시(done = reader 종료로 처리).
+        }
+      }
+      if (!acc) setBot("네, 반영했어요."); // 텍스트 없으면 최소 응답(빈 말풍선 방지).
+      speak(acc);
+      // ── 응답 처리 정합(T-1 방어벽 실전 가동): proposal 디스패치(가드 → 관문 → 연출/적용). ──
+      dispatchProposal(proposalActions, proposalSteps);
     } catch {
-      setMessages((m) => [...m, { role: "assistant", text: "연결이 잠깐 끊겼어요. 다시 말씀해 주세요." }]);
+      setBot("링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요."); // 무언 실패 금지 · 재시도 가능.
     } finally {
       setThinking(false);
     }
@@ -3436,17 +3500,7 @@ export function CardStudioPage() {
                           ))}
                         </div>
                         {/* UI-5-T1(T-D) — 퀵명령 칩 미이식. */}
-                        {/* UI-5-T1b — 데모 칩: mock 조립 연출 트리거(검수용). T-2 실배선 시 제거 예정. */}
-                        <div className="mt-2.5">
-                          <button
-                            onClick={() => submitLingoText("조립 연출 보기")}
-                            disabled={thinking}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#404040] transition-transform active:scale-95 disabled:opacity-40 [word-break:keep-all] [box-shadow:0_0_0_1px_#E8E8EC]"
-                          >
-                            <Sparkles className="h-3 w-3 text-[#A3A3A3]" strokeWidth={2.5} fill="currentColor" />
-                            조립 연출 보기
-                          </button>
-                        </div>
+                        {/* UI-5-T2-E2 — mock 데모 칩("조립 연출 보기") 제거: 실 lingo-chat 응답으로 대체. */}
                       </div>
                     )}
                     {messages.map((m, i) => (
