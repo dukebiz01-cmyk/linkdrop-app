@@ -412,6 +412,31 @@ function confirmRank(id: string): number {
   return 4;
 }
 
+// UI-5-T2-E2a — 모드별 제작 순서 플랜(생활어 라벨 · 개발용어 화면 금지). 마지막 = 확인(훑어보기 · 발행 별개 수동).
+type PlanStep = { key: string; label: string; block?: string };
+const STEP_PLAN: Record<"general" | "reserve" | "commerce", PlanStep[]> = {
+  general: [
+    { key: "video", label: "영상 담기", block: "content" },
+    { key: "title", label: "제목·한마디", block: "content" },
+    { key: "clip", label: "핵심 장면", block: "content" },
+    { key: "review", label: "확인" },
+  ],
+  reserve: [
+    { key: "video", label: "영상 담기", block: "content" },
+    { key: "title", label: "제목·한마디", block: "content" },
+    { key: "coupon", label: "쿠폰", block: "coupon" },
+    { key: "calendar", label: "예약 날짜", block: "calendar" },
+    { key: "review", label: "확인" },
+  ],
+  commerce: [
+    { key: "photo", label: "상품 사진", block: "productimage" },
+    { key: "title", label: "상품 이름", block: "product" },
+    { key: "price", label: "가격", block: "product" },
+    { key: "season", label: "판매 기간", block: "seasonal" },
+    { key: "review", label: "확인" },
+  ],
+};
+
 // UI-5-T2-E1 — 영상 슬롯·유틸(45 :561–594 동형 복제 — 45 컴포넌트 무수정 · 거울 파일 import 회피).
 type VideoSlot49 = {
   videoId: string;
@@ -606,6 +631,20 @@ export function CardStudioPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoSlot49 | null>(null);
   const videoLeadRef = useRef<string | null>(null); // 요약 리드 취소용(영상 바뀌면 이전 무시).
+  // UI-5-T2-E2a — 순차 진행: 현재 스텝·완료 집합·잠금 토스트.
+  const [currentStep, setCurrentStep] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(() => new Set());
+  const [stepToast, setStepToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!stepToast) return;
+    const t = setTimeout(() => setStepToast(null), 1800);
+    return () => clearTimeout(t);
+  }, [stepToast]);
+  // UI-5-T2-E2a(2) — 진입 시 초기 모드 플랜 제시(패널 첫 메시지).
+  useEffect(() => {
+    setMessages((m) => (m.length === 0 ? [{ role: "assistant", text: stepPlanIntro(mode) }] : m));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // 추가 카드 편집값
   const [cfgParty, setCfgParty] = useState(2);
   const [cfgRating, setCfgRating] = useState(5);
@@ -726,6 +765,13 @@ export function CardStudioPage() {
     setDropped(false);
     setShowColorPicker(false);
     setCardColor(MODE_CARD_COLOR[next]); // 모드별 고정 배경색 적용
+    // UI-5-T2-E2a — 모드 진입: 미디어·스텝 초기화 + 플랜 제시(패널 메시지).
+    setSelectedVideo(null);
+    setCatImgReady(false);
+    setCurrentStep(0);
+    setCompletedSteps(new Set());
+    setStepToast(null);
+    setMessages((m) => [...m, { role: "assistant", text: stepPlanIntro(next) }]);
   };
 
   // 공개/비공개 스와이프 — 손가락으로 좌우로 밀어서 전환
@@ -1148,6 +1194,8 @@ export function CardStudioPage() {
       saleStartIdx,
       saleEndIdx,
       selectedVideo, // T1n — 영상 선택도 스냅샷(전체 되돌리기 정합).
+      currentStep, // T2-E2a(5) — 스텝 진행도 스냅샷.
+      completedSteps: new Set(completedSteps),
       lingoTouched: new Set(lingoTouched),
     };
     appliedActionsRef.current = [];
@@ -1181,7 +1229,7 @@ export function CardStudioPage() {
         summary.items
           .filter((i) => i.needsConfirm)
           .map((i) => i.id)
-          .sort((a, b) => confirmRank(a) - confirmRank(b)),
+          .sort((a, b) => planOrder(a) - planOrder(b)), // T2-E2a(8c) — 릴레이 큐 = STEP_PLAN 순서.
       ); // T1k·T1m — 미확정 큐(영상→이미지→숫자→구간→기타).
       const filled = summary.items.filter((i) => !i.needsConfirm).map((i) => i.label);
       const need = summary.items.filter((i) => i.needsConfirm).map((i) => i.label);
@@ -1254,6 +1302,8 @@ export function CardStudioPage() {
       setSaleStartIdx(s.saleStartIdx);
       setSaleEndIdx(s.saleEndIdx);
       setSelectedVideo(s.selectedVideo ?? null); // T1n — 영상 선택 복원.
+      if (typeof s.currentStep === "number") setCurrentStep(s.currentStep); // T2-E2a — 스텝 진행 복원.
+      if (s.completedSteps) setCompletedSteps(new Set(s.completedSteps));
       setLingoTouched(s.lingoTouched);
     }
     setAssembleSummary(null);
@@ -1459,14 +1509,85 @@ export function CardStudioPage() {
       sum.items
         .filter((i) => i.needsConfirm)
         .map((i) => i.id)
-        .sort((a, b) => confirmRank(a) - confirmRank(b)),
+        .sort((a, b) => planOrder(a) - planOrder(b)), // T2-E2a(8c) — 릴레이 큐 = STEP_PLAN 순서.
     );
+  }
+
+  // UI-5-T2-E2a — 스텝 완료 조건(블록별 확정 신호). review = 항상 완료(훑어보기).
+  function isStepDone(idx: number): boolean {
+    const s = STEP_PLAN[mode][idx];
+    if (!s) return false;
+    switch (s.key) {
+      case "video":
+        return !!selectedVideo;
+      case "photo":
+        return catImgReady;
+      case "title":
+        return cfgTitle.trim().length > 0 || cfgProductName.trim().length > 0;
+      case "clip":
+        return cfgClip.trim().length > 0;
+      case "price":
+        return cfgProductPrice.trim().length > 0;
+      case "coupon":
+        return !!applied["coupon"];
+      case "calendar":
+        return !!applied["calendar"];
+      case "season":
+        return !!applied["seasonal"];
+      case "review":
+        return true;
+      default:
+        return !!(s.block && applied[s.block]);
+    }
+  }
+  // 스텝 진입 = 해당 칸 이동 + 도우미(T1k 릴레이를 스텝 전환 기본 동작으로 승격).
+  function enterStep(idx: number) {
+    const plan = STEP_PLAN[mode];
+    if (idx < 0 || idx >= plan.length) return;
+    setCurrentStep(idx);
+    const s = plan[idx];
+    if (s.block) onEditField(s.block, s.key === "video" ? "video" : undefined);
+  }
+  // 미니 번호열 탭: 완료/현재/이전 = 재방문 허용, 미완 미래 = 토스트(순서 강제 · 자동 점프 없음).
+  function goToStep(idx: number) {
+    if (idx === currentStep) return;
+    if (idx > currentStep && !completedSteps.has(currentStep) && !isStepDone(currentStep)) {
+      setStepToast(`순서대로 가요 — 지금은 ${STEP_PLAN[mode][currentStep].label}부터`);
+      return;
+    }
+    enterStep(idx);
+  }
+  // [다음]: 현재 스텝 완료 조건 충족 시에만 활성 → 탭으로만 진행.
+  function nextStep() {
+    if (!isStepDone(currentStep)) return;
+    setCompletedSteps((prev) => new Set(prev).add(currentStep));
+    const plan = STEP_PLAN[mode];
+    if (currentStep < plan.length - 1) enterStep(currentStep + 1);
+  }
+  // 릴레이 큐·액션 정렬용 플랜 순서(블록 → STEP_PLAN 인덱스). 미포함 = 뒤로.
+  function planOrder(blockId: string): number {
+    const idx = STEP_PLAN[mode].findIndex((s) => s.block === blockId);
+    return idx < 0 ? 99 : idx;
+  }
+  // 연출 스텝 → data-assemble-anchor 도출(플랜 블록 1:1): content=hero / review=gauge / 그 외=deck.
+  function planAnchor(s: PlanStep): string {
+    if (s.key === "review") return "gauge";
+    if (s.block === "content") return "hero";
+    return "deck";
+  }
+  function stepPlanIntro(m: "general" | "reserve" | "commerce"): string {
+    const plan = STEP_PLAN[m];
+    return `이 카드는 ${plan.length}단계로 만들어요: ${plan.map((s, i) => `${i + 1} ${s.label}`).join(" → ")}`;
   }
 
   // UI-5-T2-E2 — 49 컨텍스트 → LingoContext(45 페이로드 형태 계승: studio_state + studio{deck,fields}).
   //   hasVideo 신호 = video_summary 존재. Edge v6 대본이 상황 인지.
-  function buildLingoContext(): LingoContext {
+  function buildLingoContext(): LingoContext & {
+    step_plan?: string[];
+    current_step?: { index: number; key: string; block: string | null };
+  } {
     const applied_blocks = STUDIO_BLOCKS.filter((b) => applied[b.id]).map((b) => b.id);
+    const cur = STEP_PLAN[mode][currentStep];
     const deck = DECK.map((b) => ({
       id: b.id,
       label: b.label,
@@ -1497,6 +1618,9 @@ export function CardStudioPage() {
       },
       studio: { mode, deck, fields },
       ...(selectedVideo ? { video_summary: selectedVideo.title } : {}),
+      // UI-5-T2-E2a(8a) — 현재 스텝 컨텍스트: Edge v6 대본이 "지금 몇 번째"를 인지.
+      step_plan: STEP_PLAN[mode].map((s) => s.label),
+      current_step: { index: currentStep, key: cur?.key ?? "", block: cur?.block ?? null },
     };
   }
 
@@ -1510,19 +1634,33 @@ export function CardStudioPage() {
         { role: "assistant", text: "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요." },
       ]);
     }
-    // 관문은 클라 선처리(T1m·T1n): 영상 미선택이면 연출 미시작 + 영상 칸 도우미. Edge 응답과 충돌 없음.
-    const hasVideo = !!selectedVideo;
-    if (steps.length >= 2 && !hasVideo) {
+    // 관문은 클라 선처리(T1m·T1n). 미디어 = general/reserve 영상(selectedVideo) · commerce 상품 사진(catImgReady).
+    const mediaReady = mode === "commerce" ? catImgReady : !!selectedVideo;
+    if (steps.length >= 2 && !mediaReady) {
+      const photo = mode === "commerce";
       setMessages((m) => [
         ...m,
-        { role: "assistant", text: "영상부터 담아야 카드가 시작돼요 — 검색하거나 링크를 붙여넣어 주세요." },
+        {
+          role: "assistant",
+          text: photo
+            ? "상품 사진부터 담아야 카드가 시작돼요 — 사진을 올려 주세요."
+            : "영상부터 담아야 카드가 시작돼요 — 검색하거나 링크를 붙여넣어 주세요.",
+        },
       ]);
-      onEditField("content", "video");
+      onEditField(photo ? "productimage" : "content", photo ? "productimage" : "video");
       return;
     }
-    // Edge steps 는 note 옵셔널·anchor 없음(실 대본) → note 정규화. anchor 부재 = 오버레이 전체 딤 폴백.
-    if (steps.length >= 2) runAssembly(okActions, steps.map((s) => ({ label: s.label, note: s.note ?? "" }))); // 연출(T1b 분기 유지).
-    else applyLingoActions(okActions); // 단순 편집 즉시 적용.
+    // UI-5-T2-E2a(8b·8c·4) — 연출 = STEP_PLAN 순회(1:1). 실응답 액션도 플랜 순 정렬 후 재생.
+    //   anchor = 플랜 블록 1:1 도출(content=hero/review=gauge/그 외=deck) → Edge anchor 부재 폴백 해소.
+    if (steps.length >= 2) {
+      const actionBlock = (a: any): string =>
+        a?.type === "equip" ? (a.blockId ?? "") : a?.type === "setField" ? (FIELD_TO_BLOCK[a.field] ?? a.field ?? "") : (a?.blockId ?? "");
+      const sortedActions = [...okActions].sort((x, y) => planOrder(actionBlock(x)) - planOrder(actionBlock(y)));
+      const planConnut = STEP_PLAN[mode].map((s) => ({ label: s.label, note: "", anchor: planAnchor(s) }));
+      runAssembly(sortedActions, planConnut); // 연출(T1b 분기 유지).
+    } else {
+      applyLingoActions(okActions); // 단순 편집 즉시 적용.
+    }
   }
 
   // UI-5-T2-E2 — lingo-chat Edge SSE 직결(45 useLingoChat send :195–312 동형). 텍스트 delta 스트리밍 + event:actions 1회.
@@ -1818,6 +1956,49 @@ export function CardStudioPage() {
       </header>
 
       {/* UI-5-T1f(1a) — 스티키 조립 미니 미리보기 완전 삭제(평시 부유물 제거). 카드 확인 = 스크롤 업. */}
+
+      {/* UI-5-T2-E2a(3·6) — 진행 지도(상시 1개 · sticky · h-11=44px). 부유물 원칙 내 유일 예외 = 지도.
+          완료 ✓ 잉크 / 현재 블루 / 대기 회색 번호. 미니열 탭 = 재방문/토스트, [다음] = 완료 시만 활성. */}
+      <div className="sticky top-0 z-[33] flex h-11 items-center gap-2 border-b border-[#E8E8EC] bg-[#F7F7F9]/95 px-4 backdrop-blur">
+        <span className="shrink-0 text-[12px] font-bold text-[#16161D]">
+          {currentStep + 1} / {STEP_PLAN[mode].length} · {STEP_PLAN[mode][currentStep]?.label}
+        </span>
+        <div className="mx-auto flex items-center gap-1">
+          {STEP_PLAN[mode].map((s, i) => {
+            const done = completedSteps.has(i) || isStepDone(i);
+            const cur = i === currentStep;
+            return (
+              <button
+                key={s.key}
+                onClick={() => goToStep(i)}
+                aria-label={`${i + 1} ${s.label}`}
+                className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold transition-colors"
+                style={
+                  cur
+                    ? { backgroundColor: "#1D4ED8", color: "#FFFFFF" }
+                    : done
+                      ? { backgroundColor: "#16161D", color: "#FFFFFF" }
+                      : { backgroundColor: "#EDEDF0", color: "#9A9A9A" }
+                }
+              >
+                {done && !cur ? "✓" : i + 1}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          onClick={nextStep}
+          disabled={!isStepDone(currentStep) || currentStep >= STEP_PLAN[mode].length - 1}
+          className="shrink-0 rounded-lg bg-[#16161D] px-2.5 py-1 text-[11px] font-bold text-white transition-transform active:scale-95 disabled:opacity-30"
+        >
+          다음
+        </button>
+      </div>
+      {stepToast && (
+        <div className="pointer-events-none fixed left-1/2 top-14 z-[60] -translate-x-1/2 rounded-full bg-[#16161D] px-3 py-1.5 text-[11px] font-bold text-white shadow-lg">
+          {stepToast}
+        </div>
+      )}
 
       <div className="mx-auto max-w-md px-5">
         {/* ───────── 모드 전환 (퍼블릭 / 예약·쿠폰 / 상품판매) ───────── */}
