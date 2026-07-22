@@ -730,6 +730,8 @@ export function CardStudioPage() {
   const [interim, setInterim] = useState("");
   const [voiceSupported, setVoiceSupported] = useState(true);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
+  // UI-5-T2-E4b — 인사 행동 칩(1스텝 하러 가기 / 알아서 할게요) 노출. 마운트·모드전환 시 재개, 상호작용 시 닫힘.
+  const [greetingChipsOpen, setGreetingChipsOpen] = useState(true);
   const lingoSessionRef = useRef<string | null>(null); // UI-5-T2-E2 — lingo-chat 세션 id(meta 수신 시 보관).
   // UI-5-T1(T-D) — 조립순서 번호도(lingoSteps) 미이식.
   // 링고AI 조립 연출 — 카드 위에서 손가락으로 가리키며 단계별로 조립
@@ -867,7 +869,12 @@ export function CardStudioPage() {
     assembleSnapshot.current = null; // 되돌리기 스냅샷 폐기(이전 목적 작업물 유입 차단)
     appliedActionsRef.current = [];
     // ── 링고 패널: 대화 이력 유지 + 새 플랜 인사 ───────────────────
-    setMessages((m) => [...m, { role: "assistant", text: `새로 시작할게요 — ${stepPlanIntro(next)}` }]);
+    // E4b — 전환 인사도 행동 지시형(1화면 1행동). 나열문 폐지.
+    setMessages((m) => [
+      ...m,
+      { role: "assistant", text: `새 ${MODE_NAME[next]} 카드를 시작해요. 먼저 ${STEP_PLAN[next][0].label}부터 — ${firstStepGuide(next)}` },
+    ]);
+    setGreetingChipsOpen(true); // 새 인사 → 행동 칩 재개.
     // ── 안내 토스트 ─────────────────────────────────────────────────
     setStepToast(`새 ${MODE_NAME[next]} 카드를 시작했어요`);
   }
@@ -1737,13 +1744,17 @@ export function CardStudioPage() {
     if (s.block === "content") return "hero";
     return "deck";
   }
+  // UI-5-T2-E4b — 1스텝 행동 안내(HELPER_COPY 재사용). video 스텝 = 검색·링크 안내(content=구간 안내 아님).
+  function firstStepGuide(m: StudioMode): string {
+    const s0 = STEP_PLAN[m][0];
+    const key = s0.key === "video" ? "video" : (s0.block ?? "");
+    return HELPER_COPY[key] ?? "아래에서 시작해 주세요.";
+  }
+  // UI-5-T2-E4b — 행동 지시형 인사(1화면 1행동). 단계 나열·"더 넣고 싶으면" 폐지 —
+  //   진행 지도(스텝 헤더)·확인 스텝 제안(E3e)이 각각 대체(정보 중복 금지). 총 2문장 이내.
   function stepPlanIntro(m: StudioMode): string {
-    const plan = STEP_PLAN[m]; // 인트로 = 기본 코스 소개(추가 스텝 편입 전 시점).
-    const base = `이 카드는 ${plan.length}단계로 만들어요: ${plan.map((s, i) => `${i + 1} ${s.label}`).join(" → ")}`;
-    // E3e(1) — 열린 문 안내: 잔여 블록 생활어 라벨 2~3개 예시.
-    const extras = extraBlocksFor(m).slice(0, 3).map((id) => EXTRA_LABELS[id]);
-    if (extras.length === 0) return base;
-    return `${base}. 더 넣고 싶은 게 있으면 말씀하세요 — ${extras.join("·")}도 붙일 수 있어요.`;
+    const s0 = STEP_PLAN[m][0];
+    return `${MODE_NAME[m]} 카드를 만들어요. 먼저 ${s0.label}부터 — ${firstStepGuide(m)}`;
   }
 
   // UI-5-T2-E2 — 49 컨텍스트 → LingoContext(45 페이로드 형태 계승: studio_state + studio{deck,fields}).
@@ -1848,6 +1859,7 @@ export function CardStudioPage() {
   // UI-5-T2-E2 — lingo-chat Edge SSE 직결(45 useLingoChat send :195–312 동형). 텍스트 delta 스트리밍 + event:actions 1회.
   async function sendToLingo(text: string) {
     if (!text || thinking) return;
+    setGreetingChipsOpen(false); // E4b — 대화 시작 시 인사 칩 소멸.
     setMessages((m) => [...m, { role: "user", text }, { role: "assistant", text: "" }]);
     setThinking(true);
     // 마지막 assistant(스트리밍 자리) 갱신 헬퍼.
@@ -4049,6 +4061,26 @@ export function CardStudioPage() {
                         </span>
                       </div>
                     ))}
+                    {/* UI-5-T2-E4b — 인사 행동 칩(1화면 1행동): [1스텝 하러 가기](enterStep(0)) · [내가 알아서 할게요]. */}
+                    {greetingChipsOpen && messages.length > 0 && !thinking && (
+                      <div className="flex flex-wrap gap-2 pl-1">
+                        <button
+                          onClick={() => {
+                            setGreetingChipsOpen(false);
+                            enterStep(0); // 1스텝 칸 이동 + 포커스.
+                          }}
+                          className="min-h-[44px] rounded-xl bg-[#EEF2FF] px-3.5 text-[13px] font-bold text-[#1D4ED8] transition-transform active:scale-95"
+                        >
+                          {stepPlanState[0]?.label} 하러 가기
+                        </button>
+                        <button
+                          onClick={() => setGreetingChipsOpen(false)}
+                          className="min-h-[44px] rounded-xl border border-[#E8E8EC] px-3.5 text-[13px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                        >
+                          내가 알아서 할게요
+                        </button>
+                      </div>
+                    )}
                     {interim && (
                       <div className="flex justify-end">
                         <span className="max-w-[82%] rounded-2xl bg-[#F4F4F5] px-3 py-2 text-[13px] italic text-[#A3A3A3]">
