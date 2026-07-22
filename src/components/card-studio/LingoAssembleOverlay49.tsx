@@ -12,7 +12,8 @@ export interface AssembleStep {
 // UI-5-T1j(2)·T1k — 종료 요약 데이터. id = 이동 대상 블록(칩 탭 → onEditField).
 export interface AssembleSummary {
   count: number
-  items: { id: string; label: string; value: string; needsConfirm: boolean }[]
+  // select = 선택 필요(구간 등) → 확인 문구 "골라 주세요" / 그 외 숫자 = "정해 주세요".
+  items: { id: string; label: string; value: string; needsConfirm: boolean; select?: boolean }[]
 }
 
 /**
@@ -290,7 +291,9 @@ export function LingoAssembleOverlay({
                 >
                   <span className="w-3 shrink-0 text-center">{it.needsConfirm ? "○" : "✓"}</span>
                   {it.needsConfirm ? (
-                    <span className="min-w-0 flex-1">{it.label}은 대표님이 정해 주세요</span>
+                    <span className="min-w-0 flex-1">
+                      {it.label}은 대표님이 {it.select ? "골라" : "정해"} 주세요
+                    </span>
                   ) : (
                     <span className="min-w-0 flex-1">
                       {it.label}

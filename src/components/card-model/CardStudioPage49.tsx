@@ -360,6 +360,7 @@ function isAiActionAllowed(mode: "general" | "reserve" | "commerce", a: any): bo
   if (a.type === "detach") return true; // 해제(제거)는 항상 안전.
   if (a.type === "equip") return typeof a.blockId === "string" && allowed.includes(a.blockId);
   if (a.type === "setField") {
+    if (AI_BLOCKED_FIELDS.has(a.field)) return false; // T1k(D) — 구간 값 등 자동 설정 금지(선택은 대표님).
     const blk = FIELD_TO_BLOCK[a.field];
     return !blk || allowed.includes(blk); // 매핑 없는 필드는 블록 게이트 없음(허용).
   }
@@ -382,6 +383,10 @@ const FIELD_LABEL: Record<string, string> = {
 };
 const NUMBER_FIELDS = new Set(["productPrice", "date", "time"]); // 가격·기간 계열 → 항상 확인(숫자 불가침).
 const NUMBER_CRITICAL_BLOCKS = new Set(["product", "seasonal", "calendar", "party"]); // 가격·수량·기간·인원.
+// UI-5-T1k(D) — 핵심구간(clip): "장착은 링고, 선택은 대표님". content = 선택 필요(needsConfirm 동급).
+//   구간 값(clip) setField 는 AI 화이트리스트에서 제외 → 링고가 시도해도 가드에 걸림(T-2 실배선 방어).
+const CLIP_BLOCKS = new Set(["content"]); // 구간 선택 필요 블록(선택은 대표님).
+const AI_BLOCKED_FIELDS = new Set(["clip"]); // 링고 자동 설정 금지 필드(구간 숫자).
 
 // UI-5-T1k(B2) — 미확정 칸 도우미 안내(블록별). 값 제안·자동입력 금지 — 링고는 안내만(숫자 불가침).
 const HELPER_COPY: Record<string, string> = {
@@ -390,7 +395,7 @@ const HELPER_COPY: Record<string, string> = {
   calendar: "예약 받을 날짜를 골라 주세요.",
   party: "예약 인원을 정해 주세요.",
   coupon: "할인 금액을 확인해 주세요.",
-  content: "제목과 설명을 다듬어 주세요.",
+  content: "영상에서 가장 보여주고 싶은 장면을 골라 주세요 — 시작과 끝을 움직이면 카드에 바로 반영돼요.",
   dock: "함께 보낼 카드를 골라 주세요.",
   link: "전화·위치를 확인해 주세요.",
 };
@@ -485,18 +490,19 @@ async function mockLingoReply(payload: {
       ],
     };
   }
-  // 일반(퍼블릭=개인 공유) — 콘텐츠·하이라이트만. 쿠폰·예약·판매 없음(§0 역할 경계).
+  // 일반(퍼블릭=개인 공유) — 콘텐츠·핵심구간만. 쿠폰·예약·판매 없음(§0 역할 경계).
+  //   D — 구간은 "장착만" 링고: 구간 값(setField clip) 자동 설정 금지 → 선택은 대표님.
   return {
-    reply: "이렇게 카드를 구성했어요 — 제목·설명·하이라이트를 골랐어요.",
+    reply: "이렇게 카드를 구성했어요 — 제목·설명과 핵심구간 도구를 붙였어요.",
     actions: [
+      { type: "equip", blockId: "content" }, // 구간 도구 장착만(값 미설정).
       { type: "setField", field: "title", value: "가을 여행 브이로그" },
       { type: "setField", field: "subtitle", value: "괴산 호수 캠핑 하이라이트" },
-      { type: "setField", field: "clip", value: "0:42" },
     ],
     steps: [
       { label: "카드 제목을 정했어요", note: "핵심 메시지를 한 줄로.", anchor: "hero" },
       { label: "설명 문구를 더했어요", note: "무슨 영상인지 알려줘요.", anchor: "hero" },
-      { label: "하이라이트 구간을 골랐어요", note: "가장 좋은 장면부터 보여요.", anchor: "deck" },
+      { label: "핵심구간 도구를 붙였어요", note: "어느 장면을 보여줄지는 대표님이 골라 주세요.", anchor: "deck" },
       { label: "공유 준비가 됐어요", note: "카드가 그만큼 탄탄해져요.", anchor: "gauge" },
     ],
   };
@@ -597,7 +603,7 @@ export function CardStudioPage() {
   const assembleSnapshot = useRef<any>(null);
   const appliedActionsRef = useRef<any[]>([]);
   const [assembleSummary, setAssembleSummary] = useState<
-    null | { count: number; items: { id: string; label: string; value: string; needsConfirm: boolean }[] }
+    null | { count: number; items: { id: string; label: string; value: string; needsConfirm: boolean; select?: boolean }[] }
   >(null);
   const touch = (keys: string[]) =>
     setLingoTouched((s) => {
@@ -1157,13 +1163,22 @@ export function CardStudioPage() {
   // UI-5-T1j(2) — 적용 로그(appliedActionsRef)로 종료 요약 구성. 숫자·가격·기간은 항상 확인 줄.
   function buildAssembleSummary() {
     const seen = new Set<string>();
-    const items: { id: string; label: string; value: string; needsConfirm: boolean }[] = [];
+    const items: { id: string; label: string; value: string; needsConfirm: boolean; select?: boolean }[] = [];
     for (const a of appliedActionsRef.current) {
       if (a.type === "equip" && a.blockId) {
         if (seen.has("b:" + a.blockId)) continue;
         seen.add("b:" + a.blockId);
         const b = STUDIO_BLOCKS.find((x) => x.id === a.blockId);
-        if (b) items.push({ id: b.id, label: b.label, value: "장착 완료", needsConfirm: NUMBER_CRITICAL_BLOCKS.has(b.id) });
+        if (b) {
+          const isSelect = CLIP_BLOCKS.has(b.id); // T1k(D) — 구간 = 선택 필요(장착은 링고, 선택은 대표님).
+          items.push({
+            id: b.id,
+            label: isSelect ? "핵심구간" : b.label,
+            value: "장착 완료",
+            needsConfirm: NUMBER_CRITICAL_BLOCKS.has(b.id) || isSelect,
+            select: isSelect,
+          });
+        }
       } else if (a.type === "setField" && a.field) {
         if (seen.has("f:" + a.field)) continue;
         seen.add("f:" + a.field);
@@ -1173,6 +1188,7 @@ export function CardStudioPage() {
           label: FIELD_LABEL[a.field] ?? a.field,
           value: raw.length > 20 ? raw.slice(0, 20) + "…" : raw,
           needsConfirm: NUMBER_FIELDS.has(a.field),
+          select: false,
         });
       }
     }
@@ -1810,7 +1826,10 @@ export function CardStudioPage() {
               className="relative mb-3 rounded-2xl bg-white p-3.5 animate-fade-in"
               style={{
                 boxShadow: `inset 0 0 0 1px ${
-                  lingoTouched.has(activeBlock.id) && NUMBER_CRITICAL_BLOCKS.has(activeBlock.id) ? "#FDBA74" : "#E8E8EC"
+                  lingoTouched.has(activeBlock.id) &&
+                  (NUMBER_CRITICAL_BLOCKS.has(activeBlock.id) || CLIP_BLOCKS.has(activeBlock.id))
+                    ? "#FDBA74"
+                    : "#E8E8EC"
                 }`,
                 ...(blinkBlock === activeBlock.id ? { animation: "lingo-spot-blink 0.8s ease-in-out 2" } : {}),
               }}
@@ -1821,7 +1840,9 @@ export function CardStudioPage() {
               )}
               {/* UI-5-T1j(3) — 링고 손길 배지(폼 섹션 우상단). 숫자 계열 = 확인 필요(주황). 직접 수정 시 소멸. */}
               {lingoTouched.has(activeBlock.id) && (
-                <LingoTouchBadge needsConfirm={NUMBER_CRITICAL_BLOCKS.has(activeBlock.id)} />
+                <LingoTouchBadge
+                  needsConfirm={NUMBER_CRITICAL_BLOCKS.has(activeBlock.id) || CLIP_BLOCKS.has(activeBlock.id)}
+                />
               )}
               {/* UI-5-T1k(B2·3·4·5) — 미확정 칸 도우미 말풍선(패널 상단 부착 · 화면 미추종). 값 자동입력 없음(안내만). */}
               {helperTarget === activeBlock.id && (
@@ -2264,7 +2285,10 @@ export function CardStudioPage() {
                     <span className="text-[12px] font-semibold text-[#525252]">핵심 구간 시작</span>
                     <input
                       value={cfgClip}
-                      onChange={(e) => setCfgClip(e.target.value.replace(/[^0-9:]/g, ""))}
+                      onChange={(e) => {
+                        setCfgClip(e.target.value.replace(/[^0-9:]/g, ""));
+                        confirmHelper("content"); // UI-5-T1k(D) — 구간 직접 조작 = 도우미 완료(선택은 대표님).
+                      }}
                       inputMode="numeric"
                       className="ml-auto w-16 rounded-lg bg-white px-2 py-1 text-center text-[12px] font-bold tabular-nums text-[#0A0A0A] outline-none"
                       style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
