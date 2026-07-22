@@ -383,6 +383,18 @@ const FIELD_LABEL: Record<string, string> = {
 const NUMBER_FIELDS = new Set(["productPrice", "date", "time"]); // 가격·기간 계열 → 항상 확인(숫자 불가침).
 const NUMBER_CRITICAL_BLOCKS = new Set(["product", "seasonal", "calendar", "party"]); // 가격·수량·기간·인원.
 
+// UI-5-T1k(B2) — 미확정 칸 도우미 안내(블록별). 값 제안·자동입력 금지 — 링고는 안내만(숫자 불가침).
+const HELPER_COPY: Record<string, string> = {
+  product: "가격과 수량을 정해 주세요 — 여기에 적으면 카드에 바로 들어가요.",
+  seasonal: "판매 기간을 정해 주세요 — 시작일과 종료일을 골라요.",
+  calendar: "예약 받을 날짜를 골라 주세요.",
+  party: "예약 인원을 정해 주세요.",
+  coupon: "할인 금액을 확인해 주세요.",
+  content: "제목과 설명을 다듬어 주세요.",
+  dock: "함께 보낼 카드를 골라 주세요.",
+  link: "전화·위치를 확인해 주세요.",
+};
+
 // UI-5-T1j — 링고 손길 배지(스튜디오 크롬 전용 — 카드 프리뷰 내부 렌더 금지). 확인 필요 = 주황.
 function LingoTouchBadge({ needsConfirm }: { needsConfirm: boolean }) {
   return needsConfirm ? (
@@ -585,7 +597,7 @@ export function CardStudioPage() {
   const assembleSnapshot = useRef<any>(null);
   const appliedActionsRef = useRef<any[]>([]);
   const [assembleSummary, setAssembleSummary] = useState<
-    null | { count: number; items: { label: string; value: string; needsConfirm: boolean }[] }
+    null | { count: number; items: { id: string; label: string; value: string; needsConfirm: boolean }[] }
   >(null);
   const touch = (keys: string[]) =>
     setLingoTouched((s) => {
@@ -599,6 +611,25 @@ export function CardStudioPage() {
       keys.forEach((k) => n.delete(k));
       return n;
     });
+  // UI-5-T1k(B) — 미확정 칸 도우미 릴레이(동행 선행). 대상 블록·단계·미확정 큐·스포트라이트 깜빡.
+  const [helperTarget, setHelperTarget] = useState<string | null>(null);
+  const [helperPhase, setHelperPhase] = useState<"guide" | "done" | "allDone">("guide");
+  const [pendingConfirm, setPendingConfirm] = useState<string[]>([]);
+  const [blinkBlock, setBlinkBlock] = useState<string | null>(null);
+  const helperTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // done 단계에 남은 미확정이 없으면 전체 완료로 승격.
+  useEffect(() => {
+    if (helperPhase === "done" && pendingConfirm.length === 0) setHelperPhase("allDone");
+  }, [helperPhase, pendingConfirm]);
+  // 전체 완료 말풍선 3s 후 소멸(발행 CTA 자동 트리거 없음 — 헌장 ⑨).
+  useEffect(() => {
+    if (helperPhase !== "allDone") return;
+    const t = setTimeout(() => {
+      setHelperTarget(null);
+      setHelperPhase("guide");
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [helperPhase]);
   const deckRef = useRef<HTMLElement>(null);
   // 음성 대화
   const [listening, setListening] = useState(false);
@@ -738,6 +769,7 @@ export function CardStudioPage() {
   function equip(block: StudioBlock) {
     if (block.isPaid && score < ENHANCE_UNLOCK) return;
     untouch([block.id]); // UI-5-T1j — 직접 장착/해제 = 손길 소멸(AI 경로는 applyOneLingoAction 이 직후 재기록).
+    confirmHelper(block.id); // UI-5-T1k — 도우미 대상 블록 직접 조작 = 확정(guide→done). 비대상이면 no-op.
     if (block.id === "bgcolor") {
       setShowColorPicker((v) => !v);
       setApplied((p) => ({ ...p, bgcolor: true }));
@@ -1108,6 +1140,7 @@ export function CardStudioPage() {
       setAssembling(false);
       const summary = buildAssembleSummary();
       setAssembleSummary(summary);
+      setPendingConfirm(summary.items.filter((i) => i.needsConfirm).map((i) => i.id)); // T1k — 미확정 큐.
       const filled = summary.items.filter((i) => !i.needsConfirm).map((i) => i.label);
       const need = summary.items.filter((i) => i.needsConfirm).map((i) => i.label);
       setMessages((m) => [
@@ -1124,18 +1157,19 @@ export function CardStudioPage() {
   // UI-5-T1j(2) — 적용 로그(appliedActionsRef)로 종료 요약 구성. 숫자·가격·기간은 항상 확인 줄.
   function buildAssembleSummary() {
     const seen = new Set<string>();
-    const items: { label: string; value: string; needsConfirm: boolean }[] = [];
+    const items: { id: string; label: string; value: string; needsConfirm: boolean }[] = [];
     for (const a of appliedActionsRef.current) {
       if (a.type === "equip" && a.blockId) {
         if (seen.has("b:" + a.blockId)) continue;
         seen.add("b:" + a.blockId);
         const b = STUDIO_BLOCKS.find((x) => x.id === a.blockId);
-        if (b) items.push({ label: b.label, value: "장착 완료", needsConfirm: NUMBER_CRITICAL_BLOCKS.has(b.id) });
+        if (b) items.push({ id: b.id, label: b.label, value: "장착 완료", needsConfirm: NUMBER_CRITICAL_BLOCKS.has(b.id) });
       } else if (a.type === "setField" && a.field) {
         if (seen.has("f:" + a.field)) continue;
         seen.add("f:" + a.field);
         const raw = String(a.value ?? "");
         items.push({
+          id: FIELD_TO_BLOCK[a.field] ?? a.field, // T1k — 칩 탭 이동 대상 블록.
           label: FIELD_LABEL[a.field] ?? a.field,
           value: raw.length > 20 ? raw.slice(0, 20) + "…" : raw,
           needsConfirm: NUMBER_FIELDS.has(a.field),
@@ -1173,11 +1207,38 @@ export function CardStudioPage() {
     setAssembleSummary(null);
   }
 
+  // UI-5-T1k(B1) — 칩 탭 → 딤 종료 → 해당 블록 이동 + 스포트라이트 1회 깜빡 + 도우미 말풍선(guide).
+  function onEditField(blockId: string) {
+    setAssembleSummary(null); // 딤 종료(오버레이 cleanup 이 스크롤 잠금 원복).
+    if (typeof document !== "undefined") document.body.style.overflow = ""; // T1k(C) — B 진입 시 잠금 확실 원복.
+    const b = STUDIO_BLOCKS.find((x) => x.id === blockId);
+    jumpToBlock(blockId); // setActiveBlock + scrollIntoView(center).
+    if (b && !applied[b.id]) equip(b); // 설정 패널이 뜨도록 장착(미장착 시).
+    setBlinkBlock(blockId);
+    if (helperTimer.current) clearTimeout(helperTimer.current);
+    helperTimer.current = setTimeout(() => setBlinkBlock(null), 1600); // 0.8s×2 깜빡 후 상주 금지.
+    setHelperTarget(blockId);
+    setHelperPhase("guide");
+  }
+  // 사용자가 그 칸을 직접 확정(장착/필드 확정) → 완료 말풍선 + 릴레이(강제 이동 없음).
+  function confirmHelper(blockId: string) {
+    if (helperTarget !== blockId || helperPhase !== "guide") return;
+    untouch([blockId]); // 배지 소멸 로직 연동.
+    setPendingConfirm((q) => q.filter((id) => id !== blockId));
+    setHelperPhase("done");
+  }
+  function dismissHelper() {
+    setHelperTarget(null);
+    setHelperPhase("guide");
+  }
+
   function skipAssembly() {
     assembleTimers.current.forEach(clearTimeout);
     assembleTimers.current = [];
     setAssembling(false);
-    setAssembleSummary(buildAssembleSummary()); // 중단 = 적용된 데까지만 요약.
+    const sum = buildAssembleSummary(); // 중단 = 적용된 데까지만 요약.
+    setAssembleSummary(sum);
+    setPendingConfirm(sum.items.filter((i) => i.needsConfirm).map((i) => i.id));
   }
 
   async function sendToLingo(text: string) {
@@ -1485,6 +1546,7 @@ export function CardStudioPage() {
               summary={assembleSummary}
               onUndo={undoAssembly}
               onConfirm={confirmAssembly}
+              onEditField={onEditField}
             />
           </div>
         </section>
@@ -1750,11 +1812,64 @@ export function CardStudioPage() {
                 boxShadow: `inset 0 0 0 1px ${
                   lingoTouched.has(activeBlock.id) && NUMBER_CRITICAL_BLOCKS.has(activeBlock.id) ? "#FDBA74" : "#E8E8EC"
                 }`,
+                ...(blinkBlock === activeBlock.id ? { animation: "lingo-spot-blink 0.8s ease-in-out 2" } : {}),
               }}
             >
+              {/* UI-5-T1k(B1) — 이동 직후 스포트라이트 1회 깜빡(0.8s×2, 상주 금지). */}
+              {blinkBlock === activeBlock.id && (
+                <style>{`@keyframes lingo-spot-blink{0%,100%{box-shadow:inset 0 0 0 1px #E8E8EC}50%{box-shadow:inset 0 0 0 2px #1D4ED8,0 0 0 5px rgba(29,78,216,0.28)}}`}</style>
+              )}
               {/* UI-5-T1j(3) — 링고 손길 배지(폼 섹션 우상단). 숫자 계열 = 확인 필요(주황). 직접 수정 시 소멸. */}
               {lingoTouched.has(activeBlock.id) && (
                 <LingoTouchBadge needsConfirm={NUMBER_CRITICAL_BLOCKS.has(activeBlock.id)} />
+              )}
+              {/* UI-5-T1k(B2·3·4·5) — 미확정 칸 도우미 말풍선(패널 상단 부착 · 화면 미추종). 값 자동입력 없음(안내만). */}
+              {helperTarget === activeBlock.id && (
+                <div className="absolute left-2 right-2 -top-2 z-20 -translate-y-full">
+                  <div className="relative rounded-2xl bg-white p-3 [box-shadow:0_16px_36px_-14px_rgba(15,23,42,0.4),0_0_0_1px_#E8E8EC]">
+                    <span className="absolute -bottom-1.5 left-6 h-3 w-3 rotate-45 bg-white [box-shadow:2px_2px_0_#E8E8EC]" aria-hidden="true" />
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-1.5 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                        ✦ 링고
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        {helperPhase === "guide" && (
+                          <p className="text-[12px] font-semibold leading-relaxed text-[#16161D] [word-break:keep-all]">
+                            {HELPER_COPY[activeBlock.id] ?? "여기에서 값을 정해 주세요."}
+                          </p>
+                        )}
+                        {helperPhase === "done" && (
+                          <>
+                            <p className="text-[12px] font-bold text-[#16161D] [word-break:keep-all]">
+                              좋아요, {activeBlock.label} 정해졌어요 ✓
+                            </p>
+                            {pendingConfirm.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                <button
+                                  onClick={() => onEditField(pendingConfirm[0])}
+                                  className="inline-flex min-h-[36px] items-center rounded-full bg-[#16161D] px-3 text-[11px] font-bold text-white active:scale-95"
+                                >
+                                  다음: {STUDIO_BLOCKS.find((b) => b.id === pendingConfirm[0])?.label ?? "다음"} 정하러 가기
+                                </button>
+                                <button
+                                  onClick={dismissHelper}
+                                  className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] active:scale-95"
+                                >
+                                  나중에 할게요
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        {helperPhase === "allDone" && (
+                          <p className="text-[12px] font-bold text-[#16161D] [word-break:keep-all]">
+                            이제 다 됐어요 — 발행 전에 한 번 훑어보세요.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
               <p className="mb-2.5 flex items-center gap-1.5 text-[12px] font-bold text-[#0A0A0A]">
                 <activeBlock.icon className="h-3.5 w-3.5 text-[#525252]" strokeWidth={2.5} />
@@ -2058,7 +2173,10 @@ export function CardStudioPage() {
                   {COUPON_OPTIONS.map((c) => (
                     <button
                       key={c.id}
-                      onClick={() => setCfgCoupon(c.id)}
+                      onClick={() => {
+                        setCfgCoupon(c.id);
+                        confirmHelper("coupon"); // UI-5-T1k — 쿠폰 확정 = 도우미 완료.
+                      }}
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition-colors"
                       style={
                         cfgCoupon === c.id
@@ -2084,7 +2202,10 @@ export function CardStudioPage() {
                   value={{ ...cfgProduct, name: cfgProductName, price: cfgProductPrice }}
                   onChange={(patch) => {
                     if (patch.name !== undefined) setCfgProductName(patch.name);
-                    if (patch.price !== undefined) setCfgProductPrice(patch.price);
+                    if (patch.price !== undefined) {
+                      setCfgProductPrice(patch.price);
+                      confirmHelper("product"); // UI-5-T1k — 가격 직접 입력 = 도우미 완료(숫자 사용자 확정).
+                    }
                     const rest = { ...patch };
                     delete rest.name;
                     delete rest.price;

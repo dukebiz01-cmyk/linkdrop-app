@@ -9,10 +9,10 @@ export interface AssembleStep {
   anchor?: string
 }
 
-// UI-5-T1j(2) — 종료 요약 데이터(딤 유지한 채 말풍선 → 요약 카드).
+// UI-5-T1j(2)·T1k — 종료 요약 데이터. id = 이동 대상 블록(칩 탭 → onEditField).
 export interface AssembleSummary {
   count: number
-  items: { label: string; value: string; needsConfirm: boolean }[]
+  items: { id: string; label: string; value: string; needsConfirm: boolean }[]
 }
 
 /**
@@ -31,6 +31,7 @@ export function LingoAssembleOverlay({
   summary,
   onUndo,
   onConfirm,
+  onEditField,
 }: {
   active: boolean
   steps: AssembleStep[]
@@ -40,6 +41,7 @@ export function LingoAssembleOverlay({
   summary?: AssembleSummary | null
   onUndo?: () => void
   onConfirm?: () => void
+  onEditField?: (blockId: string) => void
 }) {
   const total = steps.length
   const current = Math.min(Math.max(0, step), Math.max(0, total - 1))
@@ -47,6 +49,11 @@ export function LingoAssembleOverlay({
 
   // 대상 rect(뷰포트 기준) — 스포트라이트 구멍·마커·말풍선 배치의 단일 공급원.
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  // UI-5-T1k(A) — 요약 카드 "고칠게 있어요" 편집 칩 뷰 토글. 새 요약이 열리면 초기화.
+  const [showEdit, setShowEdit] = useState(false)
+  useEffect(() => {
+    setShowEdit(false)
+  }, [summary])
 
   // UI-5-T1f(4a)·T1j(2) — 연출/요약 동안 스크롤 잠금(요약 카드도 딤 유지). 원복 = 확인/되돌리기/언마운트.
   useEffect(() => {
@@ -271,38 +278,83 @@ export function LingoAssembleOverlay({
             </span>
           </div>
           <p className="mt-2.5 text-[15px] font-extrabold text-[#0F172A]">{summary.count}가지를 채워 뒀어요</p>
-          <div className="mt-2 flex flex-col gap-1.5">
-            {summary.items.map((it, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-1.5 text-[12px] font-semibold [word-break:keep-all]"
-                style={{ color: it.needsConfirm ? "#C2410C" : "#16161D" }}
-              >
-                <span className="w-3 shrink-0 text-center">{it.needsConfirm ? "○" : "✓"}</span>
-                {it.needsConfirm ? (
-                  <span className="min-w-0 flex-1">{it.label}은 대표님이 정해 주세요</span>
-                ) : (
-                  <span className="min-w-0 flex-1">
-                    {it.label}
-                    {it.value ? <span className="font-medium text-[#64748B]"> — {it.value}</span> : null}
-                  </span>
-                )}
+
+          {!showEdit ? (
+            /* 기본 요약 리스트 */
+            <div className="mt-2 flex flex-col gap-1.5">
+              {summary.items.map((it, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-1.5 text-[12px] font-semibold [word-break:keep-all]"
+                  style={{ color: it.needsConfirm ? "#C2410C" : "#16161D" }}
+                >
+                  <span className="w-3 shrink-0 text-center">{it.needsConfirm ? "○" : "✓"}</span>
+                  {it.needsConfirm ? (
+                    <span className="min-w-0 flex-1">{it.label}은 대표님이 정해 주세요</span>
+                  ) : (
+                    <span className="min-w-0 flex-1">
+                      {it.label}
+                      {it.value ? <span className="font-medium text-[#64748B]"> — {it.value}</span> : null}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* UI-5-T1k(A2·A3) — 고칠게 있어요: 탭 칩(44px). 확인 필요(주황) 최상단 고정 + 힌트(장식). */
+            <>
+              <p className="mt-2 text-[11px] font-semibold text-[#8A8A8A]">고칠 항목을 골라 주세요</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {[...summary.items]
+                  .sort((a, b) => Number(b.needsConfirm) - Number(a.needsConfirm))
+                  .map((it, i) => (
+                    <button
+                      key={i}
+                      onClick={() => onEditField?.(it.id)}
+                      className="inline-flex min-h-[44px] items-center gap-1 rounded-full px-3 text-[12px] font-bold transition-transform active:scale-95"
+                      style={
+                        it.needsConfirm
+                          ? { color: "#C2410C", backgroundColor: "#FFF4EC", boxShadow: "inset 0 0 0 1px #FDBA74" }
+                          : { color: "#16161D", backgroundColor: "#F1F2F4", boxShadow: "inset 0 0 0 1px #E8E8EC" }
+                      }
+                    >
+                      <span>{it.needsConfirm ? "●" : "✎"}</span>
+                      {it.label}
+                    </button>
+                  ))}
               </div>
-            ))}
-          </div>
+              <p className="mt-2 text-[11px] font-medium text-[#94A3B8] [word-break:keep-all]">
+                말로 고치셔도 돼요 — 예: “쿠폰 2천원으로 바꿔줘”
+              </p>
+            </>
+          )}
+
+          {/* UI-5-T1k(A1) — 버튼 3개: 전체 되돌리기 / 고칠게 있어요(칩 토글) / 좋아요, 확인. */}
           <div className="mt-3.5 flex gap-2">
             <button
               onClick={onUndo}
-              className="flex h-10 flex-1 items-center justify-center gap-1 rounded-xl border border-[#E8E8EC] bg-white text-[13px] font-bold text-[#525252] transition-transform active:scale-[0.98]"
+              className="flex h-10 flex-1 items-center justify-center gap-1 rounded-xl border border-[#E8E8EC] bg-white text-[12px] font-bold text-[#525252] transition-transform active:scale-[0.98]"
             >
-              ↩ 전체 되돌리기
+              ↩ 되돌리기
+            </button>
+            <button
+              onClick={() => setShowEdit((v) => !v)}
+              aria-pressed={showEdit}
+              className="flex h-10 flex-1 items-center justify-center gap-1 rounded-xl border text-[12px] font-bold transition-transform active:scale-[0.98]"
+              style={
+                showEdit
+                  ? { color: "#1D4ED8", borderColor: "#C7D7FB", backgroundColor: "#EEF3FE" }
+                  : { color: "#525252", borderColor: "#E8E8EC", backgroundColor: "#FFFFFF" }
+              }
+            >
+              ✎ 고칠게 있어요
             </button>
             <button
               onClick={onConfirm}
-              className="flex h-10 flex-[1.4] items-center justify-center rounded-xl text-[13px] font-bold text-white transition-transform active:scale-[0.98]"
+              className="flex h-10 flex-1 items-center justify-center rounded-xl text-[12px] font-bold text-white transition-transform active:scale-[0.98]"
               style={{ backgroundColor: "#16161D" }}
             >
-              확인했어요
+              좋아요, 확인
             </button>
           </div>
         </div>
