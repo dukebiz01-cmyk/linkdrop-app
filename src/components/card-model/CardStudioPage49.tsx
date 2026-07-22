@@ -17,7 +17,6 @@ import {
   Video,
   Image as ImageIcon,
   Link as LinkIcon,
-  Palette,
   Ticket,
   Rocket,
   Search,
@@ -220,15 +219,6 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     power: 12,
   },
   {
-    id: "bgcolor",
-    label: "카드 배경색",
-    desc: "내 카드 분위기 고르기",
-    detail: "브랜드 톤에 맞는 배경색을 골라 카드 분위기를 완성해요. 작은 차이가 신뢰감을 만들어요.",
-    icon: Palette,
-    category: "content",
-    power: 6,
-  },
-  {
     id: "top",
     label: "상위노출",
     desc: "피드 상단에 먼저 보이기",
@@ -258,15 +248,6 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     power: 0,
     isPaid: true,
   },
-];
-
-const CARD_COLORS = [
-  { id: "ink", value: "#0F172A", label: "잉크" },
-  { id: "forest", value: "#14532D", label: "포레스트" },
-  { id: "navy", value: "#1E3A8A", label: "네이비" },
-  { id: "wine", value: "#7F1D1D", label: "와인" },
-  { id: "sand", value: "#78350F", label: "샌드" },
-  { id: "slate", value: "#334155", label: "슬레이트" },
 ];
 
 const ENHANCE_UNLOCK = 75;
@@ -352,13 +333,13 @@ type StudioMode = "general" | "reserve" | "commerce";
 
 // 모드별 덱 구성 (주 제작 → 일반 레버 → 강화)
 const DECK_IDS: Record<StudioMode, string[]> = {
-  general: ["content", "dock", "bgcolor", "top", "boost", "marketing"],
-  reserve: ["calendar", "party", "content", "review", "coupon", "brand", "dock", "image", "link", "bgcolor", "top", "boost", "marketing"],
-  commerce: ["product", "productimage", "aivideo", "seasonal", "review", "delivery", "coupon", "brand", "dock", "link", "bgcolor", "top", "boost", "marketing"],
+  general: ["content", "dock", "top", "boost", "marketing"],
+  reserve: ["calendar", "party", "content", "review", "coupon", "brand", "dock", "image", "link", "top", "boost", "marketing"],
+  commerce: ["product", "productimage", "aivideo", "seasonal", "review", "delivery", "coupon", "brand", "dock", "link", "top", "boost", "marketing"],
 };
 
 // UI-5-T1h — AI 액션 모드 권한 가드(§0 역할 경계). 허용 블록 = 그 모드의 덱 구성(DECK_IDS) 자체(임의 창작 아님).
-//   퍼블릭(general)=content/dock/bgcolor/… → coupon·calendar·product·seasonal 등 매장 기능 사용 불가.
+//   퍼블릭(general)=content/dock/… → coupon·calendar·product·seasonal 등 매장 기능 사용 불가.
 //   필드는 그 필드를 지배하는 블록으로 환산해 심사(엔진의 setField↔블록 결합 반영).
 const FIELD_TO_BLOCK: Record<string, string> = {
   title: "content",
@@ -526,12 +507,6 @@ const SHARE_JOURNEY: {
 ];
 
 // 둥둥 떠 있는 기본 프레임 배경 — 모드와 무관하게 화이트 베이스로 통일
-const CARD_BASE = "#FFFFFF";
-const MODE_CARD_COLOR: Record<StudioMode, string> = {
-  general: CARD_BASE,
-  reserve: CARD_BASE,
-  commerce: CARD_BASE,
-};
 
 // UI-5-T2-E2 — lingo-chat SSE 파서·경량 재가드(useLingoChat :110/116/126 동형 — 훅 비export 함수라 복제).
 const LINGO_ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField", "goToBlock"]);
@@ -562,8 +537,6 @@ export function CardStudioPage() {
   const modeRef = useRef<StudioMode>(mode);
   modeRef.current = mode;
   const [applied, setApplied] = useState<Record<string, boolean>>({});
-  const [cardColor, setCardColor] = useState(MODE_CARD_COLOR.general);
-  const [showColorPicker, setShowColorPicker] = useState(false);
   const [dropped, setDropped] = useState(false);
   const [mirrorOpen, setMirrorOpen] = useState(false);
   const [visibility, setVisibility] = useState<"public" | "private">("public");
@@ -785,8 +758,6 @@ export function CardStudioPage() {
     // ── 카드 상태(스냅샷 키 + 나머지 전 필드) ───────────────────────
     setMode(next);
     setApplied({});
-    setCardColor(MODE_CARD_COLOR[next]); // 모드별 고정 배경색(기본값)
-    setShowColorPicker(false);
     setDropped(false);
     setMirrorOpen(false);
     setVisibility("public");
@@ -962,12 +933,6 @@ export function CardStudioPage() {
     if (block.isPaid && score < ENHANCE_UNLOCK) return;
     untouch([block.id]); // UI-5-T1j — 직접 장착/해제 = 손길 소멸(AI 경로는 applyOneLingoAction 이 직후 재기록).
     confirmHelper(block.id); // UI-5-T1k — 도우미 대상 블록 직접 조작 = 확정(guide→done). 비대상이면 no-op.
-    if (block.id === "bgcolor") {
-      setShowColorPicker((v) => !v);
-      setApplied((p) => ({ ...p, bgcolor: true }));
-      setBurstKey((k) => k + 1);
-      return;
-    }
     setApplied((p) => ({ ...p, [block.id]: !p[block.id] }));
     if (!applied[block.id]) {
       setBurstKey((k) => k + 1);
@@ -1975,7 +1940,6 @@ export function CardStudioPage() {
         : `무게 단위${cfgProduct.totalWeight ? ` (${cfgProduct.totalWeight}kg)` : ""}`;
   const cardModel: CardModel = studio49ToCardModel({
     mode,
-    cardColor,
     applied,
     title: cfgTitle,
     subtitle: cfgSubtitle,
@@ -2444,25 +2408,6 @@ export function CardStudioPage() {
 
         {/* 장착 액션 (가운데 카드 대상) */}
         <div className="mx-auto mt-4 max-w-md px-5">
-          {/* 배경색 팔레트 (배경색 카드가 가운데일 때) */}
-          {activeBlock.id === "bgcolor" && showColorPicker && (
-            <div className="mb-3 flex flex-wrap items-center justify-center gap-2 animate-fade-in">
-              {CARD_COLORS.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setCardColor(c.value)}
-                  className="h-8 w-8 rounded-full ring-2 transition-transform hover:scale-110"
-                  style={{
-                    backgroundColor: c.value,
-                    // @ts-expect-error css var
-                    "--tw-ring-color": cardColor === c.value ? accent : "transparent",
-                  }}
-                  aria-label={c.label}
-                />
-              ))}
-            </div>
-          )}
-
           {/* 블록 설정 패널 — 장착과 동시에 여기서 값을 채우면 카드에 바로 반영 */}
           {activeApplied && CONFIGURABLE.includes(activeBlock.id) && (
             <div

@@ -16,7 +16,6 @@ export type Studio49VideoSlot = {
 
 export type Studio49Input = {
   mode: "general" | "reserve" | "commerce";
-  cardColor: string;
   applied: Record<string, boolean>;
   title: string; // cfgTitle
   subtitle: string; // cfgSubtitle
@@ -54,7 +53,8 @@ export function studio49ToCardModel(s: Studio49Input): CardModel {
   // 45:2639 — 커머스 매장정보 셀 억제(link false), 수신 억제와 동형.
   const input: StudioStateInput = {
     buildMode: s.mode,
-    cardColor: s.cardColor,
+    // UI-5-T2-E3d — 카드 배경색 선택 기능 제거(삭제 사양). 빈 값 전달 → 정본 어댑터 DEFAULT_CARD_COLOR 고정.
+    cardColor: "",
     applied: isCommerce ? { ...s.applied, link: false } : s.applied,
     tagline: s.subtitle,
     selectedVideo: s.selectedVideo ?? null,
