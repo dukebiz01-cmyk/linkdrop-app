@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ProductRegisterForm, EMPTY_PRODUCT, type ProductForm } from "@/components/card-studio/ProductRegisterForm49";
+// UI-5-T2-E1 — 영상 검색 실배선(45 파이프 계승). 45 순수 모듈·공용 타입 import(45 컴포넌트 무수정).
+import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
+import { getSupabase } from "@/lib/supabase";
+import {
+  FINDER_EMPTY_MSG,
+  FINDER_FAIL_MSG,
+  mapYoutubeSearchCandidates,
+  parseYouTubeId,
+  type YoutubeSearchItem,
+} from "@/components/card-model/video-finder45";
 import {
   Calendar,
   Video,
@@ -400,18 +410,36 @@ function confirmRank(id: string): number {
   return 4;
 }
 
-// UI-5-T1n — 영상 검색 mock(T-1 한정, 실네트워크 0). 썸네일 = 플레이스홀더 도형/색(외부 URL 금지).
-//   T-2 실배선 시 45 파이프로 교체: CardStudioPage45 handleVideoSearch(/api/discover, :1977) ·
-//   youtube-search Edge invoke(:2059) · /api/oembed(:1990/2104) → videoResults → handleSelectVideo(:2086).
-type MockVideo = { id: string; title: string; channel: string; duration: string; hue: number };
-function mockVideoSearch(query: string): MockVideo[] {
-  const q = query.trim() || "우리 가게";
-  return [
-    { id: "mv1", title: `${q} 브이로그 하이라이트`, channel: "내 채널", duration: "3:24", hue: 212 },
-    { id: "mv2", title: `${q} 소개 영상`, channel: "우리 가게 공식", duration: "1:12", hue: 158 },
-    { id: "mv3", title: `${q} 둘러보기`, channel: "여행 로그", duration: "5:03", hue: 28 },
-    { id: "mv4", title: `${q} 다녀왔어요`, channel: "동네 브이로거", duration: "2:41", hue: 280 },
-  ];
+// UI-5-T2-E1 — 영상 슬롯·유틸(45 :561–594 동형 복제 — 45 컴포넌트 무수정 · 거울 파일 import 회피).
+type VideoSlot49 = {
+  videoId: string;
+  thumbnailUrl: string;
+  title: string;
+  isShorts: boolean;
+  durationLabel?: string;
+  sourceLabel?: string;
+};
+function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+function parseClock(v: string): number | null {
+  const t = v.trim();
+  if (!t || !/^\d+(:\d{1,2}){0,2}$/.test(t)) return null;
+  const parts = t.split(":").map(Number);
+  if (parts.slice(1).some((p) => p >= 60)) return null;
+  return parts.reduce((acc, p) => acc * 60 + p, 0);
+}
+function toVideoSlot(c: DiscoverCandidate): VideoSlot49 {
+  return {
+    videoId: c.source_id,
+    thumbnailUrl: c.source_id ? `https://i.ytimg.com/vi/${c.source_id}/mqdefault.jpg` : (c.thumbnail_url ?? ""),
+    title: c.title ?? "영상",
+    isShorts: (c.duration_sec ?? 999) <= 60,
+    durationLabel: c.duration_sec ? formatDuration(c.duration_sec) : undefined,
+    sourceLabel: "YouTube",
+  };
 }
 
 // UI-5-T1k(B2) — 미확정 칸 도우미 안내(블록별). 값 제안·자동입력 금지 — 링고는 안내만(숫자 불가침).
@@ -611,13 +639,15 @@ export function CardStudioPage() {
   const [cfgTitle, setCfgTitle] = useState("");
   const [cfgSubtitle, setCfgSubtitle] = useState("");
   const [cfgClip, setCfgClip] = useState("0:42");
-  // UI-5-T1n — 영상 검색 흐름(45 계승). 실검색은 T-2(45 /api/discover 파이프). hasVideo = !!selectedVideo.
+  // UI-5-T2-E1 — 영상 검색 실배선(45 파이프). hasVideo = !!selectedVideo. 결과 = DiscoverCandidate.
   const [videoQuery, setVideoQuery] = useState("");
   const [videoLink, setVideoLink] = useState("");
-  const [videoResults, setVideoResults] = useState<MockVideo[]>([]);
+  const [videoResults, setVideoResults] = useState<DiscoverCandidate[]>([]);
   const [videoSearching, setVideoSearching] = useState(false);
   const [videoSearched, setVideoSearched] = useState(false);
-  const [selectedVideo, setSelectedVideo] = useState<MockVideo | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<VideoSlot49 | null>(null);
+  const videoLeadRef = useRef<string | null>(null); // 요약 리드 취소용(영상 바뀌면 이전 무시).
   // 추가 카드 편집값
   const [cfgParty, setCfgParty] = useState(2);
   const [cfgRating, setCfgRating] = useState(5);
@@ -1301,30 +1331,162 @@ export function CardStudioPage() {
     setHelperPhase("guide");
   }
 
-  // UI-5-T1n — 영상 검색(mock, 실네트워크 0). T-2: 45 handleVideoSearch(/api/discover)로 교체.
-  function runVideoSearch() {
+  // UI-5-T2-E1 — 영상 검색 실배선(45 handleVideoSearch :1977 계승). URL=oembed / 키워드=discover→youtube-search 폴백.
+  const focusVideoLink = () => {
+    if (typeof document !== "undefined") document.getElementById("video-link-49")?.focus?.();
+  };
+  async function runVideoSearch() {
     const k = videoQuery.trim();
     if (!k || videoSearching) return;
-    setVideoSearched(true);
-    setVideoResults([]);
+    // (c) URL 붙여넣기 — oembed 실값으로 후보 1건(45 :1983–2024).
+    const pastedId = parseYouTubeId(k);
+    if (pastedId) {
+      setVideoSearching(true);
+      setVideoError(null);
+      try {
+        const vUrl = `https://www.youtube.com/watch?v=${pastedId}`;
+        const res = await fetch("/api/oembed?url=" + encodeURIComponent(vUrl));
+        const meta = (await res.json()) as {
+          title?: string | null;
+          author_name?: string | null;
+          thumbnail_url?: string | null;
+          duration_sec?: number | null;
+          message?: string;
+        };
+        if (!res.ok) {
+          setVideoError(meta.message ?? "영상 정보를 불러올 수 없어요. 링크를 확인해 주세요.");
+          setVideoResults([]);
+          return;
+        }
+        setVideoResults([
+          {
+            provider: "youtube",
+            source_url: vUrl,
+            source_id: pastedId,
+            canonical_url: vUrl,
+            title: meta.title ?? null,
+            thumbnail_url: meta.thumbnail_url ?? null,
+            author_name: meta.author_name ?? null,
+            duration_sec: meta.duration_sec ?? null,
+            raw_meta: {},
+          },
+        ]);
+      } catch {
+        setVideoError("지금 검색이 잘 안돼요 — 링크를 직접 붙여넣어 주세요.");
+        setVideoResults([]);
+        focusVideoLink();
+      } finally {
+        setVideoSearching(false);
+        setVideoSearched(true);
+      }
+      return;
+    }
+    // (a) 주 소스 /api/discover(45 :2028) → 실패/빈 결과면 (b) youtube-search 폴백.
     setVideoSearching(true);
-    window.setTimeout(() => {
-      setVideoResults(mockVideoSearch(k)); // 하드코딩 결과(외부 네트워크·이미지 URL 0).
+    setVideoError(null);
+    try {
+      const res = await fetch("/api/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: k }),
+      });
+      const json = (await res.json()) as { candidates?: DiscoverCandidate[]; message?: string };
+      const cands = res.ok ? (json.candidates ?? []).filter((c) => (c.provider as string) === "youtube") : [];
+      if (cands.length > 0) {
+        setVideoResults(cands);
+      } else {
+        await runFinderFallback(k); // 45 handleFinderSearch(:2053) 동일 소스.
+      }
+    } catch {
+      await runFinderFallback(k); // 네트워크 실패도 폴백 후 최종 에러 처리.
+    } finally {
       setVideoSearching(false);
-    }, 600);
+      setVideoSearched(true);
+    }
   }
-  // 영상 선택 = content 장착 + 프리뷰 제목 반영 + hasVideo 충족(관문 통과) + 도우미 완료. (선택은 대표님.)
-  function selectVideo(v: MockVideo) {
-    setSelectedVideo(v);
-    if (!applied["content"]) equip(blockById("content"));
-    setCfgTitle((t) => (t.trim() ? t : v.title)); // 비어있을 때만(사용자 제목 존중).
-    confirmHelper("content");
+  // 도우미 폴백 — youtube-search Edge invoke(45 :2059, 유저 JWT 자동 첨부).
+  async function runFinderFallback(k: string) {
+    try {
+      const { data, error } = await getSupabase().functions.invoke("youtube-search", { body: { q: k } });
+      if (error || !data) {
+        setVideoError(FINDER_FAIL_MSG);
+        setVideoResults([]);
+        focusVideoLink();
+        return;
+      }
+      const items = (data as { candidates?: YoutubeSearchItem[] }).candidates ?? [];
+      const mapped = mapYoutubeSearchCandidates(items);
+      if (mapped.length === 0) {
+        setVideoResults([]); // 0건 = T1n 문구 렌더(검색 완료 + 빈 결과).
+        setVideoError(null);
+        return;
+      }
+      setVideoResults(mapped);
+      setVideoError(null);
+    } catch {
+      setVideoError(FINDER_FAIL_MSG);
+      setVideoResults([]);
+      focusVideoLink();
+    }
   }
-  // 링크 직접 붙여넣기 — URL 감지 시 즉시 장착 경로.
-  function onVideoLinkChange(v: string) {
+  // 영상 선택 — 45 handleSelectVideo(:2086) 계승 + T1n 통합(장착·관문·도우미). 선택은 대표님.
+  async function selectVideo(c: DiscoverCandidate) {
+    const slot = toVideoSlot(c);
+    setSelectedVideo(slot);
+    setCfgClip(""); // 구간 초기화(45 :2092/2097) — 영상 바뀌면 구간 잔존 방지.
+    if (!applied["content"]) equip(blockById("content")); // content 장착 → hasVideo 충족(관문 통과).
+    setCfgTitle((t) => (t.trim() ? t : slot.title)); // 제목 반영(비었을 때만 — 사용자 제목 존중).
+    confirmHelper("content"); // 도우미 완료(영상 담김) + 배지·릴레이 연동.
+    // oembed→요약 리드(45 :2103) — 백그라운드 best-effort. 결과 소비는 T-2 AI 포인트 UI 예정.
+    videoLeadRef.current = slot.videoId;
+    try {
+      const videoUrl = `https://www.youtube.com/watch?v=${slot.videoId}`;
+      const oembedRes = await fetch("/api/oembed?url=" + encodeURIComponent(videoUrl));
+      const oembedJson = (await oembedRes.json()) as { source_id?: string };
+      const sourceId = oembedJson?.source_id;
+      if (!oembedRes.ok || !sourceId || videoLeadRef.current !== slot.videoId) return;
+      await fetch("/api/generate-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_id: sourceId }),
+      });
+    } catch {
+      /* 요약 리드 실패는 조용히 — 영상 선택 자체는 이미 반영됨. */
+    }
+  }
+  // 링크 직접 붙여넣기 — URL 감지 시 oembed 후보 1건 → 즉시 선택(45 :1983 경로).
+  async function onVideoLinkChange(v: string) {
     setVideoLink(v);
-    if (/^https?:\/\/\S+/.test(v.trim())) {
-      selectVideo({ id: "link", title: "붙여넣은 영상", channel: "링크", duration: "", hue: 258 });
+    const id = parseYouTubeId(v.trim());
+    if (!id || id === selectedVideo?.videoId) return; // 유효 URL·중복 처리 방지.
+    try {
+      const vUrl = `https://www.youtube.com/watch?v=${id}`;
+      const res = await fetch("/api/oembed?url=" + encodeURIComponent(vUrl));
+      const meta = (await res.json()) as {
+        title?: string | null;
+        author_name?: string | null;
+        thumbnail_url?: string | null;
+        duration_sec?: number | null;
+        message?: string;
+      };
+      if (!res.ok) {
+        setVideoError(meta.message ?? "영상 정보를 불러올 수 없어요. 링크를 확인해 주세요.");
+        return;
+      }
+      void selectVideo({
+        provider: "youtube",
+        source_url: vUrl,
+        source_id: id,
+        canonical_url: vUrl,
+        title: meta.title ?? null,
+        thumbnail_url: meta.thumbnail_url ?? null,
+        author_name: meta.author_name ?? null,
+        duration_sec: meta.duration_sec ?? null,
+        raw_meta: {},
+      });
+    } catch {
+      setVideoError("지금 검색이 잘 안돼요 — 링크를 직접 붙여넣어 주세요.");
+      focusVideoLink();
     }
   }
 
@@ -2384,6 +2546,7 @@ export function CardStudioPage() {
                       </button>
                     </div>
                     <input
+                      id="video-link-49"
                       value={videoLink}
                       onChange={(e) => onVideoLinkChange(e.target.value)}
                       placeholder="또는 유튜브·인스타 링크 붙여넣기"
@@ -2395,46 +2558,56 @@ export function CardStudioPage() {
                         영상을 찾고 있어요…
                       </div>
                     )}
-                    {videoSearched && !videoSearching && videoResults.length === 0 && (
+                    {/* UI-5-T2-E1(5) — 에러 폴백(무언 실패 금지): 링크 직접 입력 유도(input 포커스 연동). */}
+                    {!videoSearching && videoError && (
+                      <p className="rounded-xl bg-[#FFF4EC] px-3 py-3 text-center text-[12px] font-semibold text-[#C2410C] [box-shadow:inset_0_0_0_1px_#FDBA74]">
+                        {videoError}
+                      </p>
+                    )}
+                    {videoSearched && !videoSearching && !videoError && videoResults.length === 0 && (
                       <p className="rounded-xl bg-[#F4F4F5] px-3 py-3 text-center text-[12px] font-medium text-[#8A8A8A]">
                         검색 결과가 없어요 — 다른 말로 찾아볼까요?
                       </p>
                     )}
                     {!videoSearching && videoResults.length > 0 && (
                       <div className="flex flex-col gap-1.5">
-                        {videoResults.slice(0, 5).map((v) => (
-                          <button
-                            key={v.id}
-                            onClick={() => selectVideo(v)}
-                            className="flex min-h-[56px] items-center gap-2.5 rounded-xl bg-white px-2.5 py-2 text-left transition-transform active:scale-[0.99]"
-                            style={{ boxShadow: `inset 0 0 0 1px ${selectedVideo?.id === v.id ? "#1D4ED8" : "#E8E8EC"}` }}
-                          >
-                            {/* 썸네일 = 플레이스홀더 도형/색(외부 이미지 URL 금지). */}
-                            <span
-                              className="flex h-11 w-16 shrink-0 items-center justify-center rounded-lg"
-                              style={{ background: `linear-gradient(135deg, hsl(${v.hue} 68% 54%), hsl(${v.hue + 24} 68% 40%))` }}
+                        {videoResults.slice(0, 5).map((c) => {
+                          const slot = toVideoSlot(c);
+                          const on = selectedVideo?.videoId === slot.videoId;
+                          return (
+                            <button
+                              key={c.source_id}
+                              onClick={() => void selectVideo(c)}
+                              className="flex min-h-[56px] items-center gap-2.5 rounded-xl bg-white px-2.5 py-2 text-left transition-transform active:scale-[0.99]"
+                              style={{ boxShadow: `inset 0 0 0 1px ${on ? "#1D4ED8" : "#E8E8EC"}` }}
                             >
-                              <Play className="h-4 w-4 text-white" strokeWidth={2.5} fill="currentColor" />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-[12.5px] font-bold text-[#0A0A0A]">{v.title}</span>
-                              <span className="mt-0.5 block truncate text-[11px] font-medium text-[#8A8A8A]">
-                                {v.channel}
-                                {v.duration ? ` · ${v.duration}` : ""}
+                              {/* 썸네일 = 실데이터(i.ytimg mqdefault, toVideoSlot 계승). */}
+                              <span className="relative flex h-11 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#0F172A]">
+                                {slot.thumbnailUrl ? (
+                                  <img src={slot.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                                ) : null}
+                                <Play className="absolute h-4 w-4 text-white drop-shadow" strokeWidth={2.5} fill="currentColor" />
                               </span>
-                            </span>
-                            {selectedVideo?.id === v.id && <Check className="h-4 w-4 shrink-0 text-[#1D4ED8]" strokeWidth={2.5} />}
-                          </button>
-                        ))}
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[12.5px] font-bold text-[#0A0A0A]">{c.title ?? "영상"}</span>
+                                <span className="mt-0.5 block truncate text-[11px] font-medium text-[#8A8A8A]">
+                                  {c.author_name ?? "YouTube"}
+                                  {slot.durationLabel ? ` · ${slot.durationLabel}` : ""}
+                                </span>
+                              </span>
+                              {on && <Check className="h-4 w-4 shrink-0 text-[#1D4ED8]" strokeWidth={2.5} />}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                     {selectedVideo && (
                       <div className="flex items-center gap-2 rounded-xl bg-[#EEF3FE] px-2.5 py-2 [box-shadow:inset_0_0_0_1px_#C7D7FB]">
-                        <span
-                          className="flex h-8 w-12 shrink-0 items-center justify-center rounded-md"
-                          style={{ background: `linear-gradient(135deg, hsl(${selectedVideo.hue} 68% 54%), hsl(${selectedVideo.hue + 24} 68% 40%))` }}
-                        >
-                          <Play className="h-3.5 w-3.5 text-white" strokeWidth={2.5} fill="currentColor" />
+                        <span className="relative flex h-8 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#0F172A]">
+                          {selectedVideo.thumbnailUrl ? (
+                            <img src={selectedVideo.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                          ) : null}
+                          <Play className="absolute h-3.5 w-3.5 text-white drop-shadow" strokeWidth={2.5} fill="currentColor" />
                         </span>
                         <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#1D4ED8]">담긴 영상: {selectedVideo.title}</span>
                       </div>
