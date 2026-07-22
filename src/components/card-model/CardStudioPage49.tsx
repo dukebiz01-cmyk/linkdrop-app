@@ -59,7 +59,10 @@ import {
   Pencil,
   ListOrdered,
 } from "lucide-react";
-import { CardBody, type CardModel, SHIP_STAGES } from "@/components/card-studio/CardBody49";
+// UI-5-T2-E3 — 위지윅: 미리보기 = 정본 CardModelBody(거울) + 어댑터. CardBody49(v0 목업) 폐기.
+import { CardModelBody } from "@/components/card-model/CardModelBody";
+import { SHIP_STAGES, type CardModel } from "@/components/card-model/card-model.types";
+import { studio49ToCardModel } from "@/components/card-studio/studio49-to-card";
 import { LingoAssembleOverlay } from "@/components/card-studio/LingoAssembleOverlay49";
 
 // =============================================================================
@@ -1845,65 +1848,51 @@ export function CardStudioPage() {
   const content = MODE_CONTENT[mode];
 
   // 제작=공유=수신 거울: 현재 스튜디오 상태를 단일 CardModel로 확정
-  const cardModel: CardModel = {
-    accent: cardAccent, // T-C — 카드(CardBody) 는 모드 색 유지(WYSIWYG · 다이어트 제외).
-    cardColor,
-    pageBg,
-    category: content.category,
-    categoryIcon: content.categoryIcon,
-    source: content.source,
-    ctaIcon: content.ctaIcon,
-    store: content.store,
-    applied,
-    titleText: cfgTitle.trim()
-      ? cfgTitle
-      : applied["product"] && cfgProductName
-      ? cfgProductName
-      : content.title,
-    subtitleText: cfgSubtitle.trim()
-      ? cfgSubtitle
-      : applied["product"] && cfgProduct.headline.trim()
-      ? cfgProduct.headline
-      : content.subtitle,
-    clip: cfgClip,
-    brandText: cfgBrand.trim() ? cfgBrand : `${content.store} · 우리 가게만의 이야기를 들려주세요`,
-    priceText: cfgProductPrice ? `₩${cfgProductPrice}` : content.price ?? "",
-    productType:
-      cfgProduct.type === "fresh" ? "신선식품" : cfgProduct.type === "processed" ? "가공식품" : "공산품·잡화",
-    productOrigin: cfgProduct.origin.trim(),
-    productUnitLabel:
-      cfgProduct.saleUnit === "unit"
-        ? "낱개 판매"
-        : cfgProduct.saleUnit === "box"
+  // UI-5-T2-E3 — 위지윅: 49 상태 → 정본 CardModel(어댑터). 미리보기 = /d 수신 렌더러(CardModelBody).
+  const productUnitLabel =
+    cfgProduct.saleUnit === "unit"
+      ? "낱개 판매"
+      : cfgProduct.saleUnit === "box"
         ? `박스·묶음${cfgProduct.boxCount ? ` (한 박스 ${cfgProduct.boxCount}개)` : ""}`
-        : `무게 단위${cfgProduct.totalWeight ? ` (${cfgProduct.totalWeight}kg)` : ""}`,
-    productQty: cfgProduct.quantity.trim(),
+        : `무게 단위${cfgProduct.totalWeight ? ` (${cfgProduct.totalWeight}kg)` : ""}`;
+  const cardModel: CardModel = studio49ToCardModel({
+    mode,
+    cardColor,
+    applied,
+    title: cfgTitle,
+    subtitle: cfgSubtitle,
+    clip: cfgClip,
+    brand: cfgBrand,
+    party: cfgParty,
+    couponLabel: applied["coupon"] ? (COUPON_OPTIONS.find((c) => c.id === cfgCoupon)?.label ?? null) : null,
+    productName: cfgProductName,
+    productPrice: cfgProductPrice,
+    productHeadline: cfgProduct.headline,
     productPoints: cfgProduct.sellingPoints.map((p) => p.trim()).filter(Boolean),
-    shipFee: cfgShipFee,
-    shipEta: cfgShipEta,
-    courier: cfgCourier,
-    shipStage: cfgShipStage,
-    trackingNo: cfgTrackingNo.trim(),
-    rating: cfgRating,
-    reviewText: cfgReview.trim() ? `“${cfgReview}”` : "“한 줄 후기로 신뢰를 더해보세요”",
-    date: cfgDate,
-    time: cfgTime,
+    productUnitLabel,
+    facilities: cfgFacilities.map((f) => f.text.trim()).filter(Boolean),
     saleStart: DATE_OPTIONS[saleStartIdx],
     saleEnd: DATE_OPTIONS[saleEndIdx],
     dates: cfgDates,
     times: cfgTimes,
     slotsByDate: cfgSlotsByDate,
-    party: cfgParty,
-    couponLabel: COUPON_OPTIONS.find((c) => c.id === cfgCoupon)?.label ?? "쿠폰 혜택",
-    couponShort: COUPON_OPTIONS.find((c) => c.id === cfgCoupon)?.short ?? "쿠폰",
-    phone: cfgPhone,
-    map: cfgMap,
-    facilities: cfgFacilities.map((f) => f.text.trim()).filter(Boolean),
-    dockTitle: DOCK_OPTIONS.find((d) => d.id === cfgDock)?.title ?? DOCK_OPTIONS[0].title,
-    dockMeta: DOCK_OPTIONS.find((d) => d.id === cfgDock)?.meta ?? DOCK_OPTIONS[0].meta,
-    journey: SHARE_JOURNEY,
-    spreadCount: 12,
-  };
+    selectedVideo,
+    shipping: applied["delivery"]
+      ? {
+          shipMethod: cfgCourier,
+          freeShip: cfgShipFee === "무료",
+          shipFeeKrw: cfgShipFee === "무료" ? null : Number(cfgShipFee.replace(/[^0-9]/g, "")) || null,
+          shipNote: cfgShipEta,
+        }
+      : null,
+    categoryLabel: content.category,
+    categoryIcon: content.categoryIcon,
+    source: content.source,
+    storeName: content.store,
+    titleFallback: content.title,
+    subtitleFallback: content.subtitle,
+    pageBg,
+  });
 
   return (
       <div className="min-h-screen pb-[120px] transition-colors duration-300" style={{ backgroundColor: pageBg }}>
@@ -2055,7 +2044,7 @@ export function CardStudioPage() {
         <section ref={heroRef} className="pt-2.5">
           {/* UI-5-T1c — 조립 포인터 앵커(hero): 제목·설명 스텝 지목 대상. */}
           <div className="relative" data-assemble-anchor="hero">
-            <CardBody model={cardModel} variant="studio" burstKey={burstKey} />
+            <CardModelBody model={cardModel} variant="studio" burstKey={burstKey} />
             <LingoAssembleOverlay
               active={assembling}
               steps={assembleSteps}
@@ -3589,7 +3578,7 @@ export function CardStudioPage() {
                 <Lock className="h-3.5 w-3.5" strokeWidth={2.25} />
                 {visibility === "public" ? "공개 드롭 · 누구나 열람 가능" : "비공개 드롭 · 링크 받은 사람만"}
               </div>
-              <CardBody model={cardModel} variant="share" />
+              <CardModelBody model={cardModel} variant="share" />
             </div>
 
             <div className="border-t border-[#EAEAEA] bg-white px-5 py-3.5">
