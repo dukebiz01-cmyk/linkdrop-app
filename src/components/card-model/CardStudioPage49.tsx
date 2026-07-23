@@ -64,6 +64,7 @@ import { SHIP_STAGES, type CardModel } from "@/components/card-model/card-model.
 import { studio49ToCardModel } from "@/components/card-studio/studio49-to-card";
 import { LingoAssembleOverlay } from "@/components/card-studio/LingoAssembleOverlay49";
 import { InlineDatePicker } from "@/components/lingo/InlineDatePicker"; // UI-5-T2-E5g — 공용 캘린더 재사용(무수정).
+import { resizeToJpegBlob } from "@/lib/image-upload"; // UI-5-T2-E5a — 45 업로드 파이프 공용 리사이저.
 
 // =============================================================================
 // LinkDrop "카드 스튜디오" — 게임 카드 강화(포지) 경험.
@@ -645,17 +646,70 @@ export function CardStudioPage() {
     aivTimer.current = setTimeout(() => setAivStatus("done"), 2600);
   };
   useEffect(() => () => { if (aivTimer.current) clearTimeout(aivTimer.current); }, []);
-  // 이미지 등록 → AI 원페이지 상품 카탈로그 제작
-  const [catImgReady, setCatImgReady] = useState(false);
+  // UI-5-T2-E5a — 상품 사진 실배선(product-images 버킷). productImageUrl = 실 URL(가짜 불리언 catImgReady 폐기).
+  //   첫 사진 = 카드 얼굴 = 발행 image_url 예정 단일 소스(E5b). 스텝 1(productimage)이 유일 입구.
+  const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
+  const [productImagePreview, setProductImagePreview] = useState<string | null>(null); // 로컬 미리보기(업로드 중).
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  // AI 원페이지 카탈로그(별도 목업 — E5a 범위 밖). 게이트만 실 사진(productImageUrl)으로 전환.
   const [catStatus, setCatStatus] = useState<"idle" | "generating" | "done">("idle");
   const catTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startCatalog = () => {
-    if (!catImgReady || catStatus === "generating") return;
+    if (!productImageUrl || catStatus === "generating") return;
     setCatStatus("generating");
     if (catTimer.current) clearTimeout(catTimer.current);
     catTimer.current = setTimeout(() => setCatStatus("done"), 2600);
   };
   useEffect(() => () => { if (catTimer.current) clearTimeout(catTimer.current); }, []);
+  // UI-5-T2-E5a — 상품 사진 업로드(45 handleHeroImageChange :2132 파이프 계승). 갤러리·촬영 공용.
+  //   BUG-5 방어: 오직 input change(사용자 제스처)에서만 실행 · effect 동기화 없음 · objectURL revoke ·
+  //   조건 없는 setState 렌더 루프 없음(setApplied/confirmHelper 는 성공 1회). 크기/형식 = resizeToJpegBlob 가드.
+  async function handleProductImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 같은 파일 재선택 허용 + 재-onChange 방지.
+    if (!file) return;
+    setImageUploadError(null);
+    const localUrl = URL.createObjectURL(file);
+    setProductImagePreview(localUrl);
+    setImageUploading(true);
+    try {
+      const supabase = getSupabase();
+      const { data: sess } = await supabase.auth.getSession();
+      const userId = sess.session?.user.id;
+      if (!userId) {
+        setImageUploadError("로그인이 필요해요.");
+        setProductImagePreview(null);
+        return;
+      }
+      const blob = await resizeToJpegBlob(file); // 형식 정규화(JPEG)+크기 상한(1200px) 45 정책.
+      const path = `${userId}/${crypto.randomUUID()}.jpg`;
+      const { error: upErr } = await supabase.storage.from("product-images").upload(path, blob, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+      if (upErr) {
+        console.error("[studio49] product image upload failed:", upErr);
+        setImageUploadError("사진 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        setProductImagePreview(null);
+        return;
+      }
+      const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path);
+      setProductImageUrl(pub.publicUrl); // 실 URL = 정본 소스(isStepDone·관문·어댑터·발행 예정).
+      setProductImagePreview(pub.publicUrl);
+      setApplied((p) => ({ ...p, productimage: true }));
+      confirmHelper("productimage"); // 사진 확정 = 도우미 완료.
+    } catch (err) {
+      console.error("[studio49] product image unexpected:", err);
+      setImageUploadError(err instanceof Error ? err.message : "사진 처리 중 문제가 생겼어요.");
+      setProductImagePreview(null);
+    } finally {
+      setImageUploading(false);
+      URL.revokeObjectURL(localUrl);
+    }
+  }
   // 조립 연출 타이머 정리
   useEffect(() => () => { assembleTimers.current.forEach(clearTimeout); }, []);
   // 상품 등록 상세 (유형·원산지·판매단위·수량·셀링포인트 등)
@@ -858,7 +912,10 @@ export function CardStudioPage() {
     setVideoSearching(false);
     setVideoSearched(false);
     setVideoError(null);
-    setCatImgReady(false);
+    setProductImageUrl(null); // E5a — 새 카드 = 실 사진 초기화.
+    setProductImagePreview(null);
+    setImageUploading(false);
+    setImageUploadError(null);
     setCatStatus("idle");
     setAivStyle("dynamic");
     setAivLength("15s");
@@ -935,7 +992,7 @@ export function CardStudioPage() {
   function hasWork(): boolean {
     return (
       !!selectedVideo ||
-      catImgReady ||
+      !!productImageUrl ||
       videoSearched ||
       Object.values(applied).some(Boolean) ||
       completedSteps.size > 0 ||
@@ -1729,7 +1786,7 @@ export function CardStudioPage() {
       case "video":
         return !!selectedVideo;
       case "photo":
-        return catImgReady;
+        return !!productImageUrl; // E5a — 실 사진 URL 기준(가짜 불리언 폐기).
       case "title":
         return cfgTitle.trim().length > 0 || cfgProductName.trim().length > 0;
       case "clip":
@@ -1889,8 +1946,8 @@ export function CardStudioPage() {
         { role: "assistant", text: "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요." },
       ]);
     }
-    // 관문은 클라 선처리(T1m·T1n). 미디어 = general/reserve 영상(selectedVideo) · commerce 상품 사진(catImgReady).
-    const mediaReady = m === "commerce" ? catImgReady : !!selectedVideo;
+    // 관문은 클라 선처리(T1m·T1n). 미디어 = general/reserve 영상(selectedVideo) · commerce 상품 사진(productImageUrl).
+    const mediaReady = m === "commerce" ? !!productImageUrl : !!selectedVideo;
     if (steps.length >= 2 && !mediaReady) {
       const photo = m === "commerce";
       setMessages((m) => [
@@ -2209,6 +2266,7 @@ export function CardStudioPage() {
   const cardModel: CardModel = studio49ToCardModel({
     mode,
     applied,
+    productImageUrl: productImagePreview ?? productImageUrl ?? undefined, // E5a — 실 사진 = 카드 얼굴(거울·미리보기 정본).
     title: cfgTitle,
     subtitle: cfgSubtitle,
     clip: cfgClip,
@@ -3140,6 +3198,13 @@ export function CardStudioPage() {
                     delete rest.price;
                     if (Object.keys(rest).length) setCfgProduct((p) => ({ ...p, ...rest }));
                   }}
+                  photoUrl={productImagePreview ?? productImageUrl ?? undefined}
+                  onEditPhoto={() => {
+                    // E5a — 폼 사진 필드 = 표시 전용. 바꾸기 = 스텝 1(productimage) 재방문(단일 입구).
+                    const i = stepPlanState.findIndex((s) => s.key === "photo");
+                    if (i >= 0) enterStep(i);
+                    else onEditField("productimage", "productimage");
+                  }}
                 />
               )}
 
@@ -3426,37 +3491,20 @@ export function CardStudioPage() {
                 </div>
               )}
 
-              {(activeBlock.id === "image" || activeBlock.id === "productimage") && (
+              {/* UI-5-T2-E5a — reserve 매장 사진(image) = 기존 목업 무접촉(범위 밖). */}
+              {activeBlock.id === "image" && (
                 <div className="space-y-2">
                   <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-[#D4D4D4] bg-[#F4F4F5]">
                     <span className="flex flex-col items-center gap-1.5 text-[#8A8A8A]">
-                      <span
-                        className="flex h-10 w-10 items-center justify-center rounded-xl"
-                        style={
-                          catImgReady && activeBlock.id === "productimage"
-                            ? { backgroundColor: `${accent}16`, color: accent }
-                            : { backgroundColor: "#E6E6E6", color: "#525252" }
-                        }
-                      >
-                        {catImgReady && activeBlock.id === "productimage" ? (
-                          <Check className="h-5 w-5" strokeWidth={2.5} style={{ color: accent }} />
-                        ) : (
-                          <ImageIcon className="h-5 w-5" strokeWidth={2} />
-                        )}
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E6E6E6] text-[#525252]">
+                        <ImageIcon className="h-5 w-5" strokeWidth={2} />
                       </span>
-                      <span className="text-[11px] font-semibold">
-                        {catImgReady && activeBlock.id === "productimage"
-                          ? "상품 이미지 등록됨"
-                          : `${activeBlock.id === "productimage" ? "상품 사진" : "대표 이미지"} 미리보기`}
-                      </span>
+                      <span className="text-[11px] font-semibold">대표 이미지 미리보기</span>
                     </span>
                   </div>
                   <div className="flex gap-1.5">
                     <button
-                      onClick={() => {
-                        if (activeBlock.id === "productimage") setCatImgReady(true);
-                        confirmHelper(activeBlock.id); // UI-5-T1m — 사진 선택 = 도우미 완료(콘텐츠 선택은 대표님).
-                      }}
+                      onClick={() => confirmHelper("image")}
                       className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-white transition-transform active:translate-y-px"
                       style={{ backgroundColor: accent }}
                     >
@@ -3464,17 +3512,76 @@ export function CardStudioPage() {
                       갤러리에서 선택
                     </button>
                     <button
-                      onClick={() => {
-                        if (activeBlock.id === "productimage") setCatImgReady(true);
-                        confirmHelper(activeBlock.id); // UI-5-T1m — 사진 선택 = 도우미 완료(콘텐츠 선택은 대표님).
-                      }}
+                      onClick={() => confirmHelper("image")}
                       className="flex items-center justify-center gap-1.5 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[12px] font-semibold text-[#404040] transition-transform active:translate-y-px"
                     >
                       촬영
                     </button>
                   </div>
+                </div>
+              )}
 
-                  {/* 이미지 등록 → AI 원페이지 상품 카탈로그 제작 */}
+              {/* UI-5-T2-E5a — 상품 사진(productimage) = 실 업로드 단일 입구(product-images 버킷). */}
+              {activeBlock.id === "productimage" && (
+                <div className="space-y-2">
+                  {/* 갤러리 = 파일선택 · 촬영 = capture(데스크톱은 파일선택 폴백) */}
+                  <input ref={galleryInputRef} type="file" accept="image/*" className="hidden" onChange={handleProductImageChange} />
+                  <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleProductImageChange} />
+                  {/* 썸네일 — 로컬 미리보기(업로드 중) → 실 URL */}
+                  <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-[#D4D4D4] bg-[#F4F4F5]">
+                    {productImagePreview || productImageUrl ? (
+                      <img src={productImagePreview || productImageUrl || ""} alt="상품 사진" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="flex flex-col items-center gap-1.5 text-[#8A8A8A]">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E6E6E6] text-[#525252]">
+                          <ImageIcon className="h-5 w-5" strokeWidth={2} />
+                        </span>
+                        <span className="text-[11px] font-semibold">상품 사진 미리보기</span>
+                      </span>
+                    )}
+                    {imageUploading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <Loader2 className="h-6 w-6 animate-spin text-white" strokeWidth={2.5} />
+                      </div>
+                    )}
+                    {!imageUploading && productImageUrl && (
+                      <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full" style={{ backgroundColor: accent }}>
+                        <Check className="h-4 w-4 text-white" strokeWidth={2.5} />
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => galleryInputRef.current?.click()}
+                      disabled={imageUploading}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12px] font-bold text-white transition-transform active:translate-y-px disabled:opacity-50"
+                      style={{ backgroundColor: accent }}
+                    >
+                      <ImageIcon className="h-4 w-4" strokeWidth={2.25} />
+                      갤러리에서 선택
+                    </button>
+                    <button
+                      onClick={() => cameraInputRef.current?.click()}
+                      disabled={imageUploading}
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[12px] font-semibold text-[#404040] transition-transform active:translate-y-px disabled:opacity-50"
+                    >
+                      촬영
+                    </button>
+                  </div>
+                  {imageUploadError && (
+                    <div className="flex items-center justify-between gap-2 rounded-xl bg-[#FEF2F2] px-3 py-2">
+                      <span className="text-[12px] font-medium text-[#DC2626] [word-break:keep-all]">{imageUploadError}</span>
+                      <button
+                        onClick={() => galleryInputRef.current?.click()}
+                        className="shrink-0 text-[12px] font-bold"
+                        style={{ color: accent }}
+                      >
+                        다시 시도
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 이미지 등록 → AI 원페이지 상품 카탈로그 제작(별도 목업 · 게이트만 실 사진) */}
                   {activeBlock.id === "productimage" && (
                     <div className="mt-1 rounded-xl bg-[#F4F4F5] p-3">
                       <div className="mb-1 flex items-center gap-1.5">
@@ -3497,7 +3604,7 @@ export function CardStudioPage() {
                           <span className="flex flex-col items-center gap-1.5 px-4 text-center text-[#A3A3A3]">
                             <LayoutTemplate className="h-6 w-6 text-[#C4C4C4]" strokeWidth={1.75} />
                             <span className="text-[11px] font-semibold">
-                              {catImgReady ? "생성 버튼을 눌러 카탈로그를 만들어요" : "먼저 상품 이미지를 등록해 주세요"}
+                              {productImageUrl ? "생성 버튼을 눌러 카탈로그를 만들어요" : "먼저 상품 이미지를 등록해 주세요"}
                             </span>
                           </span>
                         )}
@@ -3543,7 +3650,7 @@ export function CardStudioPage() {
                       {/* 생성 / 재생성 버튼 */}
                       <button
                         onClick={startCatalog}
-                        disabled={!catImgReady || catStatus === "generating"}
+                        disabled={!productImageUrl || catStatus === "generating"}
                         className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-bold text-white transition-transform active:translate-y-px disabled:opacity-50"
                         style={{ backgroundColor: accent }}
                       >

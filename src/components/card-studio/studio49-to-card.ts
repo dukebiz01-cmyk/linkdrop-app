@@ -17,6 +17,7 @@ export type Studio49VideoSlot = {
 export type Studio49Input = {
   mode: "general" | "reserve" | "commerce";
   applied: Record<string, boolean>;
+  productImageUrl?: string; // UI-5-T2-E5a — 커머스 상품 사진(실 업로드 URL) → 카드 얼굴.
   title: string; // cfgTitle
   subtitle: string; // cfgSubtitle
   clip: string; // cfgClip
@@ -63,6 +64,8 @@ export function studio49ToCardModel(s: Studio49Input): CardModel {
     productName: s.productName || undefined,
     productPrice: priceNum,
     productCopy: { headline: s.productHeadline || undefined, sellingPoints: s.productPoints },
+    // E5a — 커머스 상품 사진: 정본 어댑터 commerce.imageUrl(=heroImageUrl) 소비 → CardBody 실이미지.
+    ...(isCommerce && s.productImageUrl ? { commerce: { imageUrl: s.productImageUrl } } : {}),
   };
 
   const shippingView = isCommerce && s.shipping ? buildShippingView(s.shipping) : null;

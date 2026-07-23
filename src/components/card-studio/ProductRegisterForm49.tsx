@@ -163,10 +163,15 @@ export function ProductRegisterForm({
   value,
   onChange,
   accent,
+  photoUrl,
+  onEditPhoto,
 }: {
   value: ProductForm;
   onChange: (patch: Partial<ProductForm>) => void;
   accent: string;
+  /** UI-5-T2-E5a — 상품 사진 = 스텝 1 단일 입구. 폼은 표시 전용(업로드 경로 0). */
+  photoUrl?: string;
+  onEditPhoto?: () => void;
 }) {
   const set = <K extends keyof ProductForm>(key: K, v: ProductForm[K]) => onChange({ [key]: v } as Partial<ProductForm>);
   const profit = profitOf(value.price, value.cost);
@@ -187,16 +192,34 @@ export function ProductRegisterForm({
 
   return (
     <div className="space-y-4">
-      {/* 상품 사진 */}
+      {/* UI-5-T2-E5a — 상품 사진 = 표시 전용(스텝 1이 유일 업로드 입구). 업로드 input 없음. */}
       <Field label="상품 사진">
-        <div className="flex aspect-[16/10] items-center justify-center rounded-xl border-2 border-dashed border-[#D4D4D4] bg-[#F4F4F5]">
-          <span className="flex flex-col items-center gap-1.5 text-[#8A8A8A]">
+        {photoUrl ? (
+          <div className="space-y-1.5">
+            <div className="aspect-[16/10] overflow-hidden rounded-xl bg-[#F4F4F5]">
+              <img src={photoUrl} alt="상품 사진" className="h-full w-full object-cover" />
+            </div>
+            <button
+              type="button"
+              onClick={onEditPhoto}
+              className="text-[12px] font-bold"
+              style={{ color: accent }}
+            >
+              사진 바꾸기
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onEditPhoto}
+            className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-[#D4D4D4] bg-[#F4F4F5] text-[#8A8A8A]"
+          >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E6E6E6] text-[#525252]">
               <ImageIcon className="h-5 w-5" strokeWidth={2} />
             </span>
-            <span className="text-[11px] font-semibold">사진 선택</span>
-          </span>
-        </div>
+            <span className="text-[11px] font-semibold">사진 올리러 가기</span>
+          </button>
+        )}
       </Field>
 
       {/* 상품명 */}
