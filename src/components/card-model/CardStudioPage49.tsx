@@ -63,6 +63,7 @@ import { CardModelBody } from "@/components/card-model/CardModelBody";
 import { SHIP_STAGES, type CardModel } from "@/components/card-model/card-model.types";
 import { studio49ToCardModel } from "@/components/card-studio/studio49-to-card";
 import { LingoAssembleOverlay } from "@/components/card-studio/LingoAssembleOverlay49";
+import { InlineDatePicker } from "@/components/lingo/InlineDatePicker"; // UI-5-T2-E5g — 공용 캘린더 재사용(무수정).
 
 // =============================================================================
 // LinkDrop "카드 스튜디오" — 게임 카드 강화(포지) 경험.
@@ -299,6 +300,35 @@ function buildDateList(count: number) {
 }
 const DATE_LIST = buildDateList(45);
 const DATE_OPTIONS = DATE_LIST.map((d) => d.label);
+
+// UI-5-T2-E5g — ISO("YYYY-MM-DD") ↔ 라벨("M/D(요)") 정본(45 UI-4f isoOfDate/labelOfIso 바이트 동일).
+//   구 인덱스(saleStartIdx) 폐기 락 계승 — 저장·표기 포맷 불변.
+const isoOfDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const labelOfIso = (iso: string) => {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${m}/${d}(${WEEKDAY_KR[new Date(y, m - 1, d).getDay()]})`;
+};
+function defaultSaleRange(): { start: string; end: string } {
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+  const end = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 6);
+  return { start: isoOfDate(base), end: isoOfDate(end) };
+}
+// 상품 유형 축 — 신선(제철)·가공(생산)·공산(판매). 유형 = 라벨·칸 구성만 전환(날짜 상태 유지).
+type ProductKind = "fresh" | "processed" | "manufactured";
+const PRODUCT_KIND_META: Record<ProductKind, { chip: string; calendar: string; extra: "harvest" | "produce" | null }> = {
+  fresh: { chip: "신선", calendar: "제철 캘린더", extra: "harvest" },
+  processed: { chip: "가공", calendar: "생산 캘린더", extra: "produce" },
+  manufactured: { chip: "공산", calendar: "판매 캘린더", extra: null },
+};
+// 도우미 문구 유형 분기(날짜 = 숫자 불가침 · AI 창작 금지 · needsConfirm).
+const SEASONAL_HELPER: Record<ProductKind, string> = {
+  fresh: "수확은 언제쯤이세요? 제철 캘린더로 판매기간과 수확·발송일을 정해요.",
+  processed: "만드는 날짜 기준으로 — 생산 캘린더로 판매기간과 생산·발송일을 정해요.",
+  manufactured: "언제까지 파실 건가요? 판매 캘린더로 판매기간과 발송일을 정해요.",
+};
 // 09:00 ~ 21:00, 1시간 단위
 const TIME_OPTIONS = Array.from({ length: 13 }, (_, i) => `${String(9 + i).padStart(2, "0")}:00`);
 // 배송 택배사 선택지
@@ -577,9 +607,19 @@ export function CardStudioPage() {
   // 블록별 설정값 (장착과 동시에 채움 → 카드에 실시간 반영)
   const [cfgDate, setCfgDate] = useState(DATE_OPTIONS[0]);
   const [cfgTime, setCfgTime] = useState(TIME_OPTIONS[1]);
-  // 판매 캘린더 — 판매 기간(시작일 인덱스 ~ 종료일 인덱스)
-  const [saleStartIdx, setSaleStartIdx] = useState(0);
-  const [saleEndIdx, setSaleEndIdx] = useState(6);
+  // UI-5-T2-E5g — 판매 캘린더 = ISO 기간(구 인덱스 폐기). 유형별(제철·생산·판매) 단일일 캘린더 병설.
+  const [productKind, setProductKind] = useState<ProductKind>("fresh");
+  const [saleStartIso, setSaleStartIso] = useState("");
+  const [saleEndIso, setSaleEndIso] = useState("");
+  const [harvestIso, setHarvestIso] = useState(""); // 신선 = 수확 예정일.
+  const [produceIso, setProduceIso] = useState(""); // 가공 = 생산일.
+  const [shipIso, setShipIso] = useState(""); // 전 유형 = 발송 예정일.
+  // 판매기간 기본값(오늘~+6, 45 :806 동형). SSR 안전: 마운트 후 확정.
+  useEffect(() => {
+    const r = defaultSaleRange();
+    setSaleStartIso((s) => s || r.start);
+    setSaleEndIso((s) => s || r.end);
+  }, []);
   // 복수 날짜 · 시간대 · 잔여 자리 (예약 설정과 동일한 개념)
   const [cfgDates, setCfgDates] = useState<string[]>([DATE_OPTIONS[0]]);
   const [cfgTimes, setCfgTimes] = useState<string[]>([TIME_OPTIONS[1]]);
@@ -826,8 +866,16 @@ export function CardStudioPage() {
     // cfg 전 필드
     setCfgDate(DATE_OPTIONS[0]);
     setCfgTime(TIME_OPTIONS[1]);
-    setSaleStartIdx(0);
-    setSaleEndIdx(6);
+    {
+      // E5g — 판매기간 기본값 복원 + 유형·단일일 날짜 초기화(파괴 아님 = 새 카드 시작).
+      const r = defaultSaleRange();
+      setSaleStartIso(r.start);
+      setSaleEndIso(r.end);
+      setProductKind("fresh");
+      setHarvestIso("");
+      setProduceIso("");
+      setShipIso("");
+    }
     setCfgDates([DATE_OPTIONS[0]]);
     setCfgTimes([TIME_OPTIONS[1]]);
     setCfgSlotsByDate({ [DATE_OPTIONS[0]]: 4 });
@@ -1325,8 +1373,12 @@ export function CardStudioPage() {
       cfgTimes: [...cfgTimes],
       cfgPhone,
       cfgMap,
-      saleStartIdx,
-      saleEndIdx,
+      productKind, // E5g — 유형·ISO 날짜 스냅샷(구 인덱스 폐기).
+      saleStartIso,
+      saleEndIso,
+      harvestIso,
+      produceIso,
+      shipIso,
       selectedVideo, // T1n — 영상 선택도 스냅샷(전체 되돌리기 정합).
       currentStep, // T2-E2a(5) — 스텝 진행도 스냅샷.
       completedSteps: new Set(completedSteps),
@@ -1394,7 +1446,8 @@ export function CardStudioPage() {
           const isSelect = isClip || isImage;
           items.push({
             id: b.id,
-            label: isClip ? "핵심구간" : isImage ? "매장 사진" : b.label,
+            // E5g — 판매기간 요약 라벨에 유형 캘린더 명칭 반영(제철·생산·판매).
+            label: isClip ? "핵심구간" : isImage ? "매장 사진" : b.id === "seasonal" ? PRODUCT_KIND_META[productKind].calendar : b.label,
             value: "장착 완료",
             needsConfirm: NUMBER_CRITICAL_BLOCKS.has(b.id) || isSelect,
             select: isSelect,
@@ -1434,8 +1487,12 @@ export function CardStudioPage() {
       setCfgTimes(s.cfgTimes);
       setCfgPhone(s.cfgPhone);
       setCfgMap(s.cfgMap);
-      setSaleStartIdx(s.saleStartIdx);
-      setSaleEndIdx(s.saleEndIdx);
+      if (s.productKind) setProductKind(s.productKind); // E5g — 유형·ISO 날짜 복원.
+      if (typeof s.saleStartIso === "string") setSaleStartIso(s.saleStartIso);
+      if (typeof s.saleEndIso === "string") setSaleEndIso(s.saleEndIso);
+      if (typeof s.harvestIso === "string") setHarvestIso(s.harvestIso);
+      if (typeof s.produceIso === "string") setProduceIso(s.produceIso);
+      if (typeof s.shipIso === "string") setShipIso(s.shipIso);
       setSelectedVideo(s.selectedVideo ?? null); // T1n — 영상 선택 복원.
       if (typeof s.currentStep === "number") setCurrentStep(s.currentStep); // T2-E2a — 스텝 진행 복원.
       if (s.completedSteps) setCompletedSteps(new Set(s.completedSteps));
@@ -1795,8 +1852,8 @@ export function CardStudioPage() {
       subtitle: cfgSubtitle,
       date: cfgDate,
       time: cfgTime,
-      saleStart: DATE_OPTIONS[saleStartIdx],
-      saleEnd: DATE_OPTIONS[saleEndIdx],
+      saleStart: labelOfIso(saleStartIso),
+      saleEnd: labelOfIso(saleEndIso),
       coupon: cfgCoupon,
       productName: cfgProductName,
       productPrice: cfgProductPrice,
@@ -2164,8 +2221,8 @@ export function CardStudioPage() {
     productPoints: cfgProduct.sellingPoints.map((p) => p.trim()).filter(Boolean),
     productUnitLabel,
     facilities: cfgFacilities.map((f) => f.text.trim()).filter(Boolean),
-    saleStart: DATE_OPTIONS[saleStartIdx],
-    saleEnd: DATE_OPTIONS[saleEndIdx],
+    saleStart: labelOfIso(saleStartIso), // E5g — 정본 기간 표기(발행 라벨 포맷 불변 "M/D(요)").
+    saleEnd: labelOfIso(saleEndIso),
     dates: cfgDates,
     times: cfgTimes,
     slotsByDate: cfgSlotsByDate,
@@ -2686,7 +2743,9 @@ export function CardStudioPage() {
                       <div className="min-w-0 flex-1">
                         {helperPhase === "guide" && (
                           <p className="text-[12px] font-semibold leading-relaxed text-[#16161D] [word-break:keep-all]">
-                            {HELPER_COPY[helperCopyKey ?? activeBlock.id] ?? HELPER_COPY[activeBlock.id] ?? "여기에서 값을 정해 주세요."}
+                            {activeBlock.id === "seasonal"
+                              ? SEASONAL_HELPER[productKind] /* E5g — 유형 분기(신선·가공·공산) */
+                              : (HELPER_COPY[helperCopyKey ?? activeBlock.id] ?? HELPER_COPY[activeBlock.id] ?? "여기에서 값을 정해 주세요.")}
                           </p>
                         )}
                         {helperPhase === "done" && (
@@ -2733,67 +2792,86 @@ export function CardStudioPage() {
               {(activeBlock.id === "calendar" || activeBlock.id === "seasonal") && (
                 <div className="space-y-2.5">
                   {activeBlock.id === "seasonal" ? (
-                    // 판매 캘린더 — 판매 기간(시작일 ~ 종료일)
+                    // UI-5-T2-E5g — 상품 유형별 캘린더(제철·생산·판매). 전부 InlineDatePicker 단일 컴포넌트.
+                    //   v0 날짜 칩 나열 폐기. 유형 전환 = 라벨·칸 구성만(날짜 상태 유지 — 파괴 리셋 금지).
                     <div className="space-y-3">
-                      <div className="flex items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5">
-                        <Calendar className="h-4 w-4 shrink-0 text-[#525252]" strokeWidth={2.25} />
-                        <span className="text-[12px] font-semibold text-[#525252]">판매 기간</span>
-                        <span className="ml-auto text-[12px] font-bold tabular-nums text-[#0A0A0A]">
-                          {DATE_OPTIONS[saleStartIdx]}
-                          {saleEndIdx !== saleStartIdx ? ` ~ ${DATE_OPTIONS[saleEndIdx]}` : ""}
-                          <span className="ml-1.5 text-[11px] font-semibold text-[#8A8A8A]">
-                            ({saleEndIdx - saleStartIdx + 1}일간)
-                          </span>
-                        </span>
-                      </div>
-
-                      {/* 시작일 */}
-                      <div>
-                        <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">시작일</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {DATE_OPTIONS.slice(0, 10).map((d, i) => (
+                      {/* 유형 칩 — [신선][가공][공산] */}
+                      <div className="flex gap-1.5">
+                        {(Object.keys(PRODUCT_KIND_META) as ProductKind[]).map((k) => {
+                          const on = productKind === k;
+                          return (
                             <button
-                              key={d}
-                              onClick={() => {
-                                setSaleStartIdx(i);
-                                if (i > saleEndIdx) setSaleEndIdx(i);
-                              }}
-                              className="rounded-lg px-2.5 py-1.5 text-[12px] font-semibold transition-colors"
-                              style={
-                                saleStartIdx === i
-                                  ? { backgroundColor: accent, color: "#fff" }
-                                  : { backgroundColor: "#F4F4F5", color: "#525252" }
-                              }
+                              key={k}
+                              onClick={() => setProductKind(k)}
+                              aria-pressed={on}
+                              className="min-h-[44px] flex-1 rounded-xl text-[13px] font-bold transition-colors"
+                              style={on ? { backgroundColor: accent, color: "#fff" } : { backgroundColor: "#F4F4F5", color: "#525252" }}
                             >
-                              {d}
+                              {PRODUCT_KIND_META[k].chip}
                             </button>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
 
-                      {/* 종료일 — 시작일 이후만 선택 가능 */}
+                      {/* 유형 캘린더 명칭 */}
+                      <p className="text-[12px] font-bold text-[#0A0A0A] tracking-ko">
+                        {PRODUCT_KIND_META[productKind].calendar}
+                      </p>
+
+                      {/* 판매기간(range) — 전 유형 공통 */}
                       <div>
-                        <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">종료일</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {DATE_OPTIONS.slice(0, 10).map((d, i) => {
-                            const disabled = i < saleStartIdx;
-                            return (
-                              <button
-                                key={d}
-                                disabled={disabled}
-                                onClick={() => setSaleEndIdx(i)}
-                                className="rounded-lg px-2.5 py-1.5 text-[12px] font-semibold transition-colors disabled:opacity-35"
-                                style={
-                                  saleEndIdx === i
-                                    ? { backgroundColor: accent, color: "#fff" }
-                                    : { backgroundColor: "#F4F4F5", color: "#525252" }
-                                }
-                              >
-                                {d}
-                              </button>
-                            );
-                          })}
+                        <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">판매기간</p>
+                        <InlineDatePicker
+                          mode="range"
+                          startIso={saleStartIso || null}
+                          endIso={saleEndIso || null}
+                          onChange={(s, e) => {
+                            setSaleStartIso(s);
+                            setSaleEndIso(e ?? s);
+                          }}
+                          accent={accent}
+                          summaryLabel="판매기간"
+                        />
+                      </div>
+
+                      {/* 수확 예정일(single) — 신선만 */}
+                      {productKind === "fresh" && (
+                        <div>
+                          <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">수확 예정일</p>
+                          <InlineDatePicker
+                            mode="single"
+                            startIso={harvestIso || null}
+                            onChange={(s) => setHarvestIso(s)}
+                            accent={accent}
+                            summaryLabel="수확 예정일"
+                          />
                         </div>
+                      )}
+
+                      {/* 생산일(single) — 가공만 */}
+                      {productKind === "processed" && (
+                        <div>
+                          <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">생산일</p>
+                          <InlineDatePicker
+                            mode="single"
+                            startIso={produceIso || null}
+                            onChange={(s) => setProduceIso(s)}
+                            accent={accent}
+                            summaryLabel="생산일"
+                          />
+                        </div>
+                      )}
+
+                      {/* 발송 예정일(single) — 전 유형 공통 */}
+                      <div>
+                        <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">발송 예정일</p>
+                        <InlineDatePicker
+                          mode="single"
+                          startIso={shipIso || null}
+                          onChange={(s) => setShipIso(s)}
+                          accent={accent}
+                          summaryLabel="발송 예정일"
+                        />
                       </div>
                     </div>
                   ) : (
