@@ -28,6 +28,8 @@ import {
   Send,
   Eye,
   Play,
+  Youtube,
+  PenLine,
   Lock,
   ChevronRight,
   Store,
@@ -733,6 +735,7 @@ export function CardStudioPage() {
   const [videoQuery, setVideoQuery] = useState("");
   const [videoLink, setVideoLink] = useState("");
   const [videoResults, setVideoResults] = useState<DiscoverCandidate[]>([]);
+  const [videoShowCount, setVideoShowCount] = useState(12); // UI-5-T2-E1b — 클라 노출 상한(구 5 → 12) + [더 보기] 증분.
   const [videoSearching, setVideoSearching] = useState(false);
   const [videoSearched, setVideoSearched] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
@@ -1612,6 +1615,7 @@ export function CardStudioPage() {
   async function runVideoSearch() {
     const k = videoQuery.trim();
     if (!k || videoSearching) return;
+    setVideoShowCount(12); // E1b — 새 검색마다 노출 상한 초기화.
     // (c) URL 붙여넣기 — oembed 실값으로 후보 1건(45 :1983–2024).
     const pastedId = parseYouTubeId(k);
     if (pastedId) {
@@ -1665,7 +1669,10 @@ export function CardStudioPage() {
         body: JSON.stringify({ keyword: k }),
       });
       const json = (await res.json()) as { candidates?: DiscoverCandidate[]; message?: string };
-      const cands = res.ok ? (json.candidates ?? []).filter((c) => (c.provider as string) === "youtube") : [];
+      // E1b — provider 확장: youtube + naver_blog(Duke 요청). discover 반환 순서 존중(재정렬 없음).
+      const cands = res.ok
+        ? (json.candidates ?? []).filter((c) => c.provider === "youtube" || c.provider === "naver_blog")
+        : [];
       if (cands.length > 0) {
         setVideoResults(cands);
       } else {
@@ -3285,35 +3292,56 @@ export function CardStudioPage() {
                       </p>
                     )}
                     {!videoSearching && videoResults.length > 0 && (
-                      <div className="flex flex-col gap-1.5">
-                        {videoResults.slice(0, 5).map((c) => {
-                          const slot = toVideoSlot(c);
-                          const on = selectedVideo?.videoId === slot.videoId;
+                      <div className="flex max-h-[364px] flex-col gap-1.5 overflow-y-auto">
+                        {/* E1b — 상한 12(스크롤) · 소스 배지(유튜브/블로그) · 블로그=Case B(선택 시 안내, 가짜 반영 금지). */}
+                        {videoResults.slice(0, videoShowCount).map((c) => {
+                          const isYoutube = c.provider === "youtube";
+                          const slot = isYoutube ? toVideoSlot(c) : null;
+                          const on = isYoutube && selectedVideo?.videoId === slot!.videoId;
+                          const badge = c.provider === "naver_blog" ? { label: "블로그", Icon: PenLine } : { label: "YouTube", Icon: Youtube };
+                          const thumb = isYoutube ? slot!.thumbnailUrl : (c.thumbnail_url ?? "");
                           return (
                             <button
-                              key={c.source_id}
-                              onClick={() => void selectVideo(c)}
+                              key={`${c.provider}|${c.source_id}`}
+                              onClick={() =>
+                                isYoutube
+                                  ? void selectVideo(c)
+                                  : setStepToast("블로그 카드는 준비 중이에요") /* Case B — 가짜 반영 금지 */
+                              }
                               className="flex min-h-[56px] items-center gap-2.5 rounded-xl bg-white px-2.5 py-2 text-left transition-transform active:scale-[0.99]"
                               style={{ boxShadow: `inset 0 0 0 1px ${on ? "#1D4ED8" : "#E8E8EC"}` }}
                             >
-                              {/* 썸네일 = 실데이터(i.ytimg mqdefault, toVideoSlot 계승). */}
                               <span className="relative flex h-11 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#0F172A]">
-                                {slot.thumbnailUrl ? (
-                                  <img src={slot.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                                {thumb ? (
+                                  <img src={thumb} alt="" loading="lazy" className="h-full w-full object-cover" />
                                 ) : null}
-                                <Play className="absolute h-4 w-4 text-white drop-shadow" strokeWidth={2.5} fill="currentColor" />
+                                {isYoutube && <Play className="absolute h-4 w-4 text-white drop-shadow" strokeWidth={2.5} fill="currentColor" />}
                               </span>
                               <span className="min-w-0 flex-1">
-                                <span className="block truncate text-[12.5px] font-bold text-[#0A0A0A]">{c.title ?? "영상"}</span>
-                                <span className="mt-0.5 block truncate text-[11px] font-medium text-[#8A8A8A]">
-                                  {c.author_name ?? "YouTube"}
-                                  {slot.durationLabel ? ` · ${slot.durationLabel}` : ""}
+                                <span className="block truncate text-[12.5px] font-bold text-[#0A0A0A]">
+                                  {c.title ?? (isYoutube ? "영상" : "블로그 글")}
+                                </span>
+                                <span className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-[#8A8A8A]">
+                                  <badge.Icon className="h-3 w-3 shrink-0" strokeWidth={2.25} />
+                                  <span className="truncate">
+                                    {badge.label}
+                                    {c.author_name ? ` · ${c.author_name}` : ""}
+                                    {isYoutube && slot!.durationLabel ? ` · ${slot!.durationLabel}` : ""}
+                                  </span>
                                 </span>
                               </span>
                               {on && <Check className="h-4 w-4 shrink-0 text-[#1D4ED8]" strokeWidth={2.5} />}
                             </button>
                           );
                         })}
+                        {videoResults.length > videoShowCount && (
+                          <button
+                            onClick={() => setVideoShowCount((n) => n + 12)}
+                            className="flex min-h-[44px] items-center justify-center rounded-xl bg-[#F4F4F5] text-[12px] font-bold text-[#525252] transition-transform active:scale-[0.99]"
+                          >
+                            더 보기 ({videoResults.length - videoShowCount}개)
+                          </button>
+                        )}
                       </div>
                     )}
                     {selectedVideo && (
