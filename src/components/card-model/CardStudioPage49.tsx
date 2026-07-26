@@ -2888,11 +2888,14 @@ export function CardStudioPage() {
                   needsConfirm={NUMBER_CRITICAL_BLOCKS.has(activeBlock.id) || CLIP_BLOCKS.has(activeBlock.id) || IMAGE_BLOCKS.has(activeBlock.id)}
                 />
               )}
-              {/* UI-5-T1k(B2·3·4·5) — 미확정 칸 도우미 말풍선(패널 상단 부착 · 화면 미추종). 값 자동입력 없음(안내만). */}
+              {/* UI-5-T1k(B2·3·4·5)·E4e — 미확정 칸 도우미 말풍선(값 자동입력 없음 · 안내만).
+                  E4e — absolute 부착(-top-2 -translate-y-full z-20) 폐기 → 패널 안쪽 최상단 "흐름 배치".
+                  오버레이는 주변 레이아웃을 모르므로 위 덱 카드와 겹침(간격 조정으론 재발 가능) — 흐름 참여가 근본 해결.
+                  세로 스택: 말풍선 → (내부 done/relay/E2b 합류) 칩 → 폼 내용. 말꼬리 = 위 방향(칸 부착 느낌 유지). */}
               {helperTarget === activeBlock.id && (
-                <div className="absolute left-2 right-2 -top-2 z-20 -translate-y-full">
+                <div className="lingo-bubble-in mb-2">
                   <div className="relative rounded-2xl bg-white p-3 [box-shadow:0_16px_36px_-14px_rgba(15,23,42,0.4),0_0_0_1px_#E8E8EC]">
-                    <span className="absolute -bottom-1.5 left-6 h-3 w-3 rotate-45 bg-white [box-shadow:2px_2px_0_#E8E8EC]" aria-hidden="true" />
+                    <span className="absolute -top-1.5 left-6 h-3 w-3 rotate-45 bg-white [box-shadow:-2px_-2px_0_#E8E8EC]" aria-hidden="true" />
                     <div className="flex items-start gap-2">
                       <span className="mt-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-1.5 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
                         ✦ 링고
