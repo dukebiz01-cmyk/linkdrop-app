@@ -35,11 +35,14 @@ export function LingoMascot({
   tone = "blue",
   className,
   title = "링고AI",
+  spin = false,
 }: {
   size?: number
   tone?: LingoTone
   className?: string
   title?: string
+  /** UI-5-T3-L1 — streaming(생각 중) 상태 언어: 궤도 링·노드 회전. 기본 false(기존 소비처 무영향). */
+  spin?: boolean
 }) {
   const t = TONE[tone]
   const gid = `lingo-grad-${tone}`
@@ -78,20 +81,23 @@ export function LingoMascot({
         transform="rotate(-22 37 46)"
       />
 
-      {/* 궤도 링 — 코어를 감싸는 얇은 타원, 살아있는 AI 신호 */}
-      <ellipse
-        cx="53"
-        cy="64"
-        rx="20"
-        ry="8.5"
-        fill="none"
-        stroke={t.orbit}
-        strokeWidth={2}
-        opacity={0.9}
-        transform="rotate(-28 53 64)"
-      />
-      {/* 궤도 위 작은 노드 */}
-      <circle cx="70.5" cy="55.5" r="2.6" fill={t.orbit} />
+      {/* 궤도 링 — 코어를 감싸는 얇은 타원, 살아있는 AI 신호. L1 — spin = 궤도 그룹 회전(생각 중). */}
+      {spin && <style>{`@keyframes lingo-orbit-spin{to{transform:rotate(360deg)}}`}</style>}
+      <g style={spin ? { transformOrigin: "53px 64px", animation: "lingo-orbit-spin 1.1s linear infinite" } : undefined}>
+        <ellipse
+          cx="53"
+          cy="64"
+          rx="20"
+          ry="8.5"
+          fill="none"
+          stroke={t.orbit}
+          strokeWidth={2}
+          opacity={0.9}
+          transform="rotate(-28 53 64)"
+        />
+        {/* 궤도 위 작은 노드 */}
+        <circle cx="70.5" cy="55.5" r="2.6" fill={t.orbit} />
+      </g>
 
       {/* AI 코어 — 물방울 안에 깃든 지능(정제된 4갈래 반짝임) */}
       <path
@@ -111,11 +117,14 @@ export function LingoAvatar({
   size = 56,
   background = "solid",
   className,
+  spin = false,
 }: {
   size?: number
   /** solid = 파란 그라데이션 원 + 흰 심볼 / tint = 연한 파란 원 + 파란 심볼 */
   background?: "solid" | "tint"
   className?: string
+  /** L1 — 궤도 회전 패스스루(생각 중 상태 언어). */
+  spin?: boolean
 }) {
   const isSolid = background === "solid"
   return (
@@ -131,7 +140,7 @@ export function LingoAvatar({
       }}
       aria-hidden="true"
     >
-      <LingoMascot size={size * 0.72} tone={isSolid ? "white" : "blue"} />
+      <LingoMascot size={size * 0.72} tone={isSolid ? "white" : "blue"} spin={spin} />
     </span>
   )
 }

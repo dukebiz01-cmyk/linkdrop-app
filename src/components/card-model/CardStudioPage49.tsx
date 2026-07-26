@@ -50,6 +50,7 @@ import {
   Phone,
   MapPin,
   Mic,
+  Volume2,
   Truck,
   Trash2,
   Clapperboard,
@@ -60,6 +61,10 @@ import {
   Pencil,
   ListOrdered,
 } from "lucide-react";
+// UI-5-T3-L1 — 오브=마이크(45 S2b 이식): 즉시 청취 시퀀스·사운드·게이트(보존 lib 무수정 소비만).
+import { primeAudio, playListenStart, playListenStop } from "@/lib/lingo-sound";
+import { canUseSpeechRecognition, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
+import { LingoAvatar } from "@/components/brand/LingoMascot";
 // UI-5-T2-E3 — 위지윅: 미리보기 = 정본 CardModelBody(거울) + 어댑터. CardBody49(v0 목업) 폐기.
 import { CardModelBody } from "@/components/card-model/CardModelBody";
 import { SHIP_STAGES, type CardModel } from "@/components/card-model/card-model.types";
@@ -1192,6 +1197,18 @@ export function CardStudioPage() {
   const [thinking, setThinking] = useState(false);
   const [interim, setInterim] = useState("");
   const [voiceSupported, setVoiceSupported] = useState(true);
+  // UI-5-T3-L1 — 오브=마이크 상태 언어: 낭독 중(speaking)·눌림 피드백·길게(500ms) 타이머·음성 고스트 안내.
+  const [speaking, setSpeaking] = useState(false);
+  const [orbPressed, setOrbPressed] = useState(false); // S2b — pointerDown 즉시 피드백(100ms 이내 scale-95).
+  const fabLongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fabLongFiredRef = useRef(false);
+  const [voiceGhost, setVoiceGhost] = useState<string | null>(null); // "듣고 있어요" 등 텍스트 안내(낭독 0).
+  const voiceGhostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showVoiceGhost = (msg: string, ms = 5000) => {
+    setVoiceGhost(msg);
+    if (voiceGhostTimerRef.current) clearTimeout(voiceGhostTimerRef.current);
+    voiceGhostTimerRef.current = setTimeout(() => setVoiceGhost(null), ms);
+  };
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   // UI-5-T2-E4b — 인사 행동 칩(1스텝 하러 가기 / 알아서 할게요) 노출. 마운트·모드전환 시 재개, 상호작용 시 닫힘.
   const [greetingChipsOpen, setGreetingChipsOpen] = useState(true);
@@ -1536,11 +1553,28 @@ export function CardStudioPage() {
       y: Math.min(Math.max(FAB_MARGIN, y), maxY),
     };
   }
+  // UI-5-T3-L1 — 오브 탭 계약(45 S2b :5895-5925 이식 + 49 드래그 병존): 짧게 = 즉시 청취(handleOrbTap) /
+  //   길게(500ms, pointer 직접 구현) = 패널 열기(현행 유지 — L2에서 기록실 시트로 교체 예정) / 끌면 = 이동.
+  function clearFabLongTimer() {
+    if (fabLongTimerRef.current) {
+      clearTimeout(fabLongTimerRef.current);
+      fabLongTimerRef.current = null;
+    }
+  }
   function onFabPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
     const rect = fabRef.current?.getBoundingClientRect();
     if (!rect) return;
     fabDrag.current = { active: true, moved: false, dx: e.clientX - rect.left, dy: e.clientY - rect.top };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    setOrbPressed(true); // S2b — 누르는 순간 즉시 피드백(transition 100ms).
+    fabLongFiredRef.current = false;
+    clearFabLongTimer();
+    fabLongTimerRef.current = setTimeout(() => {
+      fabLongTimerRef.current = null;
+      fabLongFiredRef.current = true; // 길게 = 패널(이때 짧은 탭 시퀀스 발화 금지 — 상호배타).
+      setPanelOffset({ x: 0, y: 0 });
+      setLingoOpen(true);
+    }, 500);
   }
   function onFabPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
     if (!fabDrag.current.active) return;
@@ -1552,6 +1586,8 @@ export function CardStudioPage() {
       if (dist > 6) {
         fabDrag.current.moved = true;
         setFabDragging(true);
+        clearFabLongTimer(); // 끌기 시작 = 길게/탭 모두 취소.
+        setOrbPressed(false);
       }
     }
     if (fabDrag.current.moved) setFabPos(clampFab(nx, ny));
@@ -1562,6 +1598,9 @@ export function CardStudioPage() {
     fabDrag.current.active = false;
     fabDrag.current.moved = false;
     setFabDragging(false);
+    setOrbPressed(false);
+    const hadTimer = !!fabLongTimerRef.current;
+    clearFabLongTimer();
     if (wasDrag) {
       // 가까운 좌/우 가장자리에 붙이기
       setFabPos((prev) => {
@@ -1570,9 +1609,8 @@ export function CardStudioPage() {
         const snapX = prev.x + FAB_SIZE / 2 < mid ? FAB_MARGIN : window.innerWidth - FAB_SIZE - FAB_MARGIN;
         return clampFab(snapX, prev.y);
       });
-    } else {
-      setPanelOffset({ x: 0, y: 0 });
-      setLingoOpen(true);
+    } else if (hadTimer && !fabLongFiredRef.current) {
+      handleOrbTap(); // L1 — 짧은 탭 = 즉시 청취(구 setLingoOpen(true) 계약 교체).
     }
   }
 
@@ -1696,8 +1734,55 @@ export function CardStudioPage() {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = "ko-KR";
       u.rate = 1.05;
+      // L1 — 낭독 상태 추적(오브 배지 Volume2 전환). cancel 도 onend 발화 → false 복귀.
+      u.onstart = () => setSpeaking(true);
+      u.onend = () => setSpeaking(false);
+      u.onerror = () => setSpeaking(false);
       window.speechSynthesis.speak(u);
-    } catch {}
+    } catch {
+      setSpeaking(false);
+    }
+  }
+
+  // UI-5-T3-L1 — 오브 짧은 탭 = 즉시 청취(45 S2b handleOrbTap :3487-3525 이식 · 낭독 대기 0).
+  //   시퀀스: primeAudio(제스처 최상단·오디오 언락) → streaming 가드 → 청취 중 재탭=중지 →
+  //   지원 게이트(불능 = 안내+패널 폴백) → stopSpeaking(낭독 끊기) → 띠딩 → 즉시 startListening.
+  //   안내는 텍스트 고스트만("듣고 있어요 — 말씀하세요") — speakThenProceed 류 낭독 지연 0(S2b :3515-3516).
+  //   인앱(inAppNoMic) 핸드오프: 49 기존 경로 부재 → 지원 게이트 폴백이 커버(기존 계약 무변).
+  function handleOrbTap() {
+    primeAudio(); // 오디오 언락은 제스처 컨텍스트 최상단(45 :3489).
+    if (thinking) return; // streaming 가드(45 :3490 동형).
+    if (listening) {
+      // 청취 중 재탭 = 중지(낮은 톤 + 종료 — 45 :3501-3508 동형).
+      playListenStop();
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+      setListening(false);
+      setInterim("");
+      setVoiceGhost(null);
+      return;
+    }
+    // 탭 시점 재판정 — 불능이면 안내 + 패널 폴백(45 :3509-3514 동형).
+    if (!canUseSpeechRecognition() || !recognitionRef.current) {
+      showVoiceGhost(VOICE_UNSUPPORTED_NOTICE);
+      setPanelOffset({ x: 0, y: 0 });
+      setLingoOpen(true);
+      return;
+    }
+    // 낭독 중 탭 = 끊고 즉시 청취(45 :3517 stopSpeaking 동형).
+    window.speechSynthesis?.cancel();
+    setSpeaking(false);
+    playListenStart(); // 띠딩(청취 시작음 — 45 :3520).
+    setInterim("");
+    try {
+      recognitionRef.current.start();
+      setListening(true);
+      showVoiceGhost("듣고 있어요 — 말씀하세요"); // 텍스트 안내만(45 :3524 동형).
+    } catch {
+      // 중복 start 등 — 상태만 정합.
+      setListening(true);
+    }
   }
 
   function toggleListening() {
@@ -5380,7 +5465,7 @@ export function CardStudioPage() {
               내부 전용인데 패널 기본 닫힘(초기 false·E4c 양보) → 미노출. 패널 열림 여부와 무관하게 FAB 옆 노출.
               상태 = greetingChipsOpen 단일 공유(패널 내부 인사·칩 그대로 — 이중 관리 금지).
               소멸 = 칩 탭·대화 시작(sendToLingo)·스텝 진입(enterStep) 3조건 계승. 재소환 말풍선과 상호 배타. */}
-          {!lingoOpen && greetingChipsOpen && !yieldBubble && !assembling && !assembleSummary && (
+          {!lingoOpen && greetingChipsOpen && !yieldBubble && !assembling && !assembleSummary && !listening && !voiceGhost && (
             <div className="fixed bottom-[262px] right-5 z-40 w-[min(78vw,280px)] animate-fade-in rounded-2xl bg-white p-3 [box-shadow:0_16px_36px_-14px_rgba(15,23,42,0.4),0_0_0_1px_#E8E8EC]">
               <p className="flex items-start gap-1.5">
                 <span className="mt-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-1.5 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
@@ -5421,34 +5506,69 @@ export function CardStudioPage() {
             </div>
           )}
 
-          {/* UI-5-T1f(4) — 연출 중 개별 숨김 제거: 딤이 FAB를 덮어 무대화 대체(중복 로직 정리). */}
+          {/* UI-5-T3-L1 — 음성 고스트: 청취 안내("듣고 있어요")·interim 실시간 표시(낭독 0 — 텍스트만). */}
+          {!lingoOpen && (voiceGhost || (listening && interim)) && (
+            <div className="fixed bottom-[262px] right-5 z-40 max-w-[240px] animate-fade-in rounded-2xl bg-[#16161D] px-3.5 py-2.5 [box-shadow:0_16px_36px_-14px_rgba(15,23,42,0.5)]">
+              {voiceGhost && (
+                <p className="text-[12px] font-bold leading-snug text-white tracking-ko [word-break:keep-all]">{voiceGhost}</p>
+              )}
+              {listening && interim && (
+                <p className="mt-0.5 text-[12px] font-medium italic leading-snug text-white/70 [word-break:keep-all]">{interim}</p>
+              )}
+              <span className="absolute -bottom-1 right-7 h-3 w-3 rotate-45 bg-[#16161D]" aria-hidden="true" />
+            </div>
+          )}
+
+          {/* UI-5-T1f(4) — 연출 중 개별 숨김 제거: 딤이 FAB를 덮어 무대화 대체(중복 로직 정리).
+              UI-5-T3-L1 — 오브=마이크 상태 언어: 평시 마스코트+빨간 Mic 배지 / listening 흰 원+빨간 Mic+펄스
+              (56px 동일 크기 — 점프 0) / speaking 배지 Volume2 / thinking 마스코트 궤도 회전(spin). */}
           {!lingoOpen && (
             <button
               ref={fabRef}
-              aria-label="링고AI 열기 · 길게 눌러 옮기기"
+              aria-label="링고AI — 짧게 눌러 말하기, 길게 눌러 창 열기"
               onPointerDown={onFabPointerDown}
               onPointerMove={onFabPointerMove}
               onPointerUp={onFabPointerUp}
               onPointerCancel={onFabPointerUp}
-              className={`fixed z-40 flex h-14 w-14 touch-none items-center justify-center rounded-full text-white ring-[3px] ring-white ${fabDragging ? "scale-110 cursor-grabbing" : "cursor-grab transition-all duration-300 ease-out active:scale-90"}`}
-              style={
-                fabPos
-                  ? { left: fabPos.x, top: fabPos.y, backgroundColor: LINGO, boxShadow: `0 14px 30px -8px ${LINGO}, 0 4px 12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.25)` }
-                  : { right: 20, bottom: 196, backgroundColor: LINGO, boxShadow: `0 14px 30px -8px ${LINGO}, 0 4px 12px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.25)` }
-              }
+              className={`fixed z-40 flex h-14 w-14 touch-none items-center justify-center rounded-full ${fabDragging ? "scale-110 cursor-grabbing" : "cursor-grab"}`}
+              style={fabPos ? { left: fabPos.x, top: fabPos.y } : { right: 20, bottom: 196 }}
             >
-              <MessageCircle className="h-6 w-6" strokeWidth={2} />
-              {lingo.action && !applied[lingo.action] && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
-                  <span
-                    className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold"
-                    style={{ color: LINGO }}
-                  >
-                    !
+              <span
+                className={`relative flex h-14 w-14 items-center justify-center transition-transform duration-100 ${orbPressed && !fabDragging ? "scale-95" : ""}`}
+              >
+                {listening ? (
+                  /* S2b — 청취 중 = 본체가 마이크(흰 원 + 빨강 Mic + 바깥 빨간 펄스 링 · 배지 숨김 · 점프 0). */
+                  <span className="relative flex h-14 w-14 items-center justify-center">
+                    <span className="absolute inset-0 rounded-full bg-[#DC2626]/40 animate-ping" aria-hidden="true" />
+                    <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-white ring-[3px] ring-white [box-shadow:0_8px_24px_-8px_rgba(15,23,42,0.35),inset_0_0_0_1px_#ECECEE]">
+                      <Mic className="h-6 w-6 text-[#DC2626]" strokeWidth={2.25} />
+                    </span>
                   </span>
-                </span>
-              )}
+                ) : (
+                  <>
+                    <LingoAvatar size={56} spin={thinking} className="ring-[3px] ring-white" />
+                    {/* S2b — 상시 마이크 배지(어포던스): 평시 Mic(빨강) / 낭독 중 Volume2. */}
+                    <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white [box-shadow:0_2px_6px_-1px_rgba(15,23,42,0.3),inset_0_0_0_1px_#E5E5E5]">
+                      {speaking ? (
+                        <Volume2 className="h-3 w-3 text-[#525252]" strokeWidth={2.5} />
+                      ) : (
+                        <Mic className="h-3 w-3 text-[#DC2626]" strokeWidth={2.5} />
+                      )}
+                    </span>
+                  </>
+                )}
+                {lingo.action && !applied[lingo.action] && !listening && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
+                    <span
+                      className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold"
+                      style={{ color: LINGO }}
+                    >
+                      !
+                    </span>
+                  </span>
+                )}
+              </span>
             </button>
           )}
         </>
