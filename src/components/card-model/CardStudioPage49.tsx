@@ -1086,6 +1086,37 @@ export function CardStudioPage() {
   //   touch(["keyPoints","content"]) 경로 재사용 예정(필드 키 예약 — 지금은 수동뿐이라 미기록).
   const [pickedPoints, setPickedPoints] = useState<string[]>([]);
   const cleanKeyPoints = () => pickedPoints.map((s) => s.trim()).filter(Boolean).slice(0, 5);
+  // UI-5-T4-D3b — 비커머스 정본 복원(45 :2100-2129·:4707-4732 계승): 영상 요약 기반 "영상 포인트" 픽.
+  //   ai_key_points = 후보 칩(자동 주입 0 — 채택은 사용자 탭) · ai_summary = 한마디 "제안" 칩(자동 주입 금지).
+  //   "셀링포인트" 용어 = 커머스 전용(비커머스 라벨 = 영상 포인트 — 생활어).
+  const [aiKeyPoints, setAiKeyPoints] = useState<string[]>([]);
+  const [aiSummaryLead, setAiSummaryLead] = useState<string | null>(null);
+  const [customPointDraft, setCustomPointDraft] = useState("");
+  // D3b — 후보 채택 토글(45 :4722 동형) · 5개 상한(cleanKeyPoints slice(0,5)와 정합).
+  function togglePickedPoint(p: string) {
+    setPickedPoints((prev) => {
+      if (prev.includes(p)) return prev.filter((x) => x !== p);
+      if (prev.filter((x) => x.trim()).length >= 5) {
+        setStepToast("포인트는 최대 5개까지 실을 수 있어요");
+        return prev;
+      }
+      return [...prev, p];
+    });
+  }
+  // D3b(c) — [직접 추가] 보조 1개: trim·중복 제외·5개 상한.
+  function addCustomPoint() {
+    const t = customPointDraft.trim();
+    if (!t) return;
+    setPickedPoints((prev) => {
+      if (prev.includes(t)) return prev;
+      if (prev.filter((x) => x.trim()).length >= 5) {
+        setStepToast("포인트는 최대 5개까지 실을 수 있어요");
+        return prev;
+      }
+      return [...prev, t];
+    });
+    setCustomPointDraft("");
+  }
   // 콘텐츠 편집값 (제목·설명·핵심구간)
   const [cfgTitle, setCfgTitle] = useState("");
   const [cfgSubtitle, setCfgSubtitle] = useState("");
@@ -1459,7 +1490,11 @@ export function CardStudioPage() {
     setCfgFacilities([newFacility("주차 가능"), newFacility("무료 와이파이")]);
     setCfgTitle("");
     setCfgSubtitle("");
-    setPickedPoints([]); // E5e — 셀링포인트 리셋.
+    setPickedPoints([]); // E5e — 포인트 픽 리셋.
+    // D3b — 후보·제안 캐시 리셋(새 카드 = 새 영상 요약).
+    setAiKeyPoints([]);
+    setAiSummaryLead(null);
+    setCustomPointDraft("");
     setCfgClip("0:42");
     setCfgParty(2);
     setCfgRating(5);
@@ -2396,6 +2431,10 @@ export function CardStudioPage() {
     const slot = toVideoSlot(c);
     setSelectedVideo(slot);
     setCfgClip(""); // 구간 초기화(45 :2092/2097) — 영상 바뀌면 구간 잔존 방지.
+    // D3b — 영상 교체 = 포인트 픽·후보·제안 초기화(45 :2100 setPickedPoints([]) 동형).
+    setPickedPoints([]);
+    setAiKeyPoints([]);
+    setAiSummaryLead(null);
     if (!applied["content"]) equip(blockById("content")); // content 장착 → hasVideo 충족(관문 통과).
     setCfgTitle((t) => (t.trim() ? t : slot.title)); // 제목 반영(비었을 때만 — 사용자 제목 존중).
     confirmHelper("content"); // 도우미 완료(영상 담김) + 배지·릴레이 연동.
@@ -2407,13 +2446,24 @@ export function CardStudioPage() {
       const oembedJson = (await oembedRes.json()) as { source_id?: string };
       const sourceId = oembedJson?.source_id;
       if (!oembedRes.ok || !sourceId || videoLeadRef.current !== slot.videoId) return;
-      await fetch("/api/generate-summary", {
+      // UI-5-T4-D3b — 응답 소비 개시(F2③b "버려지던 응답"): ai_key_points = 후보 칩 · ai_summary = 한마디 제안.
+      //   45 :2108-2126 동형(영상 교체 레이스 가드 = videoLeadRef). 자동 주입 0 — 전부 채택 탭 대기.
+      const sumRes = await fetch("/api/generate-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source_id: sourceId }),
       });
+      const sumJson = (await sumRes.json()) as { ai_summary?: unknown; ai_key_points?: unknown };
+      if (!sumRes.ok || videoLeadRef.current !== slot.videoId) return;
+      const points = Array.isArray(sumJson?.ai_key_points)
+        ? (sumJson.ai_key_points as unknown[]).filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        : [];
+      setAiKeyPoints(points);
+      if (typeof sumJson.ai_summary === "string" && sumJson.ai_summary.trim()) {
+        setAiSummaryLead(sumJson.ai_summary.trim());
+      }
     } catch {
-      /* 요약 리드 실패는 조용히 — 영상 선택 자체는 이미 반영됨. */
+      /* 요약 리드 실패는 조용히 — 섹션 미노출(빈 껍데기 금지) · 영상 선택 자체는 이미 반영됨. */
     }
   }
   // 링크 직접 붙여넣기 — URL 감지 시 oembed 후보 1건 → E5c(A3) 2단: 미리보기 행 + [확정](즉시 장착 폐지).
@@ -4560,51 +4610,90 @@ export function CardStudioPage() {
                     onFocus={(e) => (e.currentTarget.style.boxShadow = `inset 0 0 0 1.5px ${accent}`)}
                     onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
                   />
-                  {/* UI-5-T2-E5e — 셀링포인트(선택 · 최대 5개, 45 slice(0,5) 상한 계승). 수동 입력만(AI 초안 = L4).
-                      빈 항목은 소비 시 정리(trim·filter) — 입력 중 순서 유지. blur = 빈 칸 즉시 정리. */}
-                  <div className="rounded-xl bg-[#F4F4F5] px-3 py-2.5">
-                    <p className="flex items-center gap-1.5 text-[12px] font-semibold text-[#525252]">
-                      <Sparkles className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
-                      셀링포인트
-                      <span className="text-[10px] font-medium text-[#A3A3A3]">선택 · 최대 5개</span>
-                    </p>
-                    <div className="mt-2 space-y-1.5">
-                      {pickedPoints.map((pt, i) => (
-                        <div key={i} className="flex items-center gap-1.5">
-                          <input
-                            value={pt}
-                            onChange={(e) =>
-                              setPickedPoints((prev) => prev.map((x, xi) => (xi === i ? e.target.value : x)))
+                  {/* UI-5-T4-D3b(b) — 한마디 제안(ai_summary): 자동 주입 금지 — 한마디가 비었을 때만 제안 칩,
+                      탭 = 채택(사용자 유래). */}
+                  {aiSummaryLead && !cfgSubtitle.trim() && (
+                    <button
+                      onClick={() => setCfgSubtitle(aiSummaryLead)}
+                      className="flex w-full items-start gap-1.5 rounded-xl bg-[#EEF3FE] px-3 py-2 text-left transition-transform active:scale-[0.99] [box-shadow:inset_0_0_0_1px_#C7D7FB]"
+                    >
+                      <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#1D4ED8]" strokeWidth={2.5} />
+                      <span className="min-w-0 flex-1 text-[12px] font-medium leading-relaxed text-[#16161D] [word-break:keep-all]">
+                        한마디 제안 — “{aiSummaryLead}” <b className="font-bold text-[#1D4ED8]">이 문구 쓰기</b>
+                      </span>
+                    </button>
+                  )}
+                  {/* UI-5-T4-D3b — 영상 포인트 픽(45 :4707-4732 계승 · 비커머스 정본 복원): 후보 = ai_key_points,
+                      채택 = 탭 토글(pickedPoints — 자동 주입 0). 후보 없으면(도착 전·실패) 섹션 미노출(빈 껍데기 금지).
+                      "셀링포인트" 용어 = 커머스 전용 → 여기 라벨 = "영상 포인트"(생활어). */}
+                  {aiKeyPoints.length > 0 && (
+                    <div className="rounded-xl bg-[#F4F4F5] px-3 py-2.5">
+                      <p className="flex items-center gap-1.5 text-[12px] font-semibold text-[#525252]">
+                        <Sparkles className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
+                        영상 포인트
+                        <span className="text-[10px] font-medium text-[#A3A3A3]">골라 담기 · 최대 5개</span>
+                      </p>
+                      <p className="mt-1 text-[11px] font-medium text-[#8A8A8A] [word-break:keep-all]">
+                        영상에서 뽑은 포인트예요 — 카드에 실을 것만 골라 주세요
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {aiKeyPoints.map((p) => {
+                          const on = pickedPoints.includes(p);
+                          return (
+                            <button
+                              key={p}
+                              onClick={() => togglePickedPoint(p)}
+                              aria-pressed={on}
+                              className="rounded-full px-2.5 py-1.5 text-[11px] font-semibold transition-colors [word-break:keep-all]"
+                              style={
+                                on
+                                  ? { backgroundColor: accent, color: "#fff" }
+                                  : { backgroundColor: "#fff", color: "#404040", boxShadow: "inset 0 0 0 1px #E5E5E5" }
+                              }
+                            >
+                              {p}
+                            </button>
+                          );
+                        })}
+                        {/* 직접 추가분(후보 밖 채택) — 탭 = 제거. */}
+                        {pickedPoints
+                          .filter((p) => !aiKeyPoints.includes(p))
+                          .map((p) => (
+                            <button
+                              key={p}
+                              onClick={() => setPickedPoints((prev) => prev.filter((x) => x !== p))}
+                              className="rounded-full px-2.5 py-1.5 text-[11px] font-semibold [word-break:keep-all]"
+                              style={{ backgroundColor: accent, color: "#fff" }}
+                            >
+                              {p} ×
+                            </button>
+                          ))}
+                      </div>
+                      {/* D3b(c) — 수동 입력은 보조 1개([직접 추가])로만. */}
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <input
+                          value={customPointDraft}
+                          onChange={(e) => setCustomPointDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                              e.preventDefault();
+                              addCustomPoint();
                             }
-                            onBlur={() =>
-                              setPickedPoints((prev) => (prev[i]?.trim() ? prev : prev.filter((_, xi) => xi !== i)))
-                            }
-                            placeholder="예: 아침 수확 당일 발송"
-                            className="min-w-0 flex-1 rounded-lg bg-white px-2.5 py-2 text-[12.5px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#B4B4B4]"
-                            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                          />
-                          <button
-                            onClick={() => setPickedPoints((prev) => prev.filter((_, xi) => xi !== i))}
-                            aria-label="셀링포인트 삭제"
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#8A8A8A] transition-transform active:scale-90"
-                            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                          >
-                            <X className="h-3.5 w-3.5" strokeWidth={2.5} />
-                          </button>
-                        </div>
-                      ))}
-                      {pickedPoints.length < 5 && (
+                          }}
+                          placeholder="직접 추가 — 예: 주차 편해요"
+                          className="min-w-0 flex-1 rounded-lg bg-white px-2.5 py-2 text-[12px] font-medium text-[#0A0A0A] outline-none placeholder:text-[#B4B4B4]"
+                          style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                        />
                         <button
-                          onClick={() => setPickedPoints((prev) => [...prev, ""])}
-                          className="flex min-h-[36px] w-full items-center justify-center gap-1 rounded-lg bg-white text-[12px] font-semibold text-[#525252] transition-colors active:bg-[#ECECEC]"
+                          onClick={addCustomPoint}
+                          className="flex h-8 shrink-0 items-center justify-center rounded-lg bg-white px-2.5 text-[12px] font-semibold text-[#525252] transition-colors active:bg-[#ECECEC]"
                           style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
                         >
                           <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                          셀링포인트 추가
                         </button>
-                      )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   {/* UI-5-T2-E5c(B1·B2) — 핵심구간 직접 입력(시작·끝 2칸, 45 파서 parseClock 재사용).
                       확정 = blur/Enter → commitClip 검증(끝>시작·영상 길이 초과 = 45 정책 계승) →
                       cfgClip "시작~끝" 커밋 = 어댑터 model.clip 즉시 반영. 값은 대표님만(AI clip 불가침 유지 B4). */}
