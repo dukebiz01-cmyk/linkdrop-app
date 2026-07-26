@@ -361,6 +361,29 @@ function writeTutSeen(patch: Partial<TutSeen>) {
     // 저장 실패(프라이빗 모드 등) = 조용히 — 매번 풀 연출일 뿐(기능 무해).
   }
 }
+// UI-5-T4-D3 — 첫 사용 온보딩(1회성 · D2 키 체계 확장: lingo49_*). done = 제안 미재노출.
+const ONBOARD_DONE_KEY = "lingo49_onboarding_done";
+function readOnboardingDone(): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(ONBOARD_DONE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeOnboardingDone() {
+  try {
+    if (typeof window !== "undefined") window.localStorage.setItem(ONBOARD_DONE_KEY, "1");
+  } catch {
+    // 저장 실패 = 다음 진입에 재제안될 뿐(무해).
+  }
+}
+// D3(2b) — 진행 격려 사전(스텝 진입마다 1줄 · 진행률 구간 매핑). 발행 언급 0(헌장 ⑨).
+const ONBOARD_CHEER: string[] = [
+  "먼저 여기부터 — 제가 옆에서 도와드릴게요",
+  "좋아요, 잘하고 계세요",
+  "벌써 절반이에요 — 이 흐름 그대로예요",
+  "거의 다 왔어요 — 조금만 더요",
+];
 function defaultSaleRange(): { start: string; end: string } {
   const base = new Date();
   base.setHours(0, 0, 0, 0);
@@ -1266,6 +1289,51 @@ export function CardStudioPage() {
   // UI-5-T4-D1 — do 스텝 수행 대기 플래그 + 마이크로 피드백("잘하셨어요!").
   const awaitingDoRef = useRef(false);
   const [assembleFeedback, setAssembleFeedback] = useState<string | null>(null);
+  // UI-5-T4-D3 — 온보딩 상태: 제안 고스트(1회) · 진행 중 플래그 · 격려 고스트(3s). 진행 추적 = 기존
+  //   completedSteps/currentStep 재사용(신규 추적 0 · 강제 잠금 추가 0 — 중도 이탈 = 평시 흐름).
+  const [onboardOffer, setOnboardOffer] = useState(false);
+  const [onboardingActive, setOnboardingActive] = useState(false);
+  const [onboardCheer, setOnboardCheer] = useState<string | null>(null);
+  const onboardCheerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showOnboardCheer = (msg: string, ms = 3000) => {
+    setOnboardCheer(msg);
+    if (onboardCheerTimer.current) clearTimeout(onboardCheerTimer.current);
+    onboardCheerTimer.current = setTimeout(() => setOnboardCheer(null), ms);
+  };
+  // D3(1) — 발동: done 부재 + 첫 진입(마운트 1회 · 클라 전용).
+  useEffect(() => {
+    if (!readOnboardingDone()) setOnboardOffer(true);
+  }, []);
+  // D3(2b·2d) — 스텝 진입 격려 + 확인 스텝 도달 = 완료 처리. 기존 사슬(enterStep→도우미→E2b) 위에
+  //   격려 1줄만 얹음 — 신규 연출 엔진 0.
+  useEffect(() => {
+    if (!onboardingActive) return;
+    const s = stepPlanState[currentStep];
+    if (!s) return;
+    if (s.key === "review") {
+      writeOnboardingDone(); // D3(2d) — 마지막 확인 스텝 도달 = 온보딩 완료.
+      setOnboardingActive(false);
+      showOnboardCheer("이제 혼자서도 만드실 수 있어요 — 발행은 준비되셨을 때 직접 눌러 주세요", 5000);
+      return;
+    }
+    const denom = Math.max(1, stepPlanState.length - 1);
+    const idx = Math.min(ONBOARD_CHEER.length - 1, Math.floor((currentStep / denom) * ONBOARD_CHEER.length));
+    showOnboardCheer(ONBOARD_CHEER[idx]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onboardingActive, currentStep]);
+  // D3(2a) — [같이 만들기]: 기존 사슬 그대로 — enterStep(0)(E4f 인사 칩과 동일 호출) → onEditField →
+  //   도우미(HELPER_COPY) → 완료 시 E2b 견인 칩. 사용자 탭 유래.
+  function startOnboarding() {
+    setOnboardOffer(false);
+    setOnboardingActive(true);
+    setGreetingChipsOpen(false);
+    enterStep(0);
+  }
+  // D3(1) — [혼자 해볼게요]: done 기록 + 기존 인사 칩 흐름(E4f)으로.
+  function declineOnboarding() {
+    writeOnboardingDone();
+    setOnboardOffer(false);
+  }
   // UI-5-T4-D2 — 재관람("연출 다시 보기"): 마지막 연출 재료(watch 원본) + 카운트 면제 플래그.
   const lastAssemblyRef = useRef<null | { actions: any[]; steps: { label: string; note: string; anchor?: string }[] }>(null);
   const [hasAssemblyHistory, setHasAssemblyHistory] = useState(false);
@@ -1413,6 +1481,9 @@ export function CardStudioPage() {
     // L4(B5) — 막힘 감지 리셋(새 카드 = 스텝 예산 재무장).
     setStuckChip(null);
     stuckShownRef.current = new Set();
+    // D3 — 온보딩 진행 종료(새 카드 = 평시 흐름 · 제안은 1회 정책이라 미재노출).
+    setOnboardingActive(false);
+    setOnboardCheer(null);
     // E2b — 완료 칩·AI 레인 리셋(새 카드 = 수동 레인 기본 · 에지 ref 초기화).
     setStepChip(null);
     setAiLane(false);
@@ -5436,17 +5507,32 @@ export function CardStudioPage() {
             onClose={() => setLingoOpen(false)}
             logRef={lingoLogRef}
             subHeader={
-              /* UI-5-T4-D2(3) — 재관람 존중: 연출 이력 있을 때만 · 탭 = 풀 연출 1회(카운트 미증가). */
-              hasAssemblyHistory ? (
+              /* UI-5-T4-D2(3) — 재관람 존중 + D3(1) — 처음 안내 재발동(같은 보조 줄 · 상시 화면 추가물 0). */
+              <div className="flex gap-1.5">
+                {hasAssemblyHistory && (
+                  <button
+                    onClick={replayAssembly}
+                    disabled={assembling}
+                    className="flex min-h-[36px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#F7F7F8] text-[12px] font-semibold text-[#525252] transition-colors active:bg-[#ECECEC] disabled:opacity-40"
+                  >
+                    <Play className="h-3.5 w-3.5" strokeWidth={2.25} fill="currentColor" />
+                    연출 다시 보기
+                  </button>
+                )}
                 <button
-                  onClick={replayAssembly}
-                  disabled={assembling}
-                  className="flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#F7F7F8] text-[12px] font-semibold text-[#525252] transition-colors active:bg-[#ECECEC] disabled:opacity-40"
+                  onClick={() => {
+                    // D3(1) — 재발동: 명시 탭 유래로 같이 만들기 시나리오 재시작(시트는 startOnboarding 의
+                    //   enterStep→onEditField→yieldToHand 경로가 아닌 직접 닫기 — 손 우선).
+                    setLingoOpen(false);
+                    startOnboarding();
+                  }}
+                  disabled={assembling || onboardingActive}
+                  className="flex min-h-[36px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#F7F7F8] text-[12px] font-semibold text-[#525252] transition-colors active:bg-[#ECECEC] disabled:opacity-40"
                 >
-                  <Play className="h-3.5 w-3.5" strokeWidth={2.25} fill="currentColor" />
-                  연출 다시 보기
+                  <Sparkles className="h-3.5 w-3.5" strokeWidth={2.25} />
+                  처음 안내 다시 보기
                 </button>
-              ) : undefined
+              </div>
             }
             headerAction={
               /* L3 — 스피커 토글: 낭독 전체 on/off(사용자 설정 — 리셋 무관). OFF 전환 시 진행 중 낭독 즉시 중단. */
@@ -5625,34 +5711,62 @@ export function CardStudioPage() {
               내부 전용인데 패널 기본 닫힘(초기 false·E4c 양보) → 미노출. 패널 열림 여부와 무관하게 FAB 옆 노출.
               상태 = greetingChipsOpen 단일 공유(패널 내부 인사·칩 그대로 — 이중 관리 금지).
               소멸 = 칩 탭·대화 시작(sendToLingo)·스텝 진입(enterStep) 3조건 계승. 재소환 말풍선과 상호 배타. */}
-          {!lingoOpen && greetingChipsOpen && !yieldBubble && !assembling && !assembleSummary && !listening && !voiceGhost && (
+          {/* UI-5-T4-D3(1) — 온보딩 제안이 인사 고스트를 1회 대체(done 부재 시). 기존 조건 전부 승계. */}
+          {!lingoOpen && greetingChipsOpen && !yieldBubble && !assembling && !assembleSummary && !listening && !voiceGhost && !onboardCheer && (
             <div className="fixed bottom-[262px] right-5 z-40 w-[min(78vw,280px)] animate-fade-in rounded-2xl bg-white p-3 [box-shadow:0_16px_36px_-14px_rgba(15,23,42,0.4),0_0_0_1px_#E8E8EC]">
               <p className="flex items-start gap-1.5">
                 <span className="mt-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-1.5 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
                   ✦ 링고
                 </span>
                 <span className="text-[12px] font-semibold leading-relaxed text-[#16161D] [word-break:keep-all]">
-                  {stepPlanIntro(mode)}
+                  {onboardOffer ? "처음이시죠? 제가 한 장 같이 만들어 드릴게요" : stepPlanIntro(mode)}
                 </span>
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <button
-                  onClick={() => {
-                    setGreetingChipsOpen(false);
-                    enterStep(0); // E4b 계승 — 1스텝 칸 이동 + 포커스(탭 = 의사 · 자동 점프 아님).
-                  }}
-                  className="inline-flex min-h-[36px] items-center rounded-full bg-[#16161D] px-3 text-[11px] font-bold text-white transition-transform active:scale-95"
-                >
-                  {stepPlanState[0]?.label} 하러 가기
-                </button>
-                <button
-                  onClick={() => setGreetingChipsOpen(false)}
-                  className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] transition-transform active:scale-95"
-                >
-                  내가 알아서 할게요
-                </button>
+                {onboardOffer ? (
+                  <>
+                    <button
+                      onClick={startOnboarding}
+                      className="inline-flex min-h-[36px] items-center rounded-full bg-[#16161D] px-3 text-[11px] font-bold text-white transition-transform active:scale-95"
+                    >
+                      같이 만들기
+                    </button>
+                    <button
+                      onClick={declineOnboarding}
+                      className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] transition-transform active:scale-95"
+                    >
+                      혼자 해볼게요
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setGreetingChipsOpen(false);
+                        enterStep(0); // E4b 계승 — 1스텝 칸 이동 + 포커스(탭 = 의사 · 자동 점프 아님).
+                      }}
+                      className="inline-flex min-h-[36px] items-center rounded-full bg-[#16161D] px-3 text-[11px] font-bold text-white transition-transform active:scale-95"
+                    >
+                      {stepPlanState[0]?.label} 하러 가기
+                    </button>
+                    <button
+                      onClick={() => setGreetingChipsOpen(false)}
+                      className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] transition-transform active:scale-95"
+                    >
+                      내가 알아서 할게요
+                    </button>
+                  </>
+                )}
               </div>
               <span className="absolute -bottom-1 right-7 h-3 w-3 rotate-45 bg-white [box-shadow:2px_2px_0_#E8E8EC]" aria-hidden="true" />
+            </div>
+          )}
+
+          {/* UI-5-T4-D3(2b) — 온보딩 격려 고스트(3s 자동 소멸 · 도우미 밀도만 높인 일반 흐름). */}
+          {!lingoOpen && onboardCheer && !listening && (
+            <div className="fixed bottom-[262px] right-5 z-40 max-w-[240px] animate-fade-in rounded-2xl bg-[#16161D] px-3.5 py-2.5 [box-shadow:0_16px_36px_-14px_rgba(15,23,42,0.5)]">
+              <p className="text-[12px] font-bold leading-snug text-white tracking-ko [word-break:keep-all]">{onboardCheer}</p>
+              <span className="absolute -bottom-1 right-7 h-3 w-3 rotate-45 bg-[#16161D]" aria-hidden="true" />
             </div>
           )}
 
