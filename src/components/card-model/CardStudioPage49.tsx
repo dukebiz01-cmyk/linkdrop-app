@@ -65,6 +65,8 @@ import {
 import { primeAudio, playListenStart, playListenStop } from "@/lib/lingo-sound";
 import { canUseSpeechRecognition, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
 import { LingoAvatar } from "@/components/brand/LingoMascot";
+// UI-5-T3-L2 — 기록실 시트(구 패널 대체 · 직접 구현).
+import { LingoRecordSheet49 } from "@/components/lingo/LingoRecordSheet49";
 // UI-5-T2-E3 — 위지윅: 미리보기 = 정본 CardModelBody(거울) + 어댑터. CardBody49(v0 목업) 폐기.
 import { CardModelBody } from "@/components/card-model/CardModelBody";
 import { SHIP_STAGES, type CardModel } from "@/components/card-model/card-model.types";
@@ -1232,10 +1234,7 @@ export function CardStudioPage() {
   const [fabDragging, setFabDragging] = useState(false);
   const fabRef = useRef<HTMLButtonElement>(null);
   const fabDrag = useRef({ active: false, moved: false, dx: 0, dy: 0 });
-  // 링고AI 패널 — 손가락으로 옮기기 (기본 위치 대비 오프셋)
-  const [panelOffset, setPanelOffset] = useState({ x: 0, y: 0 });
-  const [panelDragging, setPanelDragging] = useState(false);
-  const panelDrag = useRef({ active: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  // L2 — 구 패널 이동 상태(panelOffset/panelDragging/panelDrag) 폐기: 기록실 시트 = 하단 고정.
 
   // 상단 AI 빌더 — 한 줄로 말하면 카드를 통째로 만들어줌
   const [heroPrompt, setHeroPrompt] = useState("");
@@ -1571,8 +1570,7 @@ export function CardStudioPage() {
     clearFabLongTimer();
     fabLongTimerRef.current = setTimeout(() => {
       fabLongTimerRef.current = null;
-      fabLongFiredRef.current = true; // 길게 = 패널(이때 짧은 탭 시퀀스 발화 금지 — 상호배타).
-      setPanelOffset({ x: 0, y: 0 });
+      fabLongFiredRef.current = true; // 길게 = 기록실 시트(이때 짧은 탭 시퀀스 발화 금지 — 상호배타).
       setLingoOpen(true);
     }, 500);
   }
@@ -1614,28 +1612,7 @@ export function CardStudioPage() {
     }
   }
 
-  // 링고AI 패널 드래그 — 상단 핸들로 자유롭게 옮기기
-  function onPanelPointerDown(e: React.PointerEvent) {
-    panelDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: panelOffset.x, oy: panelOffset.y };
-    setPanelDragging(true);
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-  }
-  function onPanelPointerMove(e: React.PointerEvent) {
-    if (!panelDrag.current.active) return;
-    const dx = panelDrag.current.ox + (e.clientX - panelDrag.current.sx);
-    const dy = panelDrag.current.oy + (e.clientY - panelDrag.current.sy);
-    // 화면 밖으로 과하게 벗어나지 않도록 제한
-    const maxX = window.innerWidth * 0.4;
-    const maxY = window.innerHeight * 0.5;
-    setPanelOffset({
-      x: Math.min(Math.max(-maxX, dx), maxX),
-      y: Math.min(Math.max(-maxY, dy), maxY),
-    });
-  }
-  function onPanelPointerUp() {
-    panelDrag.current.active = false;
-    setPanelDragging(false);
-  }
+  // L2 — 구 패널 드래그 핸들러(onPanelPointer*) 폐기: 시트는 하단 고정(이동 기능 없음).
 
   // 텍스트로 링고에게 보내기 (입력창·칩 공용)
   function submitLingoText(text?: string) {
@@ -1645,13 +1622,12 @@ export function CardStudioPage() {
     sendToLingo(t);
   }
 
-  // 상단 AI 빌더 — 한 줄 설명으로 카드를 통째로 구성 (패널을 열고 링고에게 전달)
+  // 상단 AI 빌더 — 한 줄 설명으로 카드를 통째로 구성 (기록실 시트를 열고 링고에게 전달)
   function buildWithAI(text?: string) {
     const t = (text ?? heroPrompt).trim();
     if (!t || thinking) return;
     setHeroPrompt("");
-    setPanelOffset({ x: 0, y: 0 });
-    setLingoOpen(true);
+    setLingoOpen(true); // L2 — 시트 소환(구 panelOffset 리셋 폐기).
     sendToLingo(t);
   }
 
@@ -1766,8 +1742,7 @@ export function CardStudioPage() {
     // 탭 시점 재판정 — 불능이면 안내 + 패널 폴백(45 :3509-3514 동형).
     if (!canUseSpeechRecognition() || !recognitionRef.current) {
       showVoiceGhost(VOICE_UNSUPPORTED_NOTICE);
-      setPanelOffset({ x: 0, y: 0 });
-      setLingoOpen(true);
+      setLingoOpen(true); // 시트 폴백(글 입력).
       return;
     }
     // 낭독 중 탭 = 끊고 즉시 청취(45 :3517 stopSpeaking 동형).
@@ -1785,21 +1760,7 @@ export function CardStudioPage() {
     }
   }
 
-  function toggleListening() {
-    const rec = recognitionRef.current;
-    if (!rec) return;
-    if (listening) {
-      rec.stop();
-      setListening(false);
-      return;
-    }
-    try {
-      window.speechSynthesis?.cancel();
-      setInterim("");
-      rec.start();
-      setListening(true);
-    } catch {}
-  }
+  // L2 — 구 toggleListening 폐기: 시트 내 마이크도 handleOrbTap(L1 시퀀스) 단일 경로.
 
   // 링고AI가 반환한 액션들을 스튜디오 상태에 적용
   function applyLingoActions(actions: any[]) {
@@ -5260,53 +5221,15 @@ export function CardStudioPage() {
       {/* ───────── 링고AI 플로팅 어시스턴트 (스튜디오 어디서나 따라다녀요) ───────── */}
       {!dropped && (
         <>
-          {lingoOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40 bg-black/25 animate-fade-in"
-                onClick={() => setLingoOpen(false)}
-              />
-              <div className="fixed inset-x-0 bottom-[188px] z-40 px-5 animate-slide-up">
-                <div
-                  className={`mx-auto max-w-md rounded-3xl bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(15,23,42,0.4),0_0_0_1px_#E8E8EC] ${
-                    panelDragging ? "" : "transition-transform duration-200 ease-out"
-                  }`}
-                  style={{ transform: `translate(${panelOffset.x}px, ${panelOffset.y}px)` }}
-                >
-                  {/* 드래그 핸들 — 손가락으로 패널 옮기기 */}
-                  <div
-                    onPointerDown={onPanelPointerDown}
-                    onPointerMove={onPanelPointerMove}
-                    onPointerUp={onPanelPointerUp}
-                    onPointerCancel={onPanelPointerUp}
-                    className="mx-auto mb-2 flex h-4 w-full max-w-[120px] cursor-grab touch-none items-center justify-center active:cursor-grabbing"
-                    aria-label="패널 옮기기"
-                  >
-                    <span className="h-1.5 w-10 rounded-full bg-[#E0E0E0]" />
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
-                      <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2.25} />
-                      <Sparkles className="absolute -right-0.5 -top-0.5 h-[11px] w-[11px]" strokeWidth={2.5} fill="currentColor" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">링고AI</p>
-                      <p className="flex items-center gap-1 text-[11px] font-medium text-[#9A9A9A]">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: LINGO }} />
-                        입력하거나 말하면 카드를 편집해드려요
-                      </p>
-                    </div>
-                    <button
-                      aria-label="닫기"
-                      onClick={() => setLingoOpen(false)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4F4F5] text-[#737373] transition-transform active:scale-90"
-                    >
-                      <X className="h-4 w-4" strokeWidth={2.5} />
-                    </button>
-                  </div>
-
-                  {/* 대화 로그 */}
-                  <div ref={lingoLogRef} className="mt-3 max-h-[34vh] space-y-2 overflow-y-auto">
+          {/* UI-5-T3-L2 — 기록실 시트(구 플로팅 패널·백드롭·이동 핸들 폐지 · 비모달 — 판단 근거는
+              LingoRecordSheet49 헤더 주석). 소환 = 오브 길게 탭(L1 타이머). 이관: 웰컴·제안 칩·로그·
+              인사/행동 칩·interim·thinking·입력·마이크(L1 시퀀스)·전송 — 소실 0. */}
+          <LingoRecordSheet49
+            open={lingoOpen}
+            onClose={() => setLingoOpen(false)}
+            logRef={lingoLogRef}
+            log={
+              <>
                     {messages.length === 0 && (
                       <div className="rounded-2xl bg-[#F7F7F8] p-3.5">
                         <p className="flex items-start gap-1.5 text-[13px] font-medium leading-relaxed text-[#404040] [word-break:keep-all] text-pretty">
@@ -5400,12 +5323,12 @@ export function CardStudioPage() {
                         </span>
                       </div>
                     )}
-                  </div>
-
-                  {/* UI-5-T1(T-D) — 조립순서 번호도 · 추천 장착 버튼 · 대화 중 퀵명령 미이식. */}
-
-                  {/* 입력 컴포저 — 텍스트가 기본, 음성은 보조 */}
-                  <div className="mt-3">
+              </>
+            }
+            footer={
+              <div>
+                {/* UI-5-T1(T-D) — 조립순서 번호도 · 추천 장착 버튼 · 대화 중 퀵명령 미이식. */}
+                {/* 입력 컴포저 — 텍스트가 기본, 음성은 보조(시트 내 마이크 = L1 오브 동일 시퀀스). */}
                     <div
                       className="flex items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5"
                       style={listening ? { boxShadow: "0 0 0 2px #DC2626" } : undefined}
@@ -5425,7 +5348,7 @@ export function CardStudioPage() {
                       />
                       {voiceSupported && lingoText.trim() === "" ? (
                         <button
-                          onClick={toggleListening}
+                          onClick={handleOrbTap} /* L2 — 시트 내 마이크 = L1 오브 동일 시퀀스(primeAudio·띠딩·게이트). */
                           disabled={thinking}
                           aria-label={listening ? "음성 입력 종료" : "음성으로 말하기"}
                           className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-90 disabled:opacity-50"
@@ -5453,13 +5376,10 @@ export function CardStudioPage() {
                         음성은 크롬에서 쓸 수 있어요. 지금은 입력으로 편집해요.
                       </p>
                     )}
-                  </div>
-
-                  {/* UI-5-T1(T-D) — 보조도구 3종(담기·편집·되돌리기) 미이식. */}
-                </div>
+                {/* UI-5-T1(T-D) — 보조도구 3종(담기·편집·되돌리기) 미이식. */}
               </div>
-            </>
-          )}
+            }
+          />
 
           {/* UI-5-T2-E4f(2) — 인사 고스트 말풍선(패널 밖 승격). 원인(진단 b): 인사·행동 칩이 lingoOpen 패널
               내부 전용인데 패널 기본 닫힘(초기 false·E4c 양보) → 미노출. 패널 열림 여부와 무관하게 FAB 옆 노출.
