@@ -2580,18 +2580,43 @@ export function CardStudioPage() {
   // E3c — 매 렌더 최신 sendToLingo를 ref에 게시(음성 onresult가 이 최신본을 호출).
   sendToLingoRef.current = sendToLingo;
 
-  // UI-5-T2-E4 — 발행 실행(2단 수동의 2단째). 45 handlePublish(:2251) 비커머스 body 계승.
-  //   지원 필드 한정: media_url·purpose·curator_message·is_public·partner_id. 45 계약 준수·오발행 방지.
-  //   호출처 = 거울 시트 [발행하기] 버튼뿐(자동/링고/연출/타이머 유래 0 — 헌장 ⑨).
-  async function doPublish(): Promise<boolean> {
-    // E5b — 커머스 카드 발행은 E5f 슬라이스(등록·재사용 인프라는 E5b로 완비 — registeredProduct 참조 사용 예정).
-    //   ⚠️ E5f 구현 시 BUG-1(S1-b) 필수: 재사용 드롭 is_public·published_at update(45 :2385-2411).
-    if (mode === "commerce") {
-      setSaveError("상품 카드 발행은 준비 중이에요 — 등록한 상품은 내 상품에 보관돼요");
-      return false;
+  // UI-5-T2-E5f — 내 파트너 id 1회 조회(45 loader store?.id 대응 — 비커머스 body partner_id 격차 해소).
+  async function fetchMyPartnerId(): Promise<string | null> {
+    try {
+      const supabase = getSupabase();
+      const { data: sess } = await supabase.auth.getSession();
+      const uid = sess.session?.user.id;
+      if (!uid) return null;
+      const { data } = await supabase.from("partners").select("id").eq("owner_user_id", uid).maybeSingle();
+      return (data as { id: string } | null)?.id ?? null;
+    } catch {
+      return null;
     }
-    // 검증(45 :2252 계승 — 비커머스는 영상 필수).
-    if (!selectedVideo) {
+  }
+  // UI-5-T2-E4·E5f — 발행 실행(2단 수동의 2단째). 45 handlePublish(:2251-2482) 3모드 완전 계승.
+  //   호출처 = 거울 시트 [발행하기] 버튼뿐(자동/링고/연출/타이머 유래 0 — 헌장 ⑨). 이중 탭 = saving 가드.
+  async function doPublish(): Promise<boolean> {
+    // E5f — 커머스 게이트 해제: 필수 = 사진·상품명·가격·판매기간(45 :2256-2270 3종 + 기간). 미충족 사유 1줄.
+    if (mode === "commerce") {
+      const priceNum = Number(cfgProductPrice.replace(/[^0-9]/g, "")) || 0;
+      if (!productImageUrl) {
+        setSaveError("상품 사진을 올려 주세요.");
+        return false;
+      }
+      if (!cfgProductName.trim()) {
+        setSaveError("상품 이름을 입력해 주세요.");
+        return false;
+      }
+      if (priceNum <= 0) {
+        setSaveError("가격을 입력해 주세요.");
+        return false;
+      }
+      if (!(applied["seasonal"] && saleStartIso && saleEndIso)) {
+        setSaveError("판매 기간을 정해 주세요.");
+        return false;
+      }
+    } else if (!selectedVideo) {
+      // 검증(45 :2252 계승 — 비커머스는 영상 필수).
       setSaveError("영상을 먼저 담아 주세요");
       return false;
     }
@@ -2599,43 +2624,154 @@ export function CardStudioPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      // 45 :2275·2277·2342 body 형태 동일(비커머스). 지원 필드만 — 45 대조 근거는 커밋 보고 대조표.
-      const mediaUrl = `https://www.youtube.com/watch?v=${selectedVideo.videoId}`;
-      const hasReservation = !!applied["calendar"];
-      // E5d — 실쿠폰 UUID 확보 시 purpose 반영(45 :2276-2278 동형: 예약 우선 → 쿠폰 → 정보).
-      const hasCoupon = !!applied["coupon"] && !!selectedCouponId;
-      const dropPurpose = hasReservation ? "예약" : hasCoupon ? "쿠폰" : "정보";
       const isPublic = visibility === "public";
-      const body = {
-        media_url: mediaUrl,
-        purpose: dropPurpose,
-        curator_message: cfgSubtitle.trim() || null,
-        is_public: isPublic, // BUG-1(S1-b): 신규 생성 경로라 body.is_public 로 실려나감(재사용 분기 없음 = 함정 회피).
-        partner_id: null, // 49 store=목업 문자열(실 파트너 id 없음) → 45의 store?.id ?? null 와 동형(null).
-        // blocks 생략: 49 무 실입력(clip 초/구간·image·dock·custom_title) → 45 extraBlocks.length===0 분기와 동일(blocks 키 부재).
-      };
-      const res = await fetch("/api/drops", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const json = (await res.json()) as {
-        drop?: { id?: string; share_uuid?: string };
-        shareable_url?: string;
-        message?: string;
-      };
-      if (!res.ok || !json.drop?.share_uuid) {
-        setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요."); // 무언 실패 금지.
-        return false;
+      const hasCoupon = !!applied["coupon"] && !!selectedCouponId; // E5d — 실쿠폰 UUID.
+      // 제목 WYSIWYG(45 resolvedCardTitle FIX-57) — 어댑터 titleText 와 동일 산출(미리보기=발행 동일값).
+      const resolvedCardTitle =
+        cfgTitle.trim() || (applied["product"] && cfgProductName.trim() ? cfgProductName.trim() : "") || content.title;
+      let dropId: string | null;
+      let publishedShareUuid: string;
+      let shareableUrl: string | null;
+      let reusedCommerce = false;
+      if (mode === "commerce") {
+        // E5f — 45 :2350-2377 동형: E5b 등록/재사용 드롭이 있으면 재사용(이중 생성 방지 P6-6), 없으면 self_upload 신규.
+        if (registeredProduct?.dropId) {
+          reusedCommerce = true;
+          dropId = registeredProduct.dropId;
+          publishedShareUuid = registeredProduct.shareUuid;
+          shareableUrl = null;
+        } else {
+          const priceNum = Number(cfgProductPrice.replace(/[^0-9]/g, "")) || 0;
+          const points = cfgProduct.sellingPoints.map((s) => s.trim()).filter(Boolean).slice(0, 5);
+          const body = {
+            self_upload: true,
+            image_url: productImageUrl, // E5a — 실 사진 단일 소스.
+            name: cfgProductName.trim(),
+            price_krw: priceNum,
+            headline: cfgProduct.headline.trim(),
+            selling_points: points,
+            price_band_enabled: false, // §0 시세 영구 금지.
+            is_public: isPublic,
+            blocks: [
+              { block_kind: "product", block_data: { name: cfgProductName.trim(), price_krw: priceNum }, position: 0 },
+              // FIX-57 계승 — 제목 WYSIWYG 동봉(커머스 직발행 경로 · 45 :2333-2340 동형).
+              ...(resolvedCardTitle
+                ? [{ block_kind: "text", block_data: { custom_title: resolvedCardTitle }, position: 1 }]
+                : []),
+            ],
+          };
+          const res = await fetch("/api/drops", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const json = (await res.json()) as {
+            drop?: { id?: string; share_uuid?: string };
+            shareable_url?: string;
+            message?: string;
+          };
+          if (!res.ok || !json.drop?.share_uuid) {
+            setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요."); // 무언 실패 금지.
+            return false;
+          }
+          dropId = json.drop.id ?? null;
+          publishedShareUuid = json.drop.share_uuid;
+          shareableUrl = json.shareable_url ?? null;
+        }
+      } else {
+        // 비커머스(45 :2342-2349 동형) — E5f: clip 확정·custom_title 블록 + 실 partner_id 로 완전 동일 격상.
+        const mediaUrl = `https://www.youtube.com/watch?v=${selectedVideo!.videoId}`;
+        const hasReservation = !!applied["calendar"];
+        const dropPurpose = hasReservation ? "예약" : hasCoupon ? "쿠폰" : "정보"; // 45 :2276-2278.
+        // E5c 확정 구간("a~b") → 45 clipBlocks(:2296-2310) 동형 초 단위 산출(반쪽·무효 = 미동봉).
+        const clipSecs = (() => {
+          if (!cfgClip.includes("~")) return null;
+          const [a, b] = cfgClip.split("~");
+          const s = parseClock(a?.trim() ?? "");
+          const e = parseClock(b?.trim() ?? "");
+          return s != null && e != null && e > s ? { s, e } : null;
+        })();
+        const extraBlocks = [
+          ...(clipSecs
+            ? [
+                {
+                  block_kind: "video",
+                  block_data: { video_id: selectedVideo!.videoId, title: selectedVideo!.title },
+                  video_start_seconds: clipSecs.s,
+                  video_end_seconds: clipSecs.e,
+                },
+              ]
+            : []),
+          // FIX-57 계승 — 제목 WYSIWYG(45 :2315-2319 동형 · 실값 있을 때만).
+          ...(resolvedCardTitle ? [{ block_kind: "text", block_data: { custom_title: resolvedCardTitle } }] : []),
+        ].map((b, i) => ({ ...b, position: i }));
+        const body = {
+          media_url: mediaUrl,
+          purpose: dropPurpose,
+          curator_message: cfgSubtitle.trim() || null,
+          is_public: isPublic, // 신규 생성 경로 = body 로 실림(45 :2346).
+          partner_id: await fetchMyPartnerId(), // E5f — 45 store?.id ?? null 동형(실 파트너 조회).
+          ...(extraBlocks.length > 0 ? { blocks: extraBlocks } : {}),
+        };
+        const res = await fetch("/api/drops", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const json = (await res.json()) as {
+          drop?: { id?: string; share_uuid?: string };
+          shareable_url?: string;
+          message?: string;
+        };
+        if (!res.ok || !json.drop?.share_uuid) {
+          setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요."); // 무언 실패 금지.
+          return false;
+        }
+        dropId = json.drop.id ?? null;
+        publishedShareUuid = json.drop.share_uuid;
+        shareableUrl = json.shareable_url ?? null;
       }
-      // E5e — 셀링포인트 영속화(45 :2425-2434 동형 · 비커머스 전용 = doPublish 자체가 비커머스): best-effort.
-      {
+      const supabase = getSupabase();
+      // E5f — BUG-1(S1-b) 최종 방어(45 :2380-2411 동형): 재사용 드롭은 is_public=false 로 생성됐고
+      //   재사용 분기는 /api/drops 미호출 → 발행바 토글·발행시각을 best-effort 반영(실패해도 발행 유지).
+      if (reusedCommerce && dropId) {
+        try {
+          const { error: pubErr } = await supabase.from("info_drops").update({ is_public: isPublic }).eq("id", dropId);
+          if (pubErr) console.warn("[studio49] 공개 토글 반영 실패:", pubErr.message);
+        } catch (e) {
+          console.warn("[studio49] is_public update exception:", e);
+        }
+        try {
+          const { error: pubAtErr } = await supabase
+            .from("info_drops")
+            .update({ published_at: new Date().toISOString() })
+            .eq("id", dropId)
+            .is("published_at", null); // 기존 값 보존(45 :2398-2406).
+          if (pubAtErr) console.warn("[studio49] published_at 기록 실패:", pubAtErr.message);
+        } catch (e) {
+          console.warn("[studio49] published_at update exception:", e);
+        }
+      }
+      // E5d — 쿠폰 귀속(45 :2412-2423 동형 · 모드 공통): best-effort.
+      if (dropId && hasCoupon) {
+        try {
+          const { error: couponErr } = (await supabase.rpc(
+            "set_drop_funnel_coupon" as never,
+            { p_drop_id: dropId, p_coupon_id: selectedCouponId } as never,
+          )) as { error: { message?: string } | null };
+          if (couponErr) console.warn("[studio49] 쿠폰 연결 실패:", couponErr.message);
+        } catch (e) {
+          console.warn("[studio49] set_drop_funnel_coupon exception:", e);
+        }
+      }
+      // E5e — 셀링포인트 영속화(45 :2425-2434 동형 · 비커머스만): best-effort.
+      if (mode !== "commerce") {
         const points = cleanKeyPoints();
-        if (json.drop.id && points.length > 0) {
+        if (dropId && points.length > 0) {
           try {
-            const { error: kpErr } = (await getSupabase().rpc(
+            const { error: kpErr } = (await supabase.rpc(
               "update_drop_key_points" as never,
-              { p_drop_id: json.drop.id, p_points: points } as never,
+              { p_drop_id: dropId, p_points: points } as never,
             )) as { error: { message?: string } | null };
             if (kpErr) console.warn("[studio49] 셀링포인트 저장 실패:", kpErr.message);
           } catch (e) {
@@ -2643,20 +2779,26 @@ export function CardStudioPage() {
           }
         }
       }
-      // E5d — 쿠폰 귀속(45 :2412-2423 동형): 발행 성공 후 set_drop_funnel_coupon best-effort(실패해도 발행 유지).
-      if (json.drop.id && hasCoupon) {
+      // E5f — 판매기간 영속화(45 ST2b-3 :2440-2455 동형 · 커머스만): update_drop p_block_patch {sale_start, sale_end}.
+      if (mode === "commerce" && applied["seasonal"] && saleStartIso && saleEndIso) {
         try {
-          const { error: couponErr } = (await getSupabase().rpc(
-            "set_drop_funnel_coupon" as never,
-            { p_drop_id: json.drop.id, p_coupon_id: selectedCouponId } as never,
+          const { error: spanErr } = (await supabase.rpc(
+            "update_drop" as never,
+            {
+              p_share_uuid: publishedShareUuid,
+              p_curator_message: null,
+              p_curator_note: null,
+              p_block_patch: { sale_start: saleStartIso, sale_end: saleEndIso },
+            } as never,
           )) as { error: { message?: string } | null };
-          if (couponErr) console.warn("[studio49] 쿠폰 연결 실패:", couponErr.message);
+          if (spanErr) console.warn("[studio49] 판매기간 저장 실패:", spanErr.message);
         } catch (e) {
-          console.warn("[studio49] set_drop_funnel_coupon exception:", e);
+          console.warn("[studio49] update_drop(p_block_patch) exception:", e);
         }
       }
+      // (45 :2456-2468 카드색 = 49 E3d 색 기능 삭제 → 기본값 스킵 분기와 동형(호출 0) — 의도적 차이.)
       const origin = typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
-      setSavedUrl(json.shareable_url ?? `${origin}/d/${json.drop.share_uuid}`); // 45 :2471 동형.
+      setSavedUrl(shareableUrl ?? `${origin}/d/${publishedShareUuid}`); // 45 :2470-2471 동형.
       setDropped(true);
       setMirrorOpen(false);
       return true;
@@ -2684,13 +2826,25 @@ export function CardStudioPage() {
   const activeApplied = !!applied[activeBlock.id];
   const activeLocked = !!activeBlock.isPaid && score < ENHANCE_UNLOCK;
 
-  // UI-5-T2-E4 — 발행 게이트: 비커머스 지원 필드(영상+제목) 충족 시 활성. 커머스는 보류(비활성).
-  //   쿠폰·예약 슬롯은 이번 생략 → 게이트에서 제외(쿠폰 없는 예약 카드 발행 허용).
+  // UI-5-T2-E4·E5f — 발행 게이트: 비커머스 = 영상+제목 / 커머스 = 사진·상품명·가격·판매기간(45 판정 계승).
+  //   미충족 사유 1줄 — 게이트 해제(E5f): "준비 중" 문구 폐지.
   const hasTitleForPublish = cfgTitle.trim().length > 0 || cfgProductName.trim().length > 0;
-  const canPublish = mode !== "commerce" && !dropped && !!selectedVideo && hasTitleForPublish;
+  const commercePriceNum = Number(cfgProductPrice.replace(/[^0-9]/g, "")) || 0;
+  const commerceSaleReady = !!applied["seasonal"] && !!saleStartIso && !!saleEndIso;
+  const commerceReady =
+    !!productImageUrl && cfgProductName.trim().length > 0 && commercePriceNum > 0 && commerceSaleReady;
+  const canPublish = !dropped && (mode === "commerce" ? commerceReady : !!selectedVideo && hasTitleForPublish);
   const publishGateMsg =
     mode === "commerce"
-      ? "상품 카드 발행은 준비 중이에요 — 등록한 상품은 내 상품에 보관돼요" // E5b — 문구 정확화(E5f 전까지).
+      ? !productImageUrl
+        ? "상품 사진을 올려 주세요"
+        : !cfgProductName.trim()
+          ? "상품 이름을 입력해 주세요"
+          : commercePriceNum <= 0
+            ? "가격을 입력해 주세요"
+            : !commerceSaleReady
+              ? "판매 기간을 정해 주세요"
+              : null
       : !selectedVideo
         ? "영상을 먼저 담아 주세요"
         : !hasTitleForPublish
