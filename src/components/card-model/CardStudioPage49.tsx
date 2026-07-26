@@ -1022,6 +1022,11 @@ export function CardStudioPage() {
   const editFacility = (id: string, text: string) =>
     setCfgFacilities((prev) => prev.map((f) => (f.id === id ? { ...f, text } : f)));
   const removeFacility = (id: string) => setCfgFacilities((prev) => prev.filter((f) => f.id !== id));
+  // UI-5-T2-E5e — 비커머스 셀링포인트(45 pickedPoints :853 동형 · 이번엔 수동 입력만 — AI 초안 제안은 L4 소관).
+  //   저장 형태 = string[] · 소비 시 trim·filter·slice(0,5)(45 관례). lingoTouched 호환: 후일 AI 초안 채택 시
+  //   touch(["keyPoints","content"]) 경로 재사용 예정(필드 키 예약 — 지금은 수동뿐이라 미기록).
+  const [pickedPoints, setPickedPoints] = useState<string[]>([]);
+  const cleanKeyPoints = () => pickedPoints.map((s) => s.trim()).filter(Boolean).slice(0, 5);
   // 콘텐츠 편집값 (제목·설명·핵심구간)
   const [cfgTitle, setCfgTitle] = useState("");
   const [cfgSubtitle, setCfgSubtitle] = useState("");
@@ -1320,6 +1325,7 @@ export function CardStudioPage() {
     setCfgFacilities([newFacility("주차 가능"), newFacility("무료 와이파이")]);
     setCfgTitle("");
     setCfgSubtitle("");
+    setPickedPoints([]); // E5e — 셀링포인트 리셋.
     setCfgClip("0:42");
     setCfgParty(2);
     setCfgRating(5);
@@ -2622,6 +2628,21 @@ export function CardStudioPage() {
         setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요."); // 무언 실패 금지.
         return false;
       }
+      // E5e — 셀링포인트 영속화(45 :2425-2434 동형 · 비커머스 전용 = doPublish 자체가 비커머스): best-effort.
+      {
+        const points = cleanKeyPoints();
+        if (json.drop.id && points.length > 0) {
+          try {
+            const { error: kpErr } = (await getSupabase().rpc(
+              "update_drop_key_points" as never,
+              { p_drop_id: json.drop.id, p_points: points } as never,
+            )) as { error: { message?: string } | null };
+            if (kpErr) console.warn("[studio49] 셀링포인트 저장 실패:", kpErr.message);
+          } catch (e) {
+            console.warn("[studio49] update_drop_key_points exception:", e);
+          }
+        }
+      }
       // E5d — 쿠폰 귀속(45 :2412-2423 동형): 발행 성공 후 set_drop_funnel_coupon best-effort(실패해도 발행 유지).
       if (json.drop.id && hasCoupon) {
         try {
@@ -2766,6 +2787,7 @@ export function CardStudioPage() {
     productPrice: cfgProductPrice,
     productHeadline: cfgProduct.headline,
     productPoints: cfgProduct.sellingPoints.map((p) => p.trim()).filter(Boolean),
+    keyPoints: cleanKeyPoints(), // E5e — 비커머스 셀링포인트(정리분만 · 빈 배열 = 어댑터 미주입).
     productUnitLabel,
     facilities: cfgFacilities.map((f) => f.text.trim()).filter(Boolean),
     saleStart: labelOfIso(saleStartIso), // E5g — 정본 기간 표기(발행 라벨 포맷 불변 "M/D(요)").
@@ -4061,6 +4083,51 @@ export function CardStudioPage() {
                     onFocus={(e) => (e.currentTarget.style.boxShadow = `inset 0 0 0 1.5px ${accent}`)}
                     onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
                   />
+                  {/* UI-5-T2-E5e — 셀링포인트(선택 · 최대 5개, 45 slice(0,5) 상한 계승). 수동 입력만(AI 초안 = L4).
+                      빈 항목은 소비 시 정리(trim·filter) — 입력 중 순서 유지. blur = 빈 칸 즉시 정리. */}
+                  <div className="rounded-xl bg-[#F4F4F5] px-3 py-2.5">
+                    <p className="flex items-center gap-1.5 text-[12px] font-semibold text-[#525252]">
+                      <Sparkles className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
+                      셀링포인트
+                      <span className="text-[10px] font-medium text-[#A3A3A3]">선택 · 최대 5개</span>
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {pickedPoints.map((pt, i) => (
+                        <div key={i} className="flex items-center gap-1.5">
+                          <input
+                            value={pt}
+                            onChange={(e) =>
+                              setPickedPoints((prev) => prev.map((x, xi) => (xi === i ? e.target.value : x)))
+                            }
+                            onBlur={() =>
+                              setPickedPoints((prev) => (prev[i]?.trim() ? prev : prev.filter((_, xi) => xi !== i)))
+                            }
+                            placeholder="예: 아침 수확 당일 발송"
+                            className="min-w-0 flex-1 rounded-lg bg-white px-2.5 py-2 text-[12.5px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#B4B4B4]"
+                            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                          />
+                          <button
+                            onClick={() => setPickedPoints((prev) => prev.filter((_, xi) => xi !== i))}
+                            aria-label="셀링포인트 삭제"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#8A8A8A] transition-transform active:scale-90"
+                            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                          >
+                            <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+                          </button>
+                        </div>
+                      ))}
+                      {pickedPoints.length < 5 && (
+                        <button
+                          onClick={() => setPickedPoints((prev) => [...prev, ""])}
+                          className="flex min-h-[36px] w-full items-center justify-center gap-1 rounded-lg bg-white text-[12px] font-semibold text-[#525252] transition-colors active:bg-[#ECECEC]"
+                          style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                        >
+                          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                          셀링포인트 추가
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   {/* UI-5-T2-E5c(B1·B2) — 핵심구간 직접 입력(시작·끝 2칸, 45 파서 parseClock 재사용).
                       확정 = blur/Enter → commitClip 검증(끝>시작·영상 길이 초과 = 45 정책 계승) →
                       cfgClip "시작~끝" 커밋 = 어댑터 model.clip 즉시 반영. 값은 대표님만(AI clip 불가침 유지 B4). */}

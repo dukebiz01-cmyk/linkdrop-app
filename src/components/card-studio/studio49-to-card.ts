@@ -31,6 +31,8 @@ export type Studio49Input = {
   productPrice: string; // cfgProductPrice "32,000"
   productHeadline: string; // cfgProduct.headline
   productPoints: string[]; // cfgProduct.sellingPoints (trim·filter)
+  // UI-5-T2-E5e — 비커머스 셀링포인트(45 pickedPoints 동형) → 정본 productPoints(:544-545) 렌더.
+  keyPoints?: string[];
   productUnitLabel: string; // 등록 폼 unit_label 파생
   facilities: string[]; // cfgFacilities (trim·filter)
   saleStart: string; // DATE_OPTIONS[saleStartIdx]
@@ -67,6 +69,8 @@ export function studio49ToCardModel(s: Studio49Input): CardModel {
     productName: s.productName || undefined,
     productPrice: priceNum,
     productCopy: { headline: s.productHeadline || undefined, sellingPoints: s.productPoints },
+    // E5e — 비커머스 셀링포인트: 정본 pickedPoints 입력(45 :2645 동형) → productPoints 병합.
+    ...(s.keyPoints && s.keyPoints.length > 0 ? { pickedPoints: s.keyPoints } : {}),
     // E5a — 커머스 상품 사진: 정본 어댑터 commerce.imageUrl(=heroImageUrl) 소비 → CardBody 실이미지.
     // E5g2 — commerce.harvestDate(수확 시작일) 병합 → 정본 수확·발송 칩·위젯 줄(어댑터 기존 경로 소비만).
     ...(isCommerce && (s.productImageUrl || s.harvestDate)
