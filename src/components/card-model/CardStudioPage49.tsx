@@ -3180,22 +3180,24 @@ export function CardStudioPage() {
   const commerceReady =
     !!productImageUrl && cfgProductName.trim().length > 0 && commercePriceNum > 0 && commerceSaleReady;
   const canPublish = !dropped && (mode === "commerce" ? commerceReady : !!selectedVideo && hasTitleForPublish);
-  const publishGateMsg =
+  // UI-5-T4-D3f(③) — 사유 = 첫 미충족 1개(E5f 판정 체인 재사용·문자열 동일) + 이동 타깃(탭 = 가서 고치기).
+  const publishGate =
     mode === "commerce"
       ? !productImageUrl
-        ? "상품 사진을 올려 주세요"
+        ? { msg: "상품 사진을 올려 주세요", stepKey: "photo", block: "productimage" }
         : !cfgProductName.trim()
-          ? "상품 이름을 입력해 주세요"
+          ? { msg: "상품 이름을 입력해 주세요", stepKey: "title", block: "product" }
           : commercePriceNum <= 0
-            ? "가격을 입력해 주세요"
+            ? { msg: "가격을 입력해 주세요", stepKey: "price", block: "product" }
             : !commerceSaleReady
-              ? "판매 기간을 정해 주세요"
+              ? { msg: "판매 기간을 정해 주세요", stepKey: "season", block: "seasonal" }
               : null
       : !selectedVideo
-        ? "영상을 먼저 담아 주세요"
+        ? { msg: "영상을 먼저 담아 주세요", stepKey: "video", block: "content" }
         : !hasTitleForPublish
-          ? "제목·한마디를 채워 주세요"
+          ? { msg: "제목·한마디를 채워 주세요", stepKey: "title", block: "content" }
           : null;
+  const publishGateMsg = publishGate?.msg ?? null;
 
   // UI-5-T3-L4(B5) — 막힘 감지(45 DRIVE-2e :1483-1515 동형 이식): 현재 스텝 90초 체류 + 무활동 =
   //   스텝(key)당 1회 제안 칩. 연출·청취·시트 열림·생각 중 = 발화 억제 · 활동 deps 변화 = 타이머 리셋.
@@ -5489,8 +5491,21 @@ export function CardStudioPage() {
               {canPublish ? <Send className="h-4 w-4" strokeWidth={2.25} /> : <Lock className="h-4 w-4" strokeWidth={2.25} />}
               {canPublish ? "발행하기" : "발행하기 · 조건 미충족"}
             </button>
-            {!canPublish && publishGateMsg && (
-              <p className="text-center text-[12px] font-medium text-[#8A8A8A] tracking-ko">{publishGateMsg}</p>
+            {/* D3f(③) — 사유 상시 노출 + 탭 = 해당 칸 이동(enterStep/onEditField 재사용 — 읽고 끝이 아니라 가서 고치기). */}
+            {!canPublish && publishGate && (
+              <button
+                onClick={() => {
+                  const i = stepPlanState.findIndex((s) => s.key === publishGate.stepKey);
+                  if (i >= 0) enterStep(i);
+                  else onEditField(publishGate.block);
+                }}
+                className="flex min-h-[36px] w-full items-center justify-center gap-1 text-center text-[12px] font-semibold text-[#525252] tracking-ko transition-colors active:text-[#16161D]"
+              >
+                {publishGate.msg}
+                <span className="font-bold" style={{ color: accent }}>
+                  → 하러 가기
+                </span>
+              </button>
             )}
           </div>
         </div>
@@ -5535,7 +5550,7 @@ export function CardStudioPage() {
               )}
               <button
                 type="button"
-                disabled={saving || mode === "commerce"}
+                disabled={saving} /* D3f — E5f 잔재 수복: 구 `|| mode === "commerce"` 차단 해제(게이트는 canPublish·doPublish 검증이 담당). */
                 onClick={() => doPublish()}
                 aria-label="발행하기"
                 className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-[15px] font-bold text-white transition-transform active:translate-y-px disabled:opacity-60"

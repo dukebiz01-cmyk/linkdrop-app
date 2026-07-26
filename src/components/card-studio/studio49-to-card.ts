@@ -71,8 +71,11 @@ export function studio49ToCardModel(s: Studio49Input): CardModel {
     productCopy: { headline: s.productHeadline || undefined, sellingPoints: s.productPoints },
     // E5e — 비커머스 셀링포인트: 정본 pickedPoints 입력(45 :2645 동형) → productPoints 병합.
     ...(s.keyPoints && s.keyPoints.length > 0 ? { pickedPoints: s.keyPoints } : {}),
-    // E5a — 커머스 상품 사진: 정본 어댑터 commerce.imageUrl(=heroImageUrl) 소비 → CardBody 실이미지.
-    // E5g2 — commerce.harvestDate(수확 시작일) 병합 → 정본 수확·발송 칩·위젯 줄(어댑터 기존 경로 소비만).
+    // UI-5-T4-D3f(①) — 사진 정본 배선 수복: fromStudioState 히어로(:509)는 "input.productImageUrl"을
+    //   소비한다(commerce.imageUrl 은 fromDropDetail(:266) 전용 — 스튜디오 프리뷰엔 미도달이던 결함).
+    //   productImageUrl(E5a 단일 소스) → heroImageUrl → CardBody 실이미지(미리보기·거울 즉시 반영).
+    ...(isCommerce && s.productImageUrl ? { productImageUrl: s.productImageUrl } : {}),
+    // E5a·E5g2 — commerce 블록(imageUrl·harvestDate): fromDropDetail 계열 소비 대비 유지(프리뷰 무해).
     ...(isCommerce && (s.productImageUrl || s.harvestDate)
       ? {
           commerce: {
