@@ -335,6 +335,32 @@ function rangeLabel(prefix: string, startIso: string, endIso: string): string {
   const days = Math.round((Date.parse(end) - Date.parse(startIso)) / 86400000) + 1;
   return `${prefix} ${labelOfIso(startIso)} ~ ${labelOfIso(end)} (${days}일간)`;
 }
+// UI-5-T4-D2 — 튜토리얼 졸업 카운트(localStorage · DB 신설 금지 준수). 키 설계:
+//   "lingo49_tutorial_seen" = { assembleCount(정상 완주 횟수 — 스킵 제외), doneCount(do 수행 성공 횟수),
+//   skipStreak(연속 스킵 — 완주 시 0 리셋) }. 시크릿창 = 매번 신규(테스트 이점 · 계정 동기화 = post-pilot 한계).
+const TUT_SEEN_KEY = "lingo49_tutorial_seen";
+type TutSeen = { assembleCount: number; doneCount: number; skipStreak: number };
+function readTutSeen(): TutSeen {
+  try {
+    if (typeof window === "undefined") return { assembleCount: 0, doneCount: 0, skipStreak: 0 };
+    const p = JSON.parse(window.localStorage.getItem(TUT_SEEN_KEY) ?? "null") as Partial<TutSeen> | null;
+    return {
+      assembleCount: Number(p?.assembleCount) || 0,
+      doneCount: Number(p?.doneCount) || 0,
+      skipStreak: Number(p?.skipStreak) || 0,
+    };
+  } catch {
+    return { assembleCount: 0, doneCount: 0, skipStreak: 0 };
+  }
+}
+function writeTutSeen(patch: Partial<TutSeen>) {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(TUT_SEEN_KEY, JSON.stringify({ ...readTutSeen(), ...patch }));
+  } catch {
+    // 저장 실패(프라이빗 모드 등) = 조용히 — 매번 풀 연출일 뿐(기능 무해).
+  }
+}
 function defaultSaleRange(): { start: string; end: string } {
   const base = new Date();
   base.setHours(0, 0, 0, 0);
@@ -1240,6 +1266,10 @@ export function CardStudioPage() {
   // UI-5-T4-D1 — do 스텝 수행 대기 플래그 + 마이크로 피드백("잘하셨어요!").
   const awaitingDoRef = useRef(false);
   const [assembleFeedback, setAssembleFeedback] = useState<string | null>(null);
+  // UI-5-T4-D2 — 재관람("연출 다시 보기"): 마지막 연출 재료(watch 원본) + 카운트 면제 플래그.
+  const lastAssemblyRef = useRef<null | { actions: any[]; steps: { label: string; note: string; anchor?: string }[] }>(null);
+  const [hasAssemblyHistory, setHasAssemblyHistory] = useState(false);
+  const replayingRef = useRef(false);
   const assembleTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [lingoText, setLingoText] = useState("");
   const recognitionRef = useRef<any>(null);
@@ -1401,6 +1431,10 @@ export function CardStudioPage() {
     setAssembleStep(0);
     awaitingDoRef.current = false; // D1 — do 대기 해제.
     setAssembleFeedback(null);
+    // D2 — 재관람 재료 폐기(이전 목적 연출 재생 차단 — 스냅샷 폐기 관례 동일) · 면제 플래그 해제.
+    lastAssemblyRef.current = null;
+    setHasAssemblyHistory(false);
+    replayingRef.current = false;
     assembleSnapshot.current = null; // 되돌리기 스냅샷 폐기(이전 목적 작업물 유입 차단)
     appliedActionsRef.current = [];
     // ── 링고 패널: 대화 이력 유지 + 새 플랜 인사 ───────────────────
@@ -1887,7 +1921,14 @@ export function CardStudioPage() {
   }
 
   // 링고AI가 손가락으로 카드를 가리키며 단계별로 조립하는 연출을 재생
-  function runAssembly(actions: any[], steps: { label: string; note: string; anchor?: string }[]) {
+  // UI-5-T4-D2 — 졸업제: 1~2회차 = 풀 연출 / 3회차부터(또는 연속 스킵 2회) = 축약(딤·연출 생략,
+  //   즉시 일괄 적용 + 요약만 — 마킹·배지·릴레이·재검증 동일 = 데이터 무손실, 극장만 졸업).
+  //   opts.forceFull = 재관람("연출 다시 보기") — 회차 무관 풀 1회 · 카운트 미증가(replayingRef).
+  function runAssembly(
+    actions: any[],
+    steps: { label: string; note: string; anchor?: string }[],
+    opts?: { forceFull?: boolean },
+  ) {
     // 이전 연출 타이머 정리
     assembleTimers.current.forEach(clearTimeout);
     assembleTimers.current = [];
@@ -1896,21 +1937,37 @@ export function CardStudioPage() {
     // T1m — 연출 시작 시 영상 관문 도우미(guide) 정리(장착 후 재요청으로 진입한 경우).
     setHelperTarget(null);
     setHelperCopyKey(null);
-    // UI-5-T4-D1(4) — 마지막에 do 스텝 1개 시범 편입(관람 → 수행 튜토리얼 골격 · D3 온보딩 예정).
-    //   대상 = 미리보기(거울 열기) 버튼 — 발행 버튼 아님(헌장 ⑨ — 발행 유도 연출 금지).
-    setAssembleSteps([
-      ...steps,
-      {
-        label: "완성했어요! 이제 미리보기를 눌러 확인해 보세요",
-        note: "이번엔 대표님 차례예요 — 화살표가 가리키는 버튼을 직접 눌러 보세요.",
-        anchor: "mirror",
-        kind: "do",
-      },
-    ]);
-    setAssembleStep(0);
-    setAssembling(true);
+    // D2 — 졸업 판정(스킵 신호 포함) + do 졸업(1회 수행 성공 후 생략).
+    const tut = readTutSeen();
+    const forceFull = opts?.forceFull === true;
+    replayingRef.current = forceFull;
+    const abbreviated = !forceFull && (tut.assembleCount >= 2 || tut.skipStreak >= 2);
+    const includeDo = forceFull || tut.doneCount < 1;
+    // D2(3) — 재관람 재료 보관(watch 원본 — do 편입 전).
+    lastAssemblyRef.current = { actions, steps };
+    setHasAssemblyHistory(true);
     awaitingDoRef.current = false;
     setAssembleFeedback(null);
+    if (!abbreviated) {
+      // UI-5-T4-D1(4) — 마지막에 do 스텝 1개 시범 편입(관람 → 수행 튜토리얼 골격 · D3 온보딩 예정).
+      //   대상 = 미리보기(거울 열기) 버튼 — 발행 버튼 아님(헌장 ⑨ — 발행 유도 연출 금지).
+      //   D2 — do 졸업(doneCount ≥ 1) 시 watch 스텝만.
+      setAssembleSteps(
+        includeDo
+          ? [
+              ...steps,
+              {
+                label: "완성했어요! 이제 미리보기를 눌러 확인해 보세요",
+                note: "이번엔 대표님 차례예요 — 화살표가 가리키는 버튼을 직접 눌러 보세요.",
+                anchor: "mirror",
+                kind: "do" as const,
+              },
+            ]
+          : steps,
+      );
+      setAssembleStep(0);
+      setAssembling(true);
+    }
     // UI-5-T1j(2A) — 연출 시작 전 스냅샷 1회 저장(전체 되돌리기용) + 적용 액션 로그 초기화.
     assembleSnapshot.current = {
       applied: { ...applied },
@@ -1945,6 +2002,14 @@ export function CardStudioPage() {
       stepPlan: [...stepPlanState], // E3e — 추가 스텝 포함 플랜 스냅샷(되돌리기 정합).
     };
     appliedActionsRef.current = [];
+    // D2(2) — 축약 모드: 딤·스포트라이트·타이머 생략, 동일 applyOneLingoAction 경로로 즉시 일괄 적용
+    //   (touch ✦ 배지·appliedActionsRef 마킹 무손실) → finishAssembly(요약·릴레이·재검증 동일) 직행.
+    if (abbreviated) {
+      for (const a of actions) applyOneLingoAction(a);
+      setBurstKey((k) => k + 1);
+      finishAssembly();
+      return;
+    }
     // 히어로 카드를 화면 중앙으로
     heroRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
 
@@ -1968,7 +2033,12 @@ export function CardStudioPage() {
 
     // UI-5-T4-D1(4) — 마지막 = do 스텝 진입(관람 → 수행): 자동 마무리 타이머 대신 수행 감지 대기.
     //   do 대상 = "수신자 화면 미리보기" 버튼(anchor="mirror") — 발행 CTA·발행 실행 버튼 아님(헌장 ⑨).
+    //   D2 — do 졸업(includeDo=false) 시 기존 마무리 직행.
     const enterDo = setTimeout(() => {
+      if (!includeDo) {
+        finishAssembly();
+        return;
+      }
       setAssembleStep(n); // allSteps[n] = do 스텝(runAssembly 진입부에서 편입).
       awaitingDoRef.current = true; // 감지 effect(mirrorOpen)가 마무리를 이어받음. 스킵은 상시 가능.
     }, n * STEP_MS + 800); // 마지막 watch 스텝 후 0.8s 여운.
@@ -1978,6 +2048,11 @@ export function CardStudioPage() {
   // UI-5-T4-D1 — 연출 마무리(구 done 타이머 본문 추출 — do 수행/스킵 양 경로 공용).
   function finishAssembly() {
     awaitingDoRef.current = false;
+    // D2(1) — 정상 완주 +1(스킵 제외 — skipAssembly 는 이 함수 미경유) · 연속 스킵 리셋. 재관람 = 미증가.
+    if (!replayingRef.current) {
+      writeTutSeen({ assembleCount: readTutSeen().assembleCount + 1, skipStreak: 0 });
+    }
+    replayingRef.current = false;
     setAssembling(false);
     const summary = buildAssembleSummary();
     setAssembleSummary(summary);
@@ -1996,11 +2071,19 @@ export function CardStudioPage() {
     if (lingoChannelRef.current === "voice") speak(doneLine);
     setAiSyncPending((n2) => n2 + 1); // E2b(B1) — 조립 종료(액션 커밋 후) → 실충족 재검증 동기화(스텝 자동 ✓).
   }
+  // UI-5-T4-D2(3) — 재관람: 회차 무관 풀 연출 1회 · 카운트 미증가(forceFull → replayingRef).
+  function replayAssembly() {
+    const last = lastAssemblyRef.current;
+    if (!last || assembling) return;
+    runAssembly(last.actions, last.steps, { forceFull: true }); // 진입부가 시트 자동 닫기(setLingoOpen(false)).
+  }
   // D1(2) — 수행 감지: do 대상(미리보기 버튼)의 "실 onClick"이 낸 기존 완료 신호(mirrorOpen) 관찰 —
   //   가짜 시뮬레이션 0. 감지 → "잘하셨어요!" 0.8s → 마무리(요약). 스킵/리셋은 awaitingDoRef 해제.
   useEffect(() => {
     if (!assembling || !awaitingDoRef.current || !mirrorOpen) return;
     awaitingDoRef.current = false;
+    // D2 — do 수행 성공 +1(재관람 제외) → 이후 연출에서 do 스텝 졸업.
+    if (!replayingRef.current) writeTutSeen({ doneCount: readTutSeen().doneCount + 1 });
     setAssembleFeedback("잘하셨어요!");
     const t = setTimeout(() => {
       setAssembleFeedback(null);
@@ -2329,6 +2412,9 @@ export function CardStudioPage() {
     assembleTimers.current.forEach(clearTimeout);
     assembleTimers.current = [];
     awaitingDoRef.current = false; // D1 — do 대기도 스킵으로 해제(건너뛰기 상시).
+    // D2(4) — 연속 스킵 신호 +1(2회 연속 = 다음부터 축약 — 원치 않는다는 신호 존중). 재관람 스킵 = 미기록.
+    if (!replayingRef.current) writeTutSeen({ skipStreak: readTutSeen().skipStreak + 1 });
+    replayingRef.current = false;
     setAssembleFeedback(null);
     setAssembling(false);
     const sum = buildAssembleSummary(); // 중단 = 적용된 데까지만 요약.
@@ -5349,6 +5435,19 @@ export function CardStudioPage() {
             open={lingoOpen}
             onClose={() => setLingoOpen(false)}
             logRef={lingoLogRef}
+            subHeader={
+              /* UI-5-T4-D2(3) — 재관람 존중: 연출 이력 있을 때만 · 탭 = 풀 연출 1회(카운트 미증가). */
+              hasAssemblyHistory ? (
+                <button
+                  onClick={replayAssembly}
+                  disabled={assembling}
+                  className="flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#F7F7F8] text-[12px] font-semibold text-[#525252] transition-colors active:bg-[#ECECEC] disabled:opacity-40"
+                >
+                  <Play className="h-3.5 w-3.5" strokeWidth={2.25} fill="currentColor" />
+                  연출 다시 보기
+                </button>
+              ) : undefined
+            }
             headerAction={
               /* L3 — 스피커 토글: 낭독 전체 on/off(사용자 설정 — 리셋 무관). OFF 전환 시 진행 중 낭독 즉시 중단. */
               <button

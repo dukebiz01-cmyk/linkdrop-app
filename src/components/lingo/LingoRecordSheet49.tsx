@@ -13,6 +13,7 @@ export function LingoRecordSheet49({
   footer,
   logRef,
   headerAction,
+  subHeader,
 }: {
   open: boolean;
   onClose: () => void;
@@ -23,6 +24,8 @@ export function LingoRecordSheet49({
   logRef?: Ref<HTMLDivElement>;
   /** UI-5-T3-L3 — 헤더 우측 액션 슬롯(스피커 토글 등 · 닫기 X 앞). */
   headerAction?: ReactNode;
+  /** UI-5-T4-D2 — 헤더 아래 보조 줄(예: 연출 다시 보기 — 시트 내부라 상시 화면 추가물 0 · T-D 상한 준수). */
+  subHeader?: ReactNode;
 }) {
   if (!open) return null;
   return (
@@ -51,6 +54,7 @@ export function LingoRecordSheet49({
             <X className="h-4 w-4" strokeWidth={2.5} />
           </button>
         </div>
+        {subHeader && <div className="px-4 pb-2">{subHeader}</div>}
         {/* 대화 로그 — 시트 본문 유일 스크롤 */}
         <div ref={logRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 pb-2">
           {log}
