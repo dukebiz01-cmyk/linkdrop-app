@@ -393,10 +393,16 @@ const FIELD_TO_BLOCK: Record<string, string> = {
   coupon: "coupon",
   productName: "product",
   productPrice: "product",
+  // F2③ — Edge FIX-48+50 방출 필드의 블록 환산(commerce 덱 게이트 정합).
+  origin: "product",
+  stockQty: "product",
   dock: "dock",
   phone: "link",
   map: "link",
 };
+// F2③ — 카드 공통 카피 필드: 제목·한마디는 전 모드 실필드(커머스 titleText·부제 폴백 포함).
+//   FIELD_TO_BLOCK 환산(content)이 commerce 덱에 없어 카피 요청이 통째로 차단되던 결함 해소.
+const COPY_FIELDS = new Set(["title", "subtitle"]);
 function isAiActionAllowed(mode: StudioMode, a: any): boolean {
   if (!a || typeof a.type !== "string") return false;
   const allowed = DECK_IDS[mode];
@@ -405,6 +411,7 @@ function isAiActionAllowed(mode: StudioMode, a: any): boolean {
   if (a.type === "equip") return typeof a.blockId === "string" && allowed.includes(a.blockId);
   if (a.type === "setField") {
     if (AI_BLOCKED_FIELDS.has(a.field)) return false; // T1k(D) — 구간 값 등 자동 설정 금지(선택은 대표님).
+    if (COPY_FIELDS.has(a.field)) return true; // F2③ — 카피(제목·한마디)는 전 모드 허용.
     const blk = FIELD_TO_BLOCK[a.field];
     return !blk || allowed.includes(blk); // 매핑 없는 필드는 블록 게이트 없음(허용).
   }
@@ -422,10 +429,12 @@ const FIELD_LABEL: Record<string, string> = {
   date: "예약일",
   time: "예약 시간",
   dock: "도킹 카드",
+  origin: "원산지", // F2③ — Edge 방출 필드 라벨.
+  stockQty: "수량",
   phone: "전화",
   map: "지도",
 };
-const NUMBER_FIELDS = new Set(["productPrice", "date", "time"]); // 가격·기간 계열 → 항상 확인(숫자 불가침).
+const NUMBER_FIELDS = new Set(["productPrice", "date", "time", "stockQty"]); // 가격·기간·수량 → 항상 확인(숫자 불가침). F2③ — stockQty 편입.
 const NUMBER_CRITICAL_BLOCKS = new Set(["product", "seasonal", "calendar", "party"]); // 가격·수량·기간·인원.
 // UI-5-T1k(D) — 핵심구간(clip): "장착은 링고, 선택은 대표님". content = 선택 필요(needsConfirm 동급).
 //   구간 값(clip) setField 는 AI 화이트리스트에서 제외 → 링고가 시도해도 가드에 걸림(T-2 실배선 방어).
@@ -1446,14 +1455,16 @@ export function CardStudioPage() {
         if (applied[a.blockId]) setApplied((p) => ({ ...p, [a.blockId]: false }));
       } else if (a.type === "setField" && a.field) {
         const v = a.value ?? "";
+        // F2③ — content 동반 장착은 content 가 현재 모드 덱에 있을 때만(커머스 유령 블록 장착 방지).
+        const canEquipContent = DECK_IDS[modeRef.current].includes("content");
         switch (a.field) {
           case "title":
             setCfgTitle(v);
-            if (!applied["content"]) equip(blockById("content"));
+            if (canEquipContent && !applied["content"]) equip(blockById("content"));
             break;
           case "subtitle":
             setCfgSubtitle(v);
-            if (!applied["content"]) equip(blockById("content"));
+            if (canEquipContent && !applied["content"]) equip(blockById("content"));
             break;
           case "clip":
             setCfgClip(v);
@@ -1479,11 +1490,20 @@ export function CardStudioPage() {
             setCfgDock(v);
             break;
           case "phone":
-            setCfgPhone(v === "true");
+            setCfgPhone(v === "true" || v === "on");
             break;
           case "map":
-            setCfgMap(v === "true");
+            setCfgMap(v === "true" || v === "on");
             break;
+          // F2③ — Edge 방출 필드(FIX-48+50) 실배선: 원산지·수량 → 상품등록 폼 값(적용 사실화).
+          case "origin":
+            setCfgProduct((p) => ({ ...p, origin: v }));
+            break;
+          case "stockQty":
+            setCfgProduct((p) => ({ ...p, quantity: v.replace(/[^0-9]/g, "") }));
+            break;
+          default:
+            return; // F2③ — 미배선 필드(gbTarget* 등) = 무적용·무기록(요약 "채워진 척" 금지).
         }
         appliedActionsRef.current.push(a); // T1j — 적용 로그(요약).
         touch([a.field, ...(FIELD_TO_BLOCK[a.field] ? [FIELD_TO_BLOCK[a.field]] : [])]); // T1j — 필드+블록 손길 기록.

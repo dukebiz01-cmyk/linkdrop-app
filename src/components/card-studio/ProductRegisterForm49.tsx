@@ -9,8 +9,10 @@ export type ProductForm = {
   name: string;
   price: string;
   type: ProductType;
-  /** fresh: 수확·발송 예정일 / processed: 소비기한 / goods: 발송 예정일 */
+  /** fresh: 수확·발송 예정 "시작"일 / processed: 소비기한(단일) / goods: 발송 예정 "시작"일. F2① — E5g2 기간 정합. */
   harvestDate: string;
+  /** F2① — fresh·goods 기간 "끝"일(시작=끝 = 하루). processed(소비기한)는 미사용. */
+  harvestDateEnd: string;
   /** fresh: 품목(시세 연동) / processed: 식품 유형 / goods: 카테고리 */
   itemCategory: string;
   /** fresh: 원산지 / processed: 원재료 원산지 / goods: 제조국 */
@@ -43,6 +45,7 @@ export const EMPTY_PRODUCT: ProductForm = {
   price: "",
   type: "fresh",
   harvestDate: "",
+  harvestDateEnd: "", // F2① — 기간 끝일.
   itemCategory: "",
   origin: "",
   storage: "room",
@@ -240,17 +243,46 @@ export function ProductRegisterForm({
         <Segmented options={TYPE_OPTIONS} value={value.type} onSelect={selectType} accent={accent} />
       </Field>
 
-      {/* 날짜 — 유형별: 수확·발송 예정일 / 소비기한 / 발송 예정일 */}
+      {/* 날짜 — 유형별: 수확·발송(기간) / 소비기한(단일) / 발송(기간).
+          F2① — fresh·goods 단일 date 잔재를 시작~끝 기간으로 수복(E5g2 확정 정합 · 시작=끝 = 하루).
+          processed 소비기한은 의미상 단일이 정답 — 유지. */}
       <Field label={copy.dateLabel} hint={copy.dateHint}>
-        <input
-          type="date"
-          value={value.harvestDate}
-          onChange={(e) => set("harvestDate", e.target.value)}
-          className="w-full rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none focus:bg-white"
-          style={{ boxShadow: "inset 0 0 0 1px transparent" }}
-          onFocus={focusRing}
-          onBlur={blurRing}
-        />
+        {value.type === "processed" ? (
+          <input
+            type="date"
+            value={value.harvestDate}
+            onChange={(e) => set("harvestDate", e.target.value)}
+            className="w-full rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none focus:bg-white"
+            style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+            onFocus={focusRing}
+            onBlur={blurRing}
+          />
+        ) : (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={value.harvestDate}
+              onChange={(e) => set("harvestDate", e.target.value)}
+              aria-label={`${copy.dateLabel} 시작`}
+              className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none focus:bg-white"
+              style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+              onFocus={focusRing}
+              onBlur={blurRing}
+            />
+            <span className="shrink-0 text-[12px] font-semibold text-[#8A8A8A]">~</span>
+            <input
+              type="date"
+              value={value.harvestDateEnd}
+              min={value.harvestDate || undefined}
+              onChange={(e) => set("harvestDateEnd", e.target.value)}
+              aria-label={`${copy.dateLabel} 끝`}
+              className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none focus:bg-white"
+              style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+              onFocus={focusRing}
+              onBlur={blurRing}
+            />
+          </div>
+        )}
       </Field>
 
       {/* 가공식품 전용 — 보관 방법 */}
