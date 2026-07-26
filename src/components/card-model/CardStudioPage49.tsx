@@ -1057,7 +1057,7 @@ export function CardStudioPage() {
     // E4b — 전환 인사도 행동 지시형(1화면 1행동). 나열문 폐지.
     setMessages((m) => [
       ...m,
-      { role: "assistant", text: `새 ${MODE_NAME[next]} 카드를 시작해요. 먼저 ${STEP_PLAN[next][0].label}부터 — ${firstStepGuide(next)}` },
+      { role: "assistant", text: `새 ${MODE_NAME[next]} 카드를 시작해요. ${introLead(next)}` }, // E4f — 중복 1회화 합성 공용.
     ]);
     setGreetingChipsOpen(true); // 새 인사 → 행동 칩 재개.
     // ── 안내 토스트 ─────────────────────────────────────────────────
@@ -1908,6 +1908,7 @@ export function CardStudioPage() {
   function enterStep(idx: number) {
     const plan = stepPlanState;
     if (idx < 0 || idx >= plan.length) return;
+    setGreetingChipsOpen(false); // E4f — 스텝 진입 = 인사 칩 소멸(칩 탭·대화 시작과 함께 소멸 3조건).
     setCurrentStep(idx);
     const s = plan[idx];
     if (s.block) onEditField(s.block, s.key === "video" ? "video" : undefined);
@@ -2000,11 +2001,21 @@ export function CardStudioPage() {
     const key = s0.key === "video" ? "video" : (s0.block ?? "");
     return HELPER_COPY[key] ?? "아래에서 시작해 주세요.";
   }
+  // UI-5-T2-E4f(3) — 라벨·가이드 첫 구 중복 1회화: 가이드가 1스텝 라벨로 시작하면
+  //   "먼저 {라벨}부터 {가이드 잔여}"로 합성(조사 을/를 등 제거) — "상품 사진부터 — 상품 사진을 …" 겹침 해소.
+  function introLead(m: StudioMode): string {
+    const s0 = STEP_PLAN[m][0];
+    const g = firstStepGuide(m);
+    if (g.startsWith(s0.label)) {
+      const rest = g.slice(s0.label.length).replace(/^[을를이가은는]\s*/, "").trimStart();
+      return `먼저 ${s0.label}부터 ${rest}`;
+    }
+    return `먼저 ${s0.label}부터 — ${g}`;
+  }
   // UI-5-T2-E4b — 행동 지시형 인사(1화면 1행동). 단계 나열·"더 넣고 싶으면" 폐지 —
   //   진행 지도(스텝 헤더)·확인 스텝 제안(E3e)이 각각 대체(정보 중복 금지). 총 2문장 이내.
   function stepPlanIntro(m: StudioMode): string {
-    const s0 = STEP_PLAN[m][0];
-    return `${MODE_NAME[m]} 카드를 만들어요. 먼저 ${s0.label}부터 — ${firstStepGuide(m)}`;
+    return `${MODE_NAME[m]} 카드를 만들어요. ${introLead(m)}`;
   }
 
   // UI-5-T2-E2 — 49 컨텍스트 → LingoContext(45 페이로드 형태 계승: studio_state + studio{deck,fields}).
@@ -4602,6 +4613,41 @@ export function CardStudioPage() {
                 </div>
               </div>
             </>
+          )}
+
+          {/* UI-5-T2-E4f(2) — 인사 고스트 말풍선(패널 밖 승격). 원인(진단 b): 인사·행동 칩이 lingoOpen 패널
+              내부 전용인데 패널 기본 닫힘(초기 false·E4c 양보) → 미노출. 패널 열림 여부와 무관하게 FAB 옆 노출.
+              상태 = greetingChipsOpen 단일 공유(패널 내부 인사·칩 그대로 — 이중 관리 금지).
+              소멸 = 칩 탭·대화 시작(sendToLingo)·스텝 진입(enterStep) 3조건 계승. 재소환 말풍선과 상호 배타. */}
+          {!lingoOpen && greetingChipsOpen && !yieldBubble && !assembling && !assembleSummary && (
+            <div className="fixed bottom-[262px] right-5 z-40 w-[min(78vw,280px)] animate-fade-in rounded-2xl bg-white p-3 [box-shadow:0_16px_36px_-14px_rgba(15,23,42,0.4),0_0_0_1px_#E8E8EC]">
+              <p className="flex items-start gap-1.5">
+                <span className="mt-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-1.5 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                  ✦ 링고
+                </span>
+                <span className="text-[12px] font-semibold leading-relaxed text-[#16161D] [word-break:keep-all]">
+                  {stepPlanIntro(mode)}
+                </span>
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => {
+                    setGreetingChipsOpen(false);
+                    enterStep(0); // E4b 계승 — 1스텝 칸 이동 + 포커스(탭 = 의사 · 자동 점프 아님).
+                  }}
+                  className="inline-flex min-h-[36px] items-center rounded-full bg-[#16161D] px-3 text-[11px] font-bold text-white transition-transform active:scale-95"
+                >
+                  {stepPlanState[0]?.label} 하러 가기
+                </button>
+                <button
+                  onClick={() => setGreetingChipsOpen(false)}
+                  className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] transition-transform active:scale-95"
+                >
+                  내가 알아서 할게요
+                </button>
+              </div>
+              <span className="absolute -bottom-1 right-7 h-3 w-3 rotate-45 bg-white [box-shadow:2px_2px_0_#E8E8EC]" aria-hidden="true" />
+            </div>
           )}
 
           {/* UI-5-T2-E4c(2) — 재소환 미니 말풍선(양보로 닫힘 직후 1회 · 3s 소멸). FAB는 항상 접근(z-40·백드롭 없음). */}
