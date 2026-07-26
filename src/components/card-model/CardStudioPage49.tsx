@@ -752,6 +752,14 @@ export function CardStudioPage() {
   const [showReviewSuggest, setShowReviewSuggest] = useState(false);
   const reviewSuggestUsedRef = useRef(false);
   const [stepToast, setStepToast] = useState<string | null>(null);
+  // UI-5-T2-E2b — 완료 견인·AI 레인 정합 상태.
+  //   stepChip: done=현재 스텝 완료 견인(A1) / ai=조립 요약·릴레이 종료 후 첫 미확정 제안(B2·B3). target=이동 제안 스텝.
+  const [stepChip, setStepChip] = useState<null | { kind: "done" | "ai"; target: number }>(null);
+  const prevStepDoneRef = useRef<{ idx: number; done: boolean } | null>(null); // A1 — 에지 감지(prev ref, E3c 교훈).
+  const [nextPulseKey, setNextPulseKey] = useState(0); // A2 — 진행 헤더 [다음] 완료 순간 1회 펄스(key 재마운트).
+  const [aiLane, setAiLane] = useState(false); // B4 — AI 실적용 후에만 미래 완료 스텝 잠금 완화(수동 레인 무영향 B5).
+  const [aiSyncPending, setAiSyncPending] = useState(0); // B1 — AI 적용 후 재검증 트리거(카운터 = 다중 조립 대응).
+  const prevPendingRef = useRef(0); // B2 — 릴레이 큐 비움(비→공) 에지 감지.
   // UI-5-T2-E3b — 작업물 있는 상태에서 목적 전환 시도 시 확인 대상 모드(null=게이트 닫힘).
   const [pendingModeSwitch, setPendingModeSwitch] = useState<StudioMode | null>(null);
   useEffect(() => {
@@ -759,6 +767,40 @@ export function CardStudioPage() {
     const t = setTimeout(() => setStepToast(null), 1800);
     return () => clearTimeout(t);
   }, [stepToast]);
+  // UI-5-T2-E2b(A1) — 스텝 완료 에지 감지: 현재 스텝 isStepDone false→true 순간 1회 발화(effect+prev ref).
+  //   발화 = 완료 칩 제시 + 헤더 [다음] 펄스(A2)뿐 — 자동 점프·자동 발행 없음(탭이 의사).
+  //   연출·요약 중엔 침묵(AI 채움 구간은 B1·B2가 담당) · review 스텝 제외(항상 done인 훑어보기).
+  useEffect(() => {
+    const done = isStepDone(currentStep);
+    const prev = prevStepDoneRef.current;
+    if (
+      prev && prev.idx === currentStep && !prev.done && done &&
+      !assembling && !assembleSummary &&
+      stepPlanState[currentStep]?.key !== "review"
+    ) {
+      setStepChip({ kind: "done", target: Math.min(currentStep + 1, stepPlanState.length - 1) });
+      setNextPulseKey((k) => k + 1); // A2 — 두 진입점(칩·헤더) 동일 경로 = nextStep.
+    }
+    prevStepDoneRef.current = { idx: currentStep, done };
+  });
+  // E2b — 스텝 이동 = 칩 소비/무효(다음 스텝 에지가 새로 발화).
+  useEffect(() => {
+    setStepChip(null);
+  }, [currentStep]);
+  // UI-5-T2-E2b(B1) — AI 적용 후 재검증 동기화: 적용 액션이 "실제로" 충족시킨 스텝만 completedSteps 자동 ✓.
+  //   판정 = 상태 커밋 후 isStepDone 재검증뿐 — 문구만 채워진 척 금지. review 제외 · currentStep 불변(자동 점프 0).
+  useEffect(() => {
+    if (!aiSyncPending) return;
+    const adds: number[] = [];
+    stepPlanState.forEach((s, i) => {
+      if (s.key !== "review" && !completedSteps.has(i) && isStepDone(i)) adds.push(i);
+    });
+    if (adds.length) {
+      setCompletedSteps((prev) => new Set([...prev, ...adds]));
+      setAiLane(true); // B4 — 잠금 완화는 AI 실충족 발생 이후에만.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiSyncPending]);
   // UI-5-T2-E2a(2) — 진입 시 초기 모드 플랜 제시(패널 첫 메시지).
   useEffect(() => {
     setMessages((m) => (m.length === 0 ? [{ role: "assistant", text: stepPlanIntro(mode) }] : m));
@@ -814,6 +856,13 @@ export function CardStudioPage() {
   useEffect(() => {
     if (helperPhase === "done" && pendingConfirm.length === 0) setHelperPhase("allDone");
   }, [helperPhase, pendingConfirm]);
+  // UI-5-T2-E2b(B2) — 고치기 릴레이 실종료(미확정 큐 비→공)에만 다음 코스 제안(수동 단건 확정 오발화 방지).
+  //   pendingConfirm 선언 이후 위치(TDZ) — 제안 = 칩 세우기뿐, 이동은 사용자 탭에서만.
+  useEffect(() => {
+    if (prevPendingRef.current > 0 && pendingConfirm.length === 0) suggestNextUnsettled();
+    prevPendingRef.current = pendingConfirm.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingConfirm]);
   // 전체 완료 말풍선 3s 후 소멸(발행 CTA 자동 트리거 없음 — 헌장 ⑨).
   useEffect(() => {
     if (helperPhase !== "allDone") return;
@@ -968,6 +1017,12 @@ export function CardStudioPage() {
     stepPlanRef.current = STEP_PLAN[next];
     reviewSuggestUsedRef.current = false;
     setShowReviewSuggest(false);
+    // E2b — 완료 칩·AI 레인 리셋(새 카드 = 수동 레인 기본 · 에지 ref 초기화).
+    setStepChip(null);
+    setAiLane(false);
+    setNextPulseKey(0);
+    prevStepDoneRef.current = null;
+    prevPendingRef.current = 0;
     setLingoTouched(new Set());
     setPendingConfirm([]);
     setHelperTarget(null);
@@ -1442,6 +1497,7 @@ export function CardStudioPage() {
       selectedVideo, // T1n — 영상 선택도 스냅샷(전체 되돌리기 정합).
       currentStep, // T2-E2a(5) — 스텝 진행도 스냅샷.
       completedSteps: new Set(completedSteps),
+      aiLane, // E2b — 되돌리기 시 잠금 완화 상태도 원복(B1 자동 ✓와 정합).
       lingoTouched: new Set(lingoTouched),
       stepPlan: [...stepPlanState], // E3e — 추가 스텝 포함 플랜 스냅샷(되돌리기 정합).
     };
@@ -1487,6 +1543,7 @@ export function CardStudioPage() {
           text: `조립 완료 — ${filled.join("·") || "구성"} 채움${need.length ? `, ${need.join("·")} 확인 필요` : ""}.`,
         },
       ]);
+      setAiSyncPending((n2) => n2 + 1); // E2b(B1) — 조립 종료(액션 커밋 후) → 실충족 재검증 동기화(스텝 자동 ✓).
     }, n * STEP_MS + 800); // 마지막 스텝 후 0.8s 여운.
     assembleTimers.current.push(done);
   }
@@ -1560,12 +1617,15 @@ export function CardStudioPage() {
         setStepPlanState(s.stepPlan); // E3e — 추가 스텝 포함 플랜 복원.
         stepPlanRef.current = s.stepPlan;
       }
+      setAiLane(!!s.aiLane); // E2b — 잠금 완화 상태 원복(B1 자동 ✓ 되돌림과 정합).
+      setStepChip(null);
       setLingoTouched(s.lingoTouched);
     }
     setAssembleSummary(null);
   }
   function confirmAssembly() {
     setAssembleSummary(null);
+    suggestNextUnsettled(); // E2b(B2) — [좋아요, 확인] 종료 → 첫 미확정 스텝 이동 "제안"(칩 — 강제 점프 아님).
   }
 
   // UI-5-T1k(B1)·T1m — 칩 탭/관문 → 딤 종료 → 해당 블록 이동 + 스포트라이트 1회 깜빡 + 도우미 말풍선(guide).
@@ -1783,6 +1843,7 @@ export function CardStudioPage() {
         .map((i) => i.id)
         .sort((a, b) => planOrder(a) - planOrder(b)), // T2-E2a(8c) — 릴레이 큐 = STEP_PLAN 순서.
     );
+    setAiSyncPending((n) => n + 1); // E2b(B1) — 중단도 적용된 데까지 재검증 동기화.
   }
 
   // UI-5-T2-E2a — 스텝 완료 조건(블록별 확정 신호). review = 항상 완료(훑어보기).
@@ -1833,7 +1894,10 @@ export function CardStudioPage() {
   // 미니 번호열 탭: 완료/현재/이전 = 재방문 허용, 미완 미래 = 토스트(순서 강제 · 자동 점프 없음).
   function goToStep(idx: number) {
     if (idx === currentStep) return;
-    if (idx > currentStep && !completedSteps.has(currentStep) && !isStepDone(currentStep)) {
+    // E2b(B4) — AI 레인 한정 완화: AI 재검증(B1)으로 completedSteps에 오른 미래 스텝 = 완료 스텝 재방문(잠금 아님).
+    //   수동 레인(aiLane=false) = 기존 순차 잠금 그대로(B5). review는 B1 제외 대상이라 이 완화로 못 간다.
+    const aiUnlocked = aiLane && completedSteps.has(idx);
+    if (idx > currentStep && !completedSteps.has(currentStep) && !isStepDone(currentStep) && !aiUnlocked) {
       setStepToast(`순서대로 가요 — 지금은 ${stepPlanState[currentStep].label}부터`);
       return;
     }
@@ -1845,6 +1909,29 @@ export function CardStudioPage() {
     setCompletedSteps((prev) => new Set(prev).add(currentStep));
     const plan = stepPlanState;
     if (currentStep < plan.length - 1) enterStep(currentStep + 1);
+  }
+  // UI-5-T2-E2b — 칩 라벨: 다음이 확인(review)이면 [확인하러 가기](마지막 실스텝 완료·전 스텝 충족 B3 공용).
+  function stepChipLabel(target: number): string {
+    const s = stepPlanState[target];
+    if (!s) return "다음";
+    return s.key === "review" ? "확인하러 가기" : `다음: ${s.label}`;
+  }
+  // UI-5-T2-E2b(B2·B3) — 첫 미확정 스텝 탐색(needsConfirm 잔존=pendingConfirm 큐 또는 isStepDone false)
+  //   → 이동 "제안" 칩만 세움(강제 점프 아님 — enterStep은 칩 탭에서만). 순서 = 런타임 플랜 순(planOrder와 동일 기준).
+  //   전 스텝 충족 시 = 확인(review) 직행 제안.
+  function suggestNextUnsettled() {
+    const plan = stepPlanRef.current;
+    let target = -1;
+    for (let i = 0; i < plan.length; i++) {
+      const s = plan[i];
+      if (s.key === "review") continue;
+      if ((s.block && pendingConfirm.includes(s.block)) || !isStepDone(i)) {
+        target = i;
+        break;
+      }
+    }
+    if (target < 0) target = plan.findIndex((s) => s.key === "review");
+    if (target >= 0) setStepChip({ kind: "ai", target });
   }
   // E3e(2) — 추가 스텝 삽입: 확인(review) 앞에 편입 · 중복 시 이동만 · 다중 삽입 정합(ref 즉시 반영).
   //   트리거는 사용자 유래뿐 — 칩 탭(4) · 사용자 발화 유래 equip(3). 자동/타이머 호출 없음.
@@ -1990,6 +2077,7 @@ export function CardStudioPage() {
       runAssembly(sortedActions, planConnut); // 연출(T1b 분기 유지).
     } else {
       applyLingoActions(okActions); // 단순 편집 즉시 적용.
+      if (okActions.length) setAiSyncPending((n) => n + 1); // E2b(B1) — 즉시 적용도 커밋 후 재검증 동기화.
     }
   }
 
@@ -2390,10 +2478,14 @@ export function CardStudioPage() {
             );
           })}
         </div>
+        {/* E2b(A2) — 완료 에지마다 key 재마운트 → 펄스 1회(상주 애니메이션 금지). */}
+        <style>{`@keyframes lingo-next-pulse{0%{box-shadow:0 0 0 0 rgba(29,78,216,0.6)}100%{box-shadow:0 0 0 10px rgba(29,78,216,0)}}`}</style>
         <button
+          key={nextPulseKey}
           onClick={nextStep}
           disabled={!isStepDone(currentStep) || currentStep >= stepPlanState.length - 1}
           className="shrink-0 rounded-lg bg-[#16161D] px-2.5 py-1 text-[11px] font-bold text-white transition-transform active:scale-95 disabled:opacity-30"
+          style={nextPulseKey > 0 ? { animation: "lingo-next-pulse 0.9s ease-out 1" } : undefined}
         >
           다음
         </button>
@@ -2831,6 +2923,28 @@ export function CardStudioPage() {
                                   className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] active:scale-95"
                                 >
                                   나중에 할게요
+                                </button>
+                              </div>
+                            )}
+                            {/* E2b(A1) — 완료 칩 합류: 릴레이 큐가 없으면 스텝 [다음] 칩이 이어받음(중복 렌더 금지·자동 점프 없음). */}
+                            {pendingConfirm.length === 0 && stepChip && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    const t = stepChip;
+                                    setStepChip(null);
+                                    if (t.kind === "done") nextStep(); // A2 — 헤더 [다음]과 동일 경로.
+                                    else enterStep(t.target); // B2 — 사용자 탭 = 이동 의사.
+                                  }}
+                                  className="inline-flex min-h-[36px] items-center rounded-full bg-[#16161D] px-3 text-[11px] font-bold text-white active:scale-95"
+                                >
+                                  {stepChipLabel(stepChip.target)}
+                                </button>
+                                <button
+                                  onClick={() => setStepChip(null)}
+                                  className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] active:scale-95"
+                                >
+                                  여기 더 볼게요
                                 </button>
                               </div>
                             )}
@@ -4010,6 +4124,35 @@ export function CardStudioPage() {
               </>
             )}
           </button>
+
+          {/* UI-5-T2-E2b(A1·B2) — 완료/다음 코스 칩(설정 영역 하단 — 부유물 금지 원칙 준수).
+              도우미 done 말풍선이 열려 있으면 그쪽에 합류(위)·여기선 숨김. 탭 = 사용자 의사(자동 점프·자동 발행 없음). */}
+          {stepChip && !assembling && !assembleSummary && !(helperTarget === activeBlock.id && helperPhase !== "guide") && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-2xl bg-[#F4F4F5] p-3">
+              <span className="mr-1 text-[12px] font-bold text-[#16161D] [word-break:keep-all]">
+                {stepChip.kind === "done"
+                  ? `✓ ${stepPlanState[currentStep]?.label ?? "이번 스텝"} 완료`
+                  : "✦ 링고가 채운 데까지 확인했어요"}
+              </span>
+              <button
+                onClick={() => {
+                  const t = stepChip;
+                  setStepChip(null);
+                  if (t.kind === "done") nextStep(); // A2 — 헤더 [다음]과 동일 경로(nextStep 경유).
+                  else enterStep(t.target); // B2 — 사용자 탭 = 이동 의사(강제 점프 아님).
+                }}
+                className="inline-flex min-h-[36px] items-center rounded-full bg-[#16161D] px-3 text-[11px] font-bold text-white transition-transform active:scale-95"
+              >
+                {stepChipLabel(stepChip.target)}
+              </button>
+              <button
+                onClick={() => setStepChip(null)}
+                className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] transition-transform active:scale-95"
+              >
+                여기 더 볼게요
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
