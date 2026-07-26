@@ -735,10 +735,225 @@ export function CardStudioPage() {
       URL.revokeObjectURL(localUrl);
     }
   }
+  // UI-5-T2-E5b — 상품 실등록(45 submitStudioProduct :2177-2248 동형 · blockData 45 :958-1036 보유 필드 계승).
+  //   저장 시점 = 45 관례 계승: 폼 [상품 등록하기] 확정 시 즉시 /api/drops(self_upload) — 발행 일괄 아님.
+  //   호출처 = 폼 버튼 onClick 1곳뿐(자동/링고/연출 트리거 0). 시세 = price_band_enabled:false 고정(§0 락).
+  async function registerProduct() {
+    if (productSaving) return;
+    const digits = (v: string) => v.replace(/[^0-9]/g, "");
+    const priceNum = Number(digits(cfgProductPrice)) || 0;
+    // 검증(무언 실패 금지) — /api/drops 필수(사진·가격) + 이름(45 handlePublish :2256-2270 3종 동형).
+    if (!productImageUrl) {
+      setProductSaveError("상품 사진을 먼저 올려 주세요 — 1스텝(상품 사진)에서 올릴 수 있어요.");
+      return;
+    }
+    if (!cfgProductName.trim()) {
+      setProductSaveError("상품 이름을 입력해 주세요.");
+      return;
+    }
+    if (priceNum <= 0) {
+      setProductSaveError("가격을 입력해 주세요.");
+      return;
+    }
+    const p = cfgProduct;
+    const isFresh = p.type === "fresh";
+    const dateVal = p.harvestDate.trim() || null;
+    const dateEndRaw = p.type !== "processed" ? p.harvestDateEnd.trim() : "";
+    if (dateVal && dateEndRaw && dateEndRaw < dateVal) {
+      setProductSaveError("종료일은 시작일보다 빠를 수 없어요."); // 45 :946 계승.
+      return;
+    }
+    const dateEndVal = dateVal && dateEndRaw && dateEndRaw > dateVal ? dateEndRaw : null;
+    const md = (iso: string) => {
+      const [, m, d] = iso.split("-");
+      return `${Number(m)}/${Number(d)}`;
+    };
+    const dateRangeLabel = dateVal && dateEndVal ? `${md(dateVal)}~${md(dateEndVal)} 순차 발송` : null; // 45 :955.
+    const points = p.sellingPoints.map((s) => s.trim()).filter(Boolean).slice(0, 5);
+    const qty = p.quantity && Number(digits(p.quantity)) > 0 ? Math.floor(Number(digits(p.quantity))) : null;
+    // block_data — 45 :958-1036 키 정합(49 폼 보유 필드만 · 미보유 키는 미주입=미렌더).
+    const blockData: Record<string, unknown> = {
+      name: cfgProductName.trim(),
+      price_krw: priceNum,
+      ...(p.headline.trim() ? { headline: p.headline.trim() } : {}),
+      ...(points.length > 0 ? { selling_points: points } : {}),
+      is_fresh: isFresh,
+      ...(isFresh && dateVal ? { harvest_date: dateVal } : {}),
+      ...(qty != null ? { stock_limit: qty } : {}),
+      price_band_enabled: false, // §0 시세 노출 영구 금지.
+      ...(isFresh && p.kamisItemCode ? { kamis_item_code: p.kamisItemCode } : {}),
+      origin: p.origin.trim(),
+      ...(p.itemCategory.trim() ? { category: p.itemCategory.trim() } : {}),
+      product_type: p.type,
+      sale_unit: p.saleUnit,
+      ...(isFresh && p.saleUnit === "box" && p.boxCount ? { box_count: Math.floor(Number(p.boxCount)) } : {}),
+      ...(isFresh && p.saleUnit !== "unit" && !p.weightUnknown && p.totalWeight
+        ? { total_weight_kg: Number(p.totalWeight) }
+        : {}),
+      ...(p.type !== "goods" ? { storage_method: p.storage } : {}),
+      ...(p.type === "processed" && dateVal ? { expiry_date: dateVal } : {}),
+      ...(p.type === "goods" && dateVal ? { ship_date: dateVal } : {}),
+      ...(isFresh && dateEndVal ? { harvest_date_end: dateEndVal } : {}),
+      ...(p.type === "goods" && dateEndVal ? { ship_date_end: dateEndVal } : {}),
+      ...(dateRangeLabel ? { date_range_label: dateRangeLabel } : {}),
+      ...(p.type === "goods" ? { made_in: p.origin.trim() } : {}),
+      ...(p.type === "goods" && p.brand.trim() ? { brand: p.brand.trim() } : {}),
+      ...(p.type === "goods" && p.spec.trim() ? { spec: p.spec.trim() } : {}),
+      free_ship: p.freeShip,
+      ...(!p.freeShip && p.shipFee ? { ship_fee_krw: Math.floor(Number(digits(p.shipFee))) } : {}),
+    };
+    setProductSaving(true);
+    setProductSaveError(null);
+    try {
+      const res = await fetch("/api/drops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          self_upload: true,
+          image_url: productImageUrl, // E5a — 실 사진 URL 단일 소스.
+          name: cfgProductName.trim(),
+          price_krw: priceNum,
+          headline: p.headline.trim(),
+          selling_points: points,
+          is_fresh: isFresh,
+          harvest_date: isFresh ? dateVal : null,
+          stock_limit: qty,
+          price_band_enabled: false,
+          ...(isFresh && p.kamisItemCode ? { kamis_item_code: p.kamisItemCode } : {}),
+          blocks: [{ block_kind: "product", position: 0, block_data: blockData }],
+        }),
+      });
+      const json = (await res.json()) as { drop?: { id?: string; share_uuid?: string }; message?: string };
+      if (!res.ok || !json.drop?.share_uuid) throw new Error(json.message ?? "DROP_CREATE_FAILED");
+      setRegisteredProduct({ dropId: json.drop.id ?? null, shareUuid: json.drop.share_uuid, name: cfgProductName.trim() });
+      setApplied((prev) => ({ ...prev, product: true }));
+      confirmHelper("product"); // 등록 확정 = 도우미 ✓·릴레이/견인 연동.
+      setStepToast("상품을 등록했어요 — 카드에 연결됐어요");
+    } catch (err) {
+      console.error("[studio49] product register:", err);
+      setProductSaveError("상품 등록에 실패했어요. 잠시 후 다시 시도해 주세요."); // 45 :1061 동형.
+    } finally {
+      setProductSaving(false);
+    }
+  }
+  // E5b — 재사용 목록 로드(partner.products.index :260-281 동형 쿼리 · 자체업로드분만). 탭 시 1회.
+  async function loadMyProducts() {
+    if (myProductsLoading) return;
+    setMyProductsLoading(true);
+    setMyProductsError(null);
+    try {
+      const supabase = getSupabase();
+      const { data: sess } = await supabase.auth.getSession();
+      const uid = sess.session?.user.id;
+      if (!uid) {
+        setMyProductsError("로그인이 필요해요.");
+        return;
+      }
+      const { data: rows, error: qErr } = await supabase
+        .from("info_drops")
+        .select(
+          `id, created_at,
+           source:content_sources!inner ( title, thumbnail_url, price_krw, source_url ),
+           share_events ( share_uuid ),
+           blocks:component_blocks ( block_kind, block_data )`,
+        )
+        .eq("owner_user_id", uid)
+        .eq("purpose", "구매")
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (qErr) throw qErr;
+      type Row = {
+        id: string;
+        source: { title: string | null; thumbnail_url: string | null; price_krw: number | null; source_url: string | null } | null;
+        share_events: { share_uuid: string | null }[] | null;
+        blocks: { block_kind: string | null; block_data: Record<string, unknown> | null }[] | null;
+      };
+      const mapped = ((rows ?? []) as unknown as Row[])
+        .filter((r) => r.source?.source_url?.startsWith("https://app.drop.how/p/")) // 자체업로드만(:278-281 동형).
+        .map((r) => {
+          const pb = r.blocks?.find((b) => b.block_kind === "product" && !b.block_data?.ref_drop_id) ?? null;
+          return {
+            dropId: r.id,
+            shareUuid: r.share_events?.[0]?.share_uuid ?? null,
+            name:
+              (typeof pb?.block_data?.name === "string" && pb.block_data.name) || r.source?.title || "이름 없는 상품",
+            priceKrw:
+              typeof pb?.block_data?.price_krw === "number" ? pb.block_data.price_krw : (r.source?.price_krw ?? null),
+            imageUrl: r.source?.thumbnail_url ?? null,
+            blockData: pb?.block_data ?? null,
+          };
+        });
+      setMyProducts(mapped);
+      if (mapped.length === 0) setMyProductsError("등록한 상품이 아직 없어요.");
+    } catch (err) {
+      console.error("[studio49] my products load:", err);
+      setMyProductsError("상품 목록을 불러오지 못했어요.");
+    } finally {
+      setMyProductsLoading(false);
+    }
+  }
+  // E5b — 재사용 선택: 폼 자동 채움 + 참조 연결(registeredProduct). ⚠️ BUG-1 방어: 이 드롭은
+  //   is_public=false 로 잠들어 있음 — E5f 발행 시 45 S1-b(:2385-2411) update 패턴 필수(위 상태 주석 참조).
+  function applyReusedProduct(row: MyProductRow) {
+    const bd = row.blockData ?? {};
+    const str = (v: unknown) => (typeof v === "string" ? v : "");
+    setRegisteredProduct({ dropId: row.dropId, shareUuid: row.shareUuid ?? "", name: row.name });
+    setCfgProductName(row.name);
+    setCfgProductPrice(row.priceKrw != null ? String(row.priceKrw) : "");
+    setCfgProduct((p) => ({
+      ...p,
+      type: bd.product_type === "processed" || bd.product_type === "goods" ? bd.product_type : "fresh",
+      headline: str(bd.headline),
+      sellingPoints: Array.isArray(bd.selling_points)
+        ? (bd.selling_points.filter((s): s is string => typeof s === "string") as string[])
+        : [""],
+      origin: str(bd.origin),
+      itemCategory: str(bd.category),
+      kamisItemCode: str(bd.kamis_item_code),
+      quantity: typeof bd.stock_limit === "number" ? String(bd.stock_limit) : "",
+      harvestDate: str(bd.harvest_date) || str(bd.ship_date) || str(bd.expiry_date),
+      harvestDateEnd: str(bd.harvest_date_end) || str(bd.ship_date_end),
+      saleUnit: bd.sale_unit === "box" || bd.sale_unit === "weight" ? bd.sale_unit : "unit",
+      freeShip: bd.free_ship !== false,
+      shipFee: typeof bd.ship_fee_krw === "number" ? String(bd.ship_fee_krw) : "",
+      storage: bd.storage_method === "cold" || bd.storage_method === "frozen" ? bd.storage_method : "room",
+      brand: str(bd.brand),
+      spec: str(bd.spec),
+    }));
+    if (row.imageUrl) {
+      // E5a 정합 — 재사용 = 기존 실 URL 재연결(업로드 아님 · 단일 소스 유지).
+      setProductImageUrl(row.imageUrl);
+      setProductImagePreview(row.imageUrl);
+      setApplied((prev) => ({ ...prev, productimage: true }));
+    }
+    setApplied((prev) => ({ ...prev, product: true }));
+    confirmHelper("product");
+    setMyProductsOpen(false);
+    setStepToast(`불러왔어요 — ${row.name}`);
+  }
   // 조립 연출 타이머 정리
   useEffect(() => () => { assembleTimers.current.forEach(clearTimeout); }, []);
   // 상품 등록 상세 (유형·원산지·판매단위·수량·셀링포인트 등)
   const [cfgProduct, setCfgProduct] = useState<ProductForm>(EMPTY_PRODUCT);
+  // UI-5-T2-E5b — 상품 실등록 상태: 등록 결과 참조(드롭 id·uuid) = E5f 발행 재사용·BUG-1 방어의 근거.
+  //   ⚠️ BUG-1(45 S1-b): 등록 드롭은 is_public=false(서버 기본)로 생성 — E5f 재사용 발행 시 45 :2385-2411
+  //   패턴(is_public·published_at best-effort update)을 이 dropId 에 반드시 적용할 것.
+  const [registeredProduct, setRegisteredProduct] = useState<null | { dropId: string | null; shareUuid: string; name: string }>(null);
+  const [productSaving, setProductSaving] = useState(false);
+  const [productSaveError, setProductSaveError] = useState<string | null>(null);
+  // E5b — 재사용: 내 등록 상품 목록(자체업로드분 · 탭 = 폼 자동 채움 + 참조 연결).
+  type MyProductRow = {
+    dropId: string;
+    shareUuid: string | null;
+    name: string;
+    priceKrw: number | null;
+    imageUrl: string | null;
+    blockData: Record<string, unknown> | null;
+  };
+  const [myProducts, setMyProducts] = useState<MyProductRow[]>([]);
+  const [myProductsLoading, setMyProductsLoading] = useState(false);
+  const [myProductsOpen, setMyProductsOpen] = useState(false);
+  const [myProductsError, setMyProductsError] = useState<string | null>(null);
   const [cfgPhone, setCfgPhone] = useState(true);
   const [cfgMap, setCfgMap] = useState(true);
   // 매장정보 시설 태그 (추가·수정·삭제 가능)
@@ -1035,6 +1250,12 @@ export function CardStudioPage() {
     setCfgProductName("");
     setCfgProductPrice("");
     setCfgProduct(EMPTY_PRODUCT);
+    // E5b — 상품 실등록 참조·재사용 UI 리셋(목록 캐시는 DB 정본이라 유지).
+    setRegisteredProduct(null);
+    setProductSaving(false);
+    setProductSaveError(null);
+    setMyProductsOpen(false);
+    setMyProductsError(null);
     setCfgPhone(true);
     setCfgMap(true);
     setCfgFacilities([newFacility("주차 가능"), newFacility("무료 와이파이")]);
@@ -2299,9 +2520,10 @@ export function CardStudioPage() {
   //   지원 필드 한정: media_url·purpose·curator_message·is_public·partner_id. 45 계약 준수·오발행 방지.
   //   호출처 = 거울 시트 [발행하기] 버튼뿐(자동/링고/연출/타이머 유래 0 — 헌장 ⑨).
   async function doPublish(): Promise<boolean> {
-    // 커머스 = 실 이미지·상품등록 인프라 부재 → 이번 슬라이스 보류(E5 승계).
+    // E5b — 커머스 카드 발행은 E5f 슬라이스(등록·재사용 인프라는 E5b로 완비 — registeredProduct 참조 사용 예정).
+    //   ⚠️ E5f 구현 시 BUG-1(S1-b) 필수: 재사용 드롭 is_public·published_at update(45 :2385-2411).
     if (mode === "commerce") {
-      setSaveError("상품 발행은 준비 중이에요");
+      setSaveError("상품 카드 발행은 준비 중이에요 — 등록한 상품은 내 상품에 보관돼요");
       return false;
     }
     // 검증(45 :2252 계승 — 비커머스는 영상 필수).
@@ -2376,7 +2598,7 @@ export function CardStudioPage() {
   const canPublish = mode !== "commerce" && !dropped && !!selectedVideo && hasTitleForPublish;
   const publishGateMsg =
     mode === "commerce"
-      ? "상품 발행은 준비 중이에요"
+      ? "상품 카드 발행은 준비 중이에요 — 등록한 상품은 내 상품에 보관돼요" // E5b — 문구 정확화(E5f 전까지).
       : !selectedVideo
         ? "영상을 먼저 담아 주세요"
         : !hasTitleForPublish
@@ -3437,6 +3659,63 @@ export function CardStudioPage() {
               )}
 
               {activeBlock.id === "product" && (
+                <div className="space-y-3">
+                  {/* UI-5-T2-E5b — 재사용: 내 등록 상품 불러오기(자체업로드분 · 탭 = 폼 자동 채움 + 참조 연결). */}
+                  <div>
+                    <button
+                      onClick={() => {
+                        const next = !myProductsOpen;
+                        setMyProductsOpen(next);
+                        if (next && myProducts.length === 0) void loadMyProducts();
+                      }}
+                      className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#F4F4F5] text-[12px] font-bold text-[#525252] transition-colors active:bg-[#ECECEC]"
+                    >
+                      <Search className="h-3.5 w-3.5" strokeWidth={2.25} />
+                      {myProductsOpen ? "닫기" : "등록한 상품 불러오기"}
+                    </button>
+                    {myProductsOpen && (
+                      <div className="mt-1.5 space-y-1.5">
+                        {myProductsLoading && (
+                          <div className="flex items-center justify-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[12px] font-semibold text-[#8A8A8A]">
+                            <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+                            상품을 불러오는 중…
+                          </div>
+                        )}
+                        {!myProductsLoading && myProductsError && (
+                          <p className="rounded-xl bg-[#F4F4F5] px-3 py-3 text-center text-[12px] font-medium text-[#8A8A8A]">
+                            {myProductsError}
+                          </p>
+                        )}
+                        {!myProductsLoading &&
+                          myProducts.map((row) => (
+                            <button
+                              key={row.dropId}
+                              onClick={() => applyReusedProduct(row)}
+                              className="flex min-h-[52px] w-full items-center gap-2.5 rounded-xl bg-white px-2.5 py-2 text-left transition-transform active:scale-[0.99] [box-shadow:inset_0_0_0_1px_#E8E8EC]"
+                            >
+                              <span className="flex h-9 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#F4F4F5]">
+                                {row.imageUrl ? (
+                                  <img src={row.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                                ) : (
+                                  <ImageIcon className="h-4 w-4 text-[#A3A3A3]" strokeWidth={2} />
+                                )}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[12.5px] font-bold text-[#0A0A0A]">{row.name}</span>
+                                {row.priceKrw != null && (
+                                  <span className="block text-[11px] font-semibold tabular-nums text-[#8A8A8A]">
+                                    {row.priceKrw.toLocaleString("ko-KR")}원
+                                  </span>
+                                )}
+                              </span>
+                              {registeredProduct?.dropId === row.dropId && (
+                                <Check className="h-4 w-4 shrink-0 text-[#1D4ED8]" strokeWidth={2.5} />
+                              )}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
                 <ProductRegisterForm
                   accent={accent}
                   value={{ ...cfgProduct, name: cfgProductName, price: cfgProductPrice }}
@@ -3451,7 +3730,7 @@ export function CardStudioPage() {
                     delete rest.price;
                     if (Object.keys(rest).length) setCfgProduct((p) => ({ ...p, ...rest }));
                   }}
-                  onNotify={setStepToast} /* F2-C — 준비 중 안내 = 페이지 토스트(1.8s 자동 소멸) 경유. */
+                  onNotify={setStepToast} /* F2-C — 안내 = 페이지 토스트(1.8s 자동 소멸) 경유. */
                   photoUrl={productImagePreview ?? productImageUrl ?? undefined}
                   onEditPhoto={() => {
                     // E5a — 폼 사진 필드 = 표시 전용. 바꾸기 = 스텝 1(productimage) 재방문(단일 입구).
@@ -3459,7 +3738,12 @@ export function CardStudioPage() {
                     if (i >= 0) enterStep(i);
                     else onEditField("productimage", "productimage");
                   }}
+                  onRegister={() => void registerProduct()} /* E5b — 사용자 확정 탭 유래만(자동 트리거 0). */
+                  registerSaving={productSaving}
+                  registerError={productSaveError}
+                  registeredName={registeredProduct?.name ?? null}
                 />
+                </div>
               )}
 
               {activeBlock.id === "dock" && (

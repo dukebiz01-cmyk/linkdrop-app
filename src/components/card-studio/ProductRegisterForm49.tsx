@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
-import { ImageIcon, Sparkles, Plus, X, Search, Calculator, Info } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ImageIcon, Sparkles, Plus, X, Search, Calculator, Info, Check, Loader2 } from "lucide-react";
+import { getSupabase } from "@/lib/supabase";
 
 export type ProductType = "fresh" | "processed" | "goods";
 export type SaleUnit = "unit" | "box" | "weight";
@@ -16,6 +17,8 @@ export type ProductForm = {
   harvestDateEnd: string;
   /** fresh: 품목(시세 연동) / processed: 식품 유형 / goods: 카테고리 */
   itemCategory: string;
+  /** UI-5-T2-E5b — KAMIS 품목 확정 코드(fresh 후보 탭 시에만 기록 · 시세는 §0 손님 노출 금지, 코드 연동만). */
+  kamisItemCode: string;
   /** fresh: 원산지 / processed: 원재료 원산지 / goods: 제조국 */
   origin: string;
   /** processed 전용: 보관 방법 */
@@ -48,6 +51,7 @@ export const EMPTY_PRODUCT: ProductForm = {
   harvestDate: "",
   harvestDateEnd: "", // F2① — 기간 끝일.
   itemCategory: "",
+  kamisItemCode: "", // E5b — KAMIS 확정 코드.
   origin: "",
   storage: "room",
   brand: "",
@@ -170,6 +174,10 @@ export function ProductRegisterForm({
   photoUrl,
   onEditPhoto,
   onNotify,
+  onRegister,
+  registerSaving,
+  registerError,
+  registeredName,
 }: {
   value: ProductForm;
   onChange: (patch: Partial<ProductForm>) => void;
@@ -177,15 +185,52 @@ export function ProductRegisterForm({
   /** UI-5-T2-E5a — 상품 사진 = 스텝 1 단일 입구. 폼은 표시 전용(업로드 경로 0). */
   photoUrl?: string;
   onEditPhoto?: () => void;
-  /** F2-C — 준비 중 안내 등 폼 밖 토스트 위임(미지정 = 인라인 폴백 1줄). */
+  /** F2-C — 안내 토스트 위임(미지정 = 인라인 폴백 1줄). */
   onNotify?: (msg: string) => void;
+  /** UI-5-T2-E5b — [상품 등록하기] 확정(사용자 탭 유래만 — 자동/링고 트리거 0). 미지정 = 버튼 미노출. */
+  onRegister?: () => void;
+  registerSaving?: boolean;
+  registerError?: string | null;
+  /** 등록 완료 상태 표시(재등록 허용 — 45 관례: 재제출 = 새 등록). */
+  registeredName?: string | null;
 }) {
   const set = <K extends keyof ProductForm>(key: K, v: ProductForm[K]) => onChange({ [key]: v } as Partial<ProductForm>);
-  // F2-C — "직접 찾기" 준비 중 안내: onNotify(페이지 토스트) 우선, 폼 단독 사용 시 인라인 1줄(2s).
+  // UI-5-T2-E5b — KAMIS(fresh) 병합 품목 1회 로드 + 타이핑 후보 매칭(45 :383-405·:778-784 동형).
+  //   시세 조회(get-price-band)는 미이식 — §0 손님 노출 금지, 코드 연동만(E5b 락).
+  type KamisItem = { item_code: string; item_name: string; category_code: string };
+  const [kamisAll, setKamisAll] = useState<KamisItem[]>([]);
+  const [kamisOpen, setKamisOpen] = useState(false);
+  useEffect(() => {
+    if (value.type !== "fresh" || kamisAll.length > 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await getSupabase()
+          .from("kamis_items" as never)
+          .select("item_code, item_name, category_code")
+          .order("sort_order");
+        if (!cancelled) setKamisAll((data as unknown as KamisItem[] | null) ?? []);
+      } catch {
+        // graceful — 품목 연동은 선택 사항(45 동일).
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [value.type, kamisAll.length]);
+  // 후보 = 입력 부분일치 상위 6(45 :779-784 동형 — 공백 제거 소문자 정규화).
+  const normItem = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+  const kamisMatches =
+    value.type === "fresh" && kamisOpen && value.itemCategory.trim() && !value.kamisItemCode
+      ? kamisAll.filter((it) => normItem(it.item_name).includes(normItem(value.itemCategory))).slice(0, 6)
+      : [];
+  // F2-C 폴백(로드 실패·빈 목록 시) — 인라인 안내 1줄(2s).
   const [categoryNotice, setCategoryNotice] = useState(false);
   const categoryNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const CATEGORY_PENDING_MSG = "품목 찾기는 준비 중이에요 — 이름을 직접 적어 주세요";
-  const notifyCategoryPending = () => {
+  const CATEGORY_PENDING_MSG = "품목 이름을 입력하면 후보를 찾아드려요";
+  const notifyCategoryHint = () => {
+    // E5b — KAMIS 매칭 해제(F2-C 준비 중 → 실기능): 버튼 = 매칭 열기 + 입력 유도 안내.
+    setKamisOpen(true);
     if (onNotify) {
       onNotify(CATEGORY_PENDING_MSG);
       return;
@@ -324,28 +369,60 @@ export function ProductRegisterForm({
         </Field>
       )}
 
-      {/* 분류 — 유형별: 품목(시세 연동) / 식품 유형 / 카테고리 */}
+      {/* 분류 — 유형별: 품목(시세 연동) / 식품 유형 / 카테고리.
+          UI-5-T2-E5b — KAMIS 실매칭(45 :1226-1266 동형): 타이핑 → 후보 상위 6 → 탭 = item_code 확정
+          + 상품명 자동 채움(비었을 때만). 시세 숫자 표기는 미이식(§0 — 파트너 화면까지도 코드 연동만). */}
       <Field label={copy.categoryLabel} hint={copy.categoryHint}>
         <input
           value={value.itemCategory}
-          onChange={(e) => set("itemCategory", e.target.value)}
+          onChange={(e) => {
+            onChange({ itemCategory: e.target.value, kamisItemCode: "" }); // 수정 = 확정 해제(45 동일).
+            setKamisOpen(true);
+          }}
           placeholder={copy.categoryPh}
           className="w-full rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
           style={{ boxShadow: "inset 0 0 0 1px transparent" }}
           onFocus={focusRing}
           onBlur={blurRing}
         />
+        {value.type === "fresh" && value.kamisItemCode && (
+          <p className="mt-1 flex items-center gap-1 text-[10.5px] font-semibold" style={{ color: accent }}>
+            <Check className="h-3 w-3" strokeWidth={2.75} />
+            품목 연동됨 (코드 {value.kamisItemCode})
+          </p>
+        )}
+        {kamisMatches.length > 0 && (
+          <div className="mt-1.5 space-y-1">
+            {kamisMatches.map((it) => (
+              <button
+                key={it.item_code}
+                type="button"
+                onClick={() => {
+                  // E5b — 탭 = 정확 item_code 확정 + 상품명 자동 채움(비었을 때만 — 사용자 입력 존중).
+                  onChange({
+                    itemCategory: it.item_name,
+                    kamisItemCode: it.item_code,
+                    ...(value.name.trim() ? {} : { name: it.item_name }),
+                  });
+                  setKamisOpen(false);
+                }}
+                className="flex w-full items-center gap-1.5 rounded-lg bg-[#F4F4F5] px-2.5 py-2 text-left text-[12px] font-semibold text-[#0A0A0A] active:bg-[#ECECEC]"
+              >
+                <Search className="h-3.5 w-3.5 text-[#8A8A8A]" strokeWidth={2.25} />
+                {it.item_name}
+              </button>
+            ))}
+          </div>
+        )}
         {copy.categorySearch && (
           <>
-            {/* E5b KAMIS 매칭에서 해제 */}
             <button
               type="button"
-              onClick={notifyCategoryPending}
+              onClick={notifyCategoryHint}
               className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#F4F4F5] py-2 text-[12px] font-semibold text-[#525252] transition-colors active:bg-[#ECECEC]"
             >
               <Search className="h-3.5 w-3.5" strokeWidth={2.25} />
               {copy.categorySearch}
-              <span className="text-[10px] font-semibold text-[#A3A3A3]">준비 중</span>
             </button>
             {categoryNotice && (
               <p className="mt-1 text-[11px] font-semibold text-[#8A8A8A] [word-break:keep-all]">{CATEGORY_PENDING_MSG}</p>
@@ -717,6 +794,42 @@ export function ProductRegisterForm({
           </button>
         </div>
       </div>
+
+      {/* UI-5-T2-E5b — 상품 실등록 확정(45 관례: 폼 [등록] 탭 = 즉시 /api/drops 등록 · 재제출 = 새 등록).
+          호출처 = 이 버튼 onClick 뿐(자동/링고/연출 트리거 0). 무언 실패 금지 — 오류 인라인 노출. */}
+      {onRegister && (
+        <div className="space-y-1.5">
+          {registerError && (
+            <p className="rounded-xl bg-[#FEF2F2] px-3 py-2 text-[12px] font-semibold text-[#DC2626] [word-break:keep-all]">
+              {registerError}
+            </p>
+          )}
+          {registeredName && !registerError && (
+            <p className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: accent }}>
+              <Check className="h-3 w-3" strokeWidth={2.75} />
+              등록됨 · {registeredName} — 수정했다면 다시 등록해 주세요
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={onRegister}
+            disabled={registerSaving}
+            className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl text-[14px] font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-50"
+            style={{ backgroundColor: accent }}
+          >
+            {registerSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+                등록하는 중…
+              </>
+            ) : registeredName ? (
+              "다시 등록하기"
+            ) : (
+              "상품 등록하기"
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
