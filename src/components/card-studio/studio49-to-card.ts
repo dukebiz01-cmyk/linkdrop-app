@@ -18,6 +18,9 @@ export type Studio49Input = {
   mode: "general" | "reserve" | "commerce";
   applied: Record<string, boolean>;
   productImageUrl?: string; // UI-5-T2-E5a — 커머스 상품 사진(실 업로드 URL) → 카드 얼굴.
+  // UI-5-T2-E5g2 — 수확 기간의 "시작일"(yyyy-mm-dd). 정본 수확·발송 칩(commerce.harvestDate)은 단일 날짜
+  //   전제("M월 D일 예정") → 거울 무수정 범위 내 최선 매핑 = 시작일 대표(상세 기간은 스튜디오 캡션 담당).
+  harvestDate?: string;
   title: string; // cfgTitle
   subtitle: string; // cfgSubtitle
   clip: string; // cfgClip
@@ -65,7 +68,15 @@ export function studio49ToCardModel(s: Studio49Input): CardModel {
     productPrice: priceNum,
     productCopy: { headline: s.productHeadline || undefined, sellingPoints: s.productPoints },
     // E5a — 커머스 상품 사진: 정본 어댑터 commerce.imageUrl(=heroImageUrl) 소비 → CardBody 실이미지.
-    ...(isCommerce && s.productImageUrl ? { commerce: { imageUrl: s.productImageUrl } } : {}),
+    // E5g2 — commerce.harvestDate(수확 시작일) 병합 → 정본 수확·발송 칩·위젯 줄(어댑터 기존 경로 소비만).
+    ...(isCommerce && (s.productImageUrl || s.harvestDate)
+      ? {
+          commerce: {
+            ...(s.productImageUrl ? { imageUrl: s.productImageUrl } : {}),
+            ...(s.harvestDate ? { harvestDate: s.harvestDate } : {}),
+          },
+        }
+      : {}),
   };
 
   const shippingView = isCommerce && s.shipping ? buildShippingView(s.shipping) : null;

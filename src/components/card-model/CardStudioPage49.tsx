@@ -313,6 +313,15 @@ const labelOfIso = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number);
   return `${m}/${d}(${WEEKDAY_KR[new Date(y, m - 1, d).getDay()]})`;
 };
+// UI-5-T2-E5g2 — 기간 표기: "수확 7/25(토) ~ 7/28(화) (4일간)" · 같은 날 = "수확 7/25(토) 하루".
+//   미선택("") = 빈 문자열(캡션 미렌더). 날짜 라벨 = labelOfIso 정본(포맷 불변).
+function rangeLabel(prefix: string, startIso: string, endIso: string): string {
+  if (!startIso) return "";
+  const end = endIso || startIso;
+  if (end === startIso) return `${prefix} ${labelOfIso(startIso)} 하루`;
+  const days = Math.round((Date.parse(end) - Date.parse(startIso)) / 86400000) + 1;
+  return `${prefix} ${labelOfIso(startIso)} ~ ${labelOfIso(end)} (${days}일간)`;
+}
 function defaultSaleRange(): { start: string; end: string } {
   const base = new Date();
   base.setHours(0, 0, 0, 0);
@@ -327,10 +336,11 @@ const PRODUCT_KIND_META: Record<ProductKind, { chip: string; calendar: string; e
   manufactured: { chip: "공산", calendar: "판매 캘린더", extra: null },
 };
 // 도우미 문구 유형 분기(날짜 = 숫자 불가침 · AI 창작 금지 · needsConfirm).
+// E5g2 — 범위 어투(하루도 자연 포함: 시작=종료). 값 제안·자동입력 금지 유지.
 const SEASONAL_HELPER: Record<ProductKind, string> = {
-  fresh: "수확은 언제쯤이세요? 제철 캘린더로 판매기간과 수확·발송일을 정해요.",
-  processed: "만드는 날짜 기준으로 — 생산 캘린더로 판매기간과 생산·발송일을 정해요.",
-  manufactured: "언제까지 파실 건가요? 판매 캘린더로 판매기간과 발송일을 정해요.",
+  fresh: "수확은 언제부터 언제까지 예정이세요? 제철 캘린더로 판매·수확·발송 기간을 정해요.",
+  processed: "만드는 기간 기준으로 — 생산 캘린더로 판매·생산·발송 기간을 정해요.",
+  manufactured: "언제까지 파실 건가요? 판매 캘린더로 판매 기간과 발송 기간을 정해요.",
 };
 // 09:00 ~ 21:00, 1시간 단위
 const TIME_OPTIONS = Array.from({ length: 13 }, (_, i) => `${String(9 + i).padStart(2, "0")}:00`);
@@ -614,9 +624,13 @@ export function CardStudioPage() {
   const [productKind, setProductKind] = useState<ProductKind>("fresh");
   const [saleStartIso, setSaleStartIso] = useState("");
   const [saleEndIso, setSaleEndIso] = useState("");
-  const [harvestIso, setHarvestIso] = useState(""); // 신선 = 수확 예정일.
-  const [produceIso, setProduceIso] = useState(""); // 가공 = 생산일.
-  const [shipIso, setShipIso] = useState(""); // 전 유형 = 발송 예정일.
+  // UI-5-T2-E5g2 — 수확·생산·발송 = 기간(범위) 상태. 구 단일 *Iso 키 폐기 — 하루 = 시작=종료(범위의 특수형).
+  const [harvestStartIso, setHarvestStartIso] = useState(""); // 신선 = 수확 예정 기간.
+  const [harvestEndIso, setHarvestEndIso] = useState("");
+  const [produceStartIso, setProduceStartIso] = useState(""); // 가공 = 생산 기간.
+  const [produceEndIso, setProduceEndIso] = useState("");
+  const [shipStartIso, setShipStartIso] = useState(""); // 전 유형 = 발송 예정 기간.
+  const [shipEndIso, setShipEndIso] = useState("");
   // 판매기간 기본값(오늘~+6, 45 :806 동형). SSR 안전: 마운트 후 확정.
   useEffect(() => {
     const r = defaultSaleRange();
@@ -981,9 +995,13 @@ export function CardStudioPage() {
       setSaleStartIso(r.start);
       setSaleEndIso(r.end);
       setProductKind("fresh");
-      setHarvestIso("");
-      setProduceIso("");
-      setShipIso("");
+      // E5g2 — 기간(범위) 상태 초기화.
+      setHarvestStartIso("");
+      setHarvestEndIso("");
+      setProduceStartIso("");
+      setProduceEndIso("");
+      setShipStartIso("");
+      setShipEndIso("");
     }
     setCfgDates([DATE_OPTIONS[0]]);
     setCfgTimes([TIME_OPTIONS[1]]);
@@ -1491,9 +1509,13 @@ export function CardStudioPage() {
       productKind, // E5g — 유형·ISO 날짜 스냅샷(구 인덱스 폐기).
       saleStartIso,
       saleEndIso,
-      harvestIso,
-      produceIso,
-      shipIso,
+      // E5g2 — 기간(범위) 스냅샷(구 단일 키 폐기).
+      harvestStartIso,
+      harvestEndIso,
+      produceStartIso,
+      produceEndIso,
+      shipStartIso,
+      shipEndIso,
       selectedVideo, // T1n — 영상 선택도 스냅샷(전체 되돌리기 정합).
       currentStep, // T2-E2a(5) — 스텝 진행도 스냅샷.
       completedSteps: new Set(completedSteps),
@@ -1607,9 +1629,13 @@ export function CardStudioPage() {
       if (s.productKind) setProductKind(s.productKind); // E5g — 유형·ISO 날짜 복원.
       if (typeof s.saleStartIso === "string") setSaleStartIso(s.saleStartIso);
       if (typeof s.saleEndIso === "string") setSaleEndIso(s.saleEndIso);
-      if (typeof s.harvestIso === "string") setHarvestIso(s.harvestIso);
-      if (typeof s.produceIso === "string") setProduceIso(s.produceIso);
-      if (typeof s.shipIso === "string") setShipIso(s.shipIso);
+      // E5g2 — 기간(범위) 복원.
+      if (typeof s.harvestStartIso === "string") setHarvestStartIso(s.harvestStartIso);
+      if (typeof s.harvestEndIso === "string") setHarvestEndIso(s.harvestEndIso);
+      if (typeof s.produceStartIso === "string") setProduceStartIso(s.produceStartIso);
+      if (typeof s.produceEndIso === "string") setProduceEndIso(s.produceEndIso);
+      if (typeof s.shipStartIso === "string") setShipStartIso(s.shipStartIso);
+      if (typeof s.shipEndIso === "string") setShipEndIso(s.shipEndIso);
       setSelectedVideo(s.selectedVideo ?? null); // T1n — 영상 선택 복원.
       if (typeof s.currentStep === "number") setCurrentStep(s.currentStep); // T2-E2a — 스텝 진행 복원.
       if (s.completedSteps) setCompletedSteps(new Set(s.completedSteps));
@@ -2362,6 +2388,8 @@ export function CardStudioPage() {
     mode,
     applied,
     productImageUrl: productImagePreview ?? productImageUrl ?? undefined, // E5a — 실 사진 = 카드 얼굴(거울·미리보기 정본).
+    // E5g2 — 신선 수확 기간 → 정본 수확·발송 칩(단일 날짜 전제)에 시작일 대표 매핑(장착+신선만 주입).
+    harvestDate: applied["seasonal"] && productKind === "fresh" && harvestStartIso ? harvestStartIso : undefined,
     title: cfgTitle,
     subtitle: cfgSubtitle,
     clip: cfgClip,
@@ -3016,44 +3044,72 @@ export function CardStudioPage() {
                         />
                       </div>
 
-                      {/* 수확 예정일(single) — 신선만 */}
+                      {/* E5g2 — 수확 기간(range) — 신선만. 45 판매기간(:4181–4191) 범위 문법 계승:
+                          첫 탭=시작·둘째 탭=종료, 같은 날 재탭 = 시작=종료(하루 — 별도 모드 불필요). */}
                       {productKind === "fresh" && (
                         <div>
-                          <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">수확 예정일</p>
+                          <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">수확 기간</p>
                           <InlineDatePicker
-                            mode="single"
-                            startIso={harvestIso || null}
-                            onChange={(s) => setHarvestIso(s)}
+                            mode="range"
+                            startIso={harvestStartIso || null}
+                            endIso={harvestEndIso || null}
+                            onChange={(s, e) => {
+                              setHarvestStartIso(s);
+                              setHarvestEndIso(e ?? s);
+                            }}
                             accent={accent}
-                            summaryLabel="수확 예정일"
+                            summaryLabel="수확 기간"
                           />
+                          {rangeLabel("수확", harvestStartIso, harvestEndIso) && (
+                            <p className="mt-1 text-[11px] font-semibold tabular-nums text-[#525252]">
+                              {rangeLabel("수확", harvestStartIso, harvestEndIso)}
+                            </p>
+                          )}
                         </div>
                       )}
 
-                      {/* 생산일(single) — 가공만 */}
+                      {/* E5g2 — 생산 기간(range) — 가공만. */}
                       {productKind === "processed" && (
                         <div>
-                          <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">생산일</p>
+                          <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">생산 기간</p>
                           <InlineDatePicker
-                            mode="single"
-                            startIso={produceIso || null}
-                            onChange={(s) => setProduceIso(s)}
+                            mode="range"
+                            startIso={produceStartIso || null}
+                            endIso={produceEndIso || null}
+                            onChange={(s, e) => {
+                              setProduceStartIso(s);
+                              setProduceEndIso(e ?? s);
+                            }}
                             accent={accent}
-                            summaryLabel="생산일"
+                            summaryLabel="생산 기간"
                           />
+                          {rangeLabel("생산", produceStartIso, produceEndIso) && (
+                            <p className="mt-1 text-[11px] font-semibold tabular-nums text-[#525252]">
+                              {rangeLabel("생산", produceStartIso, produceEndIso)}
+                            </p>
+                          )}
                         </div>
                       )}
 
-                      {/* 발송 예정일(single) — 전 유형 공통 */}
+                      {/* E5g2 — 발송 기간(range) — 전 유형 공통. */}
                       <div>
-                        <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">발송 예정일</p>
+                        <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">발송 기간</p>
                         <InlineDatePicker
-                          mode="single"
-                          startIso={shipIso || null}
-                          onChange={(s) => setShipIso(s)}
+                          mode="range"
+                          startIso={shipStartIso || null}
+                          endIso={shipEndIso || null}
+                          onChange={(s, e) => {
+                            setShipStartIso(s);
+                            setShipEndIso(e ?? s);
+                          }}
                           accent={accent}
-                          summaryLabel="발송 예정일"
+                          summaryLabel="발송 기간"
                         />
+                        {rangeLabel("발송", shipStartIso, shipEndIso) && (
+                          <p className="mt-1 text-[11px] font-semibold tabular-nums text-[#525252]">
+                            {rangeLabel("발송", shipStartIso, shipEndIso)}
+                          </p>
+                        )}
                       </div>
                     </div>
                   ) : (
