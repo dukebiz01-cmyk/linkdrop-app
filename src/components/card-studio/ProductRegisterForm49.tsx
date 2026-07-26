@@ -161,12 +161,15 @@ const STORAGE_OPTIONS: { id: StorageType; label: string }[] = [
 
 const onlyDigits = (v: string) => v.replace(/[^0-9]/g, "");
 
-/** 이익 = 판매가 - 원가 */
-function profitOf(price: string, cost: string) {
+/** UI-5-T4-D3d — 이익 = 판매가 − 원가 − (무료배송이면 내가 낼 배송비).
+ *  45 computeProfitReceipt(:542-555) 분기 계승: shippingMode "free" = 배송비 차감 /
+ *  "paid"(구매자 부담) = 마진 계산에서 제외(45 :410-412 정본 규칙). 빈 값 = 0 취급. */
+function profitOf(price: string, cost: string, freeShip: boolean, shipFee: string) {
   const p = Number(onlyDigits(price));
   const c = Number(onlyDigits(cost));
   if (!p || !c) return null;
-  return p - c;
+  const fee = freeShip ? Number(onlyDigits(shipFee)) || 0 : 0;
+  return p - c - fee;
 }
 
 export function ProductRegisterForm({
@@ -286,7 +289,7 @@ export function ProductRegisterForm({
     if (categoryNoticeTimer.current) clearTimeout(categoryNoticeTimer.current);
     categoryNoticeTimer.current = setTimeout(() => setCategoryNotice(false), 2000);
   };
-  const profit = profitOf(value.price, value.cost);
+  const profit = profitOf(value.price, value.cost, value.freeShip, value.shipFee); // D3d — 배송 분기 반영.
   const copy = TYPE_COPY[value.type];
   const unitOptions = copy.allowWeight ? UNIT_OPTIONS : UNIT_OPTIONS.filter((o) => o.id !== "weight");
 
@@ -608,8 +611,14 @@ export function ProductRegisterForm({
             <span className="text-[12px] font-semibold text-[#8A8A8A]">원</span>
           </div>
           {profit !== null && (
-            <p className="mt-1.5 text-[11.5px] font-semibold" style={{ color: profit >= 0 ? accent : "#EF4444" }}>
+            <p className="mt-1.5 text-[11.5px] font-semibold tabular-nums" style={{ color: profit >= 0 ? accent : "#EF4444" }}>
               개당 이익 {profit.toLocaleString()}원
+              {value.freeShip && (Number(onlyDigits(value.shipFee)) || 0) > 0 && (
+                <span className="font-medium text-[#8A8A8A]">
+                  {" "}
+                  (배송비 {Number(onlyDigits(value.shipFee)).toLocaleString()}원 차감)
+                </span>
+              )}
             </p>
           )}
         </div>
@@ -626,18 +635,26 @@ export function ProductRegisterForm({
           onSelect={(id) => set("freeShip", id === "free")}
           accent={accent}
         />
-        {!value.freeShip && (
-          <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
-            <span className="text-[12px] font-semibold text-[#8A8A8A]">배송비</span>
-            <input
-              value={value.shipFee}
-              onChange={(e) => set("shipFee", onlyDigits(e.target.value))}
-              inputMode="numeric"
-              placeholder="예: 4000"
-              className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
-            />
-            <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
-          </div>
+        {/* UI-5-T4-D3d — 배송비 입력 = 양 분기 모두(구: 별도 부담만 노출 → 무료배송 시 입력 불가 결함).
+            무료배송(내 부담) = 내가 낼 배송비 → 이익 계산 차감 / 별도(구매자 부담) = 마진 제외(45 규칙).
+            저장 계약 무변: ship_fee_krw 는 별도 부담일 때만 payload 주입(E5b) — 무료배송 배송비 = 계산 보조 전용. */}
+        <div className="mt-2 flex items-center rounded-xl bg-[#F4F4F5] px-3">
+          <span className="shrink-0 text-[12px] font-semibold text-[#8A8A8A]">
+            {value.freeShip ? "내가 낼 배송비" : "배송비"}
+          </span>
+          <input
+            value={value.shipFee}
+            onChange={(e) => set("shipFee", onlyDigits(e.target.value))}
+            inputMode="numeric"
+            placeholder="예: 4000"
+            className="w-full bg-transparent px-2 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+          />
+          <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
+        </div>
+        {value.freeShip && (
+          <p className="mt-1 text-[10.5px] font-medium text-[#A3A3A3] [word-break:keep-all]">
+            무료배송은 배송비를 내가 부담해요 — 위 이익 계산에서 빠져요.
+          </p>
         )}
       </Field>
 
