@@ -258,12 +258,17 @@ const ENHANCE_UNLOCK = 75;
   const POINT = "#1D4ED8"; // 예약·쿠폰(reserve) 모드 포인트 컬러
 const INK = "#0A0A0A";
 
-// 블록 장착 시 인라인으로 채우는 설정 옵션들
-const COUPON_OPTIONS = [
-  { id: "c1", label: "평일 1만원 할인", short: "1만원 할인" },
-  { id: "c2", label: "2인 이상 15% 할인", short: "15% 할인" },
-  { id: "c3", label: "첫 방문 웰컴 음료", short: "웰컴 음료" },
-];
+// UI-5-T2-E5d — 가짜 COUPON_OPTIONS(c1~c3) 폐기 → 파트너 실쿠폰(UUID). 형태 = get_active_store_coupons
+//   v5.11 반환(studio-build.tsx:25-36 StudioBuildCoupon 동형 — 45 파이프 계승).
+type StudioCoupon = {
+  id: string;
+  title: string | null;
+  discount_value: number | null;
+  discount_unit: string | null;
+  coupon_type?: string | null;
+  gift_item?: string | null;
+  valid_until?: string | null;
+};
 const DOCK_OPTIONS = [
   { id: "d1", title: "가을 단풍 명소 카드", meta: "퍼블릭 · 영상" },
   { id: "d2", title: "우리 캠핑장 투어", meta: "퍼블릭 · 영상" },
@@ -442,7 +447,8 @@ const CLIP_BLOCKS = new Set(["content"]); // 구간 선택 필요 블록(선택�
 // UI-5-T1m — 영상=조립 관문(content=영상·핵심구간 블록, hasVideo=applied.content). 이미지=선택 필요.
 const IMAGE_BLOCKS = new Set(["image", "productimage"]); // 사진 선택 필요 블록.
 // 링고 자동 설정 금지 필드: 구간(clip)·영상 링크·사진 = 콘텐츠 대리 선택 금지(장착·안내만).
-const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "image", "imageUrl", "photo"]);
+// E5d — coupon 편입: 실쿠폰(UUID) 전환으로 쿠폰 선택 = 대표님 탭만(AI 대리 선택 차단 — Edge 개정 목록 대상).
+const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "image", "imageUrl", "photo", "coupon"]);
 // UI-5-T1m — 미확정 릴레이 큐 정렬 우선순위: 영상 → 이미지 → 숫자(product/party/…) → 구간(content) → 기타.
 function confirmRank(id: string): number {
   if (id === "__video") return 0;
@@ -655,7 +661,14 @@ export function CardStudioPage() {
     setCfgSlotsByDate((prev) => ({ ...prev, [date]: Math.max(0, Math.min(20, next)) }));
   const dateRailRef = useRef<HTMLDivElement>(null);
   const [dateRailIdx, setDateRailIdx] = useState(0);
-  const [cfgCoupon, setCfgCoupon] = useState(COUPON_OPTIONS[0].id);
+  // UI-5-T2-E5d — 파트너 실쿠폰(45 selectedCouponId :820-822 동형): 목록 = get_active_store_coupons(소유 매장).
+  //   선택 = 실 UUID 보관 · 기본 선택 없음(가짜 c1 기본값 폐기 — 쿠폰은 대표님이 골라야 확정).
+  const [coupons, setCoupons] = useState<StudioCoupon[]>([]);
+  const [couponsLoading, setCouponsLoading] = useState(false);
+  const [couponsError, setCouponsError] = useState<string | null>(null);
+  const couponsLoadedRef = useRef(false); // 1회 로드(패널 재진입 반복 호출 방지 — DB 정본 캐시).
+  const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
+  const selectedCoupon = coupons.find((c) => c.id === selectedCouponId) ?? null;
   const [cfgDock, setCfgDock] = useState(DOCK_OPTIONS[0].id);
   const [cfgProductName, setCfgProductName] = useState("");
   const [cfgProductPrice, setCfgProductPrice] = useState("");
@@ -836,6 +849,50 @@ export function CardStudioPage() {
       setProductSaving(false);
     }
   }
+  // UI-5-T2-E5d — 파트너 실쿠폰 로드(45 studio-build loader :102-148 동형을 클라 1회 실행):
+  //   partners(owner_user_id) → get_active_store_coupons(p_partner_id). 매장 없음 = 0건(안내).
+  async function loadCoupons() {
+    if (couponsLoading || couponsLoadedRef.current) return;
+    setCouponsLoading(true);
+    setCouponsError(null);
+    try {
+      const supabase = getSupabase();
+      const { data: sess } = await supabase.auth.getSession();
+      const uid = sess.session?.user.id;
+      if (!uid) {
+        setCouponsError("로그인이 필요해요.");
+        return;
+      }
+      const { data: storeRaw } = await supabase
+        .from("partners")
+        .select("id")
+        .eq("owner_user_id", uid)
+        .maybeSingle();
+      const storeId = (storeRaw as { id: string } | null)?.id;
+      if (!storeId) {
+        couponsLoadedRef.current = true;
+        setCoupons([]); // 매장 없음 = 0건 안내(무언 실패 아님).
+        return;
+      }
+      const { data: rowsRaw, error: rowsErr } = (await supabase.rpc(
+        "get_active_store_coupons" as never,
+        { p_partner_id: storeId } as never,
+      )) as { data: unknown; error: unknown };
+      if (rowsErr) throw rowsErr;
+      couponsLoadedRef.current = true;
+      setCoupons(Array.isArray(rowsRaw) ? (rowsRaw as StudioCoupon[]) : []);
+    } catch (err) {
+      console.error("[studio49] coupons load:", err);
+      setCouponsError("쿠폰 목록을 불러오지 못했어요."); // 무언 실패 금지.
+    } finally {
+      setCouponsLoading(false);
+    }
+  }
+  // E5d — 쿠폰 칸 진입 시 1회 로드(자동 선택 없음 — 로드만·선택은 대표님 탭).
+  useEffect(() => {
+    if (DECK[deckIndex]?.id === "coupon") void loadCoupons();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deckIndex, mode]);
   // E5b — 재사용 목록 로드(partner.products.index :260-281 동형 쿼리 · 자체업로드분만). 탭 시 1회.
   async function loadMyProducts() {
     if (myProductsLoading) return;
@@ -1245,7 +1302,9 @@ export function CardStudioPage() {
     setCfgTimes([TIME_OPTIONS[1]]);
     setCfgSlotsByDate({ [DATE_OPTIONS[0]]: 4 });
     setDateRailIdx(0);
-    setCfgCoupon(COUPON_OPTIONS[0].id);
+    // E5d — 실쿠폰 선택 리셋(목록 캐시는 DB 정본이라 유지 · 기본 선택 없음).
+    setSelectedCouponId(null);
+    setCouponsError(null);
     setCfgDock(DOCK_OPTIONS[0].id);
     setCfgProductName("");
     setCfgProductPrice("");
@@ -1698,9 +1757,8 @@ export function CardStudioPage() {
             setCfgTime(v);
             setCfgTimes((prev) => (prev.includes(v) ? prev : [...prev, v]));
             break;
-          case "coupon":
-            setCfgCoupon(v);
-            break;
+          // E5d — "coupon" 케이스 제거: 실쿠폰 UUID 는 AI 대리 선택 금지(AI_BLOCKED_FIELDS 가 1차 차단,
+          //   여기 도달 시 default 무적용·무기록이 2차 방어).
           case "productName":
             setCfgProductName(v);
             break;
@@ -1751,7 +1809,7 @@ export function CardStudioPage() {
       cfgTitle,
       cfgSubtitle,
       cfgClip,
-      cfgCoupon,
+      selectedCouponId, // E5d — 실쿠폰 UUID 스냅샷(구 cfgCoupon 폐기).
       cfgProductName,
       cfgProductPrice,
       cfgDock,
@@ -1871,7 +1929,7 @@ export function CardStudioPage() {
       setCfgTitle(s.cfgTitle);
       setCfgSubtitle(s.cfgSubtitle);
       setCfgClip(s.cfgClip);
-      setCfgCoupon(s.cfgCoupon);
+      if (s.selectedCouponId !== undefined) setSelectedCouponId(s.selectedCouponId); // E5d — 실쿠폰 복원.
       setCfgProductName(s.cfgProductName);
       setCfgProductPrice(s.cfgProductPrice);
       setCfgDock(s.cfgDock);
@@ -2171,7 +2229,7 @@ export function CardStudioPage() {
       case "price":
         return cfgProductPrice.trim().length > 0;
       case "coupon":
-        return !!applied["coupon"];
+        return !!applied["coupon"] && !!selectedCouponId; // E5d — 실쿠폰 선택까지 완료(45 :1230 동형).
       case "calendar":
         return !!applied["calendar"];
       case "season":
@@ -2325,7 +2383,7 @@ export function CardStudioPage() {
       time: cfgTime,
       saleStart: labelOfIso(saleStartIso),
       saleEnd: labelOfIso(saleEndIso),
-      coupon: cfgCoupon,
+      coupon: selectedCoupon?.title ?? "", // E5d — Edge 컨텍스트 = 실쿠폰 제목(빈 값 = 미선택).
       productName: cfgProductName,
       productPrice: cfgProductPrice,
       clip: cfgClip,
@@ -2538,8 +2596,9 @@ export function CardStudioPage() {
       // 45 :2275·2277·2342 body 형태 동일(비커머스). 지원 필드만 — 45 대조 근거는 커밋 보고 대조표.
       const mediaUrl = `https://www.youtube.com/watch?v=${selectedVideo.videoId}`;
       const hasReservation = !!applied["calendar"];
-      // 쿠폰 연결(실 UUID) 이번 생략 → 45의 selectedCouponId 부재 상태와 동형(hasCoupon=false) = purpose "예약"/"정보".
-      const dropPurpose = hasReservation ? "예약" : "정보";
+      // E5d — 실쿠폰 UUID 확보 시 purpose 반영(45 :2276-2278 동형: 예약 우선 → 쿠폰 → 정보).
+      const hasCoupon = !!applied["coupon"] && !!selectedCouponId;
+      const dropPurpose = hasReservation ? "예약" : hasCoupon ? "쿠폰" : "정보";
       const isPublic = visibility === "public";
       const body = {
         media_url: mediaUrl,
@@ -2562,6 +2621,18 @@ export function CardStudioPage() {
       if (!res.ok || !json.drop?.share_uuid) {
         setSaveError(json.message ?? "카드 저장에 실패했어요. 잠시 후 다시 시도해 주세요."); // 무언 실패 금지.
         return false;
+      }
+      // E5d — 쿠폰 귀속(45 :2412-2423 동형): 발행 성공 후 set_drop_funnel_coupon best-effort(실패해도 발행 유지).
+      if (json.drop.id && hasCoupon) {
+        try {
+          const { error: couponErr } = (await getSupabase().rpc(
+            "set_drop_funnel_coupon" as never,
+            { p_drop_id: json.drop.id, p_coupon_id: selectedCouponId } as never,
+          )) as { error: { message?: string } | null };
+          if (couponErr) console.warn("[studio49] 쿠폰 연결 실패:", couponErr.message);
+        } catch (e) {
+          console.warn("[studio49] set_drop_funnel_coupon exception:", e);
+        }
       }
       const origin = typeof window !== "undefined" ? window.location.origin : "https://app.drop.how";
       setSavedUrl(json.shareable_url ?? `${origin}/d/${json.drop.share_uuid}`); // 45 :2471 동형.
@@ -2690,7 +2761,7 @@ export function CardStudioPage() {
     clip: cfgClip,
     brand: cfgBrand,
     party: cfgParty,
-    couponLabel: applied["coupon"] ? (COUPON_OPTIONS.find((c) => c.id === cfgCoupon)?.label ?? null) : null,
+    couponLabel: applied["coupon"] && selectedCoupon ? (selectedCoupon.title ?? null) : null, // E5d — 실쿠폰 제목(45 :62 동형).
     productName: cfgProductName,
     productPrice: cfgProductPrice,
     productHeadline: cfgProduct.headline,
@@ -3632,29 +3703,76 @@ export function CardStudioPage() {
 
               {activeBlock.id === "coupon" && (
                 <div className="space-y-1.5">
-                  {COUPON_OPTIONS.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => {
-                        setCfgCoupon(c.id);
-                        confirmHelper("coupon"); // UI-5-T1k — 쿠폰 확정 = 도우미 완료.
-                      }}
-                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition-colors"
-                      style={
-                        cfgCoupon === c.id
-                          ? { backgroundColor: `${accent}12`, boxShadow: `inset 0 0 0 1.5px ${accent}` }
-                          : { backgroundColor: "#F4F4F5" }
-                      }
-                    >
-                      <Ticket
-                        className="h-4 w-4 shrink-0"
-                        style={{ color: cfgCoupon === c.id ? accent : "#A3A3A3" }}
-                        strokeWidth={2.25}
-                      />
-                      <span className="flex-1 text-[13px] font-semibold text-[#0A0A0A]">{c.label}</span>
-                      {cfgCoupon === c.id && <Check className="h-4 w-4" style={{ color: accent }} strokeWidth={2.5} />}
-                    </button>
-                  ))}
+                  {/* UI-5-T2-E5d — 파트너 실쿠폰 목록(get_active_store_coupons · UUID 선택). 가짜 c1~c3 폐기.
+                      선택 = 대표님 탭만(AI 대리 선택 차단). 로딩·실패·0건 전부 안내(무언 실패 금지). */}
+                  {couponsLoading && (
+                    <div className="flex items-center justify-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[12px] font-semibold text-[#8A8A8A]">
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+                      쿠폰을 불러오는 중…
+                    </div>
+                  )}
+                  {!couponsLoading && couponsError && (
+                    <div className="flex items-center justify-between gap-2 rounded-xl bg-[#FEF2F2] px-3 py-2.5">
+                      <span className="text-[12px] font-semibold text-[#DC2626] [word-break:keep-all]">{couponsError}</span>
+                      <button
+                        onClick={() => {
+                          couponsLoadedRef.current = false;
+                          void loadCoupons();
+                        }}
+                        className="shrink-0 text-[12px] font-bold"
+                        style={{ color: accent }}
+                      >
+                        다시 시도
+                      </button>
+                    </div>
+                  )}
+                  {!couponsLoading && !couponsError && coupons.length === 0 && (
+                    <div className="rounded-xl bg-[#F4F4F5] px-3 py-3 text-center">
+                      <p className="text-[12px] font-medium text-[#8A8A8A] [word-break:keep-all]">
+                        등록된 쿠폰이 없어요 — 파트너 페이지에서 만들 수 있어요
+                      </p>
+                      <a
+                        href="/partner/coupons"
+                        className="mt-1.5 inline-flex min-h-[36px] items-center rounded-full bg-white px-3 text-[11px] font-bold text-[#525252] [box-shadow:inset_0_0_0_1px_#E8E8EC]"
+                      >
+                        쿠폰 만들러 가기
+                      </a>
+                    </div>
+                  )}
+                  {!couponsLoading &&
+                    coupons.map((c) => {
+                      const on = selectedCouponId === c.id;
+                      const sub =
+                        c.coupon_type === "gift" && c.gift_item
+                          ? `증정 · ${c.gift_item}`
+                          : c.discount_value != null
+                            ? `${c.discount_value.toLocaleString("ko-KR")}${c.discount_unit === "percent" ? "%" : "원"} 할인`
+                            : null;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => {
+                            setSelectedCouponId(c.id); // 실 UUID 보관 — 발행 시 set_drop_funnel_coupon 귀속.
+                            confirmHelper("coupon"); // UI-5-T1k — 쿠폰 확정 = 도우미 완료.
+                          }}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition-colors"
+                          style={
+                            on
+                              ? { backgroundColor: `${accent}12`, boxShadow: `inset 0 0 0 1.5px ${accent}` }
+                              : { backgroundColor: "#F4F4F5" }
+                          }
+                        >
+                          <Ticket className="h-4 w-4 shrink-0" style={{ color: on ? accent : "#A3A3A3" }} strokeWidth={2.25} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] font-semibold text-[#0A0A0A]">
+                              {c.title ?? "이름 없는 쿠폰"}
+                            </span>
+                            {sub && <span className="block text-[11px] font-medium text-[#8A8A8A]">{sub}</span>}
+                          </span>
+                          {on && <Check className="h-4 w-4" style={{ color: accent }} strokeWidth={2.5} />}
+                        </button>
+                      );
+                    })}
                 </div>
               )}
 
