@@ -12,6 +12,7 @@ export function LingoRecordSheet49({
   log,
   footer,
   logRef,
+  headerAction,
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,6 +21,8 @@ export function LingoRecordSheet49({
   /** 하단 고정 입력 컴포저. */
   footer: ReactNode;
   logRef?: Ref<HTMLDivElement>;
+  /** UI-5-T3-L3 — 헤더 우측 액션 슬롯(스피커 토글 등 · 닫기 X 앞). */
+  headerAction?: ReactNode;
 }) {
   if (!open) return null;
   return (
@@ -39,6 +42,7 @@ export function LingoRecordSheet49({
             <p className="text-[14px] font-bold leading-tight text-[#0A0A0A]">링고AI 기록실</p>
             <p className="text-[11px] font-medium text-[#9A9A9A]">입력하거나 말하면 카드를 편집해드려요</p>
           </div>
+          {headerAction}
           <button
             aria-label="닫기"
             onClick={onClose}

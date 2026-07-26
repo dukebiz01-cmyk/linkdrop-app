@@ -51,6 +51,7 @@ import {
   MapPin,
   Mic,
   Volume2,
+  VolumeX,
   Truck,
   Trash2,
   Clapperboard,
@@ -63,7 +64,7 @@ import {
 } from "lucide-react";
 // UI-5-T3-L1 — 오브=마이크(45 S2b 이식): 즉시 청취 시퀀스·사운드·게이트(보존 lib 무수정 소비만).
 import { primeAudio, playListenStart, playListenStop } from "@/lib/lingo-sound";
-import { canUseSpeechRecognition, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
+import { canUseSpeechRecognition, VOICE_UNSUPPORTED_NOTICE, speakThenProceed } from "@/lib/lingo-voice-tap";
 import { LingoAvatar } from "@/components/brand/LingoMascot";
 // UI-5-T3-L2 — 기록실 시트(구 패널 대체 · 직접 구현).
 import { LingoRecordSheet49 } from "@/components/lingo/LingoRecordSheet49";
@@ -1201,6 +1202,14 @@ export function CardStudioPage() {
   const [voiceSupported, setVoiceSupported] = useState(true);
   // UI-5-T3-L1 — 오브=마이크 상태 언어: 낭독 중(speaking)·눌림 피드백·길게(500ms) 타이머·음성 고스트 안내.
   const [speaking, setSpeaking] = useState(false);
+  // UI-5-T3-L3 — 입력 채널(45 chatChannelRef :955 동형): 음성 질문에만 응답 낭독(텍스트 = 읽는 중이니 낭독 0).
+  const lingoChannelRef = useRef<"text" | "voice">("text");
+  // L3 — 스피커 토글(낭독 전체 on/off · 사용자 설정 — resetForMode 무접촉). ref = 연출 done 타이머 라이브 참조.
+  const [speakerOn, setSpeakerOn] = useState(true);
+  const speakerOnRef = useRef(true);
+  speakerOnRef.current = speakerOn;
+  const listeningRef = useRef(false); // L3 — 낭독 종료 힌트가 청취 안내를 덮는 레이스 방지.
+  listeningRef.current = listening;
   const [orbPressed, setOrbPressed] = useState(false); // S2b — pointerDown 즉시 피드백(100ms 이내 scale-95).
   const fabLongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fabLongFiredRef = useRef(false);
@@ -1619,6 +1628,7 @@ export function CardStudioPage() {
     const t = (text ?? lingoText).trim();
     if (!t || thinking) return;
     setLingoText("");
+    lingoChannelRef.current = "text"; // L3 — 텍스트 채널(낭독 0 — 읽는 중, 45 :3445 동형).
     sendToLingo(t);
   }
 
@@ -1627,6 +1637,7 @@ export function CardStudioPage() {
     const t = (text ?? heroPrompt).trim();
     if (!t || thinking) return;
     setHeroPrompt("");
+    lingoChannelRef.current = "text"; // L3 — 텍스트 채널.
     setLingoOpen(true); // L2 — 시트 소환(구 panelOffset 리셋 폐기).
     sendToLingo(t);
   }
@@ -1689,6 +1700,7 @@ export function CardStudioPage() {
       setInterim(live);
       if (final) {
         setInterim("");
+        lingoChannelRef.current = "voice"; // L3 — 음성 유래 채널 마킹(45 :3469 동형).
         sendToLingoRef.current(final.trim()); // E3c — 최신 sendToLingo(현재 실모드) 경유. stale 캡처 회피.
       }
     };
@@ -1703,8 +1715,13 @@ export function CardStudioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function speak(text: string) {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+  // L3 — onDone 시그니처 확장(45 useLingoChat speak :530-555 관례: OFF·미지원·오류 전 분기 onDone 보장).
+  //   스피커 OFF(speakerOnRef) = 낭독 0 + 즉시 onDone — 텍스트만.
+  function speak(text: string, onDone?: () => void) {
+    if (!text || typeof window === "undefined" || !window.speechSynthesis || !speakerOnRef.current) {
+      onDone?.();
+      return;
+    }
     try {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
@@ -1712,11 +1729,18 @@ export function CardStudioPage() {
       u.rate = 1.05;
       // L1 — 낭독 상태 추적(오브 배지 Volume2 전환). cancel 도 onend 발화 → false 복귀.
       u.onstart = () => setSpeaking(true);
-      u.onend = () => setSpeaking(false);
-      u.onerror = () => setSpeaking(false);
+      u.onend = () => {
+        setSpeaking(false);
+        onDone?.();
+      };
+      u.onerror = () => {
+        setSpeaking(false);
+        onDone?.();
+      };
       window.speechSynthesis.speak(u);
     } catch {
       setSpeaking(false);
+      onDone?.();
     }
   }
 
@@ -1923,13 +1947,11 @@ export function CardStudioPage() {
       ); // T1k·T1m — 미확정 큐(영상→이미지→숫자→구간→기타).
       const filled = summary.items.filter((i) => !i.needsConfirm).map((i) => i.label);
       const need = summary.items.filter((i) => i.needsConfirm).map((i) => i.label);
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          text: `조립 완료 — ${filled.join("·") || "구성"} 채움${need.length ? `, ${need.join("·")} 확인 필요` : ""}.`,
-        },
-      ]);
+      const doneLine = `조립 완료 — ${filled.join("·") || "구성"} 채움${need.length ? `, ${need.join("·")} 확인 필요` : ""}.`;
+      setMessages((m) => [...m, { role: "assistant", text: doneLine }]);
+      // L3(예절 2) — 연출 스텝 문구 낭독 0(텍스트+효과음만) · 완료 요약 1줄만 음성 유래 세션이면 낭독.
+      //   speakerOn 게이트는 speak 내부(speakerOnRef — 타이머 지연 대비 라이브). 후속 행동 없음 = 락 해당 없음.
+      if (lingoChannelRef.current === "voice") speak(doneLine);
       setAiSyncPending((n2) => n2 + 1); // E2b(B1) — 조립 종료(액션 커밋 후) → 실충족 재검증 동기화(스텝 자동 ✓).
     }, n * STEP_MS + 800); // 마지막 스텝 후 0.8s 여운.
     assembleTimers.current.push(done);
@@ -2459,7 +2481,8 @@ export function CardStudioPage() {
   }
 
   // UI-5-T2-E2·T1h(1c)·T1m — 응답 처리 정합(방어벽 실전 가동): 사전 필터(가드) → 관문 → runAssembly/즉시 적용.
-  function dispatchProposal(rawActions: any[], rawSteps: { label: string; note?: string }[]) {
+  //   L3 — 반환 = 조립 연출 진입 여부(true = runAssembly 실행 → 응답 낭독 생략·완료 요약만 낭독 예절).
+  function dispatchProposal(rawActions: any[], rawSteps: { label: string; note?: string }[]): boolean {
     // E3c — 응답 처리 = 수신 시점 실모드 라이브 ref(요청·응답 간 모드 전환·E3b 리셋 레이스 정합).
     const m = modeRef.current;
     const steps = (rawSteps ?? []).filter((s) => s && s.label);
@@ -2484,7 +2507,7 @@ export function CardStudioPage() {
         },
       ]);
       onEditField(photo ? "productimage" : "content", photo ? "productimage" : "video");
-      return;
+      return false;
     }
     // E3e(3) — 플랜 밖·모드 허용(DECK_IDS[m]) 블록 equip = 사용자 발화 유래 "추가 의사" → 스텝 편입.
     //   트리거는 유저 메시지 응답의 equip뿐(자동 증설 아님). stepPlanRef 즉시 반영 → 아래 connut 정합.
@@ -2505,10 +2528,12 @@ export function CardStudioPage() {
       const sortedActions = [...okActions].sort((x, y) => planOrder(actionBlock(x)) - planOrder(actionBlock(y)));
       const planConnut = stepPlanRef.current.map((s) => ({ label: s.label, note: "", anchor: planAnchor(s) }));
       runAssembly(sortedActions, planConnut); // 연출(T1b 분기 유지).
+      return true; // L3 — 조립 진입(응답 낭독 생략 신호).
     } else {
       applyLingoActions(okActions); // 단순 편집 즉시 적용.
       if (okActions.length) setAiSyncPending((n) => n + 1); // E2b(B1) — 즉시 적용도 커밋 후 재검증 동기화.
     }
+    return false;
   }
 
   // UI-5-T2-E2 — lingo-chat Edge SSE 직결(45 useLingoChat send :195–312 동형). 텍스트 delta 스트리밍 + event:actions 1회.
@@ -2551,7 +2576,7 @@ export function CardStudioPage() {
           ...(lingoSessionRef.current ? { session_id: lingoSessionRef.current } : {}),
           message: text,
           context: buildLingoContext(),
-          input_channel: "text",
+          input_channel: lingoChannelRef.current, // L3 — 실채널(음성/텍스트) 전달(구 "text" 고정 교정).
           surface: "studio",
         }),
       });
@@ -2613,9 +2638,22 @@ export function CardStudioPage() {
         }
       }
       if (!acc) setBot("네, 반영했어요."); // 텍스트 없으면 최소 응답(빈 말풍선 방지).
-      speak(acc);
       // ── 응답 처리 정합(T-1 방어벽 실전 가동): proposal 디스패치(가드 → 관문 → 연출/적용). ──
-      dispatchProposal(proposalActions, proposalSteps);
+      const assembled = dispatchProposal(proposalActions, proposalSteps);
+      // UI-5-T3-L3 — 채널 분기 낭독: 음성 질문 + 스피커 ON 에만(텍스트 질문 = 낭독 0 — 읽는 중).
+      //   조립 연출 진입 시 응답 낭독 생략(예절 — 연출 템포 유지 · 완료 요약 1줄만 done 타이머에서 낭독).
+      //   낭독 뒤 후속(재청취 힌트 고스트) = speakThenProceed 경유(Chrome onend 유실 3s 타임아웃 가드 — 45 락).
+      //   conv 자동 재청취는 post-pilot 락 — 힌트 텍스트 1회(3s)만.
+      if (!assembled && acc && lingoChannelRef.current === "voice" && speakerOn) {
+        speakThenProceed({
+          speak,
+          stopSpeaking: () => window.speechSynthesis?.cancel(),
+          text: acc,
+          proceed: () => {
+            if (!listeningRef.current) showVoiceGhost("이어서 말씀하려면 저를 탭하세요", 3000);
+          },
+        });
+      }
     } catch {
       setBot("링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요."); // 무언 실패 금지 · 재시도 가능.
     } finally {
@@ -5228,6 +5266,26 @@ export function CardStudioPage() {
             open={lingoOpen}
             onClose={() => setLingoOpen(false)}
             logRef={lingoLogRef}
+            headerAction={
+              /* L3 — 스피커 토글: 낭독 전체 on/off(사용자 설정 — 리셋 무관). OFF 전환 시 진행 중 낭독 즉시 중단. */
+              <button
+                aria-label={speakerOn ? "낭독 끄기" : "낭독 켜기"}
+                aria-pressed={speakerOn}
+                onClick={() =>
+                  setSpeakerOn((v) => {
+                    if (v) {
+                      window.speechSynthesis?.cancel();
+                      setSpeaking(false);
+                    }
+                    return !v;
+                  })
+                }
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform active:scale-90"
+                style={speakerOn ? { backgroundColor: "#EEF3FE", color: "#1D4ED8" } : { backgroundColor: "#F4F4F5", color: "#9A9A9A" }}
+              >
+                {speakerOn ? <Volume2 className="h-4 w-4" strokeWidth={2.5} /> : <VolumeX className="h-4 w-4" strokeWidth={2.5} />}
+              </button>
+            }
             log={
               <>
                     {messages.length === 0 && (
