@@ -400,6 +400,7 @@ const DECK_IDS: Record<StudioMode, string[]> = {
 const FIELD_TO_BLOCK: Record<string, string> = {
   title: "content",
   subtitle: "content",
+  headline: "product", // L4(A2) — 상품 한마디(커머스 카피 — product 덱 게이트).
   clip: "content",
   date: "calendar",
   time: "calendar",
@@ -435,6 +436,7 @@ function isAiActionAllowed(mode: StudioMode, a: any): boolean {
 const FIELD_LABEL: Record<string, string> = {
   title: "제목",
   subtitle: "한마디",
+  headline: "상품 한마디", // L4(A2).
   clip: "핵심 구간",
   coupon: "쿠폰",
   productName: "상품명",
@@ -1214,6 +1216,10 @@ export function CardStudioPage() {
   const fabLongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fabLongFiredRef = useRef(false);
   const [voiceGhost, setVoiceGhost] = useState<string | null>(null); // "듣고 있어요" 등 텍스트 안내(낭독 0).
+  // UI-5-T3-L4(B5) — 막힘 감지 상태(45 DRIVE-2e 동형): 90s 상수·스텝당 1회 예산·제안 칩.
+  const STUCK_MS = 90_000;
+  const stuckShownRef = useRef<Set<string>>(new Set());
+  const [stuckChip, setStuckChip] = useState<null | { key: string; label: string; msg: string }>(null);
   const voiceGhostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showVoiceGhost = (msg: string, ms = 5000) => {
     setVoiceGhost(msg);
@@ -1369,6 +1375,9 @@ export function CardStudioPage() {
     stepPlanRef.current = STEP_PLAN[next];
     reviewSuggestUsedRef.current = false;
     setShowReviewSuggest(false);
+    // L4(B5) — 막힘 감지 리셋(새 카드 = 스텝 예산 재무장).
+    setStuckChip(null);
+    stuckShownRef.current = new Set();
     // E2b — 완료 칩·AI 레인 리셋(새 카드 = 수동 레인 기본 · 에지 ref 초기화).
     setStepChip(null);
     setAiLane(false);
@@ -1849,6 +1858,10 @@ export function CardStudioPage() {
             break;
           case "map":
             setCfgMap(v === "true" || v === "on");
+            break;
+          // L4(A2) — 커머스 카피: 상품 한마디(headline) → 폼·카드 부제 폴백 동시 반영.
+          case "headline":
+            setCfgProduct((p) => ({ ...p, headline: v }));
             break;
           // F2③ — Edge 방출 필드(FIX-48+50) 실배선: 원산지·수량 → 상품등록 폼 값(적용 사실화).
           case "origin":
@@ -2934,6 +2947,32 @@ export function CardStudioPage() {
         : !hasTitleForPublish
           ? "제목·한마디를 채워 주세요"
           : null;
+
+  // UI-5-T3-L4(B5) — 막힘 감지(45 DRIVE-2e :1483-1515 동형 이식): 현재 스텝 90초 체류 + 무활동 =
+  //   스텝(key)당 1회 제안 칩. 연출·청취·시트 열림·생각 중 = 발화 억제 · 활동 deps 변화 = 타이머 리셋.
+  //   침묵 존중(45): 발화한 스텝은 재무장 없음 — [괜찮아요] 후 조용히 정상 흐름.
+  //   B6 — gate 칩 통합: 확인(발행 직전) 스텝 막힘 = publishGateMsg(E5f 게이트 사유)를 그대로 사용
+  //   (부족분 안내 단일 소스 — 중복 안내 금지).
+  useEffect(() => {
+    setStuckChip(null); // 스텝 전이·활동 재개 = 칩 소거(45 :1494 동형).
+    const s = stepPlanState[currentStep];
+    if (!s || dropped) return;
+    if (stuckShownRef.current.has(s.key)) return;
+    const t = setTimeout(() => {
+      if (thinking || listening || assembling || assembleSummary || lingoOpen) return; // 정지 조건(45 :1498 확장).
+      if (s.key !== "review" && isStepDone(currentStep)) return; // 완료 스텝 = 막힘 아님(확인 스텝은 게이트 기준).
+      if (s.key === "review" && !publishGateMsg) return; // 발행 준비 완료 = 막힘 아님.
+      stuckShownRef.current.add(s.key);
+      setStuckChip({
+        key: s.key,
+        label: s.label,
+        msg: s.key === "review" && publishGateMsg ? publishGateMsg : `${s.label}에서 막히셨어요?`,
+      });
+    }, STUCK_MS);
+    return () => clearTimeout(t);
+    // 활동 신호 = 리셋 deps(45 :1515 동형 + 49 신호: 입력값·사진·연출·시트).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, stepPlanState, messages.length, lingoText, deckIndex, mode, applied, dropped, thinking, listening, assembling, assembleSummary, lingoOpen, cfgTitle, cfgProductName, cfgProductPrice, productImageUrl, selectedVideo, cfgClip]);
 
   // 화면 배경은 하나로 통일 — 목적(모드)별 포인트 컬러로만 카테고리를 분기
   const PAGE_BG = "#F7F7F9"; // UI-5-T1f(3) — 조용한 페이지 배경(흰 섹션 카드와 명도차로 구획).
@@ -5481,6 +5520,40 @@ export function CardStudioPage() {
                 저는 여기 있어요 — 필요하면 불러 주세요
               </p>
               <span className="absolute -bottom-1 right-7 h-3 w-3 rotate-45 bg-[#16161D]" />
+            </div>
+          )}
+
+          {/* UI-5-T3-L4(B5·B6) — 막힘 제안 칩: 현재 스텝 기준 도움 제안(확인 스텝 = 발행 게이트 사유 통합).
+              [도와줘] = 시트 소환 + 스텝 맥락 질문(사용자 탭 유래) / [괜찮아요] = 소거(스텝당 1회 — 재발화 없음). */}
+          {!lingoOpen && stuckChip && !listening && !voiceGhost && !yieldBubble && !assembling && !assembleSummary && (
+            <div className="fixed bottom-[262px] right-5 z-40 w-[min(78vw,280px)] animate-fade-in rounded-2xl bg-white p-3 [box-shadow:0_16px_36px_-14px_rgba(15,23,42,0.4),0_0_0_1px_#E8E8EC]">
+              <p className="flex items-start gap-1.5">
+                <span className="mt-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-1.5 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                  ✦ 링고
+                </span>
+                <span className="text-[12px] font-semibold leading-relaxed text-[#16161D] [word-break:keep-all]">{stuckChip.msg}</span>
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => {
+                    const label = stuckChip.label;
+                    setStuckChip(null);
+                    lingoChannelRef.current = "text";
+                    setLingoOpen(true); // 기록실 시트 소환 + 스텝 맥락 도움 요청(A3 대본이 현재 스텝 인지).
+                    sendToLingo(`${label} 단계가 어려워요 — 어떻게 하면 돼요?`);
+                  }}
+                  className="inline-flex min-h-[36px] items-center rounded-full bg-[#16161D] px-3 text-[11px] font-bold text-white transition-transform active:scale-95"
+                >
+                  도와줘
+                </button>
+                <button
+                  onClick={() => setStuckChip(null)}
+                  className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] transition-transform active:scale-95"
+                >
+                  괜찮아요
+                </button>
+              </div>
+              <span className="absolute -bottom-1 right-7 h-3 w-3 rotate-45 bg-white [box-shadow:2px_2px_0_#E8E8EC]" aria-hidden="true" />
             </div>
           )}
 

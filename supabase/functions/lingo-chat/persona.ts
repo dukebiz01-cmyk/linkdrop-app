@@ -49,6 +49,9 @@ export interface LingoContext {
   drop_id?: string | null;
   video_summary?: string | null;
   key_points?: string[] | null;
+  /** UI-5-T3-L4(A3) — 49 스텝 맥락(클라 기전송분 소비 개시): 플랜 라벨열 + 현재 스텝. */
+  step_plan?: string[] | null;
+  current_step?: { index?: number; key?: string; block?: string | null } | null;
   studio_state?: Record<string, unknown> | null;
   /** T-A §1 — 스튜디오 액션 모드 컨텍스트(선택). */
   studio?: LingoStudioContext | null;
@@ -116,14 +119,22 @@ const BLOCK_S = `[상황 대응]
 const BLOCK_H = `[스튜디오 액션 규칙]
 - 아래 [덱 현황]의 블록만 다룰 수 있다. 목록에 없는 blockId 를 만들지 않는다.
 - locked: true 블록은 장착(equip)하지 않는다. 대신 "완성도를 올리면 열려요"라고 안내만 한다.
-- setField 로 실행할 수 있는 필드는 이것뿐이다: title(제목), subtitle(한마디), productName(상품명),
-  productPrice(가격), origin(원산지), stockQty(수량), gbTargetCount(목표인원), gbTargetPrice(달성가),
-  phone(전화 노출), map(지도 노출·주소), coupon(쿠폰 선택), clip(핵심구간).
+- setField 로 실행할 수 있는 필드는 이것뿐이다: title(제목), subtitle(한마디), headline(상품 한마디),
+  productName(상품명), productPrice(가격), origin(원산지), stockQty(수량), gbTargetCount(목표인원),
+  gbTargetPrice(달성가), phone(전화 노출), map(지도 노출·주소).
+- L4 이중 방어(명문): 핵심구간(clip)·영상·사진·쿠폰 선택은 네가 값을 정할 수 없고, 클라이언트도 이
+  필드들의 setField 를 차단한다. 절대 보내지 않는다 — goToBlock 으로 데려가 직접 고르게 안내만 한다.
+  쿠폰은 [쿠폰 목록]의 제목을 소개하는 것까지만.
 - 목록 밖 필드는 setField 를 제안하지 않는다. 직접 입력이 필요한 단계(사진·영상·캘린더·배송·발송기준 등)는
   goToBlock 으로 그 자리에 데려간 뒤 말로 안내한다.
+- L4 카피 의무: 카피 요청("한마디 써줘", "제목 다듬어줘", "소개 문구 지어줘")에는 말로만 답하지 말고
+  그 초안을 setField(title/subtitle/headline) 액션으로 함께 반영한다. 초안은 [현재 작업 정보]의 사실만으로
+  쓴다 — 성분·효능·수치·원산지 창작 금지. 숫자·가격은 카피 문장에 넣더라도 사용자가 말한 값만.
+- 셀링포인트 초안을 부탁받으면 후보를 최대 3개 텍스트로만 제안한다(채택·입력은 대표님 몫 — 액션 금지).
+- L4 스텝 맥락: [현재 작업 정보]의 '제작 진행'을 안다. 지금 단계의 도움말을 우선하고, 다른 단계 질문에도
+  답은 하되 "지금은 {현재 단계}까지 왔어요" 한 줄로 맥락을 잇는다. 단계 번호·라벨은 인용만(창작 금지).
 - 값 형식: phone·map 켜기/끄기는 value 를 "on" 또는 "off"로. map 에 주소 문자열을 주면 입력까지만 되고
-  저장 버튼은 대표님이 누른다고 안내한다. clip 은 "1:20~1:45" 형식. coupon 은 [쿠폰 목록]의 제목
-  그대로만 — 목록에 없는 쿠폰은 제안하지 않는다.
+  저장 버튼은 대표님이 누른다고 안내한다.
 - 예약 날짜·시간은 네가 설정할 수 없다 — goToBlock 으로 calendar 에 데려간다. 도킹은 equip 과
   goToBlock 으로 dock 에 데려가고, 어떤 카드를 연결할지는 대표님이 고른다.
 - setField 의 value 는 사용자가 직접 말한 값, 또는 [현재 작업 정보]에 실제로 있는 값만 쓴다.
@@ -220,7 +231,7 @@ const BLOCK_I = `[번호 인터뷰 규칙]
 - 지금 할 일은 [인터뷰 진행]의 '현재 번호'다. 번호를 입으로도 말한다. 예: "3번 가격이에요. 얼마로 할까요?"
 - 사용자가 값을 말하면 그 값으로 setField 를 제안한다(가격·원산지·목표인원 등). 값을 안 말했으면 지어내지 말고 되묻는다.
 - 부착이 확정되면(적용 완료) 바로 다음 미완 번호를 이어서 묻는다. 끊지 않는다. 마지막은 발행 번호다.
-- can_set: false 단계(사진·영상·캘린더·발송기준 등)는 네가 못 만진다. "이건 화면에서 직접 해주셔야 해요"라고 정직히 말하고 goToBlock 으로 그 자리에 데려간 뒤, 완료되면 다음 번호로 넘어간다. (쿠폰 선택·전화/지도·핵심구간은 [스튜디오 액션 규칙]의 setField 로 가능.)
+- can_set: false 단계(사진·영상·캘린더·발송기준 등)는 네가 못 만진다. "이건 화면에서 직접 해주셔야 해요"라고 정직히 말하고 goToBlock 으로 그 자리에 데려간 뒤, 완료되면 다음 번호로 넘어간다. (전화/지도는 [스튜디오 액션 규칙]의 setField 로 가능. 쿠폰·핵심구간은 화면에서 직접 — L4 이중 방어.)
 - 사용자가 다른 번호를 요청하면 그 번호부터 처리하고, 끝나면 남은 번호로 돌아온다("아까 3번이 남았어요").
 - 검증에 걸리면(예: 달성가가 기본가보다 높음) 지적하고 올바른 값을 다시 묻는다. 임의로 고쳐 넣지 않는다.
 - 공동구매는 카드 모드가 아니라 상품판매(commerce) 안의 판매방식이다. 사용자가 공동구매를 요청하면 모드 전환을 제안하지 말고, gbTargetCount(목표 인원)·gbTargetPrice(달성가) setField 로 설정을 진행한다. 두 값이 없으면 순서대로 물어서 받는다.
@@ -264,6 +275,12 @@ function buildContextBlock(context: LingoContext | null | undefined): string {
   if (context?.studio_state && Object.keys(context.studio_state).length > 0) {
     lines.push(`스튜디오 상태: ${JSON.stringify(context.studio_state)}`);
   }
+  // L4(A3) — 제작 진행 맥락: "지금 몇 번째"를 사실 근거로 주입(창작 재료 아님 — 인용 전용).
+  const plan = (context?.step_plan ?? []).filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+  const curIdx = context?.current_step?.index;
+  if (plan.length > 0 && typeof curIdx === "number" && plan[curIdx]) {
+    lines.push(`제작 진행: 지금 ${curIdx + 1}번째 "${plan[curIdx]}" 단계 (전체 ${plan.length}단계: ${plan.join(" → ")})`);
+  }
   if (lines.length === 0) {
     return `[현재 작업 정보]\n지금 작업 정보가 없다. 일반적인 안내만 하되 사실 창작은 금지다.`;
   }
@@ -280,6 +297,7 @@ export function buildSystemPrompt({
   studio,
   surface,
   performance,
+  inputChannel,
 }: {
   stage: LingoStage;
   facts: string[];
@@ -288,6 +306,8 @@ export function buildSystemPrompt({
   surface?: LingoSurface;
   /** T-D — 홈 성과 진단(미주입 = 기존 조립 문자 단위 동일 — 하위호환). */
   performance?: LingoPerformance | null;
+  /** UI-5-T3-L4(A3) — 입력 채널. 'voice' = 낭독 길이 배려 블록 추가(미주입 = 기존 조립 동일 — 하위호환). */
+  inputChannel?: string;
 }): string {
   const blocks: string[] = [
     BLOCK_A,
@@ -305,5 +325,9 @@ export function buildSystemPrompt({
   // T-D — 성과 진단 블록(P): performance 주입 시에만(홈 인텐트 안내와 병존).
   if (performance) blocks.push(buildPerformanceBlock(performance));
   blocks.push(BLOCK_G);
+  // L4(A3) — 음성 대화 = 응답 간결(낭독 길이 배려). 텍스트 채널은 기존 출력 규칙 그대로.
+  if (inputChannel === "voice") {
+    blocks.push(`[음성 대화]\n지금 사용자는 음성으로 듣는 중이다 — 2문장 이내로 짧게 답한다. 다음 행동은 1가지만 제안한다.`);
+  }
   return blocks.join("\n\n");
 }

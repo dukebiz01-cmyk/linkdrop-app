@@ -131,11 +131,11 @@ const APPLY_STUDIO_ACTIONS_TOOL = {
             blockId: { type: "string" },
             field: {
               // LINGO-HANDS-1 — date/time(FIX-62 유물)·dock(카드 선택은 사장님 영역) 삭제.
+              // UI-5-T3-L4 — clip·coupon 제거(클라 AI_BLOCKED_FIELDS 이중 방어 정합) · headline 신설(커머스 카피).
               enum: [
                 "title",
                 "subtitle",
-                "clip",
-                "coupon",
+                "headline",
                 "productName",
                 "productPrice",
                 // FIX-48+50 P2 — 인터뷰 setField 확장(승인 6종 중 신규 4종).
@@ -186,8 +186,7 @@ const ACTION_MODES = new Set(["general", "reserve", "commerce"]);
 const ACTION_FIELDS = new Set([
   "title",
   "subtitle",
-  "clip",
-  "coupon",
+  "headline", // UI-5-T3-L4 — 커머스 카피(상품 한마디).
   "productName",
   "productPrice",
   // FIX-48+50 P2 — 인터뷰 setField 확장(승인 6종 중 신규 4종).
@@ -197,6 +196,7 @@ const ACTION_FIELDS = new Set([
   "gbTargetPrice",
   "phone",
   "map",
+  // L4 — clip·coupon 제거: 서버 재검증도 차단(클라 AI_BLOCKED_FIELDS 와 이중 방어).
 ]);
 // FIX-48+50 P2 — 숫자 setField(빈 값 = 액션 제거). 상세 규칙(N≥2 · 달성가<기본가)은
 //   클라 폼 최종 가드(handleSubmit 정본)가 판정 — Edge 는 숫자화·경량 게이트만(중복 판정 회피).
@@ -514,6 +514,7 @@ Deno.serve(async (req) => {
     studio,
     surface,
     performance,
+    inputChannel, // UI-5-T3-L4(A3) — voice = 응답 간결 블록(낭독 길이 배려).
   });
 
   const messages = [...history, { role: "user" as const, content: message }];
