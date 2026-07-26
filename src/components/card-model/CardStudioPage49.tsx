@@ -1234,7 +1234,12 @@ export function CardStudioPage() {
   // 링고AI 조립 연출 — 카드 위에서 손가락으로 가리키며 단계별로 조립
   const [assembling, setAssembling] = useState(false);
   const [assembleStep, setAssembleStep] = useState(0);
-  const [assembleSteps, setAssembleSteps] = useState<{ label: string; note: string; anchor?: string }[]>([]);
+  const [assembleSteps, setAssembleSteps] = useState<
+    { label: string; note: string; anchor?: string; kind?: "watch" | "do" }[]
+  >([]);
+  // UI-5-T4-D1 — do 스텝 수행 대기 플래그 + 마이크로 피드백("잘하셨어요!").
+  const awaitingDoRef = useRef(false);
+  const [assembleFeedback, setAssembleFeedback] = useState<string | null>(null);
   const assembleTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [lingoText, setLingoText] = useState("");
   const recognitionRef = useRef<any>(null);
@@ -1394,6 +1399,8 @@ export function CardStudioPage() {
     setAssembling(false);
     setAssembleSteps([]);
     setAssembleStep(0);
+    awaitingDoRef.current = false; // D1 — do 대기 해제.
+    setAssembleFeedback(null);
     assembleSnapshot.current = null; // 되돌리기 스냅샷 폐기(이전 목적 작업물 유입 차단)
     appliedActionsRef.current = [];
     // ── 링고 패널: 대화 이력 유지 + 새 플랜 인사 ───────────────────
@@ -1889,9 +1896,21 @@ export function CardStudioPage() {
     // T1m — 연출 시작 시 영상 관문 도우미(guide) 정리(장착 후 재요청으로 진입한 경우).
     setHelperTarget(null);
     setHelperCopyKey(null);
-    setAssembleSteps(steps);
+    // UI-5-T4-D1(4) — 마지막에 do 스텝 1개 시범 편입(관람 → 수행 튜토리얼 골격 · D3 온보딩 예정).
+    //   대상 = 미리보기(거울 열기) 버튼 — 발행 버튼 아님(헌장 ⑨ — 발행 유도 연출 금지).
+    setAssembleSteps([
+      ...steps,
+      {
+        label: "완성했어요! 이제 미리보기를 눌러 확인해 보세요",
+        note: "이번엔 대표님 차례예요 — 화살표가 가리키는 버튼을 직접 눌러 보세요.",
+        anchor: "mirror",
+        kind: "do",
+      },
+    ]);
     setAssembleStep(0);
     setAssembling(true);
+    awaitingDoRef.current = false;
+    setAssembleFeedback(null);
     // UI-5-T1j(2A) — 연출 시작 전 스냅샷 1회 저장(전체 되돌리기용) + 적용 액션 로그 초기화.
     assembleSnapshot.current = {
       applied: { ...applied },
@@ -1947,28 +1966,49 @@ export function CardStudioPage() {
       assembleTimers.current.push(t);
     }
 
-    // 마무리 — 딤 유지한 채 요약 카드로 전환(T1j-2) + 패널 요약 1줄.
-    const done = setTimeout(() => {
-      setAssembling(false);
-      const summary = buildAssembleSummary();
-      setAssembleSummary(summary);
-      setPendingConfirm(
-        summary.items
-          .filter((i) => i.needsConfirm)
-          .map((i) => i.id)
-          .sort((a, b) => planOrder(a) - planOrder(b)), // T2-E2a(8c) — 릴레이 큐 = STEP_PLAN 순서.
-      ); // T1k·T1m — 미확정 큐(영상→이미지→숫자→구간→기타).
-      const filled = summary.items.filter((i) => !i.needsConfirm).map((i) => i.label);
-      const need = summary.items.filter((i) => i.needsConfirm).map((i) => i.label);
-      const doneLine = `조립 완료 — ${filled.join("·") || "구성"} 채움${need.length ? `, ${need.join("·")} 확인 필요` : ""}.`;
-      setMessages((m) => [...m, { role: "assistant", text: doneLine }]);
-      // L3(예절 2) — 연출 스텝 문구 낭독 0(텍스트+효과음만) · 완료 요약 1줄만 음성 유래 세션이면 낭독.
-      //   speakerOn 게이트는 speak 내부(speakerOnRef — 타이머 지연 대비 라이브). 후속 행동 없음 = 락 해당 없음.
-      if (lingoChannelRef.current === "voice") speak(doneLine);
-      setAiSyncPending((n2) => n2 + 1); // E2b(B1) — 조립 종료(액션 커밋 후) → 실충족 재검증 동기화(스텝 자동 ✓).
-    }, n * STEP_MS + 800); // 마지막 스텝 후 0.8s 여운.
-    assembleTimers.current.push(done);
+    // UI-5-T4-D1(4) — 마지막 = do 스텝 진입(관람 → 수행): 자동 마무리 타이머 대신 수행 감지 대기.
+    //   do 대상 = "수신자 화면 미리보기" 버튼(anchor="mirror") — 발행 CTA·발행 실행 버튼 아님(헌장 ⑨).
+    const enterDo = setTimeout(() => {
+      setAssembleStep(n); // allSteps[n] = do 스텝(runAssembly 진입부에서 편입).
+      awaitingDoRef.current = true; // 감지 effect(mirrorOpen)가 마무리를 이어받음. 스킵은 상시 가능.
+    }, n * STEP_MS + 800); // 마지막 watch 스텝 후 0.8s 여운.
+    assembleTimers.current.push(enterDo);
   }
+
+  // UI-5-T4-D1 — 연출 마무리(구 done 타이머 본문 추출 — do 수행/스킵 양 경로 공용).
+  function finishAssembly() {
+    awaitingDoRef.current = false;
+    setAssembling(false);
+    const summary = buildAssembleSummary();
+    setAssembleSummary(summary);
+    setPendingConfirm(
+      summary.items
+        .filter((i) => i.needsConfirm)
+        .map((i) => i.id)
+        .sort((a, b) => planOrder(a) - planOrder(b)), // T2-E2a(8c) — 릴레이 큐 = STEP_PLAN 순서.
+    ); // T1k·T1m — 미확정 큐(영상→이미지→숫자→구간→기타).
+    const filled = summary.items.filter((i) => !i.needsConfirm).map((i) => i.label);
+    const need = summary.items.filter((i) => i.needsConfirm).map((i) => i.label);
+    const doneLine = `조립 완료 — ${filled.join("·") || "구성"} 채움${need.length ? `, ${need.join("·")} 확인 필요` : ""}.`;
+    setMessages((m) => [...m, { role: "assistant", text: doneLine }]);
+    // L3(예절 2) — 연출 스텝 문구 낭독 0(텍스트+효과음만) · 완료 요약 1줄만 음성 유래 세션이면 낭독.
+    //   speakerOn 게이트는 speak 내부(speakerOnRef — 타이머 지연 대비 라이브). 후속 행동 없음 = 락 해당 없음.
+    if (lingoChannelRef.current === "voice") speak(doneLine);
+    setAiSyncPending((n2) => n2 + 1); // E2b(B1) — 조립 종료(액션 커밋 후) → 실충족 재검증 동기화(스텝 자동 ✓).
+  }
+  // D1(2) — 수행 감지: do 대상(미리보기 버튼)의 "실 onClick"이 낸 기존 완료 신호(mirrorOpen) 관찰 —
+  //   가짜 시뮬레이션 0. 감지 → "잘하셨어요!" 0.8s → 마무리(요약). 스킵/리셋은 awaitingDoRef 해제.
+  useEffect(() => {
+    if (!assembling || !awaitingDoRef.current || !mirrorOpen) return;
+    awaitingDoRef.current = false;
+    setAssembleFeedback("잘하셨어요!");
+    const t = setTimeout(() => {
+      setAssembleFeedback(null);
+      finishAssembly();
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mirrorOpen, assembling]);
 
   // UI-5-T1j(2) — 적용 로그(appliedActionsRef)로 종료 요약 구성. 숫자·가격·기간은 항상 확인 줄.
   function buildAssembleSummary() {
@@ -2288,6 +2328,8 @@ export function CardStudioPage() {
   function skipAssembly() {
     assembleTimers.current.forEach(clearTimeout);
     assembleTimers.current = [];
+    awaitingDoRef.current = false; // D1 — do 대기도 스킵으로 해제(건너뛰기 상시).
+    setAssembleFeedback(null);
     setAssembling(false);
     const sum = buildAssembleSummary(); // 중단 = 적용된 데까지만 요약.
     setAssembleSummary(sum);
@@ -3288,6 +3330,7 @@ export function CardStudioPage() {
               onUndo={undoAssembly}
               onConfirm={confirmAssembly}
               onEditField={onEditField}
+              feedback={assembleFeedback} /* D1 — 수행 마이크로 피드백(0.8s). */
             />
           </div>
         </section>
@@ -5156,8 +5199,9 @@ export function CardStudioPage() {
           {visibility === "public" ? "누구나 볼 수 있고 검색·추천에 노출돼요" : "링크를 받은 사람만 볼 수 있어요"}
         </p>
 
-        {/* 수신자 화면 미리보기 — 눈에 띄게 강조 */}
+        {/* 수신자 화면 미리보기 — 눈에 띄게 강조. UI-5-T4-D1 — do 스텝 지목 앵커(mirror). */}
         <button
+          data-assemble-anchor="mirror"
           onClick={() => setMirrorOpen(true)}
           className="group flex w-full items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left transition-transform active:translate-y-px [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]"
         >

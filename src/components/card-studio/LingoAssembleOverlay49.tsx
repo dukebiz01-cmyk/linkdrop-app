@@ -7,6 +7,8 @@ export interface AssembleStep {
   /** UI-5-T1c — 실좌표 지목 대상. document 의 [data-assemble-anchor="{anchor}"] 를 실측해 스포트라이트·포인터 배치.
    *  미지정/미발견 시 전체 딤 + 말풍선만(엉뚱한 곳 지목 금지). */
   anchor?: string
+  /** UI-5-T4-D1 — 스텝 2종: watch(기본 · 관람) / do(수행 — 스포트라이트 구멍만 탭 가능, 실 버튼 onClick 발화). */
+  kind?: "watch" | "do"
 }
 
 // UI-5-T1j(2)·T1k — 종료 요약 데이터. id = 이동 대상 블록(칩 탭 → onEditField).
@@ -33,6 +35,7 @@ export function LingoAssembleOverlay({
   onUndo,
   onConfirm,
   onEditField,
+  feedback,
 }: {
   active: boolean
   steps: AssembleStep[]
@@ -43,10 +46,13 @@ export function LingoAssembleOverlay({
   onUndo?: () => void
   onConfirm?: () => void
   onEditField?: (blockId: string) => void
+  /** UI-5-T4-D1 — do 스텝 수행 직후 마이크로 피드백("잘하셨어요!" 0.8s — 호출부 타이머 소관). */
+  feedback?: string | null
 }) {
   const total = steps.length
   const current = Math.min(Math.max(0, step), Math.max(0, total - 1))
   const cur: AssembleStep | undefined = steps[current]
+  const isDo = active && cur?.kind === "do" // D1 — 수행형 스텝(구멍만 탭 가능).
 
   // 대상 rect(뷰포트 기준) — 스포트라이트 구멍·마커·말풍선 배치의 단일 공급원.
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
@@ -55,6 +61,23 @@ export function LingoAssembleOverlay({
   useEffect(() => {
     setShowEdit(false)
   }, [summary])
+  // UI-5-T4-D1(3) — 오탭 카운터(스텝 전이 시 리셋): 3회 오탭 = 화살표 펄스 증폭 1회(힌트 강조).
+  const [missTaps, setMissTaps] = useState(0)
+  const [hintBoost, setHintBoost] = useState(false)
+  useEffect(() => {
+    setMissTaps(0)
+    setHintBoost(false)
+  }, [current, active])
+  const onMissTap = () => {
+    setMissTaps((n) => {
+      const next = n + 1
+      if (next >= 3 && !hintBoost) {
+        setHintBoost(true)
+        setTimeout(() => setHintBoost(false), 1400) // 증폭 1회 후 원복.
+      }
+      return next
+    })
+  }
 
   // UI-5-T1f(4a)·T1j(2) — 연출/요약 동안 스크롤 잠금(요약 카드도 딤 유지). 원복 = 확인/되돌리기/언마운트.
   useEffect(() => {
@@ -150,12 +173,17 @@ export function LingoAssembleOverlay({
   const markerY = rect ? tipY - arrowTipOffY : 0
 
   return (
-    <div className="fixed inset-0 z-[70]">
+    /* UI-5-T4-D1(2) — 히트 구조: 루트 pointer-events-none(자체 차단 0) + 자식이 명시적으로 히트 소유.
+       watch = 투명 전면 블로커 1장(기존 관람형 차단 동일) / do = "딤 4분할 패널" 기법 — 스포트라이트
+       구멍 사방(상·하·좌·우)에만 투명 히트 패널을 깔아 오탭을 흡수하고, 구멍 영역은 오버레이 요소
+       자체가 없어 탭이 그대로 아래 실 버튼에 도달(실 onClick 발화 — 가짜 시뮬레이션 0).
+       시각 딤은 기존 box-shadow 컷아웃(포인터 무관)이 그대로 담당 — 시각·히트 분리. */
+    <div className="pointer-events-none fixed inset-0 z-[70]">
       <style>{`
         @keyframes lingo-arrow-nudge{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
       `}</style>
 
-      {/* 딤 — 컷아웃 스포트라이트(단일). rect 있으면 구멍+블루 링, 없으면 전체 딤. */}
+      {/* 딤 — 컷아웃 스포트라이트(단일 · 시각 전용). rect 있으면 구멍+블루 링, 없으면 전체 딤. */}
       {rect ? (
         <div
           className="pointer-events-none absolute"
@@ -174,19 +202,45 @@ export function LingoAssembleOverlay({
         <div className="pointer-events-none absolute inset-0" style={{ backgroundColor: "rgba(10,14,22,0.55)" }} aria-hidden="true" />
       )}
 
+      {/* D1(2) — 히트 레이어: watch(또는 요약) = 전면 블로커 / do = 4분할 패널(구멍만 통과). */}
+      {(!isDo || summary || !rect) && (active || summary) && (
+        <div className="pointer-events-auto absolute inset-0" onClick={isDo && !summary ? onMissTap : undefined} aria-hidden="true" />
+      )}
+      {isDo && !summary && rect && (
+        <>
+          {/* 상·하·좌·우 투명 히트 패널 — 구멍(rect±6px)만 비워 실 버튼 탭 통과. 오탭 = 흡수 + 카운트. */}
+          <div className="pointer-events-auto absolute" style={{ left: 0, top: 0, right: 0, height: Math.max(0, rect.y - 6) }} onClick={onMissTap} aria-hidden="true" />
+          <div className="pointer-events-auto absolute" style={{ left: 0, top: rect.y + rect.h + 6, right: 0, bottom: 0 }} onClick={onMissTap} aria-hidden="true" />
+          <div className="pointer-events-auto absolute" style={{ left: 0, top: Math.max(0, rect.y - 6), width: Math.max(0, rect.x - 6), height: rect.h + 12 }} onClick={onMissTap} aria-hidden="true" />
+          <div className="pointer-events-auto absolute" style={{ left: rect.x + rect.w + 6, top: Math.max(0, rect.y - 6), right: 0, height: rect.h + 12 }} onClick={onMissTap} aria-hidden="true" />
+        </>
+      )}
+
+      {/* D1 — 수행 마이크로 피드백("잘하셨어요!" — 0.8s 호출부 타이머). */}
+      {feedback && (
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-5 py-3 text-[15px] font-extrabold tracking-ko text-[#16161D] [box-shadow:0_20px_50px_-12px_rgba(10,14,22,0.6)]">
+          ✓ {feedback}
+        </div>
+      )}
+
       {/* UI-5-T1i — 코치 마커: 게임형 화살표 단독(받침 원 제거) + drop-shadow(딤 위 최대 대비).
           화살촉 끝이 대상 지목. 지목 강조 = 화살표가 지목 방향(로컬 위=화살촉)으로 ~4px 전진→복귀
           (1.1s ease-in-out infinite · 스포트라이트 링과 리듬 맞춤). */}
       {rect && (
         <div
-          className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-out"
+          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-out"
           style={{ left: markerX, top: markerY }}
         >
           <svg
             viewBox="0 0 48 48"
             width="44"
             height="44"
-            style={{ filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.45))" }}
+            style={{
+              filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.45))",
+              // D1(3) — 3회 오탭 힌트: 펄스 증폭 1회(스케일 확대 + 리듬 가속 · 1.4s 후 원복).
+              ...(hintBoost ? { transform: "scale(1.3)" } : {}),
+              transition: "transform 0.2s ease-out",
+            }}
             aria-hidden="true"
           >
             <g transform={`rotate(${arrowAngle} 24 24)`}>
@@ -196,7 +250,7 @@ export function LingoAssembleOverlay({
                 stroke="#16161D"
                 strokeWidth="2.5"
                 strokeLinejoin="round"
-                style={{ animation: "lingo-arrow-nudge 1.1s ease-in-out infinite" }}
+                style={{ animation: `lingo-arrow-nudge ${hintBoost ? "0.45s" : "1.1s"} ease-in-out infinite` }}
               />
             </g>
           </svg>
@@ -268,7 +322,7 @@ export function LingoAssembleOverlay({
 
       {/* UI-5-T1j(2) — 종료 요약 카드(딤 유지). 항목별 채운 값 / 숫자 계열 확인 줄 + [되돌리기]·[확인]. */}
       {summary && (
-        <div className="absolute left-1/2 top-1/2 w-[min(90vw,360px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(10,14,22,0.7)]">
+        <div className="pointer-events-auto absolute left-1/2 top-1/2 w-[min(90vw,360px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-4 [box-shadow:0_24px_60px_-16px_rgba(10,14,22,0.7)]">
           <div className="flex items-center gap-2">
             <LingoAvatar size={32} background="solid" />
             <span
@@ -367,7 +421,7 @@ export function LingoAssembleOverlay({
       {!summary && (
         <button
           onClick={onSkip}
-          className="absolute bottom-6 right-4 z-[76] rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-bold text-[#16161D] shadow-lg backdrop-blur-sm transition-transform active:scale-95"
+          className="pointer-events-auto absolute bottom-6 right-4 z-[76] rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-bold text-[#16161D] shadow-lg backdrop-blur-sm transition-transform active:scale-95"
         >
           건너뛰기
         </button>
