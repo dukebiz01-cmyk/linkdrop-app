@@ -392,6 +392,26 @@ function defaultSaleRange(): { start: string; end: string } {
 }
 // 상품 유형 축 — 신선(제철)·가공(생산)·공산(판매). 유형 = 라벨·칸 구성만 전환(날짜 상태 유지).
 type ProductKind = "fresh" | "processed" | "manufactured";
+// UI-5-T4-F1(재) — 유형별 기간 독립 보관 구조: 전환 시 타 유형 값 표시·오염 금지(공유 상태 결함 수복).
+type KindRange = {
+  harvestStart: string;
+  harvestEnd: string;
+  produceStart: string;
+  produceEnd: string;
+  shipStart: string;
+  shipEnd: string;
+};
+const EMPTY_KIND_RANGE: KindRange = { harvestStart: "", harvestEnd: "", produceStart: "", produceEnd: "", shipStart: "", shipEnd: "" };
+const emptyKindRanges = (): Record<ProductKind, KindRange> => ({
+  fresh: { ...EMPTY_KIND_RANGE },
+  processed: { ...EMPTY_KIND_RANGE },
+  manufactured: { ...EMPTY_KIND_RANGE },
+});
+const cloneKindRanges = (r: Record<ProductKind, KindRange>): Record<ProductKind, KindRange> => ({
+  fresh: { ...r.fresh },
+  processed: { ...r.processed },
+  manufactured: { ...r.manufactured },
+});
 const PRODUCT_KIND_META: Record<ProductKind, { chip: string; calendar: string; extra: "harvest" | "produce" | null }> = {
   fresh: { chip: "신선", calendar: "제철 캘린더", extra: "harvest" },
   processed: { chip: "가공", calendar: "생산 캘린더", extra: "produce" },
@@ -698,13 +718,13 @@ export function CardStudioPage() {
   const [productKind, setProductKind] = useState<ProductKind>("fresh");
   const [saleStartIso, setSaleStartIso] = useState("");
   const [saleEndIso, setSaleEndIso] = useState("");
-  // UI-5-T2-E5g2 — 수확·생산·발송 = 기간(범위) 상태. 구 단일 *Iso 키 폐기 — 하루 = 시작=종료(범위의 특수형).
-  const [harvestStartIso, setHarvestStartIso] = useState(""); // 신선 = 수확 예정 기간.
-  const [harvestEndIso, setHarvestEndIso] = useState("");
-  const [produceStartIso, setProduceStartIso] = useState(""); // 가공 = 생산 기간.
-  const [produceEndIso, setProduceEndIso] = useState("");
-  const [shipStartIso, setShipStartIso] = useState(""); // 전 유형 = 발송 예정 기간.
-  const [shipEndIso, setShipEndIso] = useState("");
+  // UI-5-T4-F1(재) — E5g2 범위 상태를 유형별(kindRanges)로 분리: 표시·기록 전부 현재 유형 칸만
+  //   (A유형 입력 → B 전환 = B의 독립 저장분 표시 → A 복귀 = A 값 보존 · B 무오염).
+  //   하루 = 시작=종료(범위 특수형) 계승. 판매기간(saleStartIso/EndIso)은 전 유형 공통 유지(E5g 계약).
+  const [kindRanges, setKindRanges] = useState<Record<ProductKind, KindRange>>(emptyKindRanges);
+  const curRange = kindRanges[productKind]; // 현 유형 표시분(타 유형 비노출).
+  const setCurRange = (patch: Partial<KindRange>) =>
+    setKindRanges((prev) => ({ ...prev, [productKind]: { ...prev[productKind], ...patch } }));
   // 판매기간 기본값(오늘~+6, 45 :806 동형). SSR 안전: 마운트 후 확정.
   useEffect(() => {
     const r = defaultSaleRange();
@@ -1460,13 +1480,8 @@ export function CardStudioPage() {
       setSaleStartIso(r.start);
       setSaleEndIso(r.end);
       setProductKind("fresh");
-      // E5g2 — 기간(범위) 상태 초기화.
-      setHarvestStartIso("");
-      setHarvestEndIso("");
-      setProduceStartIso("");
-      setProduceEndIso("");
-      setShipStartIso("");
-      setShipEndIso("");
+      // F1(재) — 유형별 기간 전량 초기화(새 카드).
+      setKindRanges(emptyKindRanges());
     }
     setCfgDates([DATE_OPTIONS[0]]);
     setCfgTimes([TIME_OPTIONS[1]]);
@@ -1559,6 +1574,8 @@ export function CardStudioPage() {
     return (
       !!selectedVideo ||
       !!productImageUrl ||
+      // F1(재) — 유형별 기간 입력도 작업물(전환 확인 게이트 편입).
+      Object.values(kindRanges).some((kr) => Object.values(kr).some(Boolean)) ||
       videoSearched ||
       Object.values(applied).some(Boolean) ||
       completedSteps.size > 0 ||
@@ -2093,13 +2110,8 @@ export function CardStudioPage() {
       productKind, // E5g — 유형·ISO 날짜 스냅샷(구 인덱스 폐기).
       saleStartIso,
       saleEndIso,
-      // E5g2 — 기간(범위) 스냅샷(구 단일 키 폐기).
-      harvestStartIso,
-      harvestEndIso,
-      produceStartIso,
-      produceEndIso,
-      shipStartIso,
-      shipEndIso,
+      // F1(재) — 유형별 기간 스냅샷(깊은 사본 — 이후 편집과 격리).
+      kindRanges: cloneKindRanges(kindRanges),
       selectedVideo, // T1n — 영상 선택도 스냅샷(전체 되돌리기 정합).
       currentStep, // T2-E2a(5) — 스텝 진행도 스냅샷.
       completedSteps: new Set(completedSteps),
@@ -2258,13 +2270,8 @@ export function CardStudioPage() {
       if (s.productKind) setProductKind(s.productKind); // E5g — 유형·ISO 날짜 복원.
       if (typeof s.saleStartIso === "string") setSaleStartIso(s.saleStartIso);
       if (typeof s.saleEndIso === "string") setSaleEndIso(s.saleEndIso);
-      // E5g2 — 기간(범위) 복원.
-      if (typeof s.harvestStartIso === "string") setHarvestStartIso(s.harvestStartIso);
-      if (typeof s.harvestEndIso === "string") setHarvestEndIso(s.harvestEndIso);
-      if (typeof s.produceStartIso === "string") setProduceStartIso(s.produceStartIso);
-      if (typeof s.produceEndIso === "string") setProduceEndIso(s.produceEndIso);
-      if (typeof s.shipStartIso === "string") setShipStartIso(s.shipStartIso);
-      if (typeof s.shipEndIso === "string") setShipEndIso(s.shipEndIso);
+      // F1(재) — 유형별 기간 복원(스냅샷 사본 재복제 — 복원 후 편집과 격리).
+      if (s.kindRanges) setKindRanges(cloneKindRanges(s.kindRanges));
       setSelectedVideo(s.selectedVideo ?? null); // T1n — 영상 선택 복원.
       if (typeof s.currentStep === "number") setCurrentStep(s.currentStep); // T2-E2a — 스텝 진행 복원.
       if (s.completedSteps) setCompletedSteps(new Set(s.completedSteps));
@@ -3304,7 +3311,11 @@ export function CardStudioPage() {
     applied,
     productImageUrl: productImagePreview ?? productImageUrl ?? undefined, // E5a — 실 사진 = 카드 얼굴(거울·미리보기 정본).
     // E5g2 — 신선 수확 기간 → 정본 수확·발송 칩(단일 날짜 전제)에 시작일 대표 매핑(장착+신선만 주입).
-    harvestDate: applied["seasonal"] && productKind === "fresh" && harvestStartIso ? harvestStartIso : undefined,
+    // F1(재) — 명시적으로 "fresh 유형의 저장분"만(현 유형 fresh 조건 + fresh 칸 참조 이중 한정 — 타 유형 잔존값 발행 편입 금지).
+    harvestDate:
+      applied["seasonal"] && productKind === "fresh" && kindRanges.fresh.harvestStart
+        ? kindRanges.fresh.harvestStart
+        : undefined,
     title: cfgTitle,
     subtitle: cfgSubtitle,
     clip: cfgClip,
@@ -3968,18 +3979,15 @@ export function CardStudioPage() {
                           <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">수확 기간</p>
                           <InlineDatePicker
                             mode="range"
-                            startIso={harvestStartIso || null}
-                            endIso={harvestEndIso || null}
-                            onChange={(s, e) => {
-                              setHarvestStartIso(s);
-                              setHarvestEndIso(e ?? s);
-                            }}
+                            startIso={curRange.harvestStart || null}
+                            endIso={curRange.harvestEnd || null}
+                            onChange={(s, e) => setCurRange({ harvestStart: s, harvestEnd: e ?? s })}
                             accent={accent}
                             summaryLabel="수확 기간"
                           />
-                          {rangeLabel("수확", harvestStartIso, harvestEndIso) && (
+                          {rangeLabel("수확", curRange.harvestStart, curRange.harvestEnd) && (
                             <p className="mt-1 text-[11px] font-semibold tabular-nums text-[#525252]">
-                              {rangeLabel("수확", harvestStartIso, harvestEndIso)}
+                              {rangeLabel("수확", curRange.harvestStart, curRange.harvestEnd)}
                             </p>
                           )}
                         </div>
@@ -3991,18 +3999,15 @@ export function CardStudioPage() {
                           <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">생산 기간</p>
                           <InlineDatePicker
                             mode="range"
-                            startIso={produceStartIso || null}
-                            endIso={produceEndIso || null}
-                            onChange={(s, e) => {
-                              setProduceStartIso(s);
-                              setProduceEndIso(e ?? s);
-                            }}
+                            startIso={curRange.produceStart || null}
+                            endIso={curRange.produceEnd || null}
+                            onChange={(s, e) => setCurRange({ produceStart: s, produceEnd: e ?? s })}
                             accent={accent}
                             summaryLabel="생산 기간"
                           />
-                          {rangeLabel("생산", produceStartIso, produceEndIso) && (
+                          {rangeLabel("생산", curRange.produceStart, curRange.produceEnd) && (
                             <p className="mt-1 text-[11px] font-semibold tabular-nums text-[#525252]">
-                              {rangeLabel("생산", produceStartIso, produceEndIso)}
+                              {rangeLabel("생산", curRange.produceStart, curRange.produceEnd)}
                             </p>
                           )}
                         </div>
@@ -4013,18 +4018,15 @@ export function CardStudioPage() {
                         <p className="mb-1.5 text-[11px] font-semibold text-[#8A8A8A]">발송 기간</p>
                         <InlineDatePicker
                           mode="range"
-                          startIso={shipStartIso || null}
-                          endIso={shipEndIso || null}
-                          onChange={(s, e) => {
-                            setShipStartIso(s);
-                            setShipEndIso(e ?? s);
-                          }}
+                          startIso={curRange.shipStart || null}
+                          endIso={curRange.shipEnd || null}
+                          onChange={(s, e) => setCurRange({ shipStart: s, shipEnd: e ?? s })}
                           accent={accent}
                           summaryLabel="발송 기간"
                         />
-                        {rangeLabel("발송", shipStartIso, shipEndIso) && (
+                        {rangeLabel("발송", curRange.shipStart, curRange.shipEnd) && (
                           <p className="mt-1 text-[11px] font-semibold tabular-nums text-[#525252]">
-                            {rangeLabel("발송", shipStartIso, shipEndIso)}
+                            {rangeLabel("발송", curRange.shipStart, curRange.shipEnd)}
                           </p>
                         )}
                       </div>
