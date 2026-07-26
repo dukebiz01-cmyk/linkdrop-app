@@ -12,6 +12,7 @@ import {
   Crown,
   Gift,
   ImageIcon,
+  Info,
   Lock,
   MapPin,
   Megaphone,
@@ -201,7 +202,10 @@ export function CardModelBody({
   if (applied["link"] && (model.facilities?.length ?? 0) > 0)
     gridItems.push({ id: "facilities", label: "시설 정보", icon: Store });
   if (applied["link"] && (model.phone || model.map))
-    gridItems.push({ id: "store", label: "매장 정보", icon: model.phone ? Phone : MapPin });
+    // UI-5-T4-D3g(Duke 승인 거울 수정 1건) — 접힘 트리거 아이콘 Phone/MapPin → Info: 펼침 내부가
+    //   전화(Phone)·문자(MessageCircle)·길찾기(MapPin)라 바깥 전화기 = 중복. Store 는 시설 정보
+    //   셀(:202)이 선점 → 스펙 대체 규칙대로 Info(매장 안내 묶음 의미 · 내부 3종과 비중복).
+    gridItems.push({ id: "store", label: "매장 정보", icon: Info });
   // S4-6 — 배송정보 셀(additive): 이중 게이트(applied.shipping + 실값 행 존재 — delivery 문법 동형).
   //   내용 = buildShippingView 산출 표(판매자 고지) — SHIP_STAGES/송장(배송추적)과 무관(§0 S4b 락).
   if (applied["shipping"] && (model.shipping?.rows.length ?? 0) > 0)
