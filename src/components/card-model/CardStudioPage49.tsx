@@ -745,10 +745,23 @@ export function CardStudioPage() {
   const [cfgTitle, setCfgTitle] = useState("");
   const [cfgSubtitle, setCfgSubtitle] = useState("");
   const [cfgClip, setCfgClip] = useState("0:42");
+  // UI-5-T2-E5c(B) — 핵심구간 직접 입력 초안(시작·끝). 확정(blur/Enter) 시 검증 → cfgClip("시작~끝") 커밋.
+  const [clipStartDraft, setClipStartDraft] = useState("");
+  const [clipEndDraft, setClipEndDraft] = useState("");
+  const [clipError, setClipError] = useState<string | null>(null);
+  // cfgClip(정본 값) → 초안 동기(외부 변경: 영상 교체 초기화·되돌리기·리셋 포함). "a~b" 분해, 단일값 = 시작만.
+  useEffect(() => {
+    const [a, b] = cfgClip.split("~");
+    setClipStartDraft(a?.trim() ?? "");
+    setClipEndDraft(b?.trim() ?? "");
+    setClipError(null);
+  }, [cfgClip]);
   // UI-5-T2-E1 — 영상 검색 실배선(45 파이프). hasVideo = !!selectedVideo. 결과 = DiscoverCandidate.
   const [videoQuery, setVideoQuery] = useState("");
   const [videoLink, setVideoLink] = useState("");
   const [videoResults, setVideoResults] = useState<DiscoverCandidate[]>([]);
+  // UI-5-T2-E5c(A) — 영상 확정 2단: 행 탭 = 선택 표시(pending)만, [이 영상으로 확정]에서 selectVideo 실행.
+  const [pendingVideo, setPendingVideo] = useState<DiscoverCandidate | null>(null);
   const [videoShowCount, setVideoShowCount] = useState(12); // UI-5-T2-E1b — 클라 노출 상한(구 5 → 12) + [더 보기] 증분.
   const [videoSearching, setVideoSearching] = useState(false);
   const [videoSearched, setVideoSearched] = useState(false);
@@ -975,6 +988,7 @@ export function CardStudioPage() {
     setVideoQuery("");
     setVideoLink("");
     setVideoResults([]);
+    setPendingVideo(null); // E5c — 확정 대기 선택도 새 카드로 초기화.
     setVideoSearching(false);
     setVideoSearched(false);
     setVideoError(null);
@@ -1702,6 +1716,7 @@ export function CardStudioPage() {
     const k = videoQuery.trim();
     if (!k || videoSearching) return;
     setVideoShowCount(12); // E1b — 새 검색마다 노출 상한 초기화.
+    setPendingVideo(null); // E5c(A) — 새 검색 = 이전 선택 대기 해제(stale 확정 방지).
     // (c) URL 붙여넣기 — oembed 실값으로 후보 1건(45 :1983–2024).
     const pastedId = parseYouTubeId(k);
     if (pastedId) {
@@ -1821,7 +1836,7 @@ export function CardStudioPage() {
       /* 요약 리드 실패는 조용히 — 영상 선택 자체는 이미 반영됨. */
     }
   }
-  // 링크 직접 붙여넣기 — URL 감지 시 oembed 후보 1건 → 즉시 선택(45 :1983 경로).
+  // 링크 직접 붙여넣기 — URL 감지 시 oembed 후보 1건 → E5c(A3) 2단: 미리보기 행 + [확정](즉시 장착 폐지).
   async function onVideoLinkChange(v: string) {
     setVideoLink(v);
     const id = parseYouTubeId(v.trim());
@@ -1840,7 +1855,7 @@ export function CardStudioPage() {
         setVideoError(meta.message ?? "영상 정보를 불러올 수 없어요. 링크를 확인해 주세요.");
         return;
       }
-      void selectVideo({
+      setPendingVideo({
         provider: "youtube",
         source_url: vUrl,
         source_id: id,
@@ -1850,11 +1865,38 @@ export function CardStudioPage() {
         author_name: meta.author_name ?? null,
         duration_sec: meta.duration_sec ?? null,
         raw_meta: {},
-      });
+      }); // A3 — 검색 경로와 동일 2단 문법(확정 버튼 공용).
     } catch {
       setVideoError("지금 검색이 잘 안돼요 — 링크를 직접 붙여넣어 주세요.");
       focusVideoLink();
     }
+  }
+  // UI-5-T2-E5c(B2·B3) — 구간 확정(blur/Enter): 45 applyClip(:1613–1638) 검증 계승 — 끝>시작 ·
+  //   영상 길이(durationLabel) 초과 차단. 통과 시 cfgClip = "시작~끝"(45 :1632 라벨 포맷 동일) →
+  //   어댑터 model.clip 즉시 반영 + confirmHelper("content") = ✓·배지 소멸·릴레이/견인.
+  //   반쪽 입력(한 칸 비움) = 조용히 대기(시작→끝 이동 blur 에 성급한 에러 금지).
+  function commitClip() {
+    const sRaw = clipStartDraft.trim();
+    const eRaw = clipEndDraft.trim();
+    if (!sRaw || !eRaw) return;
+    const s = parseClock(sRaw);
+    const e = parseClock(eRaw);
+    if (s == null || e == null) {
+      setClipError("시간은 0:12 형식(분:초)이나 초 숫자로 적어 주세요.");
+      return;
+    }
+    if (e <= s) {
+      setClipError("끝 시점은 시작보다 뒤여야 해요."); // 45 :1622 계승.
+      return;
+    }
+    const durSec = selectedVideo?.durationLabel ? parseClock(selectedVideo.durationLabel) : null;
+    if (durSec != null && (s > durSec || e > durSec)) {
+      setClipError(`영상 길이(${selectedVideo!.durationLabel}) 안에서 골라 주세요.`); // 45 :1626 계승.
+      return;
+    }
+    setClipError(null);
+    setCfgClip(`${formatDuration(s)}~${formatDuration(e)}`); // 45 :1632 — model.clip 주입 경로 재사용.
+    confirmHelper("content"); // B3 — 유효 구간 확정 = 도우미 ✓(needsConfirm 해소)·견인 연동.
   }
 
   function skipAssembly() {
@@ -3481,7 +3523,11 @@ export function CardStudioPage() {
                         {videoResults.slice(0, videoShowCount).map((c) => {
                           const isYoutube = c.provider === "youtube";
                           const slot = isYoutube ? toVideoSlot(c) : null;
-                          const on = isYoutube && selectedVideo?.videoId === slot!.videoId;
+                          // E5c(A1) — 행 하이라이트 = 확정 대기(pending) 또는 이미 담긴 영상.
+                          const on =
+                            isYoutube &&
+                            ((pendingVideo?.provider === c.provider && pendingVideo?.source_id === c.source_id) ||
+                              selectedVideo?.videoId === slot!.videoId);
                           const badge = c.provider === "naver_blog" ? { label: "블로그", Icon: PenLine } : { label: "YouTube", Icon: Youtube };
                           const thumb = isYoutube ? slot!.thumbnailUrl : (c.thumbnail_url ?? "");
                           return (
@@ -3489,7 +3535,7 @@ export function CardStudioPage() {
                               key={`${c.provider}|${c.source_id}`}
                               onClick={() =>
                                 isYoutube
-                                  ? void selectVideo(c)
+                                  ? setPendingVideo(c) /* E5c(A1) — 탭 = 선택 표시만(즉시 장착 폐지). 확정은 하단 버튼. */
                                   : setStepToast("블로그 카드는 준비 중이에요") /* Case B — 가짜 반영 금지 */
                               }
                               className="flex min-h-[56px] items-center gap-2.5 rounded-xl bg-white px-2.5 py-2 text-left transition-transform active:scale-[0.99]"
@@ -3528,6 +3574,41 @@ export function CardStudioPage() {
                         )}
                       </div>
                     )}
+                    {/* E5c(A3) — URL 붙여넣기 경로 미리보기 행(결과 목록에 없는 대기 후보만 — 경로 간 문법 통일). */}
+                    {pendingVideo &&
+                      !videoResults.some((r) => r.provider === pendingVideo.provider && r.source_id === pendingVideo.source_id) && (
+                        <div className="flex min-h-[56px] items-center gap-2.5 rounded-xl bg-white px-2.5 py-2 [box-shadow:inset_0_0_0_1px_#1D4ED8]">
+                          <span className="relative flex h-11 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#0F172A]">
+                            {pendingVideo.thumbnail_url ? (
+                              <img src={pendingVideo.thumbnail_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                            ) : null}
+                            <Play className="absolute h-4 w-4 text-white drop-shadow" strokeWidth={2.5} fill="currentColor" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[12.5px] font-bold text-[#0A0A0A]">{pendingVideo.title ?? "영상"}</span>
+                            <span className="mt-0.5 block truncate text-[11px] font-medium text-[#8A8A8A]">
+                              링크로 찾은 영상{pendingVideo.author_name ? ` · ${pendingVideo.author_name}` : ""}
+                            </span>
+                          </span>
+                          <Check className="h-4 w-4 shrink-0 text-[#1D4ED8]" strokeWidth={2.5} />
+                        </div>
+                      )}
+                    {/* E5c(A2) — 확정 버튼(2단의 2단째): 선택 시에만 활성 → 기존 selectVideo 사슬(장착·confirmHelper·
+                        관문·요약 리드) 그대로 실행. isStepDone(video) 전이 = 이 시점(E2b 견인 발화 정합 A4). */}
+                    {(pendingVideo || (!videoSearching && videoResults.length > 0)) && (
+                      <button
+                        onClick={() => {
+                          if (!pendingVideo) return;
+                          void selectVideo(pendingVideo);
+                          setPendingVideo(null);
+                        }}
+                        disabled={!pendingVideo}
+                        className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#16161D] text-[13px] font-bold text-white transition-transform active:scale-[0.99] disabled:opacity-30"
+                      >
+                        <Check className="h-4 w-4" strokeWidth={2.5} />
+                        이 영상으로 확정
+                      </button>
+                    )}
                     {selectedVideo && (
                       <div className="flex items-center gap-2 rounded-xl bg-[#EEF3FE] px-2.5 py-2 [box-shadow:inset_0_0_0_1px_#C7D7FB]">
                         <span className="relative flex h-8 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#0F172A]">
@@ -3557,19 +3638,55 @@ export function CardStudioPage() {
                     onFocus={(e) => (e.currentTarget.style.boxShadow = `inset 0 0 0 1.5px ${accent}`)}
                     onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
                   />
-                  <div className="flex items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5">
-                    <Video className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
-                    <span className="text-[12px] font-semibold text-[#525252]">핵심 구간 시작</span>
-                    <input
-                      value={cfgClip}
-                      onChange={(e) => {
-                        setCfgClip(e.target.value.replace(/[^0-9:]/g, ""));
-                        confirmHelper("content"); // UI-5-T1k(D) — 구간 직접 조작 = 도우미 완료(선택은 대표님).
-                      }}
-                      inputMode="numeric"
-                      className="ml-auto w-16 rounded-lg bg-white px-2 py-1 text-center text-[12px] font-bold tabular-nums text-[#0A0A0A] outline-none"
-                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                    />
+                  {/* UI-5-T2-E5c(B1·B2) — 핵심구간 직접 입력(시작·끝 2칸, 45 파서 parseClock 재사용).
+                      확정 = blur/Enter → commitClip 검증(끝>시작·영상 길이 초과 = 45 정책 계승) →
+                      cfgClip "시작~끝" 커밋 = 어댑터 model.clip 즉시 반영. 값은 대표님만(AI clip 불가침 유지 B4). */}
+                  <div className="rounded-xl bg-[#F4F4F5] px-3 py-2.5">
+                    <p className="flex items-center gap-1.5 text-[12px] font-semibold text-[#525252]">
+                      <Video className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
+                      핵심 구간 (시작~끝)
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        value={clipStartDraft}
+                        onChange={(e) => setClipStartDraft(e.target.value.replace(/[^0-9:]/g, ""))}
+                        onBlur={commitClip}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            commitClip();
+                          }
+                        }}
+                        placeholder="0:12"
+                        inputMode="numeric"
+                        aria-label="핵심 구간 시작"
+                        className="min-w-0 flex-1 rounded-lg bg-white px-2 py-2 text-center text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#B4B4B4]"
+                        style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                      />
+                      <span className="shrink-0 text-[12px] font-semibold text-[#8A8A8A]">~</span>
+                      <input
+                        value={clipEndDraft}
+                        onChange={(e) => setClipEndDraft(e.target.value.replace(/[^0-9:]/g, ""))}
+                        onBlur={commitClip}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            commitClip();
+                          }
+                        }}
+                        placeholder="0:30"
+                        inputMode="numeric"
+                        aria-label="핵심 구간 끝"
+                        className="min-w-0 flex-1 rounded-lg bg-white px-2 py-2 text-center text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#B4B4B4]"
+                        style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                      />
+                    </div>
+                    {clipError && (
+                      <p className="mt-1.5 text-[11px] font-semibold text-[#DC2626] [word-break:keep-all]">{clipError}</p>
+                    )}
+                    {!clipError && cfgClip.includes("~") && (
+                      <p className="mt-1.5 text-[11px] font-semibold tabular-nums text-[#525252]">적용된 구간: {cfgClip}</p>
+                    )}
                   </div>
                 </div>
               )}
