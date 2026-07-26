@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ImageIcon, Sparkles, Plus, X, Search, Calculator, Info, Check, Loader2 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
+// UI-5-T4-D3c — 시세 참고(45 계승): 공용 presentational 어드바이저(무수정 import 소비만 · §0 파트너 전용).
+import { PriceBandAdvisor, type PriceBandResult } from "@/components/commerce/PriceBandAdvisor";
 
 export type ProductType = "fresh" | "processed" | "goods";
 export type SaleUnit = "unit" | "box" | "weight";
@@ -218,6 +220,51 @@ export function ProductRegisterForm({
       cancelled = true;
     };
   }, [value.type, kamisAll.length]);
+  // UI-5-T4-D3c — 시세 참고(45 :498-541 동형 이식): 트리거 = 품목 코드 "확정" 시(fresh + kamis_item_code
+  //   + category_code — fuzzy 금지 락) · debounce 350ms · get-price-band Edge invoke.
+  //   ⚠️ §0 락: 시세는 파트너 화면 전용 참고 — 폼 로컬 상태뿐(onChange/cfgProduct/payload 로 유출 0).
+  //   49 미보유 무게 선언(composition)은 미전달(옵셔널 생략 = kg 원단위 표기 — Advisor 가 단위 라벨 명시).
+  const [priceBand, setPriceBand] = useState<PriceBandResult | null>(null);
+  const [priceBandLoading, setPriceBandLoading] = useState(false);
+  const [priceBandRefresh, setPriceBandRefresh] = useState(0);
+  const kamisCategoryCode = value.kamisItemCode
+    ? (kamisAll.find((it) => it.item_code === value.kamisItemCode)?.category_code ?? null)
+    : null; // 45 :474-477 동형 — 병합 목록 역참조(get-price-band 필수 파라미터).
+  useEffect(() => {
+    if (value.type !== "fresh" || !value.kamisItemCode || !kamisCategoryCode) {
+      setPriceBand(null);
+      setPriceBandLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPriceBandLoading(true);
+    const timer = setTimeout(() => {
+      void (async () => {
+        const fail: PriceBandResult = {
+          status: "error",
+          item_code: value.kamisItemCode,
+          item_name: null,
+          sources: [],
+          cached: false,
+        };
+        try {
+          const { data, error } = await getSupabase().functions.invoke("get-price-band", {
+            body: { item_code: value.kamisItemCode, category_code: kamisCategoryCode },
+          });
+          if (cancelled) return;
+          setPriceBand(error || !data ? fail : (data as PriceBandResult));
+        } catch {
+          if (!cancelled) setPriceBand(fail); // 참고 정보 — 무언 실패 허용(Advisor 가 작은 안내 + 재조회 제공).
+        } finally {
+          if (!cancelled) setPriceBandLoading(false);
+        }
+      })();
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [value.type, value.kamisItemCode, kamisCategoryCode, priceBandRefresh]);
   // 후보 = 입력 부분일치 상위 6(45 :779-784 동형 — 공백 제거 소문자 정규화).
   const normItem = (s: string) => s.replace(/\s+/g, "").toLowerCase();
   const kamisMatches =
@@ -510,6 +557,20 @@ export function ProductRegisterForm({
           </div>
         )}
       </Field>
+
+      {/* UI-5-T4-D3c — 시세 참고(가격 입력 전 · 45 :1470-1501 형태 계승): fresh + 품목 확정 시에만.
+          §0 — 파트너 화면 전용 참고(저장·손님 카드 반출 0 · 단정·권유 금지 — Advisor 내장 문구). */}
+      {value.type === "fresh" && value.kamisItemCode && (priceBandLoading || priceBand) && (
+        <div>
+          <h3 className="text-[12.5px] font-bold text-[#0A0A0A]">시세는 이렇습니다. 참고하세요</h3>
+          <PriceBandAdvisor
+            priceBand={priceBand}
+            loading={priceBandLoading}
+            myPriceKrw={Number(onlyDigits(value.price)) || null}
+            onRefresh={() => setPriceBandRefresh((n) => n + 1)}
+          />
+        </div>
+      )}
 
       {/* 가격 */}
       <Field label="가격" required>
