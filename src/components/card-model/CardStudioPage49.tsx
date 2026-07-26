@@ -3451,6 +3451,7 @@ export function CardStudioPage() {
                     delete rest.price;
                     if (Object.keys(rest).length) setCfgProduct((p) => ({ ...p, ...rest }));
                   }}
+                  onNotify={setStepToast} /* F2-C — 준비 중 안내 = 페이지 토스트(1.8s 자동 소멸) 경유. */
                   photoUrl={productImagePreview ?? productImageUrl ?? undefined}
                   onEditPhoto={() => {
                     // E5a — 폼 사진 필드 = 표시 전용. 바꾸기 = 스텝 1(productimage) 재방문(단일 입구).

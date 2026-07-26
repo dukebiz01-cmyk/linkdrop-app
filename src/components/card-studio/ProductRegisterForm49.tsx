@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { ImageIcon, Sparkles, Plus, X, Search, Calculator, Info } from "lucide-react";
 
 export type ProductType = "fresh" | "processed" | "goods";
@@ -168,6 +169,7 @@ export function ProductRegisterForm({
   accent,
   photoUrl,
   onEditPhoto,
+  onNotify,
 }: {
   value: ProductForm;
   onChange: (patch: Partial<ProductForm>) => void;
@@ -175,8 +177,23 @@ export function ProductRegisterForm({
   /** UI-5-T2-E5a — 상품 사진 = 스텝 1 단일 입구. 폼은 표시 전용(업로드 경로 0). */
   photoUrl?: string;
   onEditPhoto?: () => void;
+  /** F2-C — 준비 중 안내 등 폼 밖 토스트 위임(미지정 = 인라인 폴백 1줄). */
+  onNotify?: (msg: string) => void;
 }) {
   const set = <K extends keyof ProductForm>(key: K, v: ProductForm[K]) => onChange({ [key]: v } as Partial<ProductForm>);
+  // F2-C — "직접 찾기" 준비 중 안내: onNotify(페이지 토스트) 우선, 폼 단독 사용 시 인라인 1줄(2s).
+  const [categoryNotice, setCategoryNotice] = useState(false);
+  const categoryNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const CATEGORY_PENDING_MSG = "품목 찾기는 준비 중이에요 — 이름을 직접 적어 주세요";
+  const notifyCategoryPending = () => {
+    if (onNotify) {
+      onNotify(CATEGORY_PENDING_MSG);
+      return;
+    }
+    setCategoryNotice(true);
+    if (categoryNoticeTimer.current) clearTimeout(categoryNoticeTimer.current);
+    categoryNoticeTimer.current = setTimeout(() => setCategoryNotice(false), 2000);
+  };
   const profit = profitOf(value.price, value.cost);
   const copy = TYPE_COPY[value.type];
   const unitOptions = copy.allowWeight ? UNIT_OPTIONS : UNIT_OPTIONS.filter((o) => o.id !== "weight");
@@ -319,13 +336,21 @@ export function ProductRegisterForm({
           onBlur={blurRing}
         />
         {copy.categorySearch && (
-          <button
-            type="button"
-            className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#F4F4F5] py-2 text-[12px] font-semibold text-[#525252] transition-colors active:bg-[#ECECEC]"
-          >
-            <Search className="h-3.5 w-3.5" strokeWidth={2.25} />
-            {copy.categorySearch}
-          </button>
+          <>
+            {/* E5b KAMIS 매칭에서 해제 */}
+            <button
+              type="button"
+              onClick={notifyCategoryPending}
+              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#F4F4F5] py-2 text-[12px] font-semibold text-[#525252] transition-colors active:bg-[#ECECEC]"
+            >
+              <Search className="h-3.5 w-3.5" strokeWidth={2.25} />
+              {copy.categorySearch}
+              <span className="text-[10px] font-semibold text-[#A3A3A3]">준비 중</span>
+            </button>
+            {categoryNotice && (
+              <p className="mt-1 text-[11px] font-semibold text-[#8A8A8A] [word-break:keep-all]">{CATEGORY_PENDING_MSG}</p>
+            )}
+          </>
         )}
       </Field>
 
