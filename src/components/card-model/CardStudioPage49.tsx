@@ -491,11 +491,17 @@ function isAiActionAllowed(mode: StudioMode, a: any): boolean {
   const allowed = DECK_IDS[mode];
   if (a.type === "switchMode") return false; // 사용자 확인 없는 AI 모드 전환 금지.
   if (a.type === "detach") return true; // 해제(제거)는 항상 안전.
-  if (a.type === "equip") return typeof a.blockId === "string" && allowed.includes(a.blockId);
+  if (a.type === "equip")
+    return (
+      typeof a.blockId === "string" &&
+      allowed.includes(a.blockId) &&
+      !AI_PENDING_BLOCKS.has(a.blockId) // E4e-2(재) — 준비 중 블록 AI 장착 차단(2차 방어).
+    );
   if (a.type === "setField") {
     if (AI_BLOCKED_FIELDS.has(a.field)) return false; // T1k(D) — 구간 값 등 자동 설정 금지(선택은 대표님).
     if (COPY_FIELDS.has(a.field)) return true; // F2③ — 카피(제목·한마디)는 전 모드 허용.
     const blk = FIELD_TO_BLOCK[a.field];
+    if (blk && AI_PENDING_BLOCKS.has(blk)) return false; // E4e-2(재) — 준비 중 블록 소속 필드 차단.
     return !blk || allowed.includes(blk); // 매핑 없는 필드는 블록 게이트 없음(허용).
   }
   return true;
@@ -528,6 +534,11 @@ const IMAGE_BLOCKS = new Set(["image", "productimage"]); // 사진 선택 필요
 // 링고 자동 설정 금지 필드: 구간(clip)·영상 링크·사진 = 콘텐츠 대리 선택 금지(장착·안내만).
 // E5d — coupon 편입: 실쿠폰(UUID) 전환으로 쿠폰 선택 = 대표님 탭만(AI 대리 선택 차단 — Edge 개정 목록 대상).
 const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "image", "imageUrl", "photo", "coupon"]);
+// UI-5-T4-E4e-2(재) — 준비 중 블록 = AI 경유(equip·setField·조립) 차단 2차 방어층(L4 대본이 1차).
+//   등재 근거(전수 조사): aivideo = 생성 엔진 부재(aivStatus 타이머 목업 :757-760) / image = reserve 매장
+//   사진 업로드 미배선(E5a 범위 밖 목업 :4883) / dock = DOCK_OPTIONS 하드코딩 목업(:280 — 실 카드 연결 부재).
+//   수동 편집(덱 탭·칸 조작)은 무영향 — 차단은 AI 액션 경로 한정.
+const AI_PENDING_BLOCKS = new Set(["aivideo", "image", "dock"]);
 // UI-5-T1m — 미확정 릴레이 큐 정렬 우선순위: 영상 → 이미지 → 숫자(product/party/…) → 구간(content) → 기타.
 function confirmRank(id: string): number {
   if (id === "__video") return 0;
@@ -2755,11 +2766,22 @@ export function CardStudioPage() {
     // E3c — 응답 처리 = 수신 시점 실모드 라이브 ref(요청·응답 간 모드 전환·E3b 리셋 레이스 정합).
     const m = modeRef.current;
     const steps = (rawSteps ?? []).filter((s) => s && s.label);
-    const okActions = (rawActions ?? []).filter((a: any) => isAiActionAllowed(m, a)); // AI_BLOCKED_FIELDS·MODE_ALLOWED·switchMode 차단.
+    const okActions = (rawActions ?? []).filter((a: any) => isAiActionAllowed(m, a)); // AI_BLOCKED_FIELDS·AI_PENDING_BLOCKS·MODE_ALLOWED·switchMode 차단.
     if (okActions.length < (rawActions?.length ?? 0)) {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", text: "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요." },
+      // E4e-2(재) — 차단 사유 분기: 준비 중 블록 히트 = 준비 중 안내(구 모드 오문구 방지) / 그 외 = 기존 모드 안내.
+      const pendingHit = (rawActions ?? []).some((a: any) => {
+        const blk =
+          a?.type === "equip" ? a.blockId : a?.type === "setField" ? FIELD_TO_BLOCK[a.field] : null;
+        return typeof blk === "string" && AI_PENDING_BLOCKS.has(blk);
+      });
+      setMessages((mm) => [
+        ...mm,
+        {
+          role: "assistant",
+          text: pendingHit
+            ? "이 부분은 준비 중이에요 — 열리면 제가 먼저 알려드릴게요."
+            : "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요.",
+        },
       ]);
     }
     // 관문은 클라 선처리(T1m·T1n). 미디어 = general/reserve 영상(selectedVideo) · commerce 상품 사진(productImageUrl).
