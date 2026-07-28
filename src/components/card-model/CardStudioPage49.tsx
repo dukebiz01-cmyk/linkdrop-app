@@ -983,6 +983,20 @@ export function CardStudioPage() {
     if (DECK[deckIndex]?.id === "coupon") void loadCoupons();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deckIndex, mode]);
+  // UI-5-T4-D3e — [✦ AI로 쓰기](headline): 사용자 타이핑을 대체하는 내부 발화 → 기존 sendToLingo →
+  //   L4 카피 액션(setField headline) 수신·적용 — 신규 쓰기 경로 0(링고 쓰기 = 수동 편집과 동일 적용 코드 락).
+  //   실패 안내: 응답 커밋 후에도 headline 무변이면 토스트(무언 실패 금지). 로딩 = thinking(폼 스피너·중복 탭 방지).
+  //   (cfgProductRef 동기화는 cfgProduct 선언부 — TDZ 회피.)
+  async function aiWriteHeadline() {
+    if (thinking) return;
+    const before = cfgProductRef.current.headline;
+    lingoChannelRef.current = "text";
+    await sendToLingo("상품 한마디(홍보 카피)를 한 줄 써 줘");
+    // 응답 액션 커밋 여유 후 판정 — 변화 없으면 실패 안내(액션 미동반/차단/오류 공통).
+    setTimeout(() => {
+      if (cfgProductRef.current.headline === before) setStepToast("지금은 어렵네요 — 다시 눌러 주세요");
+    }, 400);
+  }
   // E5b — 재사용 목록 로드(partner.products.index :260-281 동형 쿼리 · 자체업로드분만). 탭 시 1회.
   async function loadMyProducts() {
     if (myProductsLoading) return;
@@ -1082,6 +1096,9 @@ export function CardStudioPage() {
   useEffect(() => () => { assembleTimers.current.forEach(clearTimeout); }, []);
   // 상품 등록 상세 (유형·원산지·판매단위·수량·셀링포인트 등)
   const [cfgProduct, setCfgProduct] = useState<ProductForm>(EMPTY_PRODUCT);
+  // D3e — 실패 판정용 라이브 미러(비동기 발화 후 headline 무변 감지 — stale closure 회피).
+  const cfgProductRef = useRef(cfgProduct);
+  cfgProductRef.current = cfgProduct;
   // UI-5-T2-E5b — 상품 실등록 상태: 등록 결과 참조(드롭 id·uuid) = E5f 발행 재사용·BUG-1 방어의 근거.
   //   ⚠️ BUG-1(45 S1-b): 등록 드롭은 is_public=false(서버 기본)로 생성 — E5f 재사용 발행 시 45 :2385-2411
   //   패턴(is_public·published_at best-effort update)을 이 dropId 에 반드시 적용할 것.
@@ -4435,6 +4452,8 @@ export function CardStudioPage() {
                   registerSaving={productSaving}
                   registerError={productSaveError}
                   registeredName={registeredProduct?.name ?? null}
+                  onAiWrite={() => void aiWriteHeadline()} /* D3e — 사용자 탭 유래 발화(자동 트리거 0). */
+                  aiWriting={thinking}
                 />
                 </div>
               )}

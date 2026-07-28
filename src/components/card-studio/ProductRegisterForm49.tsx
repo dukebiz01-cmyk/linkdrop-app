@@ -183,6 +183,8 @@ export function ProductRegisterForm({
   registerSaving,
   registerError,
   registeredName,
+  onAiWrite,
+  aiWriting,
 }: {
   value: ProductForm;
   onChange: (patch: Partial<ProductForm>) => void;
@@ -198,6 +200,10 @@ export function ProductRegisterForm({
   registerError?: string | null;
   /** 등록 완료 상태 표시(재등록 허용 — 45 관례: 재제출 = 새 등록). */
   registeredName?: string | null;
+  /** UI-5-T4-D3e — [✦ AI로 쓰기](headline 전용 입구): 탭 = 호출부 sendToLingo 발화(L4 카피 액션 경로).
+   *  숫자 불가침 — 가격·수량·날짜 칸 부착 금지(이 prop 은 headline 칸에서만 소비). */
+  onAiWrite?: () => void;
+  aiWriting?: boolean;
 }) {
   const set = <K extends keyof ProductForm>(key: K, v: ProductForm[K]) => onChange({ [key]: v } as Partial<ProductForm>);
   // UI-5-T2-E5b — KAMIS(fresh) 병합 품목 1회 로드 + 타이핑 후보 매칭(45 :383-405·:778-784 동형).
@@ -812,7 +818,22 @@ export function ProductRegisterForm({
 
         {/* 헤드라인 */}
         <div className="mt-3">
-          <span className="mb-1 block text-[11px] font-semibold text-[#525252]">헤드라인</span>
+          <span className="mb-1 flex items-center text-[11px] font-semibold text-[#525252]">
+            헤드라인
+            {/* UI-5-T4-D3e — [✦ AI로 쓰기]: 링고에게 맡기는 입구(✦ 배지 문법 · 링고 블루 #1D4ED8 락).
+                로딩 = 스피너 + disabled(중복 탭 방지). headline 칸 한정 — 숫자 칸 부착 금지. */}
+            {onAiWrite && (
+              <button
+                type="button"
+                onClick={onAiWrite}
+                disabled={aiWriting}
+                className="ml-auto inline-flex min-h-[28px] items-center gap-1 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2.5 text-[10.5px] font-bold text-[#1D4ED8] transition-transform active:scale-95 disabled:opacity-60"
+              >
+                {aiWriting ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <span aria-hidden="true">✦</span>}
+                {aiWriting ? "쓰는 중…" : "AI로 쓰기"}
+              </button>
+            )}
+          </span>
           <input
             value={value.headline}
             onChange={(e) => set("headline", e.target.value)}
