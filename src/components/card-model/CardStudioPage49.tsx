@@ -1477,6 +1477,9 @@ export function CardStudioPage() {
   const FAB_SIZE = 56;
   const FAB_MARGIN = 12;
   const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(null); // null = 기본 위치
+  // UI-5-T5-F3-5(2) — 발행바 실점유 실측용(offsetHeight = 게이트 줄·safe-area·border 포함).
+  //   clampFab 이 바 위까지만 허용 — z-40 FAB 이 z-50 바 밑에 깔려 회수 불가되던 문제 해소.
+  const publishBarRef = useRef<HTMLDivElement | null>(null);
   const [fabDragging, setFabDragging] = useState(false);
   const fabRef = useRef<HTMLButtonElement>(null);
   const fabDrag = useRef({ active: false, moved: false, dx: 0, dy: 0 });
@@ -1805,7 +1808,10 @@ export function CardStudioPage() {
   // 링고AI 플로팅 버튼 드래그 — 손가락으로 자유롭게 옮기기
   function clampFab(x: number, y: number) {
     const maxX = window.innerWidth - FAB_SIZE - FAB_MARGIN;
-    const maxY = window.innerHeight - FAB_SIZE - FAB_MARGIN;
+    // F3-5(2) — 발행바 실점유 높이 차감(실측 — 게이트 줄 유무·줄바꿈·safe-area 자동 반영).
+    //   바 미장착 상태(ref 부재)는 0 = 기존 클램프 동작. 하한은 아래 Math.max(FAB_MARGIN)이 보장.
+    const barH = publishBarRef.current?.offsetHeight ?? 0;
+    const maxY = window.innerHeight - FAB_SIZE - FAB_MARGIN - barH;
     return {
       x: Math.min(Math.max(FAB_MARGIN, x), maxX),
       y: Math.min(Math.max(FAB_MARGIN, y), maxY),
@@ -3459,8 +3465,16 @@ export function CardStudioPage() {
     pageBg,
   });
 
+  // UI-5-T5-F3-5(1) — 루트 하단 여백 = 발행바 실점유 조건부. 게이트 사유 줄 상시화(D3f③)로 바 실높이가
+  //   기본 85px → ~133px(사유 1줄) · ~149px(2줄 줄바꿈) + iOS safe-area 까지 커져 구 pb-[120px]
+  //   (기본 85px 기준 보정치)를 초과 — 마지막 요소(수신자 미리보기)가 가려지던 결함 수복.
+  //   사유 줄 노출(발행바 내부와 동일 조건 !canPublish && publishGate)일 때만 176px+safe-area 로
+  //   확대, 미노출이면 현행 120px 유지(과대 여백 스크롤 낭비 금지).
   return (
-      <div className="min-h-screen pb-[120px] transition-colors duration-300" style={{ backgroundColor: pageBg }}>
+      <div
+        className={`min-h-screen ${!canPublish && publishGate ? "pb-[calc(176px+env(safe-area-inset-bottom))]" : "pb-[120px]"} transition-colors duration-300`}
+        style={{ backgroundColor: pageBg }}
+      >
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[#E8E8EC] bg-white/90 backdrop-blur-lg">
         <div className="mx-auto flex max-w-md items-center gap-3 px-5 py-3">
@@ -5584,6 +5598,7 @@ export function CardStudioPage() {
       {/* ───────── 카드 드롭하기 (기본 CTA만 고정) ───────── */}
       {/* UI-5-T1f(4) — 연출 중 개별 숨김 제거: 딤(오버레이 z-70)이 하단 CTA를 덮어 무대화 대체. */}
       <div
+        ref={publishBarRef} /* F3-5(2) — FAB 클램프용 실측 지점(레이아웃·층·동작 무변). */
         className="fixed inset-x-0 bottom-0 z-50 border-t border-[#E8E8EC] pb-[env(safe-area-inset-bottom)]"
         style={{ backgroundColor: pageBg }}
       >
