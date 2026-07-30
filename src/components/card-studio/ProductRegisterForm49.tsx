@@ -44,6 +44,10 @@ export type ProductForm = {
   headline: string;
   sellingPoints: string[];
   extraInfo: string;
+  // UI-5-T5-F3-1(B안) — 이익 계산 보조 입력(대표님 입력만·payload 미편입 — blockData 명시 키 조립이라
+  //   구조적 무유출). ProductForm 소속 = resetForMode 의 setCfgProduct(EMPTY_PRODUCT) 리셋 자동 편입.
+  packCost: string; // 포장비(원) — 박스·아이스팩 등
+  miscCost: string; // 기타비용(원) — 수수료 등
 };
 
 export const EMPTY_PRODUCT: ProductForm = {
@@ -73,6 +77,8 @@ export const EMPTY_PRODUCT: ProductForm = {
   headline: "",
   sellingPoints: [""],
   extraInfo: "",
+  packCost: "",
+  miscCost: "",
 };
 
 const TYPE_OPTIONS: { id: ProductType; label: string }[] = [
@@ -175,15 +181,27 @@ const VARIETY_CHIPS: Record<string, string[]> = {
   쌀: ["고시히카리", "신동진", "백진주", "추청", "오대"],
 };
 
-/** UI-5-T4-D3d — 이익 = 판매가 − 원가 − (무료배송이면 내가 낼 배송비).
- *  45 computeProfitReceipt(:542-555) 분기 계승: shippingMode "free" = 배송비 차감 /
- *  "paid"(구매자 부담) = 마진 계산에서 제외(45 :410-412 정본 규칙). 빈 값 = 0 취급. */
-function profitOf(price: string, cost: string, freeShip: boolean, shipFee: string) {
+/** UI-5-T4-D3d→T5-F3-1(B안 확정식) —
+ *  이익 = 판매가 − 원가 − 배송비(D3d 분기) − 드로피 할인(쿠폰 연동 자동) − 포장비 − 기타비용.
+ *  D3d 계승: shippingMode "free" = 배송비 차감 / "paid"(구매자 부담) = 마진 계산에서 제외
+ *  (45 computeProfitReceipt :542-555 · :410-412 정본 규칙). 빈 값 = 0 취급. couponKrw 는 호출부가
+ *  정액/정률 환산을 마친 원 단위 값(정률 = 판매가 × 율 반올림). */
+function profitOf(
+  price: string,
+  cost: string,
+  freeShip: boolean,
+  shipFee: string,
+  couponKrw: number,
+  packCost: string,
+  miscCost: string,
+) {
   const p = Number(onlyDigits(price));
   const c = Number(onlyDigits(cost));
   if (!p || !c) return null;
   const fee = freeShip ? Number(onlyDigits(shipFee)) || 0 : 0;
-  return p - c - fee;
+  const pack = Number(onlyDigits(packCost)) || 0;
+  const misc = Number(onlyDigits(miscCost)) || 0;
+  return p - c - fee - couponKrw - pack - misc;
 }
 
 export function ProductRegisterForm({
@@ -203,6 +221,7 @@ export function ProductRegisterForm({
   aiPointsLoading,
   aiPointCandidates,
   onConsumePointCandidate,
+  couponDiscount,
 }: {
   value: ProductForm;
   onChange: (patch: Partial<ProductForm>) => void;
@@ -230,6 +249,9 @@ export function ProductRegisterForm({
   aiPointsLoading?: boolean;
   aiPointCandidates?: string[];
   onConsumePointCandidate?: (p: string) => void;
+  /** UI-5-T5-F3-1(2) — 장착 쿠폰 할인(자동 행 재료): 페이지 selectedCoupon → {value, isPercent}.
+   *  null = 미장착(행 숨김). 해제/교체 = prop 재렌더로 자동 재계산. 환산(정률 = 판매가 × 율)은 폼 내부. */
+  couponDiscount?: { value: number; isPercent: boolean } | null;
 }) {
   const set = <K extends keyof ProductForm>(key: K, v: ProductForm[K]) => onChange({ [key]: v } as Partial<ProductForm>);
   // UI-5-T5-F3-3(2) — 후보 칩 채택: 사용자 칩 탭만("채택은 대표님" 원칙 — 자동 주입 0). 기입은 수동
@@ -398,7 +420,27 @@ export function ProductRegisterForm({
     if (categoryNoticeTimer.current) clearTimeout(categoryNoticeTimer.current);
     categoryNoticeTimer.current = setTimeout(() => setCategoryNotice(false), 2000);
   };
-  const profit = profitOf(value.price, value.cost, value.freeShip, value.shipFee); // D3d — 배송 분기 반영.
+  // F3-1(2) — 드로피 할인 자동 산출: 정률 = 판매가 × 율(반올림) / 정액 = 값 그대로. 미장착 = 0(행 숨김).
+  const couponDiscountKrw = couponDiscount
+    ? couponDiscount.isPercent
+      ? Math.round(((Number(onlyDigits(value.price)) || 0) * couponDiscount.value) / 100)
+      : Math.round(couponDiscount.value)
+    : 0;
+  const profit = profitOf(
+    value.price,
+    value.cost,
+    value.freeShip,
+    value.shipFee,
+    couponDiscountKrw,
+    value.packCost,
+    value.miscCost,
+  ); // D3d 배송 분기 + F3-1 B안 확정식.
+  // F3-1(3) — 내역 표시용 분해값(계산 단일 소스 = profitOf — 여기는 표기 재료만).
+  const bdPrice = Number(onlyDigits(value.price)) || 0;
+  const bdCost = Number(onlyDigits(value.cost)) || 0;
+  const bdShip = value.freeShip ? Number(onlyDigits(value.shipFee)) || 0 : 0;
+  const bdPack = Number(onlyDigits(value.packCost)) || 0;
+  const bdMisc = Number(onlyDigits(value.miscCost)) || 0;
   const copy = TYPE_COPY[value.type];
   const unitOptions = copy.allowWeight ? UNIT_OPTIONS : UNIT_OPTIONS.filter((o) => o.id !== "weight");
 
@@ -819,34 +861,97 @@ export function ProductRegisterForm({
           <span className="text-[13px] font-semibold text-[#8A8A8A]">원</span>
         </div>
 
-        {/* 이익 계산 — 저장하지 않는 보조 계산기 */}
+        {/* UI-5-T5-F3-1(B안) — 이익 계산 완전체: 원가 + 포장비/기타 2칸(대표님 입력만·저장 안 함) +
+            드로피 할인 자동 행(쿠폰 연동 — 입력 칸 아님) + 항목별 내역 투명화 + 적자 경고(확정 문구). */}
         <div className="mt-1.5 rounded-xl bg-[#F7F7F8] p-2.5">
           <span className="flex items-center gap-1 text-[11px] font-bold text-[#525252]">
             <Calculator className="h-3.5 w-3.5" strokeWidth={2.25} />
             이익 계산
             <span className="ml-1 font-medium text-[#A3A3A3]">선택 · 저장하지 않아요</span>
           </span>
-          <div className="mt-1.5 flex items-center rounded-lg bg-white px-2.5">
-            <span className="text-[11px] font-semibold text-[#8A8A8A]">원가</span>
-            <input
-              value={value.cost}
-              onChange={(e) => set("cost", onlyDigits(e.target.value))}
-              inputMode="numeric"
-              placeholder="예: 12000"
-              className="w-full bg-transparent px-2 py-2 text-[12.5px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
-            />
-            <span className="text-[12px] font-semibold text-[#8A8A8A]">원</span>
+          <div className="mt-1.5 space-y-1.5">
+            <div className="flex items-center rounded-lg bg-white px-2.5">
+              <span className="flex-none text-[11px] font-semibold text-[#8A8A8A]">원가</span>
+              <input
+                value={value.cost}
+                onChange={(e) => set("cost", onlyDigits(e.target.value))}
+                inputMode="numeric"
+                placeholder="예: 12000"
+                className="w-full bg-transparent px-2 py-2 text-[12.5px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+              />
+              <span className="text-[12px] font-semibold text-[#8A8A8A]">원</span>
+            </div>
+            <div className="flex items-center rounded-lg bg-white px-2.5">
+              <span className="flex-none text-[11px] font-semibold text-[#8A8A8A]">포장비</span>
+              <input
+                value={value.packCost}
+                onChange={(e) => set("packCost", onlyDigits(e.target.value))}
+                inputMode="numeric"
+                placeholder="박스·아이스팩 등"
+                className="w-full bg-transparent px-2 py-2 text-[12.5px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+              />
+              <span className="text-[12px] font-semibold text-[#8A8A8A]">원</span>
+            </div>
+            <div className="flex items-center rounded-lg bg-white px-2.5">
+              <span className="flex-none text-[11px] font-semibold text-[#8A8A8A]">기타비용</span>
+              <input
+                value={value.miscCost}
+                onChange={(e) => set("miscCost", onlyDigits(e.target.value))}
+                inputMode="numeric"
+                placeholder="수수료 등"
+                className="w-full bg-transparent px-2 py-2 text-[12.5px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+              />
+              <span className="text-[12px] font-semibold text-[#8A8A8A]">원</span>
+            </div>
           </div>
+          {/* F3-1(3) — 계산 내역: 판매가부터 이익까지 항목별 한 줄(0원 선택 항목은 생략 — 입력분만). */}
           {profit !== null && (
-            <p className="mt-1.5 text-[11.5px] font-semibold tabular-nums" style={{ color: profit >= 0 ? accent : "#EF4444" }}>
-              개당 이익 {profit.toLocaleString()}원
-              {value.freeShip && (Number(onlyDigits(value.shipFee)) || 0) > 0 && (
-                <span className="font-medium text-[#8A8A8A]">
-                  {" "}
-                  (배송비 {Number(onlyDigits(value.shipFee)).toLocaleString()}원 차감)
-                </span>
+            <div className="mt-1.5 space-y-0.5 rounded-lg bg-white px-2.5 py-2 text-[11px] font-medium tabular-nums text-[#525252]">
+              <p className="flex justify-between">
+                <span>판매가</span>
+                <span>{bdPrice.toLocaleString()}원</span>
+              </p>
+              <p className="flex justify-between">
+                <span>원가</span>
+                <span>−{bdCost.toLocaleString()}원</span>
+              </p>
+              {bdShip > 0 && (
+                <p className="flex justify-between">
+                  <span>배송비 (무료배송)</span>
+                  <span>−{bdShip.toLocaleString()}원</span>
+                </p>
               )}
-            </p>
+              {couponDiscountKrw > 0 && (
+                <p className="flex justify-between">
+                  <span>드로피 할인 (쿠폰 연동)</span>
+                  <span>−{couponDiscountKrw.toLocaleString()}원</span>
+                </p>
+              )}
+              {bdPack > 0 && (
+                <p className="flex justify-between">
+                  <span>포장비</span>
+                  <span>−{bdPack.toLocaleString()}원</span>
+                </p>
+              )}
+              {bdMisc > 0 && (
+                <p className="flex justify-between">
+                  <span>기타비용</span>
+                  <span>−{bdMisc.toLocaleString()}원</span>
+                </p>
+              )}
+              <p
+                className="flex justify-between border-t border-[#EFEFEF] pt-1 text-[11.5px] font-bold"
+                style={{ color: profit > 0 ? accent : "#EF4444" }}
+              >
+                <span>한 개 팔면 이익</span>
+                <span>{profit.toLocaleString()}원</span>
+              </p>
+              {profit <= 0 && (
+                <p className="text-[11px] font-semibold text-[#EF4444] [word-break:keep-all]">
+                  이익이 없어요 — 가격을 확인해 주세요
+                </p>
+              )}
+            </div>
           )}
         </div>
       </Field>

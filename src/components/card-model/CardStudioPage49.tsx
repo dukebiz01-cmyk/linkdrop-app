@@ -4540,6 +4540,23 @@ export function CardStudioPage() {
                   aiPointsLoading={aiCopyBusy === "points"}
                   aiPointCandidates={aiPointCandidates}
                   onConsumePointCandidate={(p) => setAiPointCandidates((prev) => prev.filter((x) => x !== p))}
+                  couponDiscount={
+                    /* F3-1(2) — 드로피 할인 자동 재료: 쿠폰 장착+선택 시에만. 단위 판정 3형 수용
+                       (생성부 "%"·"원" / 구 표기 "percent" / coupon_type 폴백 — partner.coupons :198·
+                       Step3Options :34 실측). 해제/교체 = state 재렌더로 자동 재계산. */
+                    applied["coupon"] &&
+                    selectedCoupon &&
+                    typeof selectedCoupon.discount_value === "number" &&
+                    selectedCoupon.discount_value > 0
+                      ? {
+                          value: selectedCoupon.discount_value,
+                          isPercent:
+                            selectedCoupon.discount_unit === "%" ||
+                            selectedCoupon.discount_unit === "percent" ||
+                            selectedCoupon.coupon_type === "percent",
+                        }
+                      : null
+                  }
                 />
                 </div>
               )}
