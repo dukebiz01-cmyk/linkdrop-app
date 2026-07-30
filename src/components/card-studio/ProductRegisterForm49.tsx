@@ -264,10 +264,37 @@ export function ProductRegisterForm({
   // UI-5-T4-D3c — 시세 참고(45 :498-541 동형 이식): 트리거 = 품목 코드 "확정" 시(fresh + kamis_item_code
   //   + category_code — fuzzy 금지 락) · debounce 350ms · get-price-band Edge invoke.
   //   ⚠️ §0 락: 시세는 파트너 화면 전용 참고 — 폼 로컬 상태뿐(onChange/cfgProduct/payload 로 유출 0).
-  //   49 미보유 무게 선언(composition)은 미전달(옵셔널 생략 = kg 원단위 표기 — Advisor 가 단위 라벨 명시).
+  //   F3-2a — 구 "composition 미전달" 락 해제: 45 동형 구성 파라미터·composition 전달 복원(아래 계산부).
   const [priceBand, setPriceBand] = useState<PriceBandResult | null>(null);
   const [priceBandLoading, setPriceBandLoading] = useState(false);
   const [priceBandRefresh, setPriceBandRefresh] = useState(0);
+  // UI-5-T5-F3-2a — 낱개 1개 무게(g): 45 :320 동형 폼 로컬 상태(시세 개당 환산 기준 전용).
+  //   ProductForm 미편입 = 등록/발행 payload 구조적 무유출(§0 시세 락 정합) · AI setField 경로 부재.
+  const [singleWeightG, setSingleWeightG] = useState("");
+  // F3-2a — 판매 구성 통역(45 :432-449 정본 계산 그대로): 모드 → 유효 구성(입수·총중량 kg).
+  //   box=개수×총kg / unit=1개×g / weight=1단위×kg. 무게 미상이면 구성 없음(kg 비교 생략).
+  //   구성 성립 시에만 앵커 축 발동(45 계약 동일 — 미입력 = 현행 표+캡션 유지).
+  const composition = (() => {
+    if (value.type !== "fresh" || value.weightUnknown) return null;
+    if (value.saleUnit === "box") {
+      const n = Math.floor(Number(value.boxCount));
+      const kg = Number(value.totalWeight);
+      return Number.isFinite(n) && n >= 1 && Number.isFinite(kg) && kg > 0
+        ? { unitCount: n, totalKg: kg }
+        : null;
+    }
+    if (value.saleUnit === "unit") {
+      const g = Number(singleWeightG);
+      return Number.isFinite(g) && g > 0 ? { unitCount: 1, totalKg: g / 1000 } : null;
+    }
+    const kg = Number(value.totalWeight);
+    return Number.isFinite(kg) && kg > 0 ? { unitCount: 1, totalKg: kg } : null;
+  })();
+  // 개당 중량(g) — 총중량÷입수(45 :450-453 P5a 공식 그대로). get-price-band per_unit_weight_g 전달.
+  const perUnitWeightG = composition
+    ? Math.round((composition.totalKg * 1000) / composition.unitCount)
+    : null;
+  const unitCountForQuery = composition != null ? composition.unitCount : null;
   const kamisCategoryCode = value.kamisItemCode
     ? (kamisAll.find((it) => it.item_code === value.kamisItemCode)?.category_code ?? null)
     : null; // 45 :474-477 동형 — 병합 목록 역참조(get-price-band 필수 파라미터).
@@ -290,7 +317,15 @@ export function ProductRegisterForm({
         };
         try {
           const { data, error } = await getSupabase().functions.invoke("get-price-band", {
-            body: { item_code: value.kamisItemCode, category_code: kamisCategoryCode },
+            // F3-2a — 45 :520-526 동형: 구성 성립 시에만 per_unit_weight_g·unit_count 편입
+            //   (Edge 무수정 — 기존 옵셔널 파라미터 소비 → unit축 번역·count-only 환산 가동).
+            body: {
+              item_code: value.kamisItemCode,
+              category_code: kamisCategoryCode,
+              ...(perUnitWeightG != null && unitCountForQuery != null
+                ? { per_unit_weight_g: perUnitWeightG, unit_count: unitCountForQuery }
+                : {}),
+            },
           });
           if (cancelled) return;
           setPriceBand(error || !data ? fail : (data as PriceBandResult));
@@ -305,7 +340,8 @@ export function ProductRegisterForm({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [value.type, value.kamisItemCode, kamisCategoryCode, priceBandRefresh]);
+    // F3-2a — 45 :541 동형 deps: 구성 타이핑도 debounce 350ms 재조회(연타 방지 기존 타이머 재사용).
+  }, [value.type, value.kamisItemCode, kamisCategoryCode, priceBandRefresh, perUnitWeightG, unitCountForQuery]);
   // 후보 = 입력 부분일치 상위 6(45 :779-784 동형 — 공백 제거 소문자 정규화).
   const normItem = (s: string) => s.replace(/\s+/g, "").toLowerCase();
   const kamisMatches =
@@ -597,6 +633,20 @@ export function ProductRegisterForm({
             />
           </div>
         )}
+        {/* F3-2a — 낱개 모드 1개 무게(g): 45 :1408-1420 동형 복원(시세 개당 환산 기준 — 선택 입력·
+            폼 로컬 전용 = payload 무유출). 입력 시에만 앵커 축 발동(45 계약 동일). */}
+        {value.type === "fresh" && value.saleUnit === "unit" && !value.weightUnknown && (
+          <div className="mt-2 rounded-xl bg-[#F7F7F8] p-2.5">
+            <SubInput
+              label="1개 무게 약 (g)"
+              value={singleWeightG}
+              onChange={(v) => setSingleWeightG(onlyDigits(v))}
+              placeholder="예: 300"
+              suffix="g"
+              accent={accent}
+            />
+          </div>
+        )}
       </Field>
 
       {/* UI-5-T4-D3c — 시세 참고(가격 입력 전 · 45 :1470-1501 형태 계승): fresh + 품목 확정 시에만.
@@ -607,6 +657,19 @@ export function ProductRegisterForm({
           <PriceBandAdvisor
             priceBand={priceBand}
             loading={priceBandLoading}
+            /* F3-2a — 45 :1478-1487 동형 composition 전달: totalKg 산출 → 4점 앵커·unit축 번역·
+               인터넷 점·격차 문구 부활(Advisor :355 게이트 통과). 49 는 포장 종류 선택지 미보유 →
+               box 라벨 = "박스" 고정("단위" 외 아무 값 = countMeaningful 성립 — Advisor :315). */
+            composition={
+              composition
+                ? {
+                    packType:
+                      value.saleUnit === "box" ? "박스" : value.saleUnit === "unit" ? "낱개" : "단위",
+                    unitCount: composition.unitCount,
+                    totalKg: composition.totalKg,
+                  }
+                : null
+            }
             myPriceKrw={Number(onlyDigits(value.price)) || null}
             onRefresh={() => setPriceBandRefresh((n) => n + 1)}
           />
