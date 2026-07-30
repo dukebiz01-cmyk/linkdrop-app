@@ -58,6 +58,8 @@ const MIN_CONFIDENT = 10; // 최종 통과 표본 미만 → online.confidence="
 const CROSS_GUARD_LOW = 0.3; // 교차 정합 — 환산 단가 < wholesale.avg×0.3 → outlier 제외
 const CROSS_GUARD_HIGH = 8; // 교차 정합 — 환산 단가 > wholesale.avg×8 → outlier 제외
 const CACHE_VERSION = "v3"; // 가드 로직 변경 시 범프(구캐시 무효). T3a-ⓐv2: v3(축 신설·IQR·품종 보존)
+// F3-2b — 품종 필터 정직 게이트: 태그 매칭 리스팅 미만이면 품종 밴드 미산출(혼합 폴백 금지).
+const KIND_MIN_MATCHED = 5;
 // T3a-ⓐv2 [7] — puw 캐시 키 10g 버킷(puw33·34→puw30 동일 키): 파편화 억제.
 //   개당가축 신설로 puw 의존 자체가 감소 → 정확도 영향 미미.
 const PUW_BUCKET_G = 10;
@@ -159,6 +161,9 @@ type PriceBandResult = {
     online?: Record<string, number>; // 네이버 제목 품종 태그별 n
   };
   retail_prev?: { day: number | null; month: number | null } | null;
+  // F3-2b ADDITIVE — 품종 필터 결과(kind 요청 시에만). insufficient = 매칭 < KIND_MIN_MATCHED
+  //   → 품종 밴드 미산출(혼합 밴드 폴백 금지 — 정직 게이트. 클라가 안내문 표시).
+  kind_filter?: { requested: string; matched_count: number; insufficient: boolean } | null;
 };
 
 // KAMIS item 한 행(필요 필드만).
@@ -405,10 +410,16 @@ async function fetchWholesale(
   const kgPrices: number[] = [];
   const markets = new Set<string>();
   // T3a-ⓐv2 [5]ⓑ — split("(")[0] 로 버려지던 괄호부를 집계 전 태깅해 보존(품종 후보).
+  //   F3-2b — 오염 정제(조사 지적분): 숫자 포함 = 규격("10kg"·"20개") / 등급어 / 광역 산지 접두는
+  //   품종이 아니므로 제외. 정제 후 남는 괄호부만 품종 후보로 집계.
   const kinds: Record<string, number> = {};
+  const PAREN_GRADE = new Set(["특", "상", "중", "하", "특상", "상품", "중품", "하품"]);
+  const PAREN_REGION =
+    /^(전남|전북|경남|경북|충남|충북|강원|경기|제주|서울|부산|대구|인천|광주|대전|울산|세종|국산|수입|수입산)/;
   for (const r of matched) {
     const paren = r.corp_gds_item_nm?.match(/\(([^)]+)\)/)?.[1]?.trim();
-    if (paren) kinds[paren] = (kinds[paren] ?? 0) + 1;
+    if (paren && !/\d/.test(paren) && !PAREN_GRADE.has(paren) && !PAREN_REGION.test(paren))
+      kinds[paren] = (kinds[paren] ?? 0) + 1;
     if (r.unit_nm !== "kg") continue;
     const prc = parsePrice(r.scsbd_prc);
     const uq = Number(r.unit_qty);
@@ -486,6 +497,8 @@ type NaverShopResult = {
   // T3a-ⓐv2 [2][3] — 이중축(kg=원/kg IQR 통과분 · unit=원/개) + [5]ⓒ 품종 태그 분포.
   axes: { kg: AxisBlock; unit: AxisBlock };
   kinds: Record<string, number>;
+  // F3-2b — 품종 필터 결과(kind 요청 시에만 존재).
+  kindFilter?: { requested: string; matched_count: number; insufficient: boolean } | null;
 };
 
 // ── P5a 리스팅 구성 파싱(단위 헌법) — 온라인 비교는 kg 환산가로만. ──
@@ -641,13 +654,36 @@ function stripUnitPriceTokens(title: string): string {
 // T3a-ⓐv2 [5]ⓒ — 네이버 제목 품종 태깅 경량 사전. 긴 토큰 우선("대학찰"·"흑찰"이 "찰"보다 먼저).
 //   태깅 전용(순도 필터와 무관 · 분리 앵커 판단은 ⓑ/후속).
 //   ★ 확장 자리: 품목명 키에 배열만 추가하면 됨(코드 무변경). 차단어에 품목명 금지 헌법과 별개 사전.
+//   F3-2b — 주요 직거래 품목 확장(감자·사과·배·복숭아·포도·쌀). 클라 칩 목록은 이 사전의 거울
+//   (ProductRegisterForm49 VARIETY_CHIPS) — 항목 추가 시 양쪽 동시 수정.
 const VARIETY_TAGS: Record<string, string[]> = {
   옥수수: ["대학찰", "흑찰", "미백", "초당", "찰"],
   고구마: ["호박", "자색", "꿀", "밤"],
+  감자: ["수미", "두백", "홍감자", "자주"],
+  사과: ["시나노골드", "아리수", "부사", "홍로", "홍옥", "양광"],
+  배: ["신고", "원황", "추황", "화산"],
+  복숭아: ["백도", "황도", "천도"],
+  포도: ["샤인머스캣", "캠벨", "거봉", "머루"],
+  쌀: ["고시히카리", "신동진", "백진주", "추청", "오대"],
+};
+// F3-2b — 별칭 사전: 제목의 별칭 표기를 정규 품종 태그로 통일(분포·필터 키 일원화).
+//   예: "연농"(연농2호) = 대학찰 브랜드 계열 / "후지" = 부사 / "아오리" = 쓰가루 계열 조생(양광 아님 —
+//   별도 정규 태그가 없어 미등재). 긴 토큰 우선 원칙은 정규 사전과 동일하게 배열 순서로 보장.
+const VARIETY_ALIASES: Record<string, Record<string, string[]>> = {
+  옥수수: { 대학찰: ["연농"] },
+  사과: { 부사: ["후지"] },
+  포도: { 샤인머스캣: ["샤인 머스캣", "샤인머스켓"] },
+  쌀: { 고시히카리: ["코시히카리"] },
 };
 function tagVariety(title: string, itemName: string): string | null {
   for (const tag of VARIETY_TAGS[itemName] ?? []) {
     if (title.includes(tag)) return tag;
+  }
+  // F3-2b — 별칭 매칭(정규 태그 미히트 시 2차) — 반환은 항상 정규 태그.
+  for (const [canon, aliases] of Object.entries(VARIETY_ALIASES[itemName] ?? {})) {
+    for (const a of aliases) {
+      if (title.includes(a)) return canon;
+    }
   }
   return null;
 }
@@ -721,6 +757,8 @@ async function fetchNaverShop(
     itemCode?: string;
     // P5d — 교차 정합 가드 기준(도매 평균 원/kg). 미전달 = 가드 스킵(cross_check:"unavailable").
     wholesaleAvgKg?: number;
+    // F3-2b — 품종 필터(옵셔널): 태그/제목 일치 리스팅 부분집합으로만 축 적산. 미전달 = 현행 동일.
+    kind?: string | null;
   },
 ): Promise<NaverShopResult | null> {
   // 키 중간 비ASCII 제거(discover-content 패턴) — ByteString 위반 차단.
@@ -819,6 +857,10 @@ async function fetchNaverShop(
   const perKgRaw: number[] = [];
   const perUnitRaw: number[] = []; // T3a-ⓐv2 [2] 개당가축 — 원/개(lprice ÷ 자기 count 토큰)
   const kinds: Record<string, number> = {}; // [5]ⓒ 품종 태그 분포(순도 통과 리스팅만)
+  // F3-2b — 품종 필터: 정규 태그 일치 또는 제목 직접 포함(직접 입력 품종 대응) = 매칭.
+  //   kinds 분포는 필터와 무관하게 전체 태깅 유지(캡션 "품종 섞임" 재료).
+  const kindReq = typeof opts?.kind === "string" && opts.kind.trim() ? opts.kind.trim() : null;
+  let kindMatched = 0;
   let excluded = 0;
   let filtered = 0;
   let outliers = 0;
@@ -833,6 +875,11 @@ async function fetchNaverShop(
     if (lp == null) continue;
     const tag = tagVariety(rawTitle, itemName);
     if (tag) kinds[tag] = (kinds[tag] ?? 0) + 1;
+    if (kindReq) {
+      const hit = tag === kindReq || rawTitle.includes(kindReq);
+      if (!hit) continue; // 품종 필터 — 부분집합만 축 적산(분포 태깅은 위에서 완료).
+      kindMatched++;
+    }
     // [4] 단가 토큰 정파싱(원/kg 직산) + 선차단 — "100g당"이 총중량으로 오인되지 않게 제거본으로 파싱.
     const unitPriceKg = parseUnitPriceToken(rawTitle);
     const title = stripUnitPriceTokens(rawTitle);
@@ -863,6 +910,24 @@ async function fetchNaverShop(
     perKgRaw.push(won);
   }
 
+  // F3-2b — 정직 게이트(서버측): 품종 요청 + 매칭 < KIND_MIN_MATCHED → 품종 밴드 미산출.
+  //   혼합 밴드로 폴백 금지(품종이 틀리면 신뢰가 죽는다) — 건수만 정직 반환, 클라가 안내문 표시.
+  if (kindReq && kindMatched < KIND_MIN_MATCHED) {
+    return {
+      source: null,
+      item_name: itemName,
+      comparables: [],
+      bandUnit: "krw_per_kg",
+      excludedCount: excluded,
+      filteredCount: filtered,
+      outlierCount: outliers,
+      crossCheck: "unavailable",
+      axes: { kg: axisBlockOf([], 0), unit: axisBlockOf([], 0) },
+      kinds,
+      kindFilter: { requested: kindReq, matched_count: kindMatched, insufficient: true },
+    };
+  }
+
   const crossCheck: "applied" | "unavailable" = wholesaleAvgKg != null ? "applied" : "unavailable";
   // [3] IQR 주가드 — 축별 Q1−1.5IQR~Q3+1.5IQR(n≥4). kg축 통과분이 기존 comparables 계약을 승계.
   const kgTrim = iqrTrim(perKgRaw);
@@ -885,6 +950,9 @@ async function fetchNaverShop(
       crossCheck,
       axes,
       kinds,
+      ...(kindReq
+        ? { kindFilter: { requested: kindReq, matched_count: kindMatched, insufficient: false } }
+        : {}),
     };
   }
   const { low, high, avg } = bandStats(arr);
@@ -910,6 +978,9 @@ async function fetchNaverShop(
     crossCheck,
     axes,
     kinds,
+    ...(kindReq
+      ? { kindFilter: { requested: kindReq, matched_count: kindMatched, insufficient: false } }
+      : {}),
   };
 }
 
@@ -1084,6 +1155,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // P5a 구성 파라미터(옵셔널·하위호환 — 없으면 기존 호출 그대로).
     per_unit_weight_g?: number;
     unit_count?: number;
+    // F3-2b — 품종 필터(옵셔널·하위호환): 미수신 = 현행 완전 동일(45 호출 무영향).
+    kind?: string;
   };
   try {
     body = await req.json();
@@ -1118,6 +1191,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     typeof body.unit_count === "number" && Number.isFinite(body.unit_count) && body.unit_count > 0
       ? Math.round(body.unit_count)
       : undefined;
+  // F3-2b — 품종 필터 파라미터(옵셔널): trim·20자 상한·캐시 키 구분자(|) 제거. 미수신 = null(현행).
+  const kindReq =
+    typeof body.kind === "string" && body.kind.trim()
+      ? body.kind.trim().replace(/\|/g, "").slice(0, 20)
+      : null;
 
   // ── S4: sale_mode 명시 시에만 신규 규격인지 path. 없으면/이상값이면 아래 기존 path 그대로(하위호환). ──
   const saleMode: SaleMode | null =
@@ -1159,7 +1237,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     perUnitWeightG != null ? Math.round(perUnitWeightG / PUW_BUCKET_G) * PUW_BUCKET_G : null;
   const cacheKey =
     `kamis|${itemCode}|${COUNTRY_CODE}|${regday}|${CACHE_VERSION}` +
-    (puwBucket != null ? `|puw${puwBucket}` : "");
+    (puwBucket != null ? `|puw${puwBucket}` : "") +
+    // F3-2b — kind 는 별도 키(미수신 = 기존 키 불변 → 구 캐시·45 호출 완전 하위호환).
+    (kindReq ? `|kind${kindReq}` : "");
   try {
     const { data: cached } = await supabase
       .from("price_cache")
@@ -1182,6 +1262,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           online_axes?: { kg: AxisBlock; unit: AxisBlock } | null;
           kinds?: PriceBandResult["kinds"];
           retail_prev?: { day: number | null; month: number | null } | null;
+          kind_filter?: PriceBandResult["kind_filter"]; // F3-2b 패스스루(kind 키에만 존재).
         };
         // P5a 이전 캐시(구조화 블록 없음)는 미스 취급 → 실호출로 재적재(1 TTL 내 자연 전환).
         if (payload.base_unit === "kg") {
@@ -1197,6 +1278,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             online_axes: payload.online_axes ?? null,
             ...(payload.kinds ? { kinds: payload.kinds } : {}),
             retail_prev: payload.retail_prev ?? null,
+            ...(payload.kind_filter ? { kind_filter: payload.kind_filter } : {}),
             ...(perUnitWeightG != null ? { per_unit_weight_g: perUnitWeightG } : {}),
             ...(unitCount != null ? { unit_count: unitCount } : {}),
           } satisfies PriceBandResult);
@@ -1263,15 +1345,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
   let onlineBlock: OnlineBlock | null = null;
   let onlineAxes: { kg: AxisBlock; unit: AxisBlock } | null = null;
   let onlineKinds: Record<string, number> = {};
+  let kindFilter: PriceBandResult["kind_filter"] = null; // F3-2b — kind 요청 시에만 채워짐.
   if (NAVER_CLIENT_ID && NAVER_CLIENT_SECRET && itemNameKo) {
     const naver = await fetchNaverShop(itemNameKo, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, {
       perUnitWeightG,
       itemCode,
       wholesaleAvgKg: wholesaleBlock?.avg,
+      kind: kindReq, // F3-2b — 품종 필터(미수신 null = 현행 동일).
     });
     if (naver) {
       onlineAxes = naver.axes;
       onlineKinds = naver.kinds;
+      kindFilter = naver.kindFilter ?? null; // F3-2b — 게이트 판정 포함 전달.
       if (naver.source) {
         sources.push(naver.source);
         if (!itemName) itemName = naver.item_name;
@@ -1333,6 +1418,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     online_axes: onlineAxes,
     kinds,
     retail_prev: retailPrev,
+    ...(kindFilter ? { kind_filter: kindFilter } : {}),
     ...(perUnitWeightG != null ? { per_unit_weight_g: perUnitWeightG } : {}),
     ...(unitCount != null ? { unit_count: unitCount } : {}),
   };
@@ -1351,6 +1437,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           online_axes: onlineAxes,
           kinds,
           retail_prev: retailPrev,
+          ...(kindFilter ? { kind_filter: kindFilter } : {}), // F3-2b — kind 전용 키에만 존재.
         },
         ref_date: regday,
         fetched_at: new Date().toISOString(),
