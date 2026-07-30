@@ -185,6 +185,10 @@ export function ProductRegisterForm({
   registeredName,
   onAiWrite,
   aiWriting,
+  onAiSuggestPoints,
+  aiPointsLoading,
+  aiPointCandidates,
+  onConsumePointCandidate,
 }: {
   value: ProductForm;
   onChange: (patch: Partial<ProductForm>) => void;
@@ -200,12 +204,40 @@ export function ProductRegisterForm({
   registerError?: string | null;
   /** 등록 완료 상태 표시(재등록 허용 — 45 관례: 재제출 = 새 등록). */
   registeredName?: string | null;
-  /** UI-5-T4-D3e — [✦ AI로 쓰기](headline 전용 입구): 탭 = 호출부 sendToLingo 발화(L4 카피 액션 경로).
-   *  숫자 불가침 — 가격·수량·날짜 칸 부착 금지(이 prop 은 headline 칸에서만 소비). */
+  /** UI-5-T4-D3e→T5-F3-3 — AI 카피 입구(headline 전용): 탭 = 호출부 sendToLingo 발화(L4 카피 액션 경로).
+   *  F3-3(1) 입구 단일화 — 대형 [✦ AI 카피 생성] 버튼이 유일 소비처(구 headline 칸 옆 칩 제거).
+   *  숫자 불가침 — 가격·수량·날짜 칸 부착 금지. 미지정 = 버튼 미노출(죽은 입구 금지). */
   onAiWrite?: () => void;
   aiWriting?: boolean;
+  /** UI-5-T5-F3-3(2) — 셀링포인트 [✦ 후보 받기]: 발화는 호출부, 후보 표시·채택은 이 폼.
+   *  채택 = 대표님 칩 탭만(자동 주입 0) → 수동 입력과 동일 set("sellingPoints") 경로로 기입.
+   *  onConsumePointCandidate = 채택·중복 시 후보 소진 통지(호출부 목록에서 제거). */
+  onAiSuggestPoints?: () => void;
+  aiPointsLoading?: boolean;
+  aiPointCandidates?: string[];
+  onConsumePointCandidate?: (p: string) => void;
 }) {
   const set = <K extends keyof ProductForm>(key: K, v: ProductForm[K]) => onChange({ [key]: v } as Partial<ProductForm>);
+  // UI-5-T5-F3-3(2) — 후보 칩 채택: 사용자 칩 탭만("채택은 대표님" 원칙 — 자동 주입 0). 기입은 수동
+  //   타이핑과 동일한 set("sellingPoints") 사슬(신규 쓰기 경로 금지) — 빈 칸 우선 채움, 없으면 행 추가.
+  //   5개 상한 = 소비부 slice(0,5)(등록 :875 · 발행 :3037)와 정합 — 도달 시 안내 후 미기입.
+  const adoptPoint = (p: string) => {
+    const cur = value.sellingPoints;
+    const filled = cur.map((s) => s.trim()).filter(Boolean);
+    if (filled.includes(p)) {
+      onNotify?.("이미 담겨 있어요");
+      onConsumePointCandidate?.(p);
+      return;
+    }
+    if (filled.length >= 5) {
+      onNotify?.("셀링포인트는 5개까지 실려요 — 칸을 비우고 담아 주세요");
+      return;
+    }
+    const emptyIdx = cur.findIndex((s) => !s.trim());
+    const next = emptyIdx >= 0 ? cur.map((s, idx) => (idx === emptyIdx ? p : s)) : [...cur, p];
+    set("sellingPoints", next);
+    onConsumePointCandidate?.(p);
+  };
   // UI-5-T2-E5b — KAMIS(fresh) 병합 품목 1회 로드 + 타이핑 후보 매칭(45 :383-405·:778-784 동형).
   //   시세 조회(get-price-band)는 미이식 — §0 손님 노출 금지, 코드 연동만(E5b 락).
   type KamisItem = { item_code: string; item_name: string; category_code: string };
@@ -789,7 +821,9 @@ export function ProductRegisterForm({
 
       </Field>
 
-      {/* AI 카피 도우미 — 헤드라인·셀링포인트를 한 카드로 강조 */}
+      {/* UI-5-T5-F3-3(1) — AI 카피 도우미: 대형 버튼 = onAiWrite 유일 입구(구 v0 목업 죽은 버튼 소생 ·
+          headline 칸 옆 D3e 칩 제거 — 같은 기능 입구 2개 금지). 문구 = SAY-DO(하는 것만 약속 —
+          셀링포인트는 자동 작성이 아니라 후보 제안이므로 여기서 약속하지 않는다). */}
       <div
         className="rounded-2xl p-3.5"
         style={{ backgroundColor: `${accent}0A`, boxShadow: `inset 0 0 0 1px ${accent}26` }}
@@ -803,37 +837,30 @@ export function ProductRegisterForm({
           </span>
           <div className="min-w-0">
             <p className="text-[12.5px] font-bold text-[#0A0A0A]">AI 카피 도우미</p>
-            <p className="text-[10.5px] font-medium text-[#8A8A8A]">홍보 문구를 바탕으로 자동 작성</p>
+            <p className="text-[10.5px] font-medium text-[#8A8A8A]">홍보 한마디를 링고가 써 드려요</p>
           </div>
         </div>
 
-        <button
-          type="button"
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl py-3 text-[13px] font-bold text-white shadow-sm transition-transform active:translate-y-px"
-          style={{ backgroundColor: accent }}
-        >
-          <Sparkles className="h-4 w-4" strokeWidth={2.25} />
-          AI 카피 생성
-        </button>
-
-        {/* 헤드라인 */}
-        <div className="mt-3">
-          <span className="mb-1 flex items-center text-[11px] font-semibold text-[#525252]">
-            헤드라인
-            {/* UI-5-T4-D3e — [✦ AI로 쓰기]: 링고에게 맡기는 입구(✦ 배지 문법 · 링고 블루 #1D4ED8 락).
-                로딩 = 스피너 + disabled(중복 탭 방지). headline 칸 한정 — 숫자 칸 부착 금지. */}
-            {onAiWrite && (
-              <button
-                type="button"
-                onClick={onAiWrite}
-                disabled={aiWriting}
-                className="ml-auto inline-flex min-h-[28px] items-center gap-1 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2.5 text-[10.5px] font-bold text-[#1D4ED8] transition-transform active:scale-95 disabled:opacity-60"
-              >
-                {aiWriting ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <span aria-hidden="true">✦</span>}
-                {aiWriting ? "쓰는 중…" : "AI로 쓰기"}
-              </button>
+        {onAiWrite && (
+          <button
+            type="button"
+            onClick={onAiWrite}
+            disabled={aiWriting}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl py-3 text-[13px] font-bold text-white shadow-sm transition-transform active:translate-y-px disabled:opacity-60"
+            style={{ backgroundColor: accent }}
+          >
+            {aiWriting ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.25} />
+            ) : (
+              <Sparkles className="h-4 w-4" strokeWidth={2.25} />
             )}
-          </span>
+            {aiWriting ? "쓰는 중…" : "AI로 한마디 쓰기"}
+          </button>
+        )}
+
+        {/* 헤드라인 — F3-3(1): 칸 옆 [✦ AI로 쓰기] 칩 제거(위 대형 버튼으로 입구 단일화). */}
+        <div className="mt-3">
+          <span className="mb-1 block text-[11px] font-semibold text-[#525252]">헤드라인</span>
           <input
             value={value.headline}
             onChange={(e) => set("headline", e.target.value)}
@@ -845,9 +872,47 @@ export function ProductRegisterForm({
           />
         </div>
 
-        {/* 셀링포인트 */}
+        {/* 셀링포인트 — F3-3(2): [✦ 후보 받기] = 링고 텍스트 제안(Edge 계약 무변 · persona "액션 금지" 준수).
+            후보 칩 탭 = 대표님 채택(adoptPoint — 수동 입력과 동일 set 경로). 칩 스타일 = D3b 영상 포인트 픽 계승. */}
         <div className="mt-3">
-          <span className="mb-1 block text-[11px] font-semibold text-[#525252]">셀링포인트</span>
+          <span className="mb-1 flex items-center text-[11px] font-semibold text-[#525252]">
+            셀링포인트
+            {onAiSuggestPoints && (
+              <button
+                type="button"
+                onClick={onAiSuggestPoints}
+                disabled={aiPointsLoading}
+                className="ml-auto inline-flex min-h-[28px] items-center gap-1 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2.5 text-[10.5px] font-bold text-[#1D4ED8] transition-transform active:scale-95 disabled:opacity-60"
+              >
+                {aiPointsLoading ? (
+                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} />
+                ) : (
+                  <span aria-hidden="true">✦</span>
+                )}
+                {aiPointsLoading ? "받는 중…" : "후보 받기"}
+              </button>
+            )}
+          </span>
+          {(aiPointCandidates?.length ?? 0) > 0 && (
+            <div className="mb-1.5 rounded-xl bg-white px-2.5 py-2" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}>
+              <p className="text-[10.5px] font-medium text-[#8A8A8A] [word-break:keep-all]">
+                링고가 제안한 후보예요 — 담을 것만 탭하세요
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {aiPointCandidates!.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => adoptPoint(p)}
+                    className="rounded-full bg-[#EEF3FE] px-2.5 py-1.5 text-[11px] font-semibold text-[#1D4ED8] [word-break:keep-all] active:scale-95"
+                    style={{ boxShadow: "inset 0 0 0 1px #C7D7FB" }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="space-y-1.5">
             {value.sellingPoints.map((pt, i) => (
               <div key={i} className="flex items-center gap-1.5">

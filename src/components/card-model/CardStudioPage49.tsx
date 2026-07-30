@@ -701,6 +701,24 @@ function parseSseBlock(block: string): { event: string; data: string } | null {
   if (dataLines.length === 0 && event === "message") return null;
   return { event, data: dataLines.join("\n") };
 }
+// UI-5-T5-F3-3(2) — 링고 텍스트 응답 → 셀링포인트 후보 추출. Edge 계약 무변(persona :133
+//   "후보 최대 3개 텍스트만 · 액션 금지")을 그대로 소비 — 불릿(-·•)·번호(1. 1)) 줄만 후보로
+//   인정하고 따옴표·마크다운·꼬리 구두점을 정리한다. 2~40자 · 중복 제거 · 3개 상한.
+function parsePointCandidates(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    const m = line.match(/^\s*(?:[-•·*]|\d+[.)])\s*(.+)$/);
+    if (!m) continue;
+    const p = m[1]
+      .replace(/\*\*/g, "")
+      .replace(/^["'“”‘’「」]+|["'“”‘’「」.!]+$/g, "")
+      .trim();
+    if (p.length < 2 || p.length > 40) continue;
+    if (!out.includes(p)) out.push(p);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
 
 export function CardStudioPage() {
   const [mode, setMode] = useState<StudioMode>("general");
@@ -983,19 +1001,50 @@ export function CardStudioPage() {
     if (DECK[deckIndex]?.id === "coupon") void loadCoupons();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deckIndex, mode]);
-  // UI-5-T4-D3e — [✦ AI로 쓰기](headline): 사용자 타이핑을 대체하는 내부 발화 → 기존 sendToLingo →
+  // UI-5-T4-D3e→T5-F3-3 — AI 카피 입구(headline): 사용자 타이핑을 대체하는 내부 발화 → 기존 sendToLingo →
   //   L4 카피 액션(setField headline) 수신·적용 — 신규 쓰기 경로 0(링고 쓰기 = 수동 편집과 동일 적용 코드 락).
-  //   실패 안내: 응답 커밋 후에도 headline 무변이면 토스트(무언 실패 금지). 로딩 = thinking(폼 스피너·중복 탭 방지).
+  //   F3-3(1) 입구 단일화: 폼 대형 [✦ AI 카피 생성] 버튼이 유일 입구(구 D3e headline 칸 옆 칩 제거).
+  //   F3-3(3a) 실패 안내: headline 무변이면 sendToLingo 실패 friendly 를 토스트로 승격(닫힌 패널 묻힘 해소).
+  //   F3-3(3b) thinking 조기 return = 무언 금지 — 안내 1줄.
   //   (cfgProductRef 동기화는 cfgProduct 선언부 — TDZ 회피.)
+  const [aiCopyBusy, setAiCopyBusy] = useState<"headline" | "points" | null>(null); // F3-3 — 입구별 로딩 분리.
+  const [aiPointCandidates, setAiPointCandidates] = useState<string[]>([]); // F3-3(2) — 셀링포인트 후보 칩.
   async function aiWriteHeadline() {
-    if (thinking) return;
+    if (thinking) {
+      setStepToast("잠깐만요, 쓰고 있어요"); // F3-3(3b) — 침묵 조기 종료 해소.
+      return;
+    }
     const before = cfgProductRef.current.headline;
     lingoChannelRef.current = "text";
-    await sendToLingo("상품 한마디(홍보 카피)를 한 줄 써 줘");
+    setAiCopyBusy("headline");
+    const r = await sendToLingo("상품 한마디(홍보 카피)를 한 줄 써 줘");
+    setAiCopyBusy(null);
     // 응답 액션 커밋 여유 후 판정 — 변화 없으면 실패 안내(액션 미동반/차단/오류 공통).
     setTimeout(() => {
-      if (cfgProductRef.current.headline === before) setStepToast("지금은 어렵네요 — 다시 눌러 주세요");
+      if (cfgProductRef.current.headline === before)
+        setStepToast(r.failFriendly ?? "지금은 어렵네요 — 다시 눌러 주세요");
     }, 400);
+  }
+  // UI-5-T5-F3-3(2) — 셀링포인트 [✦ 후보 받기]: Edge 계약 무변(persona :133 "후보 텍스트 3개 · 액션 금지")
+  //   — 텍스트 응답을 후보 칩으로 파싱만 한다. 기입은 폼의 칩 탭(사용자 제스처 = "채택은 대표님" 원칙 준수
+  //   근거) → 수동 입력과 동일 set("sellingPoints") 경로. 파싱 실패 = 패널 열어 말풍선 원문 노출(무언 실패 0).
+  async function aiSuggestSellingPoints() {
+    if (thinking) {
+      setStepToast("잠깐만요, 쓰고 있어요"); // F3-3(3b) 동형.
+      return;
+    }
+    lingoChannelRef.current = "text";
+    setAiCopyBusy("points");
+    const r = await sendToLingo("이 상품의 셀링포인트 후보 3개를 짧게 제안해 줘");
+    setAiCopyBusy(null);
+    const cands = parsePointCandidates(r.text);
+    if (cands.length > 0) {
+      setAiPointCandidates(cands);
+    } else if (r.text.trim()) {
+      setLingoOpen(true); // 파싱 실패 폴백 — 후보가 담긴 링고 말풍선을 그대로 보여준다.
+    } else {
+      setStepToast(r.failFriendly ?? "지금은 어렵네요 — 다시 눌러 주세요");
+    }
   }
   // E5b — 재사용 목록 로드(partner.products.index :260-281 동형 쿼리 · 자체업로드분만). 탭 시 1회.
   async function loadMyProducts() {
@@ -2845,8 +2894,12 @@ export function CardStudioPage() {
   }
 
   // UI-5-T2-E2 — lingo-chat Edge SSE 직결(45 useLingoChat send :195–312 동형). 텍스트 delta 스트리밍 + event:actions 1회.
-  async function sendToLingo(text: string) {
-    if (!text || thinking) return;
+  //   F3-3(3a) — 반환 신설: { text: 응답 전문, failFriendly: 실패 안내(정상 완주 = null) }.
+  //   기존 호출부는 반환 무소비(void) — 폼 AI 입구(aiWriteHeadline·aiSuggestSellingPoints)만 소비해
+  //   닫힌 패널에 묻히던 실패 안내를 토스트로 승격한다. 스트림·가드·디스패치 흐름 무변.
+  async function sendToLingo(text: string): Promise<{ text: string; failFriendly: string | null }> {
+    let failFriendly: string | null = null;
+    if (!text || thinking) return { text: "", failFriendly };
     setGreetingChipsOpen(false); // E4b — 대화 시작 시 인사 칩 소멸.
     setMessages((m) => [...m, { role: "user", text }, { role: "assistant", text: "" }]);
     setThinking(true);
@@ -2892,13 +2945,15 @@ export function CardStudioPage() {
       if (!ct.includes("text/event-stream")) {
         // JSON 경로(quota·검증) — friendly 를 말풍선으로(무언 실패 금지).
         const json = (await res.json().catch(() => null)) as { friendly?: string } | null;
-        setBot(json?.friendly ?? "링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요.");
-        return;
+        failFriendly = json?.friendly ?? "링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요.";
+        setBot(failFriendly);
+        return { text: "", failFriendly };
       }
       const reader = res.body?.getReader();
       if (!reader) {
-        setBot("링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요.");
-        return;
+        failFriendly = "링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요.";
+        setBot(failFriendly);
+        return { text: "", failFriendly };
       }
       const decoder = new TextDecoder();
       let buf = "";
@@ -2940,7 +2995,10 @@ export function CardStudioPage() {
               .map((s) => ({ label: s.label, ...(typeof s.note === "string" && s.note ? { note: s.note } : {}) }));
           } else if (ev.event === "error") {
             const d = safeJson(ev.data);
-            if (typeof d?.friendly === "string" && d.friendly && !acc) setBot(d.friendly);
+            if (typeof d?.friendly === "string" && d.friendly) {
+              failFriendly = d.friendly; // F3-3(3a) — 스트림 중 실패도 호출부 승격 대상.
+              if (!acc) setBot(d.friendly);
+            }
           }
           // intent/done — 무시(done = reader 종료로 처리).
         }
@@ -2963,10 +3021,12 @@ export function CardStudioPage() {
         });
       }
     } catch {
-      setBot("링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요."); // 무언 실패 금지 · 재시도 가능.
+      failFriendly = "링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요.";
+      setBot(failFriendly); // 무언 실패 금지 · 재시도 가능.
     } finally {
       setThinking(false);
     }
+    return { text: acc, failFriendly };
   }
 
   // E3c — 매 렌더 최신 sendToLingo를 ref에 게시(음성 onresult가 이 최신본을 호출).
@@ -4452,8 +4512,12 @@ export function CardStudioPage() {
                   registerSaving={productSaving}
                   registerError={productSaveError}
                   registeredName={registeredProduct?.name ?? null}
-                  onAiWrite={() => void aiWriteHeadline()} /* D3e — 사용자 탭 유래 발화(자동 트리거 0). */
-                  aiWriting={thinking}
+                  onAiWrite={() => void aiWriteHeadline()} /* F3-3(1) — 대형 버튼 단일 입구(사용자 탭 유래 발화·자동 트리거 0). */
+                  aiWriting={aiCopyBusy === "headline"}
+                  onAiSuggestPoints={() => void aiSuggestSellingPoints()} /* F3-3(2) — 후보 칩(채택은 대표님 탭). */
+                  aiPointsLoading={aiCopyBusy === "points"}
+                  aiPointCandidates={aiPointCandidates}
+                  onConsumePointCandidate={(p) => setAiPointCandidates((prev) => prev.filter((x) => x !== p))}
                 />
                 </div>
               )}
