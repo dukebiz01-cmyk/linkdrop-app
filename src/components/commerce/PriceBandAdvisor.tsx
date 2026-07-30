@@ -81,6 +81,9 @@ export type PriceBandResult = {
     online?: Record<string, number>;
   };
   retail_prev?: { day: number | null; month: number | null } | null;
+  // F3-2b ADDITIVE — 품종 필터 결과(kind 요청 시에만 · 없으면 기존 경로 그대로 = 45 회귀 0).
+  //   insufficient = 매칭 < 5 → 서버가 온라인 밴드 미산출(정직 게이트) — 여기선 안내문만 표시.
+  kind_filter?: { requested: string; matched_count: number; insufficient: boolean } | null;
 };
 
 // 내 판매 구성(등록폼 입력) — 개당 환산·내 판매단위 강조의 기준.
@@ -337,6 +340,8 @@ export function PriceBandAdvisor({
   const onlineKindsTop = Object.entries(priceBand.kinds?.online ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
+  // F3-2b — 품종 필터 모드(kind 요청 응답에만 존재 — 미존재 = 기존 혼합 경로 그대로).
+  const kindFilter = priceBand.kind_filter ?? null;
   const retailKindLabel = (() => {
     const k = priceBand.kinds?.retail;
     if (!k) return null;
@@ -651,13 +656,28 @@ export function PriceBandAdvisor({
 
       {/* G2 캡션 블록 — 문장은 전폭 캡션에서만(셀 안 금지). 단위·약 표기 1회. */}
       <div className="space-y-1">
+        {/* F3-2b — 정직 게이트 안내(목업 문구): 서버가 품종 밴드 미산출(insufficient) — 혼합 폴백 없이 안내만. */}
+        {kindFilter?.insufficient && (
+          <p
+            className="rounded-lg bg-[#FFFBEB] px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-[#92400E] [word-break:keep-all]"
+            style={{ boxShadow: "inset 0 0 0 1px #FDE68A" }}
+          >
+            이 품종은 비교할 판매 건이 아직 적어요. 일반 시세와 가격대가 다를 수 있어 섞인 시세는
+            보여드리지 않아요.
+          </p>
+        )}
         <p className="text-[10px] font-medium tracking-ko text-text-subtle">
           단위: 원 · kg당 값은 백원 반올림(약) · 소매 평균은 상·중품 중간값 · 참고용
         </p>
-        {/* T3a-ⓑ [3] — 품종 구성 공개(분리 앵커 아님 · T3b 예고석). */}
-        {onlineKindsTop.length > 0 ? (
+        {/* T3a-ⓑ [3]→F3-2b — 품종 정보: kind 필터 성립 = "품종 기준"(정식 축) / 미필터 = "품종 섞임"
+            명시(정확 원칙 — 혼합 시세임을 숨기지 않는다). */}
+        {kindFilter && !kindFilter.insufficient ? (
+          <p className="text-[11px] font-semibold tracking-ko text-text-muted">
+            {kindFilter.requested} 품종 기준 · 온라인 {kindFilter.matched_count}건
+          </p>
+        ) : onlineKindsTop.length > 0 ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">
-            품종 포함: {onlineKindsTop.map(([k, n]) => `${k} ${n}`).join(" · ")}
+            품종 섞임: {onlineKindsTop.map(([k, n]) => `${k} ${n}`).join(" · ")}
           </p>
         ) : null}
         {/* T3a-ⓑ [3] — 소매 조사 품종 기준(retail_kind). */}

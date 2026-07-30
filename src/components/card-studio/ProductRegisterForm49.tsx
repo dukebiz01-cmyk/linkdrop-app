@@ -161,6 +161,20 @@ const STORAGE_OPTIONS: { id: StorageType; label: string }[] = [
 
 const onlyDigits = (v: string) => v.replace(/[^0-9]/g, "");
 
+// UI-5-T5-F3-2b — 품종 선택 칩 후보: Edge get-price-band VARIETY_TAGS 의 거울(정본 = Edge 사전 —
+//   태깅·필터 판정은 서버. 여기는 칩 표시 전용). 항목 추가 시 양쪽 동시 수정. 별칭(연농 등)은
+//   서버 태깅 소관이라 미거울(칩은 정규 품종명만).
+const VARIETY_CHIPS: Record<string, string[]> = {
+  옥수수: ["대학찰", "흑찰", "미백", "초당", "찰"],
+  고구마: ["호박", "자색", "꿀", "밤"],
+  감자: ["수미", "두백", "홍감자", "자주"],
+  사과: ["시나노골드", "아리수", "부사", "홍로", "홍옥", "양광"],
+  배: ["신고", "원황", "추황", "화산"],
+  복숭아: ["백도", "황도", "천도"],
+  포도: ["샤인머스캣", "캠벨", "거봉", "머루"],
+  쌀: ["고시히카리", "신동진", "백진주", "추청", "오대"],
+};
+
 /** UI-5-T4-D3d — 이익 = 판매가 − 원가 − (무료배송이면 내가 낼 배송비).
  *  45 computeProfitReceipt(:542-555) 분기 계승: shippingMode "free" = 배송비 차감 /
  *  "paid"(구매자 부담) = 마진 계산에서 제외(45 :410-412 정본 규칙). 빈 값 = 0 취급. */
@@ -295,6 +309,24 @@ export function ProductRegisterForm({
     ? Math.round((composition.totalKg * 1000) / composition.unitCount)
     : null;
   const unitCountForQuery = composition != null ? composition.unitCount : null;
+  // F3-2b(7) — 정합성 가드 45 :454-456 동형: 개당 10g 미만 / 5kg 초과 = 확인 배너(차단 아닌 확인).
+  const compositionSuspect =
+    perUnitWeightG != null && (perUnitWeightG < 10 || perUnitWeightG > 5000);
+  // F3-2b(5) — 품종 선택(대표님 탭만 — AI setField 부착 금지·콘텐츠 선택=대표님 원칙):
+  //   폼 로컬 상태 = kind 파라미터 + 카드 상품명 표기 재료 보관. 발행 payload 편입은 기존 키 부재로
+  //   보류(검증 보고 참조 — 신규 키 승인 대기). 품목 변경 시 해제(타 품목 품종 오염 방지).
+  const [selectedKind, setSelectedKind] = useState<string | null>(null);
+  const [kindCustomOpen, setKindCustomOpen] = useState(false);
+  const [kindCustomText, setKindCustomText] = useState("");
+  useEffect(() => {
+    setSelectedKind(null);
+    setKindCustomOpen(false);
+    setKindCustomText("");
+  }, [value.kamisItemCode]);
+  const kamisItemName = value.kamisItemCode
+    ? (kamisAll.find((it) => it.item_code === value.kamisItemCode)?.item_name ?? null)
+    : null;
+  const varietyChips = kamisItemName ? (VARIETY_CHIPS[kamisItemName] ?? []) : [];
   const kamisCategoryCode = value.kamisItemCode
     ? (kamisAll.find((it) => it.item_code === value.kamisItemCode)?.category_code ?? null)
     : null; // 45 :474-477 동형 — 병합 목록 역참조(get-price-band 필수 파라미터).
@@ -325,6 +357,8 @@ export function ProductRegisterForm({
               ...(perUnitWeightG != null && unitCountForQuery != null
                 ? { per_unit_weight_g: perUnitWeightG, unit_count: unitCountForQuery }
                 : {}),
+              // F3-2b — 품종 필터(선택 시에만 — 미선택 = 현행 혼합 밴드 + "품종 섞임" 캡션).
+              ...(selectedKind ? { kind: selectedKind } : {}),
             },
           });
           if (cancelled) return;
@@ -341,7 +375,8 @@ export function ProductRegisterForm({
       clearTimeout(timer);
     };
     // F3-2a — 45 :541 동형 deps: 구성 타이핑도 debounce 350ms 재조회(연타 방지 기존 타이머 재사용).
-  }, [value.type, value.kamisItemCode, kamisCategoryCode, priceBandRefresh, perUnitWeightG, unitCountForQuery]);
+    // F3-2b — selectedKind 편입: 품종 선택/해제 = 즉시 재조회(같은 debounce).
+  }, [value.type, value.kamisItemCode, kamisCategoryCode, priceBandRefresh, perUnitWeightG, unitCountForQuery, selectedKind]);
   // 후보 = 입력 부분일치 상위 6(45 :779-784 동형 — 공백 제거 소문자 정규화).
   const normItem = (s: string) => s.replace(/\s+/g, "").toLowerCase();
   const kamisMatches =
@@ -647,7 +682,98 @@ export function ProductRegisterForm({
             />
           </div>
         )}
+        {/* F3-2b(7) — 정합성 확인 배너: 45 :1453-1463 동형(차단 아닌 확인 — 구성 오입력 시 앵커 오표시 방지). */}
+        {compositionSuspect && composition && (
+          <div
+            className="mt-2 rounded-lg bg-[#FFFBEB] px-3 py-2"
+            style={{ boxShadow: "inset 0 0 0 1px #FDE68A" }}
+          >
+            <p className="text-[11px] font-medium leading-relaxed text-[#92400E]">
+              입력값을 확인해 주세요: {composition.unitCount}개에 {composition.totalKg}kg이
+              맞습니까?
+            </p>
+          </div>
+        )}
       </Field>
+
+      {/* F3-2b(5) — 품종 선택 칩: 품목 확정 시 사전 후보 + [직접 입력]. 탭 1번 = kind 파라미터 →
+          품종 기준 시세(재탭 = 해제 → 혼합 밴드 복귀). 채택은 대표님 탭만(AI 경로 0). */}
+      {value.type === "fresh" && value.kamisItemCode && (
+        <div>
+          <span className="mb-1 block text-[11px] font-semibold text-[#525252]">
+            품종 <span className="font-medium text-[#A3A3A3]">(고르면 그 품종 기준으로 시세를 비교해요)</span>
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {varietyChips.map((k) => {
+              const on = selectedKind === k;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => {
+                    setSelectedKind(on ? null : k);
+                    setKindCustomOpen(false);
+                  }}
+                  aria-pressed={on}
+                  className="min-h-[32px] rounded-full px-2.5 py-1.5 text-[11px] font-semibold transition-colors [word-break:keep-all]"
+                  style={
+                    on
+                      ? { backgroundColor: accent, color: "#fff" }
+                      : { backgroundColor: "#fff", color: "#404040", boxShadow: "inset 0 0 0 1px #E5E5E5" }
+                  }
+                >
+                  {k}
+                </button>
+              );
+            })}
+            {/* 직접 입력 — 사전 밖 품종(서버는 제목 직접 포함으로 매칭). 선택분은 값 칩으로 표시. */}
+            {selectedKind && !varietyChips.includes(selectedKind) && (
+              <button
+                type="button"
+                onClick={() => setSelectedKind(null)}
+                className="min-h-[32px] rounded-full px-2.5 py-1.5 text-[11px] font-semibold [word-break:keep-all]"
+                style={{ backgroundColor: accent, color: "#fff" }}
+              >
+                {selectedKind} ×
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setKindCustomOpen((v) => !v)}
+              className="min-h-[32px] rounded-full px-2.5 py-1.5 text-[11px] font-semibold text-[#525252] [word-break:keep-all]"
+              style={{ backgroundColor: "#F4F4F5" }}
+            >
+              직접 입력
+            </button>
+          </div>
+          {kindCustomOpen && (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <input
+                value={kindCustomText}
+                onChange={(e) => setKindCustomText(e.target.value)}
+                placeholder="품종 이름 (예: 설향)"
+                maxLength={20}
+                className="w-full rounded-lg bg-white px-2.5 py-2 text-[12.5px] font-medium text-[#0A0A0A] outline-none placeholder:text-[#A3A3A3]"
+                style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const t = kindCustomText.trim();
+                  if (!t) return;
+                  setSelectedKind(t);
+                  setKindCustomOpen(false);
+                  setKindCustomText("");
+                }}
+                className="min-h-[36px] flex-none rounded-lg px-3 text-[12px] font-bold text-white"
+                style={{ backgroundColor: accent }}
+              >
+                적용
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* UI-5-T4-D3c — 시세 참고(가격 입력 전 · 45 :1470-1501 형태 계승): fresh + 품목 확정 시에만.
           §0 — 파트너 화면 전용 참고(저장·손님 카드 반출 0 · 단정·권유 금지 — Advisor 내장 문구). */}
