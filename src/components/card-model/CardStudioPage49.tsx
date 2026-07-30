@@ -2808,6 +2808,14 @@ export function CardStudioPage() {
       productPrice: cfgProductPrice,
       clip: cfgClip,
       dock: cfgDock,
+      // UI-5-T5-F3-3b — 카피 재료 텍스트 편입(persona buildStudioBlock 이 비어있지 않은 키만 일반
+      //   순회 주입 → Edge 무수정 반영). L4 "초안은 [현재 작업 정보]의 사실만" 규칙의 재료 확충:
+      //   extraInfo(홍보 문구)·itemCategory(품목명)·headline(현재값 — 고쳐 쓸 때 맥락).
+      //   숫자 필드(가격·수량·날짜)는 기존 정책 그대로 추가 금지. 상한 = 요청 body·프롬프트 과대 방지
+      //   클램프(폼 textarea 자유 입력 대비 — Edge ctxSummary 의 video_summary slice(0,200) 관례 동형).
+      headline: cfgProduct.headline.slice(0, 80),
+      itemCategory: cfgProduct.itemCategory.slice(0, 40),
+      extraInfo: cfgProduct.extraInfo.slice(0, 300),
     };
     return {
       studio_state: {
