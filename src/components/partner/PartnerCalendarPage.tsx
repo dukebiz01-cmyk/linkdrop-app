@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { ArrowLeft, Minus, Plus } from "lucide-react";
+import { ArrowLeft, ChevronDown, Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Calendar } from "@/components/ui/calendar";
 import { Toaster } from "@/components/ui/sonner";
@@ -23,11 +23,30 @@ type Props = {
   // embedded=true: 시트 안에 들어갈 콘텐츠만 렌더(풀페이지 <main>/<header> 껍데기 제거).
   // 미지정/false: 기존 풀페이지 동작 그대로.
   embedded?: boolean;
+  // F4-6 S2 — 일괄 설정 섹션 게이트. 기본 off: 단독 페이지·49만 opt-in,
+  // 45 는 미전달 무변 (embedded 만으로는 45/49 구분 불가 — 별도 prop 필수).
+  bulkSetup?: boolean;
 };
 
 const MIN_CAPACITY = 1;
 const MAX_CAPACITY = 100;
 const CALENDAR_MODE = "date_range" as const;
+// F4-6 — bulk_upsert_reservation_slots 의 서버 상한 (p_end - p_start <= 92) 거울.
+const BULK_MAX_DAYS = 92;
+// ISO 요일 규약 (RPC p_weekdays 와 동일): 1=월 … 7=일.
+const BULK_WEEKDAYS = [
+  { iso: 1, label: "월" },
+  { iso: 2, label: "화" },
+  { iso: 3, label: "수" },
+  { iso: 4, label: "목" },
+  { iso: 5, label: "금" },
+  { iso: 6, label: "토" },
+  { iso: 7, label: "일" },
+] as const;
+
+function isoWeekday(date: Date): number {
+  return ((date.getDay() + 6) % 7) + 1;
+}
 
 function toIsoDate(date: Date): string {
   const y = date.getFullYear();
@@ -47,7 +66,12 @@ function monthRange(month: Date): { from: string; to: string } {
   return { from: toIsoDate(from), to: toIsoDate(to) };
 }
 
-export function PartnerCalendarPage({ partnerId, partnerName, embedded = false }: Props) {
+export function PartnerCalendarPage({
+  partnerId,
+  partnerName,
+  embedded = false,
+  bulkSetup = false,
+}: Props) {
   const router = useRouter();
   const supabase = getSupabase();
 
@@ -67,6 +91,16 @@ export function PartnerCalendarPage({ partnerId, partnerName, embedded = false }
   const [isBlocked, setIsBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // F4-6 S2 — 일괄 설정 상태 (bulkSetup=true 에서만 렌더/사용).
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkStart, setBulkStart] = useState("");
+  const [bulkEnd, setBulkEnd] = useState("");
+  const [bulkDays, setBulkDays] = useState<number[]>([1, 2, 3, 4, 5, 6, 7]);
+  const [bulkCapacity, setBulkCapacity] = useState<number>(1);
+  const [bulkApplying, setBulkApplying] = useState(false);
+  // 확인 게이트: null=비표시, number=범위 내 기존 마킹 일수(덮어쓰기 경고).
+  const [bulkConfirmCount, setBulkConfirmCount] = useState<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -198,6 +232,80 @@ export function PartnerCalendarPage({ partnerId, partnerName, embedded = false }
     }
   }
 
+  // F4-6 S2 — 일괄 적용. skipConfirm=false: 기존 마킹 수 계산 → N>0 이면
+  // 확인 게이트만 열고 반환. skipConfirm=true(게이트의 [덮어쓰고 적용]): RPC 1회.
+  async function handleBulkApply(skipConfirm: boolean) {
+    if (!bulkStart || !bulkEnd) {
+      toast.error("시작일과 종료일을 선택해 주세요.");
+      return;
+    }
+    const spanDays = Math.round(
+      (parseIsoDate(bulkEnd).getTime() - parseIsoDate(bulkStart).getTime()) / 86_400_000,
+    );
+    if (spanDays < 0) {
+      toast.error("종료일이 시작일보다 빨라요.");
+      return;
+    }
+    if (spanDays > BULK_MAX_DAYS) {
+      toast.error(`한 번에 최대 ${BULK_MAX_DAYS}일(약 3개월)까지 설정할 수 있어요.`);
+      return;
+    }
+    if (bulkDays.length === 0) {
+      toast.error("요일을 하나 이상 선택해 주세요.");
+      return;
+    }
+
+    setBulkApplying(true);
+    try {
+      await supabase.auth.getSession();
+
+      if (!skipConfirm) {
+        // 덮어쓰기 확인 게이트 — 범위 내 기존 마킹(선택 요일·date_range 행) 계산.
+        const { data, error } = await supabase.rpc("get_partner_slots", {
+          p_partner_id: partnerId,
+          p_from: bulkStart,
+          p_to: bulkEnd,
+        });
+        if (error) {
+          console.error("[PartnerCalendarPage] get_partner_slots (bulk pre-check) failed:", error);
+          toast.error("기존 설정 확인에 실패했어요. 잠시 후 다시 시도해 주세요.");
+          return;
+        }
+        const rows = (Array.isArray(data) ? data : []) as SlotRow[];
+        const existing = rows.filter(
+          (r) => r.slot_time === null && bulkDays.includes(isoWeekday(parseIsoDate(r.slot_date))),
+        ).length;
+        if (existing > 0) {
+          setBulkConfirmCount(existing);
+          return;
+        }
+      }
+
+      const { data, error } = await supabase.rpc("bulk_upsert_reservation_slots", {
+        p_partner_id: partnerId,
+        p_start: bulkStart,
+        p_end: bulkEnd,
+        p_weekdays: [...bulkDays].sort((a, b) => a - b),
+        p_max_capacity: bulkCapacity,
+      });
+      if (error) {
+        console.error("[PartnerCalendarPage] bulk_upsert_reservation_slots failed:", error);
+        toast.error("일괄 적용에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      const r = (data ?? {}) as { applied?: number; overwritten?: number; protected?: number };
+      const parts = [`${r.applied ?? 0}일 적용`];
+      if ((r.overwritten ?? 0) > 0) parts.push(`${r.overwritten}일 덮어씀`);
+      if ((r.protected ?? 0) > 0) parts.push(`${r.protected}일 예약 보호`);
+      toast.success(parts.join(" · "));
+      setBulkConfirmCount(null);
+      await loadSlots();
+      router.invalidate();
+    } finally {
+      setBulkApplying(false);
+    }
+  }
+
   const selectedIso = selectedDate ? toIsoDate(selectedDate) : null;
   const existingSlot = selectedIso ? slotsByDate.get(selectedIso) : undefined;
   const hasBookings = (existingSlot?.current_bookings ?? 0) > 0;
@@ -266,6 +374,171 @@ export function PartnerCalendarPage({ partnerId, partnerName, embedded = false }
             </span>
           </div>
         </section>
+
+        {/* F4-6 S2 — 일괄 설정 (bulkSetup 게이트 · 접이식 · 달력↔개별 편집 사이).
+            개별 편집과 공존: 적용 후 loadSlots 재조회 → 날짜 클릭 개별 수정 그대로. */}
+        {bulkSetup ? (
+          <section className="rounded-2xl bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+            <button
+              type="button"
+              onClick={() => setBulkOpen((o) => !o)}
+              className="flex w-full min-h-[44px] items-center justify-between px-5 py-4"
+            >
+              <span className="text-left">
+                <span className="block text-sm font-bold text-[#0F172A]">일괄 설정</span>
+                <span className="mt-0.5 block text-xs text-[#64748B]">
+                  기간과 요일을 골라 한 번에 마킹해요
+                </span>
+              </span>
+              <ChevronDown
+                className={`size-4 text-[#64748B] transition-transform ${bulkOpen ? "rotate-180" : ""}`}
+                strokeWidth={2}
+              />
+            </button>
+
+            {bulkOpen ? (
+              <div className="space-y-4 border-t border-[#F1F5F9] px-5 py-4">
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-[#475569]">
+                    기간 (최대 {BULK_MAX_DAYS}일)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={bulkStart}
+                      onChange={(e) => {
+                        setBulkStart(e.target.value);
+                        setBulkConfirmCount(null);
+                      }}
+                      disabled={bulkApplying}
+                      className="h-11 min-h-[44px] min-w-0 flex-1 rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm font-semibold text-[#0F172A] disabled:opacity-40"
+                    />
+                    <span className="text-xs text-[#94A3B8]">~</span>
+                    <input
+                      type="date"
+                      value={bulkEnd}
+                      onChange={(e) => {
+                        setBulkEnd(e.target.value);
+                        setBulkConfirmCount(null);
+                      }}
+                      disabled={bulkApplying}
+                      className="h-11 min-h-[44px] min-w-0 flex-1 rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm font-semibold text-[#0F172A] disabled:opacity-40"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-[#475569]">반복 요일</p>
+                  <div className="flex gap-1">
+                    {BULK_WEEKDAYS.map((d) => {
+                      const active = bulkDays.includes(d.iso);
+                      return (
+                        <button
+                          key={d.iso}
+                          type="button"
+                          onClick={() => {
+                            setBulkDays((prev) =>
+                              prev.includes(d.iso)
+                                ? prev.filter((n) => n !== d.iso)
+                                : [...prev, d.iso],
+                            );
+                            setBulkConfirmCount(null);
+                          }}
+                          disabled={bulkApplying}
+                          className={
+                            active
+                              ? "min-h-[44px] flex-1 rounded-lg bg-[#0A0A0A] text-sm font-bold text-white disabled:opacity-40"
+                              : "min-h-[44px] flex-1 rounded-lg border border-[#E5E7EB] bg-white text-sm font-semibold text-[#64748B] hover:bg-[#F8FAFC] disabled:opacity-40"
+                          }
+                        >
+                          {d.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-[#475569]">
+                    자리수 ({MIN_CAPACITY}~{MAX_CAPACITY})
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setBulkCapacity((n) => Math.max(MIN_CAPACITY, n - 1))}
+                      disabled={bulkCapacity <= MIN_CAPACITY || bulkApplying}
+                      className="flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-[#E5E7EB] bg-white hover:bg-[#F8FAFC] disabled:opacity-40"
+                    >
+                      <Minus className="size-4 text-[#0A0A0A]" strokeWidth={2} />
+                    </button>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={MIN_CAPACITY}
+                      max={MAX_CAPACITY}
+                      value={bulkCapacity}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (Number.isFinite(n)) {
+                          setBulkCapacity(
+                            Math.min(MAX_CAPACITY, Math.max(MIN_CAPACITY, Math.floor(n))),
+                          );
+                        }
+                      }}
+                      disabled={bulkApplying}
+                      className="h-11 w-20 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white text-center text-lg font-bold text-[#0F172A] disabled:opacity-40"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setBulkCapacity((n) => Math.min(MAX_CAPACITY, n + 1))}
+                      disabled={bulkCapacity >= MAX_CAPACITY || bulkApplying}
+                      className="flex size-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-[#E5E7EB] bg-white hover:bg-[#F8FAFC] disabled:opacity-40"
+                    >
+                      <Plus className="size-4 text-[#0A0A0A]" strokeWidth={2} />
+                    </button>
+                  </div>
+                </div>
+
+                {bulkConfirmCount !== null ? (
+                  // 덮어쓰기 확인 게이트 — 인라인 패널 (Radix 미사용).
+                  <div className="space-y-3 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-4">
+                    <p className="text-sm font-semibold leading-relaxed text-[#0F172A] [word-break:keep-all]">
+                      기존 설정 {bulkConfirmCount}일을 덮어써요 — 예약 있는 날은 자리수를
+                      지켜요
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBulkConfirmCount(null)}
+                        disabled={bulkApplying}
+                        className="flex-1 min-h-[44px] rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#0F172A] hover:bg-[#F8FAFC] disabled:opacity-50"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleBulkApply(true)}
+                        disabled={bulkApplying}
+                        className="flex-1 min-h-[44px] rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                      >
+                        {bulkApplying ? "적용 중…" : "덮어쓰고 적용"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleBulkApply(false)}
+                    disabled={bulkApplying}
+                    className="w-full min-h-[44px] rounded-xl bg-[#0A0A0A] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    {bulkApplying ? "적용 중…" : "한번에 적용"}
+                  </button>
+                )}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         {selectedDate ? (
           <section className="rounded-2xl bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] space-y-4">

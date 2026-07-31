@@ -73,5 +73,6 @@ function PartnerCalendarRoute() {
     );
   }
 
-  return <PartnerCalendarPage partnerId={partnerId} partnerName={partnerName} />;
+  // F4-6 S2 — 단독 페이지는 일괄 설정 on (45 스튜디오는 미전달 무변).
+  return <PartnerCalendarPage partnerId={partnerId} partnerName={partnerName} bulkSetup />;
 }
