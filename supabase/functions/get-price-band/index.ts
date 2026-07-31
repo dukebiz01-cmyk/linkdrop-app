@@ -57,7 +57,7 @@ const MIN_COMPARABLE = 5; // 비교매물 미만이면 시세 숨김(§0 gracefu
 const MIN_CONFIDENT = 10; // 최종 통과 표본 미만 → online.confidence="low"(통계는 제공, 저신뢰 표시)
 const CROSS_GUARD_LOW = 0.3; // 교차 정합 — 환산 단가 < wholesale.avg×0.3 → outlier 제외
 const CROSS_GUARD_HIGH = 8; // 교차 정합 — 환산 단가 > wholesale.avg×8 → outlier 제외
-const CACHE_VERSION = "v3"; // 가드 로직 변경 시 범프(구캐시 무효). T3a-ⓐv2: v3(축 신설·IQR·품종 보존)
+const CACHE_VERSION = "v4"; // 가드 로직 변경 시 범프(구캐시 무효). F3-2c: v4(단위 정규화·수량 사전 확장·median)
 // F3-2b — 품종 필터 정직 게이트: 태그 매칭 리스팅 미만이면 품종 밴드 미산출(혼합 폴백 금지).
 const KIND_MIN_MATCHED = 5;
 // T3a-ⓐv2 [7] — puw 캐시 키 10g 버킷(puw33·34→puw30 동일 키): 파편화 억제.
@@ -100,10 +100,13 @@ type PriceSource = {
 };
 
 // ── P5a 구조화 블록(단위 헌법) — base_unit=kg 고정. 기존 sources 보존 + 추가 필드. ──
+//   F3-2c-1 — median ADDITIVE(대표값 평균→중앙값 전환 재료: 이상치 1건이 평균을 끌고 다니는 것 방지).
+//   구 클라(45)는 미소비 → 회귀 0.
 type WholesaleBlock = {
   min: number;
   max: number;
   avg: number;
+  median?: number;
   market_count: number;
   as_of: string;
 };
@@ -132,10 +135,12 @@ type OnlineBlock = {
 
 // T3a-ⓐv2 [2][3] — 축 통계 블록(ADDITIVE · 소비는 ⓑ). kg축=원/kg(리스팅 자기 정보 환산만),
 //   unit축=원/개(리스팅 자신의 count 토큰 lprice÷count). excluded = IQR 이상치 제거 건수.
+//   F3-2c-1 — median ADDITIVE(구 클라 미소비 → 회귀 0).
 type AxisBlock = {
   min: number | null;
   avg: number | null;
   max: number | null;
+  median?: number | null;
   n: number;
   excluded: number;
 };
@@ -448,10 +453,12 @@ async function fetchWholesale(
     source,
     item_name: matched[0]?.corp_gds_item_nm ?? itemName,
     // P5a 구조화 블록 — 표기용 통계(low/high/avg 동일값, 계약 필드명으로 재노출).
+    //   F3-2c-1 — median 동봉(kgPrices 는 위에서 오름차순 정렬 완료).
     stats: {
       min: source.low,
       max: source.high,
       avg,
+      median: quantile(kgPrices, 0.5),
       market_count: markets.size,
       as_of: usedDate,
     },
@@ -504,6 +511,19 @@ type NaverShopResult = {
 // ── P5a 리스팅 구성 파싱(단위 헌법) — 온라인 비교는 kg 환산가로만. ──
 //   우선순위: 복합 곱("2kg×3박스"=6kg) > 중량 단일(Nkg|Ng) > 개수만(N개|N입|N미|N팩).
 //   중량 표기가 서로 다른 값 2개+("500g/1kg 선택" 류) = 모호 → unknown(제외 집계).
+
+// F3-2c-2 — 단위 표기 정규화(표본 구제): 한글·특수문자 중량 표기를 정규 kg/g 토큰으로 통일해
+//   기존 파서(파싱 규칙 무변)가 그대로 읽게 한다. "10키로"·"5킬로그램"·"3㎏"·"500그램" 류가
+//   전부 구성 불명(excluded)으로 새던 것을 회수. 긴 토큰 우선(그램→키로 순서 아님 — 각 계열
+//   내부에서 "킬로그램"이 "킬로"보다 먼저). 품종·순도 어휘에는 해당 문자열 없음(사전 교차 0).
+function normalizeUnitTokens(title: string): string {
+  return title
+    .replace(/킬로그램|킬로그람|키로그램|키로그람/g, "kg")
+    .replace(/킬로미터/g, "km") // "킬로" 치환 전에 선차단(거리 표기 → 중량 오인 방어)
+    .replace(/킬로|키로|㎏/gi, "kg")
+    .replace(/(?<!프로)그램|그람/g, "g"); // "프로그램" 보호(가공품 제목 방어)
+}
+
 type ListingComposition =
   | { kind: "kg"; kg: number }
   | { kind: "count_only"; count: number }
@@ -530,14 +550,17 @@ function parseListingComposition(title: string): ListingComposition {
   if (weights.length === 1) return { kind: "kg", kg: weights[0] };
   if (weights.length > 1) return { kind: "unknown" };
   // 3) 개수만 — 요청 per_unit_weight_g 있을 때만 환산 가능(호출부 판단).
-  const c = title.match(/(\d{1,4})\s*(개|입|미|팩)/);
+  //   F3-2c-2 — 토큰 사전을 extractCount 와 통일(개|입|미|팩 4종 → 전체 사전 — "20통"·"30자루" 류 구제).
+  const c = title.match(COUNT_TOKEN_RE);
   if (c) return { kind: "count_only", count: Number(c[1]) };
   return { kind: "unknown" };
 }
 
-// 수량 토큰 추출(스펙 3-2): (\d{1,4})\s*(개|입|알|구|과|봉|수|미|포기|통|송이)
+// 수량 토큰 추출(스펙 3-2 → F3-2c-2 확장): 단일 정본 사전(parseListingComposition 과 공유).
+//   추가 = 팩·자루("20개입"은 종래 "개"로 커버 — 기존 매칭 무변).
+const COUNT_TOKEN_RE = /(\d{1,4})\s*(개|입|알|구|과|봉|수|미|포기|통|송이|팩|자루)/;
 function extractCount(title: string): number | null {
-  const m = title.match(/(\d{1,4})\s*(개|입|알|구|과|봉|수|미|포기|통|송이)/);
+  const m = title.match(COUNT_TOKEN_RE);
   return m ? Number(m[1]) : null;
 }
 
@@ -620,14 +643,17 @@ function iqrTrim(values: number[]): { kept: number[]; removed: number } {
   return { kept, removed: sorted.length - kept.length };
 }
 
-// 축 블록 산출 — kept(오름차순)·IQR 제거 수 → {min,avg,max,n,excluded}. 빈 축은 null 통계.
+// 축 블록 산출 — kept(오름차순)·IQR 제거 수 → {min,avg,max,median,n,excluded}. 빈 축은 null 통계.
+//   F3-2c-1 — median 동봉(대표값 전환 재료 · ADDITIVE).
 function axisBlockOf(kept: number[], removed: number): AxisBlock {
-  if (kept.length === 0) return { min: null, avg: null, max: null, n: 0, excluded: removed };
+  if (kept.length === 0)
+    return { min: null, avg: null, max: null, median: null, n: 0, excluded: removed };
   const avg = Math.round(kept.reduce((s, v) => s + v, 0) / kept.length);
   return {
     min: Math.round(kept[0]),
     avg,
     max: Math.round(kept[kept.length - 1]),
+    median: quantile(kept, 0.5),
     n: kept.length,
     excluded: removed,
   };
@@ -712,7 +738,8 @@ function filterBySpec(
   const wKgHi = o.approxWeightKg != null ? o.approxWeightKg * (1 + COUNT_TOLERANCE) : null;
 
   for (const it of items) {
-    const title = o.stripTag(it.title ?? "");
+    // F3-2c-2 — 단위 정규화 선적용(무게밴드 보조 매칭·volume g계열 구제 — count/volume 판정 규칙 무변).
+    const title = normalizeUnitTokens(o.stripTag(it.title ?? ""));
     if (!title.includes(o.itemName)) continue;
     if (isImpure(title, o.itemName, o.itemCode)) continue; // P5d 순도 필터(공통+품목별)
     const lp = parsePrice(it.lprice);
@@ -865,7 +892,8 @@ async function fetchNaverShop(
   let filtered = 0;
   let outliers = 0;
   for (const it of items) {
-    const rawTitle = stripTag(it.title ?? "");
+    // F3-2c-2 — 단위 정규화 선적용(표본 구제): 순도·품종 어휘와 교차 없음(사전 확인) — 태깅/필터 영향 0.
+    const rawTitle = normalizeUnitTokens(stripTag(it.title ?? ""));
     if (!rawTitle.includes(itemName)) continue; // 무관 리스팅 — 집계 자체에서 제외
     if (isImpure(rawTitle, itemName, itemCode)) {
       filtered++; // 다른 상품(가공품·별종) — 파싱 전 단계 컷
