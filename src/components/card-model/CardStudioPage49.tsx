@@ -2736,9 +2736,63 @@ export function CardStudioPage() {
   //   완료 알림에서 흐름이 끝난 듯 읽히는 단절 해소). 다음이 확인(review)이면 [발행 확인하러 가기] —
   //   확인 스텝으로 "이동만"(발행 실행 아님 · 수동 2단 무변 · 자동 발행 금지 락 — 헌장 ⑨).
   function stepChipLabel(target: number): string {
+    // F3-7b — "→"는 라벨에서 분리(전진 애니메이션 요소로 승격 — 아래 renderStepForwardButton).
     const s = stepPlanState[target];
-    if (!s) return "다음 하러 가기 →";
-    return s.key === "review" ? "발행 확인하러 가기" : `다음: ${s.label} 하러 가기 →`;
+    if (!s) return "다음 하러 가기";
+    return s.key === "review" ? "발행 확인하러 가기" : `다음: ${s.label} 하러 가기`;
+  }
+  // UI-5-T5-F3-7b — 전진 버튼 공용 렌더(독립·도우미 합류 2곳 동일 적용 — 단일 정의).
+  //   ⚠️ 함수 호출 렌더({renderStepForwardButton()}) — 중첩 컴포넌트 정의 금지(매 렌더 재마운트 방지).
+  //   연출 4요소 전부 CSS 키프레임(F3-9 인라인 <style> 관례 동형 · JS 타이머 0):
+  //   a. ✦ 반짝(1.6s — 링고 손길 문법) b. 빛 훑기(2.4s · overflow-hidden) c. 화살표 전진(1.5s ·
+  //   translateX 4px) d. 숨쉬기(scale 1↔1.03 · 2.4s 은은 주기). 장식 전부 aria-hidden ·
+  //   pointer-events 영향 0(히트 = 버튼 본체). prefers-reduced-motion = 전 연출 정지(어지럼 방어).
+  //   이동 로직 = F3-7 그대로(nextStep/enterStep — 무수정). 압점 피드백은 scale→opacity 전환
+  //   (숨쉬기 transform과 충돌 회피 — 시각 확인만, 로직 무관).
+  function renderStepForwardButton() {
+    const t = stepChip;
+    if (!t) return null;
+    return (
+      <button
+        onClick={() => {
+          setStepChip(null);
+          if (t.kind === "done") nextStep(); // A2 — 헤더 [다음]과 동일 경로(nextStep 경유).
+          else enterStep(t.target); // B2 — 사용자 탭 = 이동 의사(강제 점프 아님).
+        }}
+        className="lingo-fwd-btn relative inline-flex min-h-[44px] items-center gap-1 overflow-hidden rounded-full bg-[#1D4ED8] px-4 text-[12px] font-bold text-white transition-opacity active:opacity-85"
+      >
+        <style>{`
+          @keyframes lingo-fwd-spark{0%,100%{opacity:.5;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+          @keyframes lingo-fwd-sheen{0%{transform:translateX(-150%)}55%,100%{transform:translateX(250%)}}
+          @keyframes lingo-fwd-arrow{0%,100%{transform:translateX(0)}50%{transform:translateX(4px)}}
+          @keyframes lingo-fwd-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
+          .lingo-fwd-btn{animation:lingo-fwd-breathe 2.4s ease-in-out infinite}
+          @media (prefers-reduced-motion: reduce){
+            .lingo-fwd-btn,.lingo-fwd-spark,.lingo-fwd-sheen,.lingo-fwd-arrow{animation:none !important}
+          }
+        `}</style>
+        <span
+          className="lingo-fwd-spark"
+          style={{ animation: "lingo-fwd-spark 1.6s ease-in-out infinite" }}
+          aria-hidden="true"
+        >
+          ✦
+        </span>
+        {stepChipLabel(t.target)}
+        <span
+          className="lingo-fwd-arrow"
+          style={{ animation: "lingo-fwd-arrow 1.5s ease-in-out infinite" }}
+          aria-hidden="true"
+        >
+          →
+        </span>
+        <span
+          className="lingo-fwd-sheen pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/35 to-transparent"
+          style={{ animation: "lingo-fwd-sheen 2.4s ease-in-out infinite" }}
+          aria-hidden="true"
+        />
+      </button>
+    );
   }
   // UI-5-T2-E2b(B2·B3) — 첫 미확정 스텝 탐색(needsConfirm 잔존=pendingConfirm 큐 또는 isStepDone false)
   //   → 이동 "제안" 칩만 세움(강제 점프 아님 — enterStep은 칩 탭에서만). 순서 = 런타임 플랜 순(planOrder와 동일 기준).
@@ -4163,17 +4217,8 @@ export function CardStudioPage() {
                                 경로 그대로) / 부=텍스트 강등(닫힘만) — 독립 렌더부(:5530대)와 동일 재구성. */}
                             {pendingConfirm.length === 0 && stepChip && (
                               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                <button
-                                  onClick={() => {
-                                    const t = stepChip;
-                                    setStepChip(null);
-                                    if (t.kind === "done") nextStep(); // A2 — 헤더 [다음]과 동일 경로.
-                                    else enterStep(t.target); // B2 — 사용자 탭 = 이동 의사.
-                                  }}
-                                  className="inline-flex min-h-[44px] items-center rounded-full bg-[#1D4ED8] px-4 text-[12px] font-bold text-white active:scale-95"
-                                >
-                                  {stepChipLabel(stepChip.target)}
-                                </button>
+                                {/* F3-7b — 독립 렌더부와 동일한 공용 전진 버튼(단일 정의 — 2곳 동일 적용). */}
+                                {renderStepForwardButton()}
                                 <button
                                   onClick={() => setStepChip(null)}
                                   className="inline-flex min-h-[44px] items-center px-2 text-[11px] font-medium text-[#A3A3A3] active:opacity-70"
@@ -5686,18 +5731,9 @@ export function CardStudioPage() {
               </span>
               {/* F3-7(1) — 주객 복원: 주 = 전진 버튼(링고 블루·44px — 이동은 기존 nextStep/enterStep
                   경로 그대로, 내부 enterStep→onEditField→jumpToBlock 이 해당 칸 스크롤·깜빡 지목까지 수행 —
-                  신규 이동 엔진 0) / 부 = "여기 더 볼게요" 텍스트 강등(닫힘만). 탭 유래 이동뿐 — 자동 점프 0. */}
-              <button
-                onClick={() => {
-                  const t = stepChip;
-                  setStepChip(null);
-                  if (t.kind === "done") nextStep(); // A2 — 헤더 [다음]과 동일 경로(nextStep 경유).
-                  else enterStep(t.target); // B2 — 사용자 탭 = 이동 의사(강제 점프 아님).
-                }}
-                className="inline-flex min-h-[44px] items-center rounded-full bg-[#1D4ED8] px-4 text-[12px] font-bold text-white transition-transform active:scale-95"
-              >
-                {stepChipLabel(stepChip.target)}
-              </button>
+                  신규 이동 엔진 0) / 부 = "여기 더 볼게요" 텍스트 강등(닫힘만). 탭 유래 이동뿐 — 자동 점프 0.
+                  F3-7b — 살아있는 연출은 공용 렌더(renderStepForwardButton) 단일 정의 소비. */}
+              {renderStepForwardButton()}
               <button
                 onClick={() => setStepChip(null)}
                 className="inline-flex min-h-[44px] items-center px-2 text-[11px] font-medium text-[#A3A3A3] transition-opacity active:opacity-70"
