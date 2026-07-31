@@ -139,7 +139,15 @@ function AnchorGlyph({ kind, low }: { kind: string; low?: boolean }) {
   if (kind === "wholesale") {
     return low ? (
       <svg {...common}>
-        <circle cx="6" cy="6" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2" />
+        <circle
+          cx="6"
+          cy="6"
+          r="4.25"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeDasharray="2 2"
+        />
       </svg>
     ) : (
       <svg {...common}>
@@ -286,7 +294,11 @@ export function PriceBandAdvisor({
         : null;
   const kgBand = kgBandTrusted ?? kgBandLowSrc;
   const kgBandLow = kgBandTrusted == null && kgBandLowSrc != null;
-  const kgBandLowNote = kgBandLow ? (w ? `${w.market_count}개 시장` : `${o?.converted_count ?? 0}건`) : null;
+  const kgBandLowNote = kgBandLow
+    ? w
+      ? `${w.market_count}개 시장`
+      : `${o?.converted_count ?? 0}건`
+    : null;
   // DR2-ⓑ 4-A 소매 — legacy sources 의 retail 행을 kg당 환산(무게 단위 파싱 가능분만·아니면 미표시).
   const retailSrc = priceBand.sources.find((s) => s.price_type === "retail") ?? null;
   const retailUnitKg = retailSrc ? parseUnitToKg(retailSrc.unit) : null;
@@ -303,7 +315,9 @@ export function PriceBandAdvisor({
     exclusionParts.length > 0 ? `${exclusionParts.join(" · ")}은 비교에서 제외` : null;
 
   // insufficient/no_data/구버전 응답 — 표 대신 정직 표기 + ⑤ 유지.
-  if (!kgBand) {
+  //   F3-2c-e — answerFirst 는 이 조기 return 을 타지 않는다: 표준형 카드는 "어떤 데이터가 와도
+  //   같은 자리·같은 형식"(4단 고정 — 불가 행은 자리에 사유 1줄). 기본 모드(45)는 기존 그대로.
+  if (!kgBand && !answerFirst) {
     return (
       <div className="mt-2 space-y-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
         <p className="text-[13px] font-medium leading-relaxed tracking-ko text-text-muted">
@@ -352,8 +366,16 @@ export function PriceBandAdvisor({
     answerFirst === true && visibleMedians.length > 0 && visibleMedians.every((v) => v != null);
   const repLabel = useMedian ? "중앙값" : "평균";
   const wRep = w ? (useMedian ? (w.median as number) : w.avg) : null;
-  const unitRep = unitAxis ? (useMedian ? (unitAxis.median as number) : (unitAxis.avg as number)) : null;
-  const kgRep = kgAxisBlk ? (useMedian ? (kgAxisBlk.median as number) : (kgAxisBlk.avg as number)) : null;
+  const unitRep = unitAxis
+    ? useMedian
+      ? (unitAxis.median as number)
+      : (unitAxis.avg as number)
+    : null;
+  const kgRep = kgAxisBlk
+    ? useMedian
+      ? (kgAxisBlk.median as number)
+      : (kgAxisBlk.avg as number)
+    : null;
   const oRep = o ? (useMedian && o.median != null ? o.median : oAvg) : null;
   // 개당 번역 가능성 — packType "단위"(무게 단위 판매)는 '개' 의미가 없어 개당 축 번역 제외.
   const countMeaningful =
@@ -478,36 +500,58 @@ export function PriceBandAdvisor({
           ? "인터넷 시세보다 높아요"
           : "인터넷 시세와 나란해요"
       : null;
-  // F3-2c-1(1) — 내 가격 판정 1줄(answerFirst + 품종 선택 시): 위치 사실만(§0 — 권유·단정 0,
-  //   "상위권/하위권" = 분포 내 위치 사실). 기준 = 품종 필터 적용된 인터넷 축(서버 부분집합 산출)
-  //   — internetBandTotal(min/max) + 대표값(rep) 분할. 축·구성·내 가격 중 하나라도 없으면 미렌더.
-  const internetRepTotal =
-    unitAxis && countMeaningful && unitRep != null
-      ? unitRep * (composition as PriceComposition).unitCount
-      : kgAxisBlk && kgRep != null && totalKg != null && totalKg > 0
-        ? kgRep * totalKg
-        : o && oRep != null && totalKg != null && totalKg > 0
-          ? oRep * totalKg
-          : null;
-  const verdictLine =
-    answerFirst === true &&
-    kindFilter != null &&
-    !kindFilter.insufficient &&
-    myPriceKrw != null &&
-    myPriceKrw > 0 &&
-    internetBandTotal != null &&
-    internetRepTotal != null
-      ? (() => {
-          const kind = kindFilter.requested;
-          const my = myPriceKrw.toLocaleString("ko-KR");
-          if (myPriceKrw > internetBandTotal.max)
-            return `내 가격 ${my}원은 ${kind} 기준 최고가보다 높아요`;
-          if (myPriceKrw >= internetRepTotal) return `내 가격 ${my}원은 ${kind} 기준 상위권이에요`;
-          if (myPriceKrw >= internetBandTotal.min)
-            return `내 가격 ${my}원은 ${kind} 기준 하위권이에요`;
-          return `내 가격 ${my}원은 ${kind} 기준 최저가보다 낮아요`;
-        })()
+  // F3-2c-e(3) — 내 가격 판정: 3단 통일(보통 범위 안/위/아래 — 위치 사실만 · §0 권유·단정 0).
+  //   기준 밴드 = internetBandTotal(기존 축 선택 체인 그대로 — F3-2c 판정 로직 재사용, 문구만 교체).
+  //   품종 맥락은 ① 기준 태그줄 칩이 담당(구 "대학찰 기준 상위권" 문장 폐기 — 캡션 일원화의 일부).
+  const verdict3 =
+    answerFirst === true && myPriceKrw != null && myPriceKrw > 0 && internetBandTotal != null
+      ? myPriceKrw > internetBandTotal.max
+        ? "위예요"
+        : myPriceKrw < internetBandTotal.min
+          ? "아래예요"
+          : "안이에요"
       : null;
+
+  // F3-2c-e(1)② — 표준표 축 재료: 기존 선택 체인(internetBandTotal 동일 순서) 재사용 · 신규 통계 0.
+  //   "보통 범위" = IQR 통과 극값(edge iqrTrim kept min~max — 기존 값 그대로) / 대표값 = rep(중앙값|평균).
+  const stdAxis =
+    unitAxis && countMeaningful && unitAxis.min != null && unitAxis.max != null
+      ? {
+          unitLabel: "개당",
+          rep: unitRep as number,
+          min: unitAxis.min,
+          max: unitAxis.max,
+          isUnit: true,
+        }
+      : kgAxisBlk && kgAxisBlk.min != null && kgAxisBlk.max != null
+        ? {
+            unitLabel: "kg당",
+            rep: kgRep as number,
+            min: kgAxisBlk.min,
+            max: kgAxisBlk.max,
+            isUnit: false,
+          }
+        : o && oBand && oRep != null
+          ? { unitLabel: "kg당", rep: oRep, min: oBand.min, max: oBand.max, isUnit: false }
+          : null;
+  // 행 사유(자리 유지 원칙): 게이트 숨김(표본<5)과 "데이터 없음"을 구분(정직 — 침묵 금지 문구의 위치 이동).
+  const stdReason =
+    unitHidden || kgHidden || oHidden
+      ? "표본이 적어(5건 미만) 표시하지 않았어요"
+      : "표시할 유사상품이 없어요";
+  // 숫자 표기 통일(3): 개당 축 = 원 단위 콤마(실값) / kg 축 = 백원 반올림 관례 · "약"은 범위값에만.
+  const fmtStd = (v: number, isUnit: boolean) =>
+    isUnit ? Math.round(v).toLocaleString("ko-KR") : fmtWonH(v);
+  // F3-2c-e(1)① — 기준 태그줄 칩 3개 고정(자리 유지: 미상 = 대체 문구 칩, 미표시 아님).
+  const chipKindLabel = kindFilter && !kindFilter.insufficient ? kindFilter.requested : "품종 섞임";
+  const chipItem = priceBand.item_name ? `${priceBand.item_name}·${chipKindLabel}` : chipKindLabel;
+  const chipComp = composition
+    ? `구성 ${composition.unitCount}개·${composition.totalKg}kg`
+    : "구성 미입력";
+  const chipOnlineN =
+    kindFilter && !kindFilter.insufficient
+      ? kindFilter.matched_count
+      : (unitAxisRaw?.n ?? kgAxisRaw?.n ?? oRaw?.converted_count ?? 0);
 
   // T3a-ⓑ [2] 박스 번역층 — 순수 산수 1줄씩(구성 미상이면 전부 생략 · 권유 어휘 0).
   const translationLines: string[] = [];
@@ -537,6 +581,393 @@ export function PriceBandAdvisor({
     }
   }
 
+  // F3-2c-e — 두 렌더 모드가 공유하는 대형 블록(원시 표·앵커 바)을 상수로 1회 정의(중복 정의 금지).
+  //   기본 모드(45) = 종전과 동일 위치에 상시 렌더 / answerFirst = ④ 접힘 내부에서만 렌더.
+  const rawTableJsx = (
+    <table className="w-full border-collapse tracking-ko" style={{ tableLayout: "fixed" }}>
+      {/* STUDIO-fix3 H3 — 열 트랙: 행머리 40 고정·숫자 3열 균등(fixed 잔여 균등분)·기준 56
+          우측 끝 고정. 열 간격은 pl-1(4px — px-2 는 320px 한 줄·스크롤 0 조건과 충돌해 축소). */}
+      <colgroup>
+        <col style={{ width: 40 }} />
+        <col />
+        <col />
+        <col />
+        <col style={{ width: 56 }} />
+      </colgroup>
+      <thead>
+        <tr className="border-b border-[#F1F5F9] text-[10px] font-semibold text-text-subtle">
+          <th className="pb-1 text-left font-semibold" scope="col">
+            {" "}
+          </th>
+          <th className="pb-1 pl-1 text-right font-semibold" scope="col">
+            최저
+          </th>
+          <th className="pb-1 pl-1 text-right font-semibold" scope="col">
+            {repLabel}
+          </th>
+          <th className="pb-1 pl-1 text-right font-semibold" scope="col">
+            최고
+          </th>
+          <th className="pb-1 pl-1 text-right font-semibold" scope="col">
+            기준
+          </th>
+        </tr>
+      </thead>
+      {/* H3 — 행 구분선(연회색)·행머리 좌측 정렬 고정·숫자 전부 우측 정렬 유지. */}
+      <tbody className="divide-y divide-[#F1F5F9] [&_td]:py-2 [&_td]:align-baseline">
+        {/* FIX-45b — n<3 행 = 흐림(opacity) + "참고 부족" 라벨(숫자는 보이되 시각 강등). */}
+        {w ? (
+          <tr className={wTrusted ? undefined : "opacity-50"}>
+            <td className="whitespace-nowrap">
+              <span className="text-[12px] font-bold text-text-strong">도매</span>
+              <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(w.min)}
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(wRep as number)}
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(w.max)}
+            </td>
+            <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
+              {!wTrusted ? <span className="block font-semibold">참고 부족</span> : null}
+              <span className="block">{w.market_count}개 시장</span>
+              <span className="block">{fmtRefDate(w.as_of)}</span>
+            </td>
+          </tr>
+        ) : null}
+        {/* 소매 — kg당 환산(상·중품 low~high · 평균 열은 중간값, 캡션에 명시). */}
+        {retailSrc && retailKg ? (
+          <tr>
+            <td className="whitespace-nowrap">
+              <span className="text-[12px] font-bold text-text-strong">소매</span>
+              <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(retailKg.min)}
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH((retailKg.min + retailKg.max) / 2)}
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(retailKg.max)}
+            </td>
+            <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
+              <span className="block">{retailSrc.rank_note}</span>
+              <span className="block">{fmtRefDate(retailSrc.ref_date)}</span>
+            </td>
+          </tr>
+        ) : null}
+        {/* T3a-ⓑ [1] — 인터넷 이원축: 개당(실값) / kg당(백원 반올림). 구응답은 kg당 행 폴백. */}
+        {unitAxis ? (
+          <tr className={unitAxis.n >= MIN_TRUST_N ? undefined : "opacity-50"}>
+            <td className="whitespace-nowrap">
+              <span className="text-[12px] font-bold text-text-strong">인터넷</span>
+              <span className="block text-[10px] font-medium text-text-subtle">개당</span>
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {(unitAxis.min as number).toLocaleString("ko-KR")}
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {(unitRep as number).toLocaleString("ko-KR")}
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {(unitAxis.max as number).toLocaleString("ko-KR")}
+            </td>
+            <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
+              {unitAxis.n < MIN_TRUST_N ? (
+                <span className="block font-semibold">참고 부족</span>
+              ) : null}
+              <span className="block">{unitAxis.n}건</span>
+              {priceBand.online?.as_of ? (
+                <span className="block">{fmtRefDate(priceBand.online.as_of)}</span>
+              ) : null}
+            </td>
+          </tr>
+        ) : null}
+        {kgAxisBlk ? (
+          <tr className={kgAxisBlk.n >= MIN_TRUST_N ? undefined : "opacity-50"}>
+            <td className="whitespace-nowrap">
+              <span className="text-[12px] font-bold text-text-strong">인터넷</span>
+              <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(kgAxisBlk.min as number)}
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(kgRep as number)}
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(kgAxisBlk.max as number)}
+            </td>
+            <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
+              {kgAxisBlk.n < MIN_TRUST_N ? (
+                <span className="block font-semibold">참고 부족</span>
+              ) : null}
+              <span className="block">{kgAxisBlk.n}건</span>
+              {priceBand.online?.as_of ? (
+                <span className="block">{fmtRefDate(priceBand.online.as_of)}</span>
+              ) : null}
+            </td>
+          </tr>
+        ) : null}
+        {!unitAxis && !kgAxisBlk && o && oBand && oAvg != null ? (
+          <tr className={o.converted_count >= MIN_TRUST_N ? undefined : "opacity-50"}>
+            <td className="whitespace-nowrap">
+              <span className="text-[12px] font-bold text-text-strong">인터넷</span>
+              <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(oBand.min)}
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(oRep as number)}
+            </td>
+            <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
+              {fmtWonH(oBand.max)}
+            </td>
+            <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
+              {o.converted_count < MIN_TRUST_N ? (
+                <span className="block font-semibold">참고 부족</span>
+              ) : null}
+              <span className="block">{o.converted_count}건</span>
+              <span className="block">{fmtRefDate(o.as_of)}</span>
+            </td>
+          </tr>
+        ) : null}
+      </tbody>
+    </table>
+  );
+  const anchorBarJsx = showAnchor ? (
+    <div className="space-y-1 pt-1">
+      <div className="relative h-6">
+        <div className="absolute left-0 right-0 top-1/2 h-px bg-border" />
+        {positioned.map((p) => (
+          <span
+            key={p.key}
+            style={{ left: `${p.pos}%` }}
+            className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${
+              p.key === "mine" ? "text-accent" : "text-text-muted"
+            }${p.low ? " opacity-50" : ""}`}
+          >
+            <AnchorGlyph kind={p.key} low={p.low} />
+          </span>
+        ))}
+      </div>
+      {/* F1 — 가장자리 라벨은 중앙정렬 대신 안쪽 정렬(카드 밖 이탈·이웃 텍스트 포개짐 방지). */}
+      <div className="relative h-9 text-[10px] font-medium tabular-nums tracking-ko text-text-muted">
+        {positioned.map((p, i) => (
+          <span
+            key={p.key}
+            style={{ left: `${p.pos}%`, top: labelRows[i] === 1 ? 16 : 0 }}
+            className={`absolute whitespace-nowrap ${
+              p.pos < 18 ? "" : p.pos > 82 ? "-translate-x-full" : "-translate-x-1/2"
+            } ${p.key === "mine" ? "font-semibold text-text-strong" : ""}`}
+          >
+            {p.label} 약 {fmtWonH(p.value)}원
+          </span>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
+  // ── F3-2c-e — 표준형 카드(answerFirst 전용 렌더): 어떤 데이터가 와도 같은 자리·같은 형식 4단 고정.
+  //   기본 화면 텍스트 = 칩·표 라벨·판정문·면책 1줄만(설명문 전부 ④ 접힘 내부 — 문장형 캡션 퇴출).
+  //   기본 모드(45)는 아래 별도 return — 이 블록 미경유(opt-in 격리 유지). */
+  if (answerFirst) {
+    const stdRows: { label: string; value: string; ok: boolean }[] = [
+      {
+        label: `시세 (${repLabel})`,
+        value: stdAxis
+          ? `${stdAxis.unitLabel} ${fmtStd(stdAxis.rep, stdAxis.isUnit)}원`
+          : stdReason,
+        ok: stdAxis != null,
+      },
+      {
+        label: "보통 범위",
+        value: stdAxis
+          ? `${stdAxis.unitLabel} 약 ${fmtStd(stdAxis.min, stdAxis.isUnit)}~${fmtStd(stdAxis.max, stdAxis.isUnit)}원`
+          : stdReason,
+        ok: stdAxis != null,
+      },
+      {
+        label: "내 구성이면",
+        value:
+          composition && totalKg != null && totalKg > 0
+            ? internetBandTotal
+              ? `약 ${fmtWonH(internetBandTotal.min)}~${fmtWonH(internetBandTotal.max)}원`
+              : stdReason
+            : "구성을 입력하면 보여드려요",
+        ok: composition != null && internetBandTotal != null,
+      },
+    ];
+    return (
+      <div className="mt-2 space-y-3 rounded-xl border border-border bg-surface/40 p-4">
+        <div className="flex items-center gap-1.5">
+          <TrendingUp className="size-4 text-text-strong" strokeWidth={2} />
+          <span className="text-sm font-bold tracking-ko text-text-strong">시세 참고 정보</span>
+        </div>
+        {/* ① 기준 태그줄 — 칩 3개 고정(자리 유지: 품종 미선택=품종 섞임 · 구성 미입력=구성 미입력 칩). */}
+        <div className="flex flex-wrap gap-1.5">
+          {[chipItem, chipComp, `온라인 ${chipOnlineN}건`].map((c) => (
+            <span
+              key={c}
+              className="inline-flex items-center rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold tracking-ko text-text-muted"
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+        {/* F3-2b 정직 게이트 안내 — 내용 무변 · 위치만 칩 아래로 이동. */}
+        {kindFilter?.insufficient && (
+          <p
+            className="rounded-lg bg-[#FFFBEB] px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-[#92400E] [word-break:keep-all]"
+            style={{ boxShadow: "inset 0 0 0 1px #FDE68A" }}
+          >
+            이 품종은 비교할 판매 건이 아직 적어요. 일반 시세와 가격대가 다를 수 있어 섞인 시세는
+            보여드리지 않아요.
+          </p>
+        )}
+        {/* ② 표준표 3행 고정 — 값 불가 행도 행 자체는 항상 존재(그 자리에 사유 1줄 · 자리 유지 원칙).
+            "보통 범위" = 기존 IQR 통과 밴드(edge iqrTrim kept 극값) 재사용 — 신규 통계 0. */}
+        <div className="divide-y divide-[#F1F5F9] rounded-lg bg-bg px-3">
+          {stdRows.map((r) => (
+            <div key={r.label} className="flex items-baseline justify-between gap-2 py-2.5">
+              <span className="shrink-0 text-[12px] font-semibold tracking-ko text-text-muted">
+                {r.label}
+              </span>
+              <span
+                className={
+                  r.ok
+                    ? "text-right text-[13px] font-bold tabular-nums tracking-ko text-text-strong"
+                    : "text-right text-[11px] font-medium tracking-ko text-text-subtle [word-break:keep-all]"
+                }
+              >
+                {r.value}
+              </span>
+            </div>
+          ))}
+        </div>
+        {/* ③ 내 가격 판정 박스 — 판매가 입력 시 1줄(3단 통일 · 위치 사실만 §0). 미입력 = 미표시. */}
+        {verdict3 && myPriceKrw != null ? (
+          <div className="rounded-lg bg-surface px-3 py-2.5 text-[13px] font-bold tabular-nums tracking-ko text-text-strong [word-break:keep-all]">
+            내 가격 {myPriceKrw.toLocaleString("ko-KR")}원 — 보통 범위 {verdict3}
+          </div>
+        ) : null}
+        {/* ④ [자세히 보기] — 설명문 전부 이 안(환산 근거·원시 표·분포/제외/이력 캡션·앵커·비교문·번역). */}
+        <button
+          type="button"
+          onClick={() => setShowDetail((v) => !v)}
+          className="flex w-full min-h-[44px] items-center justify-center rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-muted hover:border-text-muted"
+        >
+          {showDetail ? "간단히 보기" : "자세히 보기"}
+        </button>
+        {showDetail ? (
+          <div className="space-y-3">
+            {hasPerUnit && composition ? (
+              <p className="text-[12px] font-medium tracking-ko text-text-muted">
+                개당 약 {Math.round(perUnitG as number).toLocaleString("ko-KR")}g 기준 ·{" "}
+                {compositionLabel ??
+                  `내 구성(${composition.unitCount}개 · ${composition.totalKg}kg)`}{" "}
+                기준으로 환산한 값
+              </p>
+            ) : null}
+            {rawTableJsx}
+            <div className="space-y-1">
+              <p className="text-[10px] font-medium tracking-ko text-text-subtle">
+                단위: 원 · kg당 값은 백원 반올림(약) · 소매 평균은 상·중품 중간값 · 참고용
+              </p>
+              {onlineKindsTop.length > 0 ? (
+                <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+                  품종 섞임: {onlineKindsTop.map(([k, n]) => `${k} ${n}`).join(" · ")}
+                </p>
+              ) : null}
+              {retailKg && retailKindLabel ? (
+                <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+                  소매 기준: {retailKindLabel}
+                </p>
+              ) : null}
+              {retailKg && prevMonthKg != null && prevPct != null ? (
+                <p className="text-[11px] font-medium tabular-nums tracking-ko text-text-muted">
+                  소매 1개월 전 kg당 약 {fmtWonH(prevMonthKg)}원 (
+                  {prevPct === 0
+                    ? "변동 없음"
+                    : prevPct > 0
+                      ? `+${prevPct}%`
+                      : `−${Math.abs(prevPct)}%`}
+                  )
+                </p>
+              ) : null}
+              {exclusionLine ? (
+                <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+                  {exclusionLine}
+                </p>
+              ) : null}
+              {/* 침묵 금지 줄 — 위치만 이동(내용 무변): 인터넷 축은 ② 행 사유가 담당 · 도매/소매는 여기. */}
+              {!w ? (
+                <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+                  {wHidden
+                    ? "도매가: 표본이 적어(5건 미만) 표시하지 않았어요"
+                    : "도매가: 표시할 시세가 없어요"}
+                </p>
+              ) : null}
+              {!retailKg ? (
+                <p className="text-[11px] font-medium tracking-ko text-text-subtle">
+                  소매가: 표시할 시세가 없어요
+                </p>
+              ) : null}
+            </div>
+            {anchorBarJsx}
+            {gapWholesale != null ? (
+              <p className="text-[12px] font-medium tabular-nums tracking-ko text-text-strong">
+                {gapWholesale > 0
+                  ? `도매(${repLabel})보다 +${fmtWonH(gapWholesale)}원이 생산자님 몫`
+                  : gapWholesale < 0
+                    ? `도매(${repLabel})보다 약 ${fmtWonH(-gapWholesale)}원 낮은 가격이에요`
+                    : `도매(${repLabel})와 같은 가격이에요`}
+              </p>
+            ) : null}
+            {onlineRelation ? (
+              <p className="text-[12px] font-medium tracking-ko text-text-muted">
+                {onlineRelation}
+              </p>
+            ) : null}
+            {translationLines.length > 0 ? (
+              <div className="space-y-1">
+                {translationLines.map((line) => (
+                  <p
+                    key={line}
+                    className="text-[11px] font-medium tabular-nums tracking-ko text-text-muted"
+                  >
+                    {line}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {onAdjustPrice || onRefresh ? (
+          <div className="space-y-2">
+            {onAdjustPrice ? (
+              <button
+                type="button"
+                onClick={onAdjustPrice}
+                className="flex w-full min-h-[44px] items-center justify-center rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-strong hover:border-text-muted"
+              >
+                시세 참고해 판매가 조정하기
+              </button>
+            ) : null}
+            {onRefresh ? <RefreshButton onRefresh={onRefresh} /> : null}
+          </div>
+        ) : null}
+        <NoticeLine />
+      </div>
+    );
+  }
+  if (!kgBand) return null; // 도달 불가(기본 모드 데이터 부족은 위 조기 return 처리) — TS 내로잉 전용.
+
   return (
     <div className="mt-2 space-y-3 rounded-xl border border-border bg-surface/40 p-4">
       <div className="flex items-center gap-1.5">
@@ -546,27 +977,19 @@ export function PriceBandAdvisor({
 
       {/* ① 헤드라인 — 개당(구성 있을 때) / kg당(없을 때). 26px.
           FIX-45b — 신뢰 축(n≥3)만으로 산출. 신뢰 축 전무 시 저표본 실값 흐림 + "참고 부족" 병기.
-          F3-2c-1(1) — answerFirst + 구성: "내 구성(N개들이) 기준 X~Y원"(답부터 — 내 판매 단위 총액). */}
+          F3-2c-e — answerFirst 분기 제거(표준형 카드는 위 전용 return) — 기본 모드 원형 복원. */}
       <p
         className={`text-[26px] font-bold leading-tight tabular-nums tracking-ko text-text-strong${
           kgBandLow ? " opacity-50" : ""
         }`}
       >
-        {answerFirst && composition && totalKg != null && totalKg > 0
-          ? `내 구성(${compositionLabel ?? `${composition.unitCount}개들이`}) 기준 약 ${fmtWonH(kgBand.min * totalKg)}~${fmtWonH(kgBand.max * totalKg)}원`
-          : hasPerUnit
-            ? `개당 약 ${fmtWonH(toUnit(kgBand.min))}~${fmtWonH(toUnit(kgBand.max))}원`
-            : `kg당 약 ${fmtWonH(kgBand.min)}~${fmtWonH(kgBand.max)}원`}
+        {hasPerUnit
+          ? `개당 약 ${fmtWonH(toUnit(kgBand.min))}~${fmtWonH(toUnit(kgBand.max))}원`
+          : `kg당 약 ${fmtWonH(kgBand.min)}~${fmtWonH(kgBand.max)}원`}
       </p>
       {kgBandLow ? (
         <p className="text-[11px] font-semibold tracking-ko text-text-subtle">
           참고 부족 ({kgBandLowNote}) — 표본이 적어 참고만 해 주세요
-        </p>
-      ) : null}
-      {/* F3-2c-1(1) — 내 가격 판정 1줄(품종 선택 시 · 위치 사실만). */}
-      {verdictLine ? (
-        <p className="text-[13px] font-semibold tabular-nums tracking-ko text-text-strong [word-break:keep-all]">
-          {verdictLine}
         </p>
       ) : null}
 
@@ -585,174 +1008,8 @@ export function PriceBandAdvisor({
           셀 안 문장 금지 — 숫자만(tabular 우측 정렬), 축 라벨은 행 머리("kg당"/"개당") 아래 줄.
           "약"·단위는 표 아래 캡션 1회. 320~375px 한 행 한 줄(가로 스크롤 금지 — 숫자 11px·기준 10px).
           문장류(제외·표본부족·품종·소매 기준·1개월 대비)는 전폭 캡션 블록으로 이동. */}
-      {/* F3-2c-1(2) — answerFirst: 원시 표(도매·인터넷 축들) [자세히 보기] 접기(기본 접힘 —
-          보고 싶은 사람만). 기본 모드(45)는 상시 표시(무변). */}
-      {answerFirst ? (
-        <button
-          type="button"
-          onClick={() => setShowDetail((v) => !v)}
-          className="flex w-full min-h-[44px] items-center justify-center rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-muted hover:border-text-muted"
-        >
-          {showDetail ? "시세 표 접기" : "자세히 보기"}
-        </button>
-      ) : null}
-      {!answerFirst || showDetail ? (
-      <table className="w-full border-collapse tracking-ko" style={{ tableLayout: "fixed" }}>
-        {/* STUDIO-fix3 H3 — 열 트랙: 행머리 40 고정·숫자 3열 균등(fixed 잔여 균등분)·기준 56
-            우측 끝 고정. 열 간격은 pl-1(4px — px-2 는 320px 한 줄·스크롤 0 조건과 충돌해 축소). */}
-        <colgroup>
-          <col style={{ width: 40 }} />
-          <col />
-          <col />
-          <col />
-          <col style={{ width: 56 }} />
-        </colgroup>
-        <thead>
-          <tr className="border-b border-[#F1F5F9] text-[10px] font-semibold text-text-subtle">
-            <th className="pb-1 text-left font-semibold" scope="col">
-              {" "}
-            </th>
-            <th className="pb-1 pl-1 text-right font-semibold" scope="col">
-              최저
-            </th>
-            <th className="pb-1 pl-1 text-right font-semibold" scope="col">
-              {repLabel}
-            </th>
-            <th className="pb-1 pl-1 text-right font-semibold" scope="col">
-              최고
-            </th>
-            <th className="pb-1 pl-1 text-right font-semibold" scope="col">
-              기준
-            </th>
-          </tr>
-        </thead>
-        {/* H3 — 행 구분선(연회색)·행머리 좌측 정렬 고정·숫자 전부 우측 정렬 유지. */}
-        <tbody className="divide-y divide-[#F1F5F9] [&_td]:py-2 [&_td]:align-baseline">
-          {/* FIX-45b — n<3 행 = 흐림(opacity) + "참고 부족" 라벨(숫자는 보이되 시각 강등). */}
-          {w ? (
-            <tr className={wTrusted ? undefined : "opacity-50"}>
-              <td className="whitespace-nowrap">
-                <span className="text-[12px] font-bold text-text-strong">도매</span>
-                <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(w.min)}
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(wRep as number)}
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(w.max)}
-              </td>
-              <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
-                {!wTrusted ? <span className="block font-semibold">참고 부족</span> : null}
-                <span className="block">{w.market_count}개 시장</span>
-                <span className="block">{fmtRefDate(w.as_of)}</span>
-              </td>
-            </tr>
-          ) : null}
-          {/* 소매 — kg당 환산(상·중품 low~high · 평균 열은 중간값, 캡션에 명시). */}
-          {retailSrc && retailKg ? (
-            <tr>
-              <td className="whitespace-nowrap">
-                <span className="text-[12px] font-bold text-text-strong">소매</span>
-                <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(retailKg.min)}
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH((retailKg.min + retailKg.max) / 2)}
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(retailKg.max)}
-              </td>
-              <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
-                <span className="block">{retailSrc.rank_note}</span>
-                <span className="block">{fmtRefDate(retailSrc.ref_date)}</span>
-              </td>
-            </tr>
-          ) : null}
-          {/* T3a-ⓑ [1] — 인터넷 이원축: 개당(실값) / kg당(백원 반올림). 구응답은 kg당 행 폴백. */}
-          {unitAxis ? (
-            <tr className={unitAxis.n >= MIN_TRUST_N ? undefined : "opacity-50"}>
-              <td className="whitespace-nowrap">
-                <span className="text-[12px] font-bold text-text-strong">인터넷</span>
-                <span className="block text-[10px] font-medium text-text-subtle">개당</span>
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {(unitAxis.min as number).toLocaleString("ko-KR")}
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {(unitRep as number).toLocaleString("ko-KR")}
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {(unitAxis.max as number).toLocaleString("ko-KR")}
-              </td>
-              <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
-                {unitAxis.n < MIN_TRUST_N ? (
-                  <span className="block font-semibold">참고 부족</span>
-                ) : null}
-                <span className="block">{unitAxis.n}건</span>
-                {priceBand.online?.as_of ? (
-                  <span className="block">{fmtRefDate(priceBand.online.as_of)}</span>
-                ) : null}
-              </td>
-            </tr>
-          ) : null}
-          {kgAxisBlk ? (
-            <tr className={kgAxisBlk.n >= MIN_TRUST_N ? undefined : "opacity-50"}>
-              <td className="whitespace-nowrap">
-                <span className="text-[12px] font-bold text-text-strong">인터넷</span>
-                <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(kgAxisBlk.min as number)}
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(kgRep as number)}
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(kgAxisBlk.max as number)}
-              </td>
-              <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
-                {kgAxisBlk.n < MIN_TRUST_N ? (
-                  <span className="block font-semibold">참고 부족</span>
-                ) : null}
-                <span className="block">{kgAxisBlk.n}건</span>
-                {priceBand.online?.as_of ? (
-                  <span className="block">{fmtRefDate(priceBand.online.as_of)}</span>
-                ) : null}
-              </td>
-            </tr>
-          ) : null}
-          {!unitAxis && !kgAxisBlk && o && oBand && oAvg != null ? (
-            <tr className={o.converted_count >= MIN_TRUST_N ? undefined : "opacity-50"}>
-              <td className="whitespace-nowrap">
-                <span className="text-[12px] font-bold text-text-strong">인터넷</span>
-                <span className="block text-[10px] font-medium text-text-subtle">kg당</span>
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(oBand.min)}
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(oRep as number)}
-              </td>
-              <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(oBand.max)}
-              </td>
-              <td className="pl-1 text-right text-[10px] font-medium tabular-nums text-text-muted">
-                {o.converted_count < MIN_TRUST_N ? (
-                  <span className="block font-semibold">참고 부족</span>
-                ) : null}
-                <span className="block">{o.converted_count}건</span>
-                <span className="block">{fmtRefDate(o.as_of)}</span>
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-      ) : null}
+      {/* F3-2c-e — 표 본체는 rawTableJsx 공유 상수(위 정의) — 기본 모드는 종전대로 상시 렌더. */}
+      {rawTableJsx}
 
       {/* G2 캡션 블록 — 문장은 전폭 캡션에서만(셀 안 금지). 단위·약 표기 1회. */}
       <div className="space-y-1">
@@ -766,44 +1023,41 @@ export function PriceBandAdvisor({
             보여드리지 않아요.
           </p>
         )}
-        {/* F3-2c-1(2) — 표 소속 캡션(단위·품종 분포·소매 기준·이력·제외)은 표와 함께 접힘.
-            답 소속(품종 기준·침묵 금지 줄)은 상시. 기본 모드 = 전부 상시(무변). */}
-        {!answerFirst || showDetail ? (
-          <p className="text-[10px] font-medium tracking-ko text-text-subtle">
-            단위: 원 · kg당 값은 백원 반올림(약) · 소매 평균은 상·중품 중간값 · 참고용
-          </p>
-        ) : null}
+        {/* F3-2c-e — answerFirst 접힘 분기 제거(전용 return 분리) — 기본 모드 캡션 원형 복원. */}
+        <p className="text-[10px] font-medium tracking-ko text-text-subtle">
+          단위: 원 · kg당 값은 백원 반올림(약) · 소매 평균은 상·중품 중간값 · 참고용
+        </p>
         {/* T3a-ⓑ [3]→F3-2b — 품종 정보: kind 필터 성립 = "품종 기준"(정식 축) / 미필터 = "품종 섞임"
             명시(정확 원칙 — 혼합 시세임을 숨기지 않는다). */}
         {kindFilter && !kindFilter.insufficient ? (
           <p className="text-[11px] font-semibold tracking-ko text-text-muted">
             {kindFilter.requested} 품종 기준 · 온라인 {kindFilter.matched_count}건
           </p>
-        ) : onlineKindsTop.length > 0 && (!answerFirst || showDetail) ? (
+        ) : onlineKindsTop.length > 0 ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">
             품종 섞임: {onlineKindsTop.map(([k, n]) => `${k} ${n}`).join(" · ")}
           </p>
         ) : null}
         {/* T3a-ⓑ [3] — 소매 조사 품종 기준(retail_kind). */}
-        {retailKg && retailKindLabel && (!answerFirst || showDetail) ? (
+        {retailKg && retailKindLabel ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">
             소매 기준: {retailKindLabel}
           </p>
         ) : null}
         {/* T3a-ⓑ [4] — 1개월 전 대비(사실만 · 예측 어휘 0). */}
-        {retailKg && prevMonthKg != null && prevPct != null && (!answerFirst || showDetail) ? (
+        {retailKg && prevMonthKg != null && prevPct != null ? (
           <p className="text-[11px] font-medium tabular-nums tracking-ko text-text-muted">
             소매 1개월 전 kg당 약 {fmtWonH(prevMonthKg)}원 (
             {prevPct === 0 ? "변동 없음" : prevPct > 0 ? `+${prevPct}%` : `−${Math.abs(prevPct)}%`})
           </p>
         ) : null}
         {/* P5d 강등 — 구응답 폴백 행의 표본 부족 표시(캡션으로 이동). */}
-        {!unitAxis && !kgAxisBlk && o && !onlineTrusted && (!answerFirst || showDetail) ? (
+        {!unitAxis && !kgAxisBlk && o && !onlineTrusted ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">
             인터넷: 표본 부족 · 참고만
           </p>
         ) : null}
-        {exclusionLine && (!answerFirst || showDetail) ? (
+        {exclusionLine ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">{exclusionLine}</p>
         ) : null}
         {/* DR2-fix1 F4ⓒ — 데이터 없는 소스 침묵 금지(도매·인터넷·소매 동일 원칙).
@@ -830,39 +1084,9 @@ export function PriceBandAdvisor({
       </div>
 
       {/* DR2-ⓑ 4점 앵커 — 정적 위치 바(도매·내가격·인터넷·소매 SVG 도형 · 값 크기 순).
-          FIX-45c — 글리프 = AnchorGlyph 인라인 SVG(폰트 의존 0 · 색은 기존 클래스 currentColor). */}
-      {showAnchor ? (
-        <div className="space-y-1 pt-1">
-          <div className="relative h-6">
-            <div className="absolute left-0 right-0 top-1/2 h-px bg-border" />
-            {positioned.map((p) => (
-              <span
-                key={p.key}
-                style={{ left: `${p.pos}%` }}
-                className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${
-                  p.key === "mine" ? "text-accent" : "text-text-muted"
-                }${p.low ? " opacity-50" : ""}`}
-              >
-                <AnchorGlyph kind={p.key} low={p.low} />
-              </span>
-            ))}
-          </div>
-          {/* F1 — 가장자리 라벨은 중앙정렬 대신 안쪽 정렬(카드 밖 이탈·이웃 텍스트 포개짐 방지). */}
-          <div className="relative h-9 text-[10px] font-medium tabular-nums tracking-ko text-text-muted">
-            {positioned.map((p, i) => (
-              <span
-                key={p.key}
-                style={{ left: `${p.pos}%`, top: labelRows[i] === 1 ? 16 : 0 }}
-                className={`absolute whitespace-nowrap ${
-                  p.pos < 18 ? "" : p.pos > 82 ? "-translate-x-full" : "-translate-x-1/2"
-                } ${p.key === "mine" ? "font-semibold text-text-strong" : ""}`}
-              >
-                {p.label} 약 {fmtWonH(p.value)}원
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
+          FIX-45c — 글리프 = AnchorGlyph 인라인 SVG(폰트 의존 0 · 색은 기존 클래스 currentColor).
+          F3-2c-e — 본체는 anchorBarJsx 공유 상수(위 정의) — 기본 모드 동일 위치 렌더. */}
+      {anchorBarJsx}
 
       {/* 격차 문구 2축 — 순수 산수(권유 어휘 0). */}
       {gapWholesale != null ? (
@@ -894,9 +1118,9 @@ export function PriceBandAdvisor({
 
       {/* ④ 내 판매단위 강조 — 구성 입력이 있을 때만. 우측 정렬 금액.
           DR2-ⓑ: compositionLabel 있으면 선언문 라벨(괄호 축약·모드 불일치 라벨 제거).
-          F3-2c-1(1) — answerFirst 는 헤드라인이 같은 값(구성 기준 총액)을 이미 답으로 제시 → 중복 미표시. */}
+          F3-2c-e — answerFirst 분기 제거(전용 return 분리) — 기본 모드 원형 복원. */}
       {/* FIX-45b — 헤드라인 밴드 재사용처: 저표본 밴드(kgBandLow)면 동일 흐림 강등. */}
-      {composition && !answerFirst ? (
+      {composition ? (
         <div
           className={`flex items-baseline justify-between gap-2 rounded-lg bg-surface px-3 py-2.5${
             kgBandLow ? " opacity-50" : ""
