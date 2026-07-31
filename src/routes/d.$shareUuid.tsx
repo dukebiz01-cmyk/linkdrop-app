@@ -772,6 +772,8 @@ function DropPage() {
           initialCheckIn={reservePrefill.checkIn}
           initialCheckOut={reservePrefill.checkOut}
           initialGuestCount={reservePrefill.guestCount}
+          // F4c(①) — 접수 확인 화면 매장명(partnerPhone :795 동형 배선 — props.local = 매장 정본).
+          storeName={props.local?.name?.trim() || null}
           // Phase 1 통합 CTA — 쿠폰 있으면 시트가 예약 성공 직후 best-effort 로 발급(가-2).
           funnelCoupon={funnelCoupon ? { id: funnelCoupon.id, title: funnelCoupon.title } : null}
           // 시트에서 발급 성공 시 OAuth 복귀 자동발급(?coupon=1) 과 중복 방지.

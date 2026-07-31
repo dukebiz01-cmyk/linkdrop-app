@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
@@ -271,32 +271,24 @@ const RESERVATION_CALENDAR_CLASS_NAMES = {
 // today(초록 ring, 직전 fix) / marked(연한 초록 채움) / makerOpen(연한 초록
 // ring) 모두 초록 계열로 일관.
 // v7.2 셀 통일 — 모든 상태 rounded-lg 동일 (반쪽 라운드/원/직각 혼재 폐기).
-// 색만 상태별로 다르게. 진한 초록(#22c55e) = 선택/range 양끝, 연한 초록
-// (#dcfce7) = range middle 띠. 셀 간 간격 균일.
+// UI-5-T7-F4c(③) — 선택 시각 강화(Duke 목업 확정): 회색 5% 틴트 → 링고 블루(#1D4ED8,
+//   CardStudioPage49 :3634 정본) 채움 + 흰 글자. range middle = 연블루(#DBEAFE) 띠
+//   하이라이트. 가능일 마킹(ring)·슬롯 색과 계열 분리 = 선택이 항상 최상위로 읽힘.
 const CALENDAR_BUTTON_OVERRIDE = cn(
-  "[&_button[data-selected-single=true]]:!bg-text-strong/5",
-  "[&_button[data-selected-single=true]]:!text-text-strong",
+  "[&_button[data-selected-single=true]]:!bg-[#1D4ED8]",
+  "[&_button[data-selected-single=true]]:!text-white",
   "[&_button[data-selected-single=true]]:!font-bold",
   "[&_button[data-selected-single=true]]:!rounded-lg",
-  "[&_button[data-selected-single=true]]:!ring-1",
-  "[&_button[data-selected-single=true]]:!ring-inset",
-  "[&_button[data-selected-single=true]]:!ring-text-strong/20",
-  "[&_button[data-range-start=true]]:!bg-text-strong/5",
-  "[&_button[data-range-start=true]]:!text-text-strong",
+  "[&_button[data-range-start=true]]:!bg-[#1D4ED8]",
+  "[&_button[data-range-start=true]]:!text-white",
   "[&_button[data-range-start=true]]:!font-bold",
   "[&_button[data-range-start=true]]:!rounded-lg",
-  "[&_button[data-range-start=true]]:!ring-1",
-  "[&_button[data-range-start=true]]:!ring-inset",
-  "[&_button[data-range-start=true]]:!ring-text-strong/20",
-  "[&_button[data-range-end=true]]:!bg-text-strong/5",
-  "[&_button[data-range-end=true]]:!text-text-strong",
+  "[&_button[data-range-end=true]]:!bg-[#1D4ED8]",
+  "[&_button[data-range-end=true]]:!text-white",
   "[&_button[data-range-end=true]]:!font-bold",
   "[&_button[data-range-end=true]]:!rounded-lg",
-  "[&_button[data-range-end=true]]:!ring-1",
-  "[&_button[data-range-end=true]]:!ring-inset",
-  "[&_button[data-range-end=true]]:!ring-text-strong/20",
-  "[&_button[data-range-middle=true]]:!bg-transparent",
-  "[&_button[data-range-middle=true]]:!text-text-strong",
+  "[&_button[data-range-middle=true]]:!bg-[#DBEAFE]",
+  "[&_button[data-range-middle=true]]:!text-[#1D4ED8]",
   "[&_button[data-range-middle=true]]:!rounded-none",
 );
 
@@ -624,6 +616,26 @@ function EditableReservationCard({
   const selectedSeats =
     checkIn !== undefined ? slotMap.get(isoFromDate(checkIn)) : undefined;
 
+  // UI-5-T7-F4c(③) — 가능일 칩 탭 → 달력 직행: 월 이동(제어 month)+날짜 선택+달력 스크롤.
+  //   range 항목 = 시작~끝 range 선택 / single·multiple = 첫 날짜 체크인만(불연속 구간 오선택 방지).
+  //   closed 항목 = 비활성(호출부 disabled). 외부 계약(props·selection) 무변 — 로컬 완결.
+  const [calMonth, setCalMonth] = useState<Date | undefined>(undefined);
+  const calendarBoxRef = useRef<HTMLDivElement | null>(null);
+  function handleMakerItemTap(item: ReservationDateItem) {
+    if (item.status === "closed") return;
+    const isos = isoListForItem(item);
+    const first = makerDateFromIso(isos[0] ?? "");
+    if (!first) return;
+    const last =
+      item.mode === "range" && isos.length > 1
+        ? makerDateFromIso(isos[isos.length - 1] ?? "")
+        : null;
+    setCheckIn(first);
+    setCheckOut(last && last.getTime() > first.getTime() ? last : undefined);
+    setCalMonth(new Date(first.getFullYear(), first.getMonth(), 1));
+    calendarBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   return (
     <div className={cn("w-full max-w-full space-y-4", className)}>
       {campgroundInfo?.name ? <CampgroundInfoCard info={campgroundInfo} /> : null}
@@ -635,6 +647,7 @@ function EditableReservationCard({
       {/* CC#2 (b) mode seam — data-calendar-mode 로 모드 노출. 현재 date_range 만 구현.
           TODO(date_time_slot): 시간슬롯(slot_time) 선택 UI 분기. 현재는 date_range(range)로 폴백. */}
       <div
+        ref={calendarBoxRef}
         data-calendar-mode={calendarMode}
         className="w-full max-w-full overflow-hidden rounded-2xl border border-[#E8EDF3] bg-white p-4"
       >
@@ -642,7 +655,9 @@ function EditableReservationCard({
           mode="range"
           selected={calendarRange}
           onSelect={handleRangeSelect}
-          defaultMonth={defaultMonth}
+          /* F4c(③) — 제어 month: 가능일 칩 탭이 해당 월로 직행(defaultMonth 는 초기값 폴백). */
+          month={calMonth ?? defaultMonth}
+          onMonthChange={setCalMonth}
           numberOfMonths={1}
           showOutsideDays
           locale={ko}
@@ -682,45 +697,70 @@ function EditableReservationCard({
             메이커가 보낸 예약 가능 날짜
           </p>
           <p className="text-xs font-medium leading-relaxed tracking-ko text-text-muted">
-            원하는 날짜를 선택해 예약 가능 여부를 확인하세요.
+            날짜를 누르면 달력에서 바로 선택돼요.
           </p>
           <ul className="space-y-2">
-            {makerAvailableDates.map((item) => (
-              <li key={item.id} className="rounded-lg border border-border bg-bg p-3">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-bold tracking-ko text-text-strong">
-                    {makerItemDateLabel(item)}
-                  </p>
-                  <span
+            {/* F4c(③) — 칩 탭 가능화(closed 만 비활성) + 매장 슬롯 잔여 자리수 병기(slotMap —
+                첫 날짜 기준·데이터 있을 때만 정직 표시). 표시 내용·상태 배지 로직 무변. */}
+            {makerAvailableDates.map((item) => {
+              const chipSeats = slotMap.get(isoListForItem(item)[0] ?? "");
+              const closed = item.status === "closed";
+              return (
+                <li key={item.id} className="rounded-lg border border-border bg-bg">
+                  <button
+                    type="button"
+                    onClick={() => handleMakerItemTap(item)}
+                    disabled={closed}
                     className={cn(
-                      "shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold tracking-ko",
-                      item.status === "closed"
-                        ? "bg-surface text-text-subtle"
-                        : item.status === "almost_full"
-                          ? "bg-intent-warning-bg text-intent-warning"
-                          : "bg-intent-success-bg text-intent-success",
+                      "w-full min-h-[44px] p-3 text-left transition-colors",
+                      closed
+                        ? "cursor-not-allowed opacity-60"
+                        : "rounded-lg hover:bg-surface active:bg-surface",
                     )}
                   >
-                    {makerItemStatusLabel(item)}
-                  </span>
-                </div>
-                {item.eventTitle && (
-                  <p className="mt-1 text-xs font-semibold tracking-ko text-text-strong">
-                    {item.eventTitle}
-                  </p>
-                )}
-                {item.eventDescription && (
-                  <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
-                    {item.eventDescription}
-                  </p>
-                )}
-                {item.memo && (
-                  <p className="mt-1 text-[11px] font-medium tracking-ko text-text-subtle">
-                    {item.memo}
-                  </p>
-                )}
-              </li>
-            ))}
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="text-sm font-bold tracking-ko text-text-strong">
+                        {makerItemDateLabel(item)}
+                      </p>
+                      <span className="flex shrink-0 items-baseline gap-1.5">
+                        {chipSeats !== undefined && !closed && (
+                          <span className="rounded-lg bg-[#EEF3FE] px-2 py-1 text-[11px] font-semibold tracking-ko text-[#1D4ED8]">
+                            남은 {chipSeats}자리
+                          </span>
+                        )}
+                        <span
+                          className={cn(
+                            "rounded-lg px-2 py-1 text-[11px] font-semibold tracking-ko",
+                            closed
+                              ? "bg-surface text-text-subtle"
+                              : item.status === "almost_full"
+                                ? "bg-intent-warning-bg text-intent-warning"
+                                : "bg-intent-success-bg text-intent-success",
+                          )}
+                        >
+                          {makerItemStatusLabel(item)}
+                        </span>
+                      </span>
+                    </div>
+                    {item.eventTitle && (
+                      <p className="mt-1 text-xs font-semibold tracking-ko text-text-strong">
+                        {item.eventTitle}
+                      </p>
+                    )}
+                    {item.eventDescription && (
+                      <p className="mt-1 text-xs font-medium tracking-ko text-text-muted">
+                        {item.eventDescription}
+                      </p>
+                    )}
+                    {item.memo && (
+                      <p className="mt-1 text-[11px] font-medium tracking-ko text-text-subtle">
+                        {item.memo}
+                      </p>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
           <p className="text-[11px] font-medium leading-relaxed tracking-ko text-text-subtle">
             최종 예약 가능 여부는 예약처에서 확인해 주세요.

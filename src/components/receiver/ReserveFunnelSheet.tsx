@@ -2,6 +2,12 @@ import { useEffect, useState } from "react";
 import { Calendar, Phone, User, MessageSquare, CheckCircle2 } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { getSupabase } from "@/lib/supabase";
+import {
+  MY_RESV_OPEN_EVENT,
+  formatResvCode,
+  readMyReservation,
+  saveMyReservation,
+} from "@/lib/my-reservation";
 
 /**
  * 직접예약 (인앱 예약 신청) 시트 — A안. 네이버로 내보내지 않고 /d 안에서 예약 *신청*.
@@ -45,6 +51,8 @@ type Props = {
   funnelCoupon?: { id: string; title: string } | null;
   /** 쿠폰 발급 시도 후 콜백(true=성공). 부모의 ?coupon=1 자동발급 중복 방지. */
   onClaimed?: (claimed: boolean) => void;
+  /** UI-5-T7-F4c(①) — 접수 확인 화면 매장명(옵셔널 — 미전달 시 매장 줄 생략, 기존 호출 무영향). */
+  storeName?: string | null;
 };
 
 // done 화면 쿠폰 표시 상태 — none=결합 아님(예약 단일) / claimed=발급됨 / failed=발급 실패(나중에).
@@ -89,6 +97,7 @@ export function ReserveFunnelSheet({
   initialGuestCount,
   funnelCoupon,
   onClaimed,
+  storeName,
 }: Props) {
   const [step, setStep] = useState<Step>("form");
   const [checkIn, setCheckIn] = useState("");
@@ -103,6 +112,9 @@ export function ReserveFunnelSheet({
   // done 화면 분기 — 쿠폰 결합 발급 결과 + 예약이 이미 있던 케이스(23505).
   const [couponStatus, setCouponStatus] = useState<CouponDoneStatus>("none");
   const [resvDup, setResvDup] = useState(false);
+  // F4c(①) — 접수 확인 화면 재료: create_reservation_anon 반환 uuid(종래 버려지던 값 수취).
+  //   dup(23505)면 클라 저장분의 기존 번호로 폴백(없으면 번호 줄 생략 — 정직).
+  const [resvId, setResvId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -111,6 +123,7 @@ export function ReserveFunnelSheet({
       setErrorIsDup(false);
       setCouponStatus("none");
       setResvDup(false);
+      setResvId(null);
       // 캘린더 선택값 prefill (이중입력 방지). 연락처(이름/전화/메시지)는 매 오픈 초기화.
       setCheckIn(initialCheckIn ?? "");
       setCheckOut(initialCheckOut ?? "");
@@ -194,7 +207,8 @@ export function ReserveFunnelSheet({
         return;
       }
 
-      const { error: resErr } = await supabase.rpc("create_reservation_anon", {
+      // F4c(①) — 반환 uuid 수취(예약번호 재료 — 종래 error 만 구조분해해 버려지던 값).
+      const { data: newResvId, error: resErr } = await supabase.rpc("create_reservation_anon", {
         p_drop_id: dropId,
         p_share_event_id: shareEventId,
         p_visitor_id: visitorUuid,
@@ -212,6 +226,23 @@ export function ReserveFunnelSheet({
         p_catcher_user_id: userId ?? null,
       });
       let reservationDup = false;
+      // F4c(①②) — 신규 접수: 번호 확보 + 클라 저장(②장 배지 재료 — 드롭당 1건 키).
+      //   RSV-FIX2 동형: 단일 숙박이면 checkOut 저장 null(연박만 범위 저장).
+      if (!resErr && typeof newResvId === "string" && newResvId) {
+        setResvId(newResvId);
+        saveMyReservation({
+          v: 1,
+          reservationId: newResvId,
+          dropId,
+          shareUuid,
+          storeName: storeName ?? null,
+          checkIn,
+          checkOut: isMultiNight ? checkOut : null,
+          guestCount: Number(guestCount),
+          status: "pending",
+          createdAt: new Date().toISOString(),
+        });
+      }
       if (resErr) {
         // A4-2 — partial UNIQUE(uq_reservations_active_catcher) 위반.
         // 같은 catcher 가 같은 drop 에 활성(pending/confirmed) 예약을 이미 가짐.
@@ -223,6 +254,8 @@ export function ReserveFunnelSheet({
         //   쿠폰만 발급 시도(아래). 단일 예약 드롭(funnelCoupon 없음)이면 기존대로 정직 안내.
         if (isCatcherDup && funnelCoupon) {
           reservationDup = true;
+          // F4c(①) — 기존 활성 예약 번호 폴백(클라 저장분 — 없으면 번호 줄 생략).
+          setResvId(readMyReservation(dropId)?.reservationId ?? null);
         } else {
           console.error("[ReserveFunnel] create_reservation_anon failed:", resErr);
           setErrorIsDup(isCatcherDup);
@@ -300,6 +333,11 @@ export function ReserveFunnelSheet({
             onClose={() => onOpenChange(false)}
             couponStatus={couponStatus}
             resvDup={resvDup}
+            resvId={resvId}
+            storeName={storeName ?? null}
+            checkIn={checkIn}
+            checkOut={isMultiNight ? checkOut : ""}
+            guestCount={guestCount}
           />
         ) : (
           <ErrorBody errorMsg={errorMsg} isDup={errorIsDup} onRetry={() => setStep("form")} />
@@ -441,19 +479,33 @@ function FormBody(props: {
   );
 }
 
+// UI-5-T7-F4c(①) — 성공 팝업 → 접수 확인 화면 승격(Duke 목업 확정): 예약번호·매장·날짜·인원·
+//   상태 "확인 대기" + [내 예약 확인하기](주 — 시트 닫고 카드 배지 블록의 ①화면 재표시 신호) ·
+//   [카드로 돌아가기](부). 쿠폰 결합·dup 정직 분기(기존 카피)는 그대로 승계.
 function DoneBody({
   onClose,
   couponStatus,
   resvDup,
+  resvId,
+  storeName,
+  checkIn,
+  checkOut,
+  guestCount,
 }: {
   onClose: () => void;
   couponStatus: CouponDoneStatus;
   resvDup: boolean;
+  resvId: string | null;
+  storeName: string | null;
+  checkIn: string;
+  checkOut: string;
+  guestCount: string;
 }) {
   // 23505(이미 활성 예약) 결합 케이스 = 신규 접수 아님 → 제목만 정직하게 분기.
   const headline = resvDup ? "이미 예약 신청돼 있어요" : "예약 신청이 접수되었어요";
+  const summary = buildReserveSummary(checkIn, checkOut, guestCount);
   return (
-    <div className="space-y-5 pt-2">
+    <div className="space-y-4 pt-2">
       <div className="flex justify-center">
         <span className="flex size-14 items-center justify-center rounded-full bg-[#ECFDF5]">
           <CheckCircle2 className="size-7 text-[#059669]" strokeWidth={2} />
@@ -461,24 +513,75 @@ function DoneBody({
       </div>
       <div className="text-center">
         <h2 className="text-lg font-bold text-[#0F172A]">{headline}</h2>
-        <p className="mt-2 text-sm text-[#475569]">매장에서 확인 후 연락드려요.</p>
         <p className="mt-1 text-xs text-[#94A3B8]">신청만으로는 예약이 확정되지 않아요.</p>
-        {/* Phase 1 통합 — 쿠폰 결합 발급 결과 안내. none(단일 예약)이면 회귀 0(미표시). */}
-        {couponStatus === "claimed" ? (
-          <p className="mt-3 text-sm font-semibold text-[#059669]">쿠폰이 지갑에 담겼어요.</p>
-        ) : couponStatus === "failed" ? (
-          <p className="mt-3 text-sm font-medium text-[#475569]">
-            쿠폰은 잠시 후 지갑에서 확인해 주세요.
-          </p>
-        ) : null}
       </div>
-      <button
-        type="button"
-        onClick={onClose}
-        className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white"
-      >
-        확인
-      </button>
+
+      {/* 접수 요약 카드 — 번호·매장·날짜·인원·상태(있는 것만 정직 표시). */}
+      <div className="space-y-2 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3">
+        {resvId ? (
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-xs font-semibold text-[#94A3B8]">예약번호</span>
+            <span className="font-mono text-sm font-bold tracking-wide text-[#0F172A]">
+              {formatResvCode(resvId)}
+            </span>
+          </div>
+        ) : null}
+        {storeName ? (
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-xs font-semibold text-[#94A3B8]">매장</span>
+            <span className="text-sm font-bold text-[#0F172A]">{storeName}</span>
+          </div>
+        ) : null}
+        {summary ? (
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-xs font-semibold text-[#94A3B8]">예약 정보</span>
+            <span className="text-sm font-bold text-[#0F172A]">{summary}</span>
+          </div>
+        ) : null}
+        <div className="flex items-center justify-between gap-2 border-t border-[#E5E7EB] pt-2">
+          <span className="text-xs font-semibold text-[#94A3B8]">상태</span>
+          <span className="rounded-lg bg-[#FFFBEB] px-2 py-1 text-xs font-bold text-[#92400E]">
+            확인 대기
+          </span>
+        </div>
+        <p className="text-xs font-medium leading-relaxed text-[#64748B] [word-break:keep-all]">
+          사장님이 확인하면 확정돼요 — 매장에서 확인 후 카톡으로 연락드려요.
+        </p>
+      </div>
+
+      {/* Phase 1 통합 — 쿠폰 결합 발급 결과 안내. none(단일 예약)이면 회귀 0(미표시). */}
+      {couponStatus === "claimed" ? (
+        <p className="text-center text-sm font-semibold text-[#059669]">쿠폰이 지갑에 담겼어요.</p>
+      ) : couponStatus === "failed" ? (
+        <p className="text-center text-sm font-medium text-[#475569]">
+          쿠폰은 잠시 후 지갑에서 확인해 주세요.
+        </p>
+      ) : null}
+
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            // ②장 배지 블록(카드)의 ①화면 재표시 — 카드가 리스너로 오버레이를 연다.
+            if (typeof window !== "undefined")
+              window.dispatchEvent(new CustomEvent(MY_RESV_OPEN_EVENT));
+          }}
+          className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white"
+        >
+          내 예약 확인하기
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex w-full min-h-[44px] items-center justify-center rounded-2xl border border-[#E5E7EB] px-6 py-2.5 text-sm font-bold text-[#525252]"
+        >
+          카드로 돌아가기
+        </button>
+      </div>
+      <p className="text-center text-xs font-medium text-[#94A3B8] [word-break:keep-all]">
+        카드의 [내 예약]에서 언제든 다시 볼 수 있어요.
+      </p>
     </div>
   );
 }

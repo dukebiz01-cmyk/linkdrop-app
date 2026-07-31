@@ -41,6 +41,7 @@ import {
   ChevronDown,
   GitBranch,
   Building2,
+  CalendarCheck2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { type PriceOfferRow } from "@/components/ai-price-comparison-card";
@@ -92,6 +93,14 @@ import { trackReceiverEvent } from "@/lib/event-tracking";
 import { getBadgeLabel, getBadgeColor, type OfficialStatus } from "@/lib/helpers/drop-status";
 import { AbuseReportSheet } from "@/components/abuse-report-sheet";
 import { VARIANT_ACCENT } from "@/lib/mode-accent";
+// UI-5-T7-F4c(②) — [내 예약] 배지 재료(거울 승인 3호: 상단 배지 1블록 한정 — 본체 렌더 무변).
+import {
+  MY_RESV_OPEN_EVENT,
+  formatKDateIso,
+  formatResvCode,
+  readMyReservation,
+  type StoredMyReservation,
+} from "@/lib/my-reservation";
 
 // ============================================================
 // Types
@@ -652,6 +661,19 @@ export function InfoDropPage({
   isViewerBusiness,
 }: InfoDropPageProps) {
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
+  // UI-5-T7-F4c(②) — [내 예약] 배지: 클라 저장(read 시 만료 자동 소거) 있을 때만 표시,
+  //   탭/시트 신호(MY_RESV_OPEN_EVENT) = ①화면 재표시 오버레이. 저장 부재 = 현행 무변.
+  const [myResv, setMyResv] = useState<StoredMyReservation | null>(null);
+  const [myResvOpen, setMyResvOpen] = useState(false);
+  useEffect(() => {
+    setMyResv(readMyReservation(dropId));
+    const onOpen = () => {
+      setMyResv(readMyReservation(dropId));
+      setMyResvOpen(true);
+    };
+    window.addEventListener(MY_RESV_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(MY_RESV_OPEN_EVENT, onOpen);
+  }, [dropId]);
   // S3-4e — 법정 푸터 사업자 정보 인라인 펼침(Radix 0).
   const [bizOpen, setBizOpen] = useState(false);
   // FIX-59 — 영상 요약 접이(콘텐츠 존 · 고시 접이 문법 통일 — Radix 아코디언 대체). 재탭 닫힘.
@@ -1621,6 +1643,74 @@ export function InfoDropPage({
           </div>
         ) : null}
       </header>
+
+      {/* UI-5-T7-F4c(②) — [내 예약] 배지 1블록 (거울 승인 3호 한정 범위: 이 블록+오버레이가 전부 —
+          카드 본체·타 블록 렌더 무접촉). 클라 저장 있을 때만 렌더 = 예약 안 한 손님 화면 현행 무변. */}
+      {myResv ? (
+        <div className="px-6 pb-2">
+          <button
+            type="button"
+            data-testid="my-reservation-badge"
+            onClick={() => setMyResvOpen(true)}
+            className="flex min-h-[44px] w-full items-center justify-between rounded-2xl border border-[#C7D7FB] bg-[#EEF3FE] px-4 py-2.5 transition-colors hover:border-[#1D4ED8]"
+          >
+            <span className="inline-flex items-center gap-2 text-sm font-bold tracking-ko text-[#0F172A]">
+              <CalendarCheck2 className="size-4 text-[#1D4ED8]" strokeWidth={2.25} />
+              내 예약 · {formatKDateIso(myResv.checkIn)}
+              {myResv.checkOut ? `~${formatKDateIso(myResv.checkOut)}` : ""}
+            </span>
+            <span className="text-xs font-bold tracking-ko text-[#1D4ED8]">확인하기</span>
+          </button>
+        </div>
+      ) : null}
+      {myResvOpen && myResv ? (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center px-8">
+          <div className="absolute inset-0 bg-black/45" onClick={() => setMyResvOpen(false)} />
+          <div className="relative w-full max-w-[340px] rounded-2xl bg-white p-5 tracking-ko [box-shadow:0_24px_60px_-16px_rgba(10,14,22,0.5)]">
+            <p className="text-[16px] font-extrabold text-[#16161D]">내 예약</p>
+            <div className="mt-3 space-y-2 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] px-4 py-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-semibold text-[#94A3B8]">예약번호</span>
+                <span className="font-mono text-sm font-bold tracking-wide text-[#0F172A]">
+                  {formatResvCode(myResv.reservationId)}
+                </span>
+              </div>
+              {(myResv.storeName ?? local?.name?.trim()) ? (
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs font-semibold text-[#94A3B8]">매장</span>
+                  <span className="text-sm font-bold text-[#0F172A]">
+                    {myResv.storeName ?? local?.name?.trim()}
+                  </span>
+                </div>
+              ) : null}
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-semibold text-[#94A3B8]">날짜·인원</span>
+                <span className="text-sm font-bold text-[#0F172A]">
+                  {formatKDateIso(myResv.checkIn)}
+                  {myResv.checkOut ? `~${formatKDateIso(myResv.checkOut)}` : ""} ·{" "}
+                  {myResv.guestCount}명
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-[#E5E7EB] pt-2">
+                <span className="text-xs font-semibold text-[#94A3B8]">상태</span>
+                <span className="rounded-lg bg-[#FFFBEB] px-2 py-1 text-xs font-bold text-[#92400E]">
+                  확인 대기
+                </span>
+              </div>
+              <p className="text-xs font-medium leading-relaxed text-[#64748B] [word-break:keep-all]">
+                사장님이 확인하면 확정돼요 — 매장에서 확인 후 카톡으로 연락드려요.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMyResvOpen(false)}
+              className="mt-4 flex w-full min-h-[44px] items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="space-y-6 px-6" data-testid={`variant-${resolvedVariant}`}>
         {/* 4a — info variant 만 단일 CardBody(스튜디오 동일, 싱크로). 나머지 variant 는 아래 기존 렌더 0변경.
