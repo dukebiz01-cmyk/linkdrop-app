@@ -848,6 +848,9 @@ export function ProductRegisterForm({
             }
             myPriceKrw={Number(onlyDigits(value.price)) || null}
             onRefresh={() => setPriceBandRefresh((n) => n + 1)}
+            /* F3-2c-1 — 답부터 말하는 화면(49 opt-in): 구성 기준 헤드라인·내 가격 판정·표 접기·
+               게이트 확대(표본<5 미표시)·대표값 중앙값. 45 는 미전달 = 기존 렌더 무변. */
+            answerFirst
           />
         </div>
       )}

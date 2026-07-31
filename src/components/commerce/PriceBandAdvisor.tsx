@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { RotateCw, TrendingUp } from "lucide-react";
 
 // 공용 시세 어드바이저 — P5b(단위 헌법 1~3조) 표기 전면 교체.
@@ -30,6 +31,8 @@ export type WholesaleBlock = {
   min: number;
   max: number;
   avg: number;
+  /** F3-2c-1 ADDITIVE(edge v4) — 대표값 중앙값 전환 재료. 구응답엔 없음 → 평균 폴백. */
+  median?: number;
   market_count: number;
   as_of: string;
 };
@@ -56,6 +59,8 @@ export type AxisBlock = {
   min: number | null;
   avg: number | null;
   max: number | null;
+  /** F3-2c-1 ADDITIVE(edge v4) — 대표값 중앙값 전환 재료. 구응답엔 없음 → 평균 폴백. */
+  median?: number | null;
   n: number;
   excluded: number;
 };
@@ -201,6 +206,7 @@ export function PriceBandAdvisor({
   myPriceKrw,
   onRefresh,
   onAdjustPrice,
+  answerFirst,
 }: {
   priceBand: PriceBandResult | null;
   loading: boolean;
@@ -213,7 +219,13 @@ export function PriceBandAdvisor({
   onRefresh?: () => void;
   /** DR2-ⓑ ②B — "시세 참고해 판매가 조정하기" → 판매가 입력 포커스 스크롤. */
   onAdjustPrice?: () => void;
+  /** F3-2c-1 ADDITIVE(49 opt-in) — 답부터 말하는 화면: 구성 기준 헤드라인 + 내 가격 판정(품종 시)
+   *  + 원시 표 [자세히 보기] 접기 + 게이트 확대(표본<5 축 행 미표시 — Duke 재판정, 45 FIX-45b 무접촉)
+   *  + 대표값 평균→중앙값(edge v4 median · 구응답 평균 폴백). 미전달 = 기존 렌더 100% 동일. */
+  answerFirst?: boolean;
 }) {
+  // F3-2c-1(2) — [자세히 보기] 접기 상태(answerFirst 전용 · 기본 접힘). 훅은 조기 return 앞(규칙).
+  const [showDetail, setShowDetail] = useState(false);
   if (loading) {
     return (
       <div className="mt-2 space-y-2 rounded-xl border border-border bg-surface/40 px-4 py-3">
@@ -236,11 +248,19 @@ export function PriceBandAdvisor({
     );
   }
 
-  const w = priceBand.wholesale ?? null;
-  const o =
+  // F3-2c-1(3) — answerFirst 정직 게이트 확대(Duke 재판정): 표본 <HIDE_N(5) 축은 행 자체 미표시
+  //   (숨김 사실은 hiddenNote 로 상시 고지 — 침묵 금지 유지). FIX-45b(n<3 흐림·미렌더 금지)는
+  //   기본 모드(45 소비) 그대로 — answerFirst 미전달 시 아래 전부 기존 값과 동일.
+  const HIDE_N = 5;
+  const wRaw = priceBand.wholesale ?? null;
+  const wHidden = answerFirst === true && wRaw != null && wRaw.market_count < HIDE_N;
+  const w = wHidden ? null : wRaw;
+  const oRaw =
     priceBand.online && priceBand.online.status === "ok" && priceBand.online.min != null
       ? priceBand.online
       : null;
+  const oHidden = answerFirst === true && oRaw != null && oRaw.converted_count < HIDE_N;
+  const o = oHidden ? null : oRaw;
   const excludedCount = priceBand.online?.excluded_count ?? 0;
   const filteredCount = priceBand.online?.filtered_count ?? 0;
   // P5d 인터넷 신뢰 판정 — confidence "low" 아님 + 표본 ≥10. 구응답(confidence 없음)은 표본만.
@@ -310,21 +330,43 @@ export function PriceBandAdvisor({
   const totalKg = composition ? composition.totalKg : null;
 
   // T3a-ⓑ [1] 이원축 소비 — unit축(개당가) 우선, kg축 병기. 구응답(axes 없음)은 기존 o 폴백.
+  //   F3-2c-1(3) — answerFirst: n<HIDE_N 축 미표시(위 게이트와 동일 원칙).
   const axes = priceBand.online_axes ?? null;
-  const unitAxis = axes && axes.unit.n > 0 && axes.unit.avg != null ? axes.unit : null;
-  const kgAxisBlk = axes && axes.kg.n > 0 && axes.kg.avg != null ? axes.kg : null;
+  const unitAxisRaw = axes && axes.unit.n > 0 && axes.unit.avg != null ? axes.unit : null;
+  const unitHidden = answerFirst === true && unitAxisRaw != null && unitAxisRaw.n < HIDE_N;
+  const unitAxis = unitHidden ? null : unitAxisRaw;
+  const kgAxisRaw = axes && axes.kg.n > 0 && axes.kg.avg != null ? axes.kg : null;
+  const kgHidden = answerFirst === true && kgAxisRaw != null && kgAxisRaw.n < HIDE_N;
+  const kgAxisBlk = kgHidden ? null : kgAxisRaw;
+  // 숨김 고지는 침묵 금지 줄(캡션)의 문구 대체로 — "데이터 없음"과 "표본 부족 숨김"을 구분(정직).
+  // F3-2c-1(4) — 대표값 평균→중앙값 전환(이상치 1건이 평균을 끌고 다니는 것 방지). edge v4
+  //   median 이 가시 블록 전부에 있을 때만 전환(혼합 시 평균 유지 — 라벨-값 불일치 금지).
+  //   answerFirst 미전달 = 항상 평균(45 무변).
+  const visibleMedians = [
+    w ? w.median : undefined,
+    unitAxis ? unitAxis.median : undefined,
+    kgAxisBlk ? kgAxisBlk.median : undefined,
+    !unitAxis && !kgAxisBlk && o ? o.median : undefined,
+  ].filter((v) => v !== undefined);
+  const useMedian =
+    answerFirst === true && visibleMedians.length > 0 && visibleMedians.every((v) => v != null);
+  const repLabel = useMedian ? "중앙값" : "평균";
+  const wRep = w ? (useMedian ? (w.median as number) : w.avg) : null;
+  const unitRep = unitAxis ? (useMedian ? (unitAxis.median as number) : (unitAxis.avg as number)) : null;
+  const kgRep = kgAxisBlk ? (useMedian ? (kgAxisBlk.median as number) : (kgAxisBlk.avg as number)) : null;
+  const oRep = o ? (useMedian && o.median != null ? o.median : oAvg) : null;
   // 개당 번역 가능성 — packType "단위"(무게 단위 판매)는 '개' 의미가 없어 개당 축 번역 제외.
   const countMeaningful =
     composition != null && composition.unitCount >= 1 && composition.packType !== "단위";
   // ◇인터넷 앵커 값 — 번역 가능한 축 우선: unit축×내 개수 → kg축×내 kg → 구응답 oAvg×내 kg.
-  //   전부 불가 → 점 생략(표 행만 — 생비교 금지).
+  //   전부 불가 → 점 생략(표 행만 — 생비교 금지). F3-2c-1(4) — 대표값(rep = 중앙값|평균) 소비.
   const internetAnchorValue =
     unitAxis && countMeaningful
-      ? (unitAxis.avg as number) * (composition as PriceComposition).unitCount
+      ? (unitRep as number) * (composition as PriceComposition).unitCount
       : kgAxisBlk && totalKg != null && totalKg > 0
-        ? (kgAxisBlk.avg as number) * totalKg
-        : o && oAvg != null && totalKg != null && totalKg > 0
-          ? oAvg * totalKg
+        ? (kgRep as number) * totalKg
+        : o && oRep != null && totalKg != null && totalKg > 0
+          ? oRep * totalKg
           : null;
   // FIX-45b — ◇앵커가 실제 소비한 축의 표본 n(위와 동일 선택 체인) — n<3 = 점선·반투명 강등.
   const internetAnchorN =
@@ -360,7 +402,12 @@ export function PriceBandAdvisor({
   if (totalKg != null && totalKg > 0 && myPriceKrw != null && myPriceKrw > 0) {
     if (w) {
       // FIX-45b — n<3 축 마커는 점선·반투명 강등(low) — 값 자체는 유지(실값 미렌더 금지).
-      anchorPoints.push({ key: "wholesale", label: "도매", value: w.avg * totalKg, low: !wTrusted });
+      anchorPoints.push({
+        key: "wholesale",
+        label: "도매",
+        value: (wRep as number) * totalKg,
+        low: !wTrusted,
+      });
     }
     anchorPoints.push({ key: "mine", label: "내 가격", value: myPriceKrw });
     // F4/T3a-ⓑ — 인터넷 점(마름모) = 번역 가능한 축의 평균값(3값 상세는 표 행에 — 바 라벨 과밀 금지).
@@ -399,7 +446,7 @@ export function PriceBandAdvisor({
   }
   // 격차 문구 2축 — 순수 산수(권유 어휘 0). 도매축 = 평균 대비 차액 / 인터넷축 = 밴드 위치 사실.
   //   FIX-45b — 비교문("~보다 +N원")은 신뢰 축(n≥3)만 생성. n<3 축 기준 비교 = 미생성.
-  const wholesaleTotal = totalKg != null && totalKg > 0 && w ? w.avg * totalKg : null;
+  const wholesaleTotal = totalKg != null && totalKg > 0 && w ? (wRep as number) * totalKg : null;
   const gapWholesale =
     wTrusted && wholesaleTotal != null && myPriceKrw != null && myPriceKrw > 0
       ? myPriceKrw - wholesaleTotal
@@ -431,25 +478,56 @@ export function PriceBandAdvisor({
           ? "인터넷 시세보다 높아요"
           : "인터넷 시세와 나란해요"
       : null;
+  // F3-2c-1(1) — 내 가격 판정 1줄(answerFirst + 품종 선택 시): 위치 사실만(§0 — 권유·단정 0,
+  //   "상위권/하위권" = 분포 내 위치 사실). 기준 = 품종 필터 적용된 인터넷 축(서버 부분집합 산출)
+  //   — internetBandTotal(min/max) + 대표값(rep) 분할. 축·구성·내 가격 중 하나라도 없으면 미렌더.
+  const internetRepTotal =
+    unitAxis && countMeaningful && unitRep != null
+      ? unitRep * (composition as PriceComposition).unitCount
+      : kgAxisBlk && kgRep != null && totalKg != null && totalKg > 0
+        ? kgRep * totalKg
+        : o && oRep != null && totalKg != null && totalKg > 0
+          ? oRep * totalKg
+          : null;
+  const verdictLine =
+    answerFirst === true &&
+    kindFilter != null &&
+    !kindFilter.insufficient &&
+    myPriceKrw != null &&
+    myPriceKrw > 0 &&
+    internetBandTotal != null &&
+    internetRepTotal != null
+      ? (() => {
+          const kind = kindFilter.requested;
+          const my = myPriceKrw.toLocaleString("ko-KR");
+          if (myPriceKrw > internetBandTotal.max)
+            return `내 가격 ${my}원은 ${kind} 기준 최고가보다 높아요`;
+          if (myPriceKrw >= internetRepTotal) return `내 가격 ${my}원은 ${kind} 기준 상위권이에요`;
+          if (myPriceKrw >= internetBandTotal.min)
+            return `내 가격 ${my}원은 ${kind} 기준 하위권이에요`;
+          return `내 가격 ${my}원은 ${kind} 기준 최저가보다 낮아요`;
+        })()
+      : null;
+
   // T3a-ⓑ [2] 박스 번역층 — 순수 산수 1줄씩(구성 미상이면 전부 생략 · 권유 어휘 0).
   const translationLines: string[] = [];
   if (composition && totalKg != null && totalKg > 0) {
     if (unitAxis && countMeaningful) {
       translationLines.push(
-        `내 구성(${composition.unitCount}개들이)으로 치면 인터넷 평균 약 ${fmtWonH((unitAxis.avg as number) * composition.unitCount)}원 상당`,
+        `내 구성(${composition.unitCount}개들이)으로 치면 인터넷 ${repLabel} 약 ${fmtWonH((unitRep as number) * composition.unitCount)}원 상당`,
       );
     } else if (kgAxisBlk) {
       translationLines.push(
-        `내 구성(${totalKg}kg)으로 치면 인터넷 평균 약 ${fmtWonH((kgAxisBlk.avg as number) * totalKg)}원 상당`,
+        `내 구성(${totalKg}kg)으로 치면 인터넷 ${repLabel} 약 ${fmtWonH((kgRep as number) * totalKg)}원 상당`,
       );
-    } else if (o && oAvg != null) {
+    } else if (o && oRep != null) {
       translationLines.push(
-        `내 구성(${totalKg}kg)으로 치면 인터넷 평균 약 ${fmtWonH(oAvg * totalKg)}원 상당`,
+        `내 구성(${totalKg}kg)으로 치면 인터넷 ${repLabel} 약 ${fmtWonH(oRep * totalKg)}원 상당`,
       );
     }
     if (w) {
       translationLines.push(
-        `내 구성(${totalKg}kg)으로 치면 도매 평균 약 ${fmtWonH(w.avg * totalKg)}원 상당`,
+        `내 구성(${totalKg}kg)으로 치면 도매 ${repLabel} 약 ${fmtWonH((wRep as number) * totalKg)}원 상당`,
       );
     }
     if (retailKg) {
@@ -467,19 +545,28 @@ export function PriceBandAdvisor({
       </div>
 
       {/* ① 헤드라인 — 개당(구성 있을 때) / kg당(없을 때). 26px.
-          FIX-45b — 신뢰 축(n≥3)만으로 산출. 신뢰 축 전무 시 저표본 실값 흐림 + "참고 부족" 병기. */}
+          FIX-45b — 신뢰 축(n≥3)만으로 산출. 신뢰 축 전무 시 저표본 실값 흐림 + "참고 부족" 병기.
+          F3-2c-1(1) — answerFirst + 구성: "내 구성(N개들이) 기준 X~Y원"(답부터 — 내 판매 단위 총액). */}
       <p
         className={`text-[26px] font-bold leading-tight tabular-nums tracking-ko text-text-strong${
           kgBandLow ? " opacity-50" : ""
         }`}
       >
-        {hasPerUnit
-          ? `개당 약 ${fmtWonH(toUnit(kgBand.min))}~${fmtWonH(toUnit(kgBand.max))}원`
-          : `kg당 약 ${fmtWonH(kgBand.min)}~${fmtWonH(kgBand.max)}원`}
+        {answerFirst && composition && totalKg != null && totalKg > 0
+          ? `내 구성(${compositionLabel ?? `${composition.unitCount}개들이`}) 기준 약 ${fmtWonH(kgBand.min * totalKg)}~${fmtWonH(kgBand.max * totalKg)}원`
+          : hasPerUnit
+            ? `개당 약 ${fmtWonH(toUnit(kgBand.min))}~${fmtWonH(toUnit(kgBand.max))}원`
+            : `kg당 약 ${fmtWonH(kgBand.min)}~${fmtWonH(kgBand.max)}원`}
       </p>
       {kgBandLow ? (
         <p className="text-[11px] font-semibold tracking-ko text-text-subtle">
           참고 부족 ({kgBandLowNote}) — 표본이 적어 참고만 해 주세요
+        </p>
+      ) : null}
+      {/* F3-2c-1(1) — 내 가격 판정 1줄(품종 선택 시 · 위치 사실만). */}
+      {verdictLine ? (
+        <p className="text-[13px] font-semibold tabular-nums tracking-ko text-text-strong [word-break:keep-all]">
+          {verdictLine}
         </p>
       ) : null}
 
@@ -498,6 +585,18 @@ export function PriceBandAdvisor({
           셀 안 문장 금지 — 숫자만(tabular 우측 정렬), 축 라벨은 행 머리("kg당"/"개당") 아래 줄.
           "약"·단위는 표 아래 캡션 1회. 320~375px 한 행 한 줄(가로 스크롤 금지 — 숫자 11px·기준 10px).
           문장류(제외·표본부족·품종·소매 기준·1개월 대비)는 전폭 캡션 블록으로 이동. */}
+      {/* F3-2c-1(2) — answerFirst: 원시 표(도매·인터넷 축들) [자세히 보기] 접기(기본 접힘 —
+          보고 싶은 사람만). 기본 모드(45)는 상시 표시(무변). */}
+      {answerFirst ? (
+        <button
+          type="button"
+          onClick={() => setShowDetail((v) => !v)}
+          className="flex w-full min-h-[44px] items-center justify-center rounded-xl border border-border bg-bg px-3 text-xs font-semibold tracking-ko text-text-muted hover:border-text-muted"
+        >
+          {showDetail ? "시세 표 접기" : "자세히 보기"}
+        </button>
+      ) : null}
+      {!answerFirst || showDetail ? (
       <table className="w-full border-collapse tracking-ko" style={{ tableLayout: "fixed" }}>
         {/* STUDIO-fix3 H3 — 열 트랙: 행머리 40 고정·숫자 3열 균등(fixed 잔여 균등분)·기준 56
             우측 끝 고정. 열 간격은 pl-1(4px — px-2 는 320px 한 줄·스크롤 0 조건과 충돌해 축소). */}
@@ -517,7 +616,7 @@ export function PriceBandAdvisor({
               최저
             </th>
             <th className="pb-1 pl-1 text-right font-semibold" scope="col">
-              평균
+              {repLabel}
             </th>
             <th className="pb-1 pl-1 text-right font-semibold" scope="col">
               최고
@@ -540,7 +639,7 @@ export function PriceBandAdvisor({
                 {fmtWonH(w.min)}
               </td>
               <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(w.avg)}
+                {fmtWonH(wRep as number)}
               </td>
               <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(w.max)}
@@ -585,7 +684,7 @@ export function PriceBandAdvisor({
                 {(unitAxis.min as number).toLocaleString("ko-KR")}
               </td>
               <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {(unitAxis.avg as number).toLocaleString("ko-KR")}
+                {(unitRep as number).toLocaleString("ko-KR")}
               </td>
               <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {(unitAxis.max as number).toLocaleString("ko-KR")}
@@ -611,7 +710,7 @@ export function PriceBandAdvisor({
                 {fmtWonH(kgAxisBlk.min as number)}
               </td>
               <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(kgAxisBlk.avg as number)}
+                {fmtWonH(kgRep as number)}
               </td>
               <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(kgAxisBlk.max as number)}
@@ -637,7 +736,7 @@ export function PriceBandAdvisor({
                 {fmtWonH(oBand.min)}
               </td>
               <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
-                {fmtWonH(oAvg)}
+                {fmtWonH(oRep as number)}
               </td>
               <td className="whitespace-nowrap pl-1 text-right text-[11px] font-medium tabular-nums text-text-strong">
                 {fmtWonH(oBand.max)}
@@ -653,6 +752,7 @@ export function PriceBandAdvisor({
           ) : null}
         </tbody>
       </table>
+      ) : null}
 
       {/* G2 캡션 블록 — 문장은 전폭 캡션에서만(셀 안 금지). 단위·약 표기 1회. */}
       <div className="space-y-1">
@@ -666,51 +766,60 @@ export function PriceBandAdvisor({
             보여드리지 않아요.
           </p>
         )}
-        <p className="text-[10px] font-medium tracking-ko text-text-subtle">
-          단위: 원 · kg당 값은 백원 반올림(약) · 소매 평균은 상·중품 중간값 · 참고용
-        </p>
+        {/* F3-2c-1(2) — 표 소속 캡션(단위·품종 분포·소매 기준·이력·제외)은 표와 함께 접힘.
+            답 소속(품종 기준·침묵 금지 줄)은 상시. 기본 모드 = 전부 상시(무변). */}
+        {!answerFirst || showDetail ? (
+          <p className="text-[10px] font-medium tracking-ko text-text-subtle">
+            단위: 원 · kg당 값은 백원 반올림(약) · 소매 평균은 상·중품 중간값 · 참고용
+          </p>
+        ) : null}
         {/* T3a-ⓑ [3]→F3-2b — 품종 정보: kind 필터 성립 = "품종 기준"(정식 축) / 미필터 = "품종 섞임"
             명시(정확 원칙 — 혼합 시세임을 숨기지 않는다). */}
         {kindFilter && !kindFilter.insufficient ? (
           <p className="text-[11px] font-semibold tracking-ko text-text-muted">
             {kindFilter.requested} 품종 기준 · 온라인 {kindFilter.matched_count}건
           </p>
-        ) : onlineKindsTop.length > 0 ? (
+        ) : onlineKindsTop.length > 0 && (!answerFirst || showDetail) ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">
             품종 섞임: {onlineKindsTop.map(([k, n]) => `${k} ${n}`).join(" · ")}
           </p>
         ) : null}
         {/* T3a-ⓑ [3] — 소매 조사 품종 기준(retail_kind). */}
-        {retailKg && retailKindLabel ? (
+        {retailKg && retailKindLabel && (!answerFirst || showDetail) ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">
             소매 기준: {retailKindLabel}
           </p>
         ) : null}
         {/* T3a-ⓑ [4] — 1개월 전 대비(사실만 · 예측 어휘 0). */}
-        {retailKg && prevMonthKg != null && prevPct != null ? (
+        {retailKg && prevMonthKg != null && prevPct != null && (!answerFirst || showDetail) ? (
           <p className="text-[11px] font-medium tabular-nums tracking-ko text-text-muted">
             소매 1개월 전 kg당 약 {fmtWonH(prevMonthKg)}원 (
             {prevPct === 0 ? "변동 없음" : prevPct > 0 ? `+${prevPct}%` : `−${Math.abs(prevPct)}%`})
           </p>
         ) : null}
         {/* P5d 강등 — 구응답 폴백 행의 표본 부족 표시(캡션으로 이동). */}
-        {!unitAxis && !kgAxisBlk && o && !onlineTrusted ? (
+        {!unitAxis && !kgAxisBlk && o && !onlineTrusted && (!answerFirst || showDetail) ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">
             인터넷: 표본 부족 · 참고만
           </p>
         ) : null}
-        {exclusionLine ? (
+        {exclusionLine && (!answerFirst || showDetail) ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">{exclusionLine}</p>
         ) : null}
-        {/* DR2-fix1 F4ⓒ — 데이터 없는 소스 침묵 금지(도매·인터넷·소매 동일 원칙). */}
+        {/* DR2-fix1 F4ⓒ — 데이터 없는 소스 침묵 금지(도매·인터넷·소매 동일 원칙).
+            F3-2c-1(3) — 게이트 숨김(표본<5)은 "데이터 없음"과 다른 문구로 정직 고지(상시). */}
         {!w ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">
-            도매가: 표시할 시세가 없어요
+            {wHidden
+              ? "도매가: 표본이 적어(5건 미만) 표시하지 않았어요"
+              : "도매가: 표시할 시세가 없어요"}
           </p>
         ) : null}
         {!(unitAxis || kgAxisBlk || (o && oBand && oAvg != null)) ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle">
-            인터넷가: 표시할 유사상품이 없어요
+            {unitHidden || kgHidden || oHidden
+              ? "인터넷가: 표본이 적어(5건 미만) 표시하지 않았어요"
+              : "인터넷가: 표시할 유사상품이 없어요"}
           </p>
         ) : null}
         {!retailKg ? (
@@ -759,10 +868,10 @@ export function PriceBandAdvisor({
       {gapWholesale != null ? (
         <p className="text-[12px] font-medium tabular-nums tracking-ko text-text-strong">
           {gapWholesale > 0
-            ? `도매(평균)보다 +${fmtWonH(gapWholesale)}원이 생산자님 몫`
+            ? `도매(${repLabel})보다 +${fmtWonH(gapWholesale)}원이 생산자님 몫`
             : gapWholesale < 0
-              ? `도매(평균)보다 약 ${fmtWonH(-gapWholesale)}원 낮은 가격이에요`
-              : `도매(평균)와 같은 가격이에요`}
+              ? `도매(${repLabel})보다 약 ${fmtWonH(-gapWholesale)}원 낮은 가격이에요`
+              : `도매(${repLabel})와 같은 가격이에요`}
         </p>
       ) : null}
       {onlineRelation ? (
@@ -784,9 +893,10 @@ export function PriceBandAdvisor({
       ) : null}
 
       {/* ④ 내 판매단위 강조 — 구성 입력이 있을 때만. 우측 정렬 금액.
-          DR2-ⓑ: compositionLabel 있으면 선언문 라벨(괄호 축약·모드 불일치 라벨 제거). */}
+          DR2-ⓑ: compositionLabel 있으면 선언문 라벨(괄호 축약·모드 불일치 라벨 제거).
+          F3-2c-1(1) — answerFirst 는 헤드라인이 같은 값(구성 기준 총액)을 이미 답으로 제시 → 중복 미표시. */}
       {/* FIX-45b — 헤드라인 밴드 재사용처: 저표본 밴드(kgBandLow)면 동일 흐림 강등. */}
-      {composition ? (
+      {composition && !answerFirst ? (
         <div
           className={`flex items-baseline justify-between gap-2 rounded-lg bg-surface px-3 py-2.5${
             kgBandLow ? " opacity-50" : ""
