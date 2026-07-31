@@ -33,6 +33,9 @@ export type WholesaleBlock = {
   avg: number;
   /** F3-2c-1 ADDITIVE(edge v4) — 대표값 중앙값 전환 재료. 구응답엔 없음 → 평균 폴백. */
   median?: number;
+  /** F3-2c-f ADDITIVE(edge v4.1) — 사분위 락(범위 = Q1~Q3). 구응답엔 없음 → 극값 정직 폴백. */
+  q1?: number;
+  q3?: number;
   market_count: number;
   as_of: string;
 };
@@ -61,6 +64,9 @@ export type AxisBlock = {
   max: number | null;
   /** F3-2c-1 ADDITIVE(edge v4) — 대표값 중앙값 전환 재료. 구응답엔 없음 → 평균 폴백. */
   median?: number | null;
+  /** F3-2c-f ADDITIVE(edge v4.1) — 사분위 락(범위 = Q1~Q3). 구응답엔 없음 → 극값 정직 폴백. */
+  q1?: number | null;
+  q3?: number | null;
   n: number;
   excluded: number;
 };
@@ -500,20 +506,9 @@ export function PriceBandAdvisor({
           ? "인터넷 시세보다 높아요"
           : "인터넷 시세와 나란해요"
       : null;
-  // F3-2c-e(3) — 내 가격 판정: 3단 통일(보통 범위 안/위/아래 — 위치 사실만 · §0 권유·단정 0).
-  //   기준 밴드 = internetBandTotal(기존 축 선택 체인 그대로 — F3-2c 판정 로직 재사용, 문구만 교체).
-  //   품종 맥락은 ① 기준 태그줄 칩이 담당(구 "대학찰 기준 상위권" 문장 폐기 — 캡션 일원화의 일부).
-  const verdict3 =
-    answerFirst === true && myPriceKrw != null && myPriceKrw > 0 && internetBandTotal != null
-      ? myPriceKrw > internetBandTotal.max
-        ? "위예요"
-        : myPriceKrw < internetBandTotal.min
-          ? "아래예요"
-          : "안이에요"
-      : null;
-
   // F3-2c-e(1)② — 표준표 축 재료: 기존 선택 체인(internetBandTotal 동일 순서) 재사용 · 신규 통계 0.
-  //   "보통 범위" = IQR 통과 극값(edge iqrTrim kept min~max — 기존 값 그대로) / 대표값 = rep(중앙값|평균).
+  //   F3-2c-f — 사분위 락 증축: median/q1/q3 동봉(edge v4.1 ADDITIVE · 구응답 폴백은 아래 stdQ 게이트).
+  //   구응답 폴백 축(o)은 P5d p25/p75/median 기존 필드를 그대로 소비(신규 통계 0).
   const stdAxis =
     unitAxis && countMeaningful && unitAxis.min != null && unitAxis.max != null
       ? {
@@ -521,6 +516,10 @@ export function PriceBandAdvisor({
           rep: unitRep as number,
           min: unitAxis.min,
           max: unitAxis.max,
+          med: unitAxis.median ?? null,
+          q1: unitAxis.q1 ?? null,
+          q3: unitAxis.q3 ?? null,
+          n: unitAxis.n,
           isUnit: true,
         }
       : kgAxisBlk && kgAxisBlk.min != null && kgAxisBlk.max != null
@@ -529,11 +528,53 @@ export function PriceBandAdvisor({
             rep: kgRep as number,
             min: kgAxisBlk.min,
             max: kgAxisBlk.max,
+            med: kgAxisBlk.median ?? null,
+            q1: kgAxisBlk.q1 ?? null,
+            q3: kgAxisBlk.q3 ?? null,
+            n: kgAxisBlk.n,
             isUnit: false,
           }
         : o && oBand && oRep != null
-          ? { unitLabel: "kg당", rep: oRep, min: oBand.min, max: oBand.max, isUnit: false }
+          ? {
+              unitLabel: "kg당",
+              rep: oRep,
+              min: oBand.min,
+              max: oBand.max,
+              med: o.median ?? null,
+              q1: o.p25 ?? null,
+              q3: o.p75 ?? null,
+              n: o.converted_count,
+              isUnit: false,
+            }
           : null;
+  // F3-2c-f — 사분위(Q1~Q3 = 거래 절반 범위). 부재(구응답·미배포 캐시) = 사분위 의존 표기 전부
+  //   미표시/정직 폴백(라벨-값 불일치 금지 — repLabel 판례 동형).
+  const stdQ =
+    stdAxis && stdAxis.q1 != null && stdAxis.q3 != null ? { q1: stdAxis.q1, q3: stdAxis.q3 } : null;
+  // 내 구성 환산 사분위 밴드(요약 2줄·"내 구성이면" 행·판정 공용 — 배수 = internetBandTotal 동일 규칙).
+  const qBandTotal =
+    stdQ && stdAxis && composition && totalKg != null && totalKg > 0
+      ? stdAxis.isUnit
+        ? { min: stdQ.q1 * composition.unitCount, max: stdQ.q3 * composition.unitCount }
+        : { min: stdQ.q1 * totalKg, max: stdQ.q3 * totalKg }
+      : null;
+  // F3-2c-e(3)→f(5) — 내 가격 판정: 기존 3단 로직 재사용·기준만 사분위(Q1~Q3 환산)로 교체 +
+  //   문구 교체(통계 사실 일치 — "보통" = 거래 절반 범위). 사분위 부재 = 미표시(§0 정직).
+  const verdict3 =
+    answerFirst === true && myPriceKrw != null && myPriceKrw > 0 && qBandTotal != null
+      ? myPriceKrw > qBandTotal.max
+        ? "보통보다 비싸게 파는 편이에요"
+        : myPriceKrw < qBandTotal.min
+          ? "보통보다 싸게 파는 편이에요"
+          : "보통 수준이에요"
+      : null;
+  // F3-2c-f(4) — 극값 강등 미니 바: 내 가격 마커 위치(축 단위 환산 — 구성 있어야 성립·없으면 마커 생략).
+  const myAxisUnitPrice =
+    myPriceKrw != null && myPriceKrw > 0 && stdAxis && composition && totalKg != null && totalKg > 0
+      ? stdAxis.isUnit
+        ? myPriceKrw / composition.unitCount
+        : myPriceKrw / totalKg
+      : null;
   // 행 사유(자리 유지 원칙): 게이트 숨김(표본<5)과 "데이터 없음"을 구분(정직 — 침묵 금지 문구의 위치 이동).
   const stdReason =
     unitHidden || kgHidden || oHidden
@@ -786,21 +827,28 @@ export function PriceBandAdvisor({
         ok: stdAxis != null,
       },
       {
-        label: "보통 범위",
-        value: stdAxis
-          ? `${stdAxis.unitLabel} 약 ${fmtStd(stdAxis.min, stdAxis.isUnit)}~${fmtStd(stdAxis.max, stdAxis.isUnit)}원`
-          : stdReason,
+        // F3-2c-f(3) — 범위 행 = Q1~Q3(극값 폐지 — 폭 증폭 해소). 사분위 부재(구응답) = 극값 폴백하되
+        //   라벨을 "전체 범위"로 정직 전환(라벨-값 불일치 금지 — repLabel 판례 동형).
+        label: stdQ ? "보통 범위" : "전체 범위",
+        value: stdQ
+          ? `${(stdAxis as NonNullable<typeof stdAxis>).unitLabel} 약 ${fmtStd(stdQ.q1, (stdAxis as NonNullable<typeof stdAxis>).isUnit)}~${fmtStd(stdQ.q3, (stdAxis as NonNullable<typeof stdAxis>).isUnit)}원`
+          : stdAxis
+            ? `${stdAxis.unitLabel} 약 ${fmtStd(stdAxis.min, stdAxis.isUnit)}~${fmtStd(stdAxis.max, stdAxis.isUnit)}원`
+            : stdReason,
         ok: stdAxis != null,
       },
       {
+        // F3-2c-f(3) — 구성 환산도 사분위 우선(qBandTotal), 부재 시 기존 극값 환산 폴백.
         label: "내 구성이면",
         value:
           composition && totalKg != null && totalKg > 0
-            ? internetBandTotal
-              ? `약 ${fmtWonH(internetBandTotal.min)}~${fmtWonH(internetBandTotal.max)}원`
-              : stdReason
+            ? qBandTotal
+              ? `약 ${fmtWonH(qBandTotal.min)}~${fmtWonH(qBandTotal.max)}원`
+              : internetBandTotal
+                ? `약 ${fmtWonH(internetBandTotal.min)}~${fmtWonH(internetBandTotal.max)}원`
+                : stdReason
             : "구성을 입력하면 보여드려요",
-        ok: composition != null && internetBandTotal != null,
+        ok: composition != null && (qBandTotal != null || internetBandTotal != null),
       },
     ];
     return (
@@ -830,8 +878,27 @@ export function PriceBandAdvisor({
             보여드리지 않아요.
           </p>
         )}
+        {/* F3-2c-f(2) — 요약 문장 승격(칩 아래·표준표 위 — 요약이 표보다 먼저): Q1~Q3 = 거래 절반.
+            사분위 부재(구응답) = 미표시(기존 3행만 — 라벨-값 불일치 금지 동형). */}
+        {stdQ && stdAxis ? (
+          <div className="space-y-0.5">
+            <p className="text-[15px] font-bold leading-snug tabular-nums tracking-ko text-text-strong [word-break:keep-all]">
+              보통 {stdAxis.unitLabel} {fmtStd(stdQ.q1, stdAxis.isUnit)}~
+              {fmtStd(stdQ.q3, stdAxis.isUnit)}원에 팔려요{" "}
+              <span className="text-[11px] font-medium text-text-muted">
+                (거래 절반이 이 가격대)
+              </span>
+            </p>
+            {qBandTotal && composition ? (
+              <p className="text-[13px] font-semibold tabular-nums tracking-ko text-text-muted [word-break:keep-all]">
+                {compositionLabel ?? `${composition.unitCount}개들이`}면 약{" "}
+                {fmtWonH(qBandTotal.min)}~{fmtWonH(qBandTotal.max)}원쯤이에요
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {/* ② 표준표 3행 고정 — 값 불가 행도 행 자체는 항상 존재(그 자리에 사유 1줄 · 자리 유지 원칙).
-            "보통 범위" = 기존 IQR 통과 밴드(edge iqrTrim kept 극값) 재사용 — 신규 통계 0. */}
+            F3-2c-f — 범위 = 사분위 락(신규 통계 0 — edge quantile 동봉값 소비만). */}
         <div className="divide-y divide-[#F1F5F9] rounded-lg bg-bg px-3">
           {stdRows.map((r) => (
             <div key={r.label} className="flex items-baseline justify-between gap-2 py-2.5">
@@ -850,11 +917,57 @@ export function PriceBandAdvisor({
             </div>
           ))}
         </div>
-        {/* ③ 내 가격 판정 박스 — 판매가 입력 시 1줄(3단 통일 · 위치 사실만 §0). 미입력 = 미표시. */}
+        {/* F3-2c-f(4) — 극값 강등: 미니 바 1줄(싼 편 min · 중간 median · 비싼 편 max + 내 가격 마커).
+            기존 앵커 바는 다중 소스 비교 의미론(도매/인터넷/소매 점 · 소스별 도형)이라 전체 재사용 불가
+            판정 — 마커 글리프(AnchorGlyph "mine")와 위치 산식(8~92% 패딩)만 부분 재사용한 신규 최소
+            구현. median 부재(구응답) = 미표시(사실 일치 — "중간" 라벨은 중앙값에만). */}
+        {stdAxis && stdAxis.med != null ? (
+          <div className="space-y-1">
+            <div className="relative h-5">
+              <div className="absolute left-0 right-0 top-1/2 h-px bg-border" />
+              {myAxisUnitPrice != null && stdAxis.max > stdAxis.min ? (
+                <span
+                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-accent"
+                  style={{
+                    left: `${
+                      8 +
+                      Math.min(
+                        Math.max((myAxisUnitPrice - stdAxis.min) / (stdAxis.max - stdAxis.min), 0),
+                        1,
+                      ) *
+                        84
+                    }%`,
+                  }}
+                  aria-hidden="true"
+                >
+                  <AnchorGlyph kind="mine" />
+                </span>
+              ) : null}
+            </div>
+            <p className="flex justify-between text-[10px] font-medium tabular-nums tracking-ko text-text-subtle">
+              <span>싼 편 {fmtStd(stdAxis.min, stdAxis.isUnit)}</span>
+              <span>중간 {fmtStd(stdAxis.med, stdAxis.isUnit)}</span>
+              <span>비싼 편 {fmtStd(stdAxis.max, stdAxis.isUnit)}</span>
+            </p>
+          </div>
+        ) : null}
+        {/* ③ 내 가격 판정 박스 — F3-2c-f(5): 기준 = Q1~Q3 환산 · 문구 3단(싸게/보통/비싸게 파는 편).
+            판매가 미입력 또는 사분위 부재 = 미표시. */}
         {verdict3 && myPriceKrw != null ? (
           <div className="rounded-lg bg-surface px-3 py-2.5 text-[13px] font-bold tabular-nums tracking-ko text-text-strong [word-break:keep-all]">
-            내 가격 {myPriceKrw.toLocaleString("ko-KR")}원 — 보통 범위 {verdict3}
+            내 가격 {myPriceKrw.toLocaleString("ko-KR")}원 — {verdict3}
           </div>
+        ) : null}
+        {/* F3-2c-f(6) — 방어 캡션 2종(사실 고지 · 권유 어휘 0). */}
+        {stdAxis && stdAxis.n < 10 ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle [word-break:keep-all]">
+            표본이 적어 범위가 흔들릴 수 있어요
+          </p>
+        ) : null}
+        {chipKindLabel === "품종 섞임" && onlineKindsTop.length > 0 ? (
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle [word-break:keep-all]">
+            품종을 고르면 더 정확해져요
+          </p>
         ) : null}
         {/* ④ [자세히 보기] — 설명문 전부 이 안(환산 근거·원시 표·분포/제외/이력 캡션·앵커·비교문·번역). */}
         <button
