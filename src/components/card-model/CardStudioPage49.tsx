@@ -537,8 +537,10 @@ const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "im
 // UI-5-T4-E4e-2(재) — 준비 중 블록 = AI 경유(equip·setField·조립) 차단 2차 방어층(L4 대본이 1차).
 //   등재 근거(전수 조사): aivideo = 생성 엔진 부재(aivStatus 타이머 목업 :757-760) / image = reserve 매장
 //   사진 업로드 미배선(E5a 범위 밖 목업 :4883) / dock = DOCK_OPTIONS 하드코딩 목업(:280 — 실 카드 연결 부재).
+//   F3-10a(E5x 감사 1순위) — calendar 편입: FIX-62 폐기분(구 미영속 프리뷰 cfgDates/Times/Slots)이
+//   49에 잔존 — 실슬롯 이식(F3-10 본대) 전까지 AI 경로 폐쇄(유일 차단 밖 목업 해소).
 //   수동 편집(덱 탭·칸 조작)은 무영향 — 차단은 AI 액션 경로 한정.
-const AI_PENDING_BLOCKS = new Set(["aivideo", "image", "dock"]);
+const AI_PENDING_BLOCKS = new Set(["aivideo", "image", "dock", "calendar"]);
 // UI-5-T1m — 미확정 릴레이 큐 정렬 우선순위: 영상 → 이미지 → 숫자(product/party/…) → 구간(content) → 기타.
 function confirmRank(id: string): number {
   if (id === "__video") return 0;
@@ -4318,6 +4320,17 @@ export function CardStudioPage() {
               <div>
               {(activeBlock.id === "calendar" || activeBlock.id === "seasonal") && (
                 <div className="space-y-2.5">
+                  {/* F3-10a — FIX-62 지혈: 구 프리뷰(미영속)임을 정직 고지. UI 는 보존(v3.0 락 — Phase 2
+                      자체 예약 대비), 발행 유출은 studio49-to-card 에서 봉쇄. seasonal(E5g)은 별개 — 미표시. */}
+                  {activeBlock.id === "calendar" && (
+                    <p
+                      className="rounded-lg bg-[#FFFBEB] px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-[#92400E] [word-break:keep-all]"
+                      style={{ boxShadow: "inset 0 0 0 1px #FDE68A" }}
+                    >
+                      예약 날짜는 준비 중이에요 — 곧 실제 예약 슬롯으로 열려요. 지금 고른 날짜는
+                      카드에 실리지 않아요.
+                    </p>
+                  )}
                   {activeBlock.id === "seasonal" ? (
                     // UI-5-T2-E5g — 상품 유형별 캘린더(제철·생산·판매). 전부 InlineDatePicker 단일 컴포넌트.
                     //   v0 날짜 칩 나열 폐기. 유형 전환 = 라벨·칸 구성만(날짜 상태 유지 — 파괴 리셋 금지).

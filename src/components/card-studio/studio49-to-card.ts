@@ -102,8 +102,9 @@ export function studio49ToCardModel(s: Studio49Input): CardModel {
     ...(s.clip ? { clip: s.clip } : {}),
     ...(s.applied["brand"] && s.brand.trim() ? { brandText: s.brand.trim() } : {}),
     ...(s.applied["party"] ? { party: s.party } : {}),
-    ...(s.applied["calendar"] && s.dates.length ? { dates: s.dates, slotsByDate: s.slotsByDate } : {}),
-    ...(s.applied["calendar"] && s.times.length ? { times: s.times } : {}),
+    // F3-10a(FIX-62 지혈 — E5x 감사 1순위) — 구 미영속 프리뷰(cfgDates/Times/SlotsByDate)의 발행
+    //   유출 봉쇄: applied["calendar"] 여도 가짜 슬롯 데이터는 미편입(하드코딩 DATE/TIME_OPTIONS 유래
+    //   — 실카드 오염 차단). 실슬롯 이식(F3-10 본대) 시 실데이터로 재개. 타입·입력 필드는 보존.
     ...(s.applied["seasonal"] && s.saleStart && s.saleEnd ? { saleStart: s.saleStart, saleEnd: s.saleEnd } : {}),
     // 45:2686 — link 게이트(예약 기본 ON), 커머스 시설 셀 미주입.
     ...((s.applied["link"] ?? s.mode === "reserve") && !isCommerce && s.facilities.length
