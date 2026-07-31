@@ -6358,30 +6358,57 @@ export function CardStudioPage() {
               <span
                 className={`relative flex h-14 w-14 items-center justify-center transition-transform duration-100 ${orbPressed && !fabDragging ? "scale-95" : ""}`}
               >
-                {listening ? (
-                  /* S2b — 청취 중 = 본체가 마이크(흰 원 + 빨강 Mic + 바깥 빨간 펄스 링 · 배지 숨김 · 점프 0). */
-                  <span className="relative flex h-14 w-14 items-center justify-center">
-                    <span className="absolute inset-0 rounded-full bg-[#DC2626]/40 animate-ping" aria-hidden="true" />
-                    <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-white ring-[3px] ring-white [box-shadow:0_8px_24px_-8px_rgba(15,23,42,0.35),inset_0_0_0_1px_#ECECEE]">
-                      <Mic className="h-6 w-6 text-[#DC2626]" strokeWidth={2.25} />
-                    </span>
-                  </span>
-                ) : (
+                {/* UI-5-T5-F3-9 — 상태 연출 재설계: 배지 전폐(F3-4 느낌표 + S2b 마이크/스피커 배지 —
+                    오브 부착물 0 확정) · 오브 자체가 상태를 연기(전부 링고 블루 #1D4ED8 계열 — 빨강 퇴출).
+                    CSS 애니메이션만(JS 타이머 신설 0 — 기존 listening/thinking/speaking 상태 소비만).
+                    파동/막대/칩 전부 pointer-events-none — 탭 히트 영역 = 기존 button 56px 불변. */}
+                <style>{`
+                  @keyframes lingo-orb-wave{0%{transform:scale(1);opacity:.65}100%{transform:scale(1.8);opacity:0}}
+                  @keyframes lingo-orb-eq{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+                `}</style>
+                {/* b. 듣는 중 — 파동 링 2겹(1.6s 주기·시차 0.8s·오브 테두리 → 바깥). 구 흰 원+빨강 Mic
+                    본체 전환(S2b) 대체 — 오브는 마스코트 그대로(점프 0 유지). */}
+                {listening && (
                   <>
-                    <LingoAvatar size={56} spin={thinking} className="ring-[3px] ring-white" />
-                    {/* S2b — 상시 마이크 배지(어포던스): 평시 Mic(빨강) / 낭독 중 Volume2. */}
-                    <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white [box-shadow:0_2px_6px_-1px_rgba(15,23,42,0.3),inset_0_0_0_1px_#E5E5E5]">
-                      {speaking ? (
-                        <Volume2 className="h-3 w-3 text-[#525252]" strokeWidth={2.5} />
-                      ) : (
-                        <Mic className="h-3 w-3 text-[#DC2626]" strokeWidth={2.5} />
-                      )}
-                    </span>
+                    <span
+                      className="pointer-events-none absolute inset-0 rounded-full border-2 border-[#1D4ED8]"
+                      style={{ animation: "lingo-orb-wave 1.6s ease-out infinite" }}
+                      aria-hidden="true"
+                    />
+                    <span
+                      className="pointer-events-none absolute inset-0 rounded-full border-2 border-[#1D4ED8]"
+                      style={{ animation: "lingo-orb-wave 1.6s ease-out infinite", animationDelay: "0.8s" }}
+                      aria-hidden="true"
+                    />
                   </>
                 )}
-                {/* UI-5-T5-F3-4 — 우상단 "!" 배지 제거(이중 알림 정리): 순수 주의 끌기였고 동일 제안
-                    (lingo.text)이 전환 코칭 카드·링고 패널 첫 메시지 두 경로로 이미 전달됨 — 정보 유실 0.
-                    마이크 상태 배지(우하단 Mic/Volume2)·listening 본체 전환은 무접촉(L1·S2b 그대로). */}
+                {/* a. 평시 = 오브만 완전 정적 / c. 생각 중 = 기존 궤도 회전(spin) 유지 — 무수정. */}
+                <LingoAvatar size={56} spin={thinking} className="ring-[3px] ring-white" />
+                {/* d. 말하는 중 — 오브 내부 소리 막대 4개(흰색·scaleY 시차 0.15s). 구 Volume2 배지 대체. */}
+                {speaking && !listening && (
+                  <span
+                    className="pointer-events-none absolute inset-0 flex items-center justify-center gap-[3px]"
+                    aria-hidden="true"
+                  >
+                    {[0, 1, 2, 3].map((i) => (
+                      <span
+                        key={i}
+                        className="h-4 w-[3px] origin-center rounded-full bg-white [box-shadow:0_1px_3px_rgba(15,23,42,0.35)]"
+                        style={{
+                          animation: "lingo-orb-eq 0.9s ease-in-out infinite",
+                          animationDelay: `${i * 0.15}s`,
+                        }}
+                      />
+                    ))}
+                  </span>
+                )}
+                {/* b. "듣고 있어요" 칩 — listening 중에만 렌더·종료 즉시 소거(조건부 렌더 자체가 소거).
+                    스크린 판독 가능 실텍스트(아이콘 단독 의존 제거 — 접근성 개선). */}
+                {listening && (
+                  <span className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2.5 py-1 text-[11px] font-bold tracking-ko text-[#1D4ED8]">
+                    듣고 있어요
+                  </span>
+                )}
               </span>
             </button>
           )}
