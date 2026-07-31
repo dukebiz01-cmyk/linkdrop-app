@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ProductRegisterForm, EMPTY_PRODUCT, type ProductForm } from "@/components/card-studio/ProductRegisterForm49";
+// F3-10b — FIX-62 실슬롯 이식(45 동형): 집계 순수 모듈(수신 fromDropDetail 공유 — 거울 자동·무수정 소비)
+//   + 검증된 실슬롯 편집기(upsert/delete RPC·router.invalidate 내장 — 무수술 재사용).
+import {
+  buildReservationSlotView,
+  type ReservationSlotRow,
+} from "./card-model-adapters";
+import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 // UI-5-T2-E1 — 영상 검색 실배선(45 파이프 계승). 45 순수 모듈·공용 타입 import(45 컴포넌트 무수정).
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { getSupabase } from "@/lib/supabase";
@@ -36,7 +43,6 @@ import {
   X,
   Zap,
   Plus,
-  Minus,
   Copy,
   MessageCircle,
   Wand2,
@@ -299,23 +305,8 @@ type FacilityItem = { id: string; text: string };
 let facilitySeq = 0;
 const newFacility = (text: string): FacilityItem => ({ id: `fac-${Date.now()}-${facilitySeq++}`, text });
 const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"];
-function buildDateList(count: number) {
-  const base = new Date();
-  base.setHours(0, 0, 0, 0);
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
-    const dow = d.getDay();
-    return {
-      label: `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAY_KR[dow]})`,
-      year: d.getFullYear(),
-      month: d.getMonth() + 1,
-      day: d.getDate(),
-      dow,
-    };
-  });
-}
-const DATE_LIST = buildDateList(45);
-const DATE_OPTIONS = DATE_LIST.map((d) => d.label);
+// F3-10b — 구 buildDateList/DATE_LIST/DATE_OPTIONS(하드코딩 45일 레일) 전량 폐기: 실슬롯
+//   (get_available_slots)이 대체. WEEKDAY_KR 은 labelOfIso 소비처 유지분만 잔존.
 
 // UI-5-T2-E5g — ISO("YYYY-MM-DD") ↔ 라벨("M/D(요)") 정본(45 UI-4f isoOfDate/labelOfIso 바이트 동일).
 //   구 인덱스(saleStartIdx) 폐기 락 계승 — 저장·표기 포맷 불변.
@@ -425,7 +416,7 @@ const SEASONAL_HELPER: Record<ProductKind, string> = {
   manufactured: "언제까지 파실 건가요? 판매 캘린더로 판매 기간과 발송 기간을 정해요.",
 };
 // 09:00 ~ 21:00, 1시간 단위
-const TIME_OPTIONS = Array.from({ length: 13 }, (_, i) => `${String(9 + i).padStart(2, "0")}:00`);
+// F3-10b — 구 TIME_OPTIONS(예약 시간 레일) 폐기(45 FIX-62 동형): 실슬롯 편집기가 대체.
 // 배송 택배사 선택지
 const COURIERS = ["CJ대한통운", "우체국택배", "한진택배", "롯데택배", "로젠택배", "직접 전달"];
 // 설정 UI가 필요한 블록
@@ -722,7 +713,14 @@ function parsePointCandidates(text: string): string[] {
   return out;
 }
 
-export function CardStudioPage() {
+// F3-10b — 라우트 loader 공급 props(45 initialSlots 동형 · 옵셔널 기본값 = 데모/무설정 렌더 하위호환).
+export function CardStudioPage({
+  initialStore = null,
+  initialSlots = [],
+}: {
+  initialStore?: { id: string; display_name: string } | null;
+  initialSlots?: ReservationSlotRow[];
+} = {}) {
   const [mode, setMode] = useState<StudioMode>("general");
   // UI-5-T2-E3c — 실모드 라이브 ref. 렌더마다 동기화 → stale 클로저(마운트 1회 음성 effect 등)도
   //   modeRef.current 로 현재 실모드를 본다. 요청·응답 간 전환·E3b 리셋 레이스 정합의 단일 근거.
@@ -743,8 +741,8 @@ export function CardStudioPage() {
   const visDrag = useRef({ active: false, startX: 0, base: 0 });
   const [deckIndex, setDeckIndex] = useState(0);
   // 블록별 설정값 (장착과 동시에 채움 → 카드에 실시간 반영)
-  const [cfgDate, setCfgDate] = useState(DATE_OPTIONS[0]);
-  const [cfgTime, setCfgTime] = useState(TIME_OPTIONS[1]);
+  // F3-10b — 구 cfgDate/cfgTime(단수 · DATE/TIME_OPTIONS 하드코딩 기본값) 제거: UI 소비처 0이었고
+  //   링고 컨텍스트 fields.date/time 에 가짜 상수만 공급하던 잔재(정확 원칙 — 컨텍스트 키도 제거).
   // UI-5-T2-E5g — 판매 캘린더 = ISO 기간(구 인덱스 폐기). 유형별(제철·생산·판매) 단일일 캘린더 병설.
   const [productKind, setProductKind] = useState<ProductKind>("fresh");
   const [saleStartIso, setSaleStartIso] = useState("");
@@ -762,15 +760,12 @@ export function CardStudioPage() {
     setSaleStartIso((s) => s || r.start);
     setSaleEndIso((s) => s || r.end);
   }, []);
-  // 복수 날짜 · 시간대 · 잔여 자리 (예약 설정과 동일한 개념)
-  const [cfgDates, setCfgDates] = useState<string[]>([DATE_OPTIONS[0]]);
-  const [cfgTimes, setCfgTimes] = useState<string[]>([TIME_OPTIONS[1]]);
-  // 날짜별 잔여 좌석 (날짜마다 다르게)
-  const [cfgSlotsByDate, setCfgSlotsByDate] = useState<Record<string, number>>({ [DATE_OPTIONS[0]]: 4 });
-  const setSlotForDate = (date: string, next: number) =>
-    setCfgSlotsByDate((prev) => ({ ...prev, [date]: Math.max(0, Math.min(20, next)) }));
-  const dateRailRef = useRef<HTMLDivElement>(null);
-  const [dateRailIdx, setDateRailIdx] = useState(0);
+  // F3-10b — FIX-62 실슬롯(45 :811-814 동형): 구 cfgDates/cfgTimes/cfgSlotsByDate 미영속 프리뷰
+  //   3종 + 레일 ref 완전 폐기. 집계 = buildReservationSlotView(수신 fromDropDetail 과 공유 —
+  //   날짜·좌석·정렬 거울 자동). 갱신 = PartnerCalendarPage 저장 → 내장 router.invalidate →
+  //   studio-build49 loader 재조회(get_available_slots) 사슬.
+  const slotView = useMemo(() => buildReservationSlotView(initialSlots), [initialSlots]);
+  const slotDays = slotView.dates.length;
   // UI-5-T2-E5d — 파트너 실쿠폰(45 selectedCouponId :820-822 동형): 목록 = get_active_store_coupons(소유 매장).
   //   선택 = 실 UUID 보관 · 기본 선택 없음(가짜 c1 기본값 폐기 — 쿠폰은 대표님이 골라야 확정).
   const [coupons, setCoupons] = useState<StudioCoupon[]>([]);
@@ -1632,8 +1627,8 @@ export function CardStudioPage() {
     setAivLength("15s");
     setAivStatus("idle");
     // cfg 전 필드
-    setCfgDate(DATE_OPTIONS[0]);
-    setCfgTime(TIME_OPTIONS[1]);
+    // F3-10b — 구 cfgDate/cfgTime·프리뷰 3종 리셋 제거(상태 자체 폐기 — 실슬롯은 매장 DB 소유라
+    //   새 카드 리셋 대상 아님 · 45 :1104 "초안 진행물 아님" 동형).
     {
       // E5g — 판매기간 기본값 복원 + 유형·단일일 날짜 초기화(파괴 아님 = 새 카드 시작).
       const r = defaultSaleRange();
@@ -1643,10 +1638,6 @@ export function CardStudioPage() {
       // F1(재) — 유형별 기간 전량 초기화(새 카드).
       setKindRanges(emptyKindRanges());
     }
-    setCfgDates([DATE_OPTIONS[0]]);
-    setCfgTimes([TIME_OPTIONS[1]]);
-    setCfgSlotsByDate({ [DATE_OPTIONS[0]]: 4 });
-    setDateRailIdx(0);
     // E5d — 실쿠폰 선택 리셋(목록 캐시는 DB 정본이라 유지 · 기본 선택 없음).
     setSelectedCouponId(null);
     setCouponsError(null);
@@ -2166,14 +2157,9 @@ export function CardStudioPage() {
           case "clip":
             setCfgClip(v);
             break;
-          case "date":
-            setCfgDate(v);
-            setCfgDates((prev) => (prev.includes(v) ? prev : [...prev, v]));
-            break;
-          case "time":
-            setCfgTime(v);
-            setCfgTimes((prev) => (prev.includes(v) ? prev : [...prev, v]));
-            break;
+          // F3-10b — "date"/"time" 케이스 제거(E5d coupon 전례): 구 프리뷰 상태 폐기로 유령 경로화.
+          //   실슬롯은 매장 DB 소유 — AI 대리 기입 금지(calendar ∈ AI_PENDING 1차 차단, 여기 도달 시
+          //   default 무적용·무기록이 2차 방어).
           // E5d — "coupon" 케이스 제거: 실쿠폰 UUID 는 AI 대리 선택 금지(AI_BLOCKED_FIELDS 가 1차 차단,
           //   여기 도달 시 default 무적용·무기록이 2차 방어).
           case "productName":
@@ -2269,10 +2255,6 @@ export function CardStudioPage() {
       cfgProductName,
       cfgProductPrice,
       cfgDock,
-      cfgDate,
-      cfgTime,
-      cfgDates: [...cfgDates],
-      cfgTimes: [...cfgTimes],
       cfgPhone,
       cfgMap,
       productKind, // E5g — 유형·ISO 날짜 스냅샷(구 인덱스 폐기).
@@ -2429,10 +2411,6 @@ export function CardStudioPage() {
       setCfgProductName(s.cfgProductName);
       setCfgProductPrice(s.cfgProductPrice);
       setCfgDock(s.cfgDock);
-      setCfgDate(s.cfgDate);
-      setCfgTime(s.cfgTime);
-      setCfgDates(s.cfgDates);
-      setCfgTimes(s.cfgTimes);
       setCfgPhone(s.cfgPhone);
       setCfgMap(s.cfgMap);
       if (s.productKind) setProductKind(s.productKind); // E5g — 유형·ISO 날짜 복원.
@@ -2742,7 +2720,7 @@ export function CardStudioPage() {
       case "coupon":
         return !!applied["coupon"] && !!selectedCouponId; // E5d — 실쿠폰 선택까지 완료(45 :1230 동형).
       case "calendar":
-        return !!applied["calendar"];
+        return !!applied["calendar"] && slotDays > 0; // F3-10b — 실슬롯 존재 기준(45 :1236 동형).
       case "season":
         return !!applied["seasonal"];
       case "review":
@@ -2960,8 +2938,6 @@ export function CardStudioPage() {
     const fields: Record<string, string> = {
       title: cfgTitle,
       subtitle: cfgSubtitle,
-      date: cfgDate,
-      time: cfgTime,
       saleStart: labelOfIso(saleStartIso),
       saleEnd: labelOfIso(saleEndIso),
       coupon: selectedCoupon?.title ?? "", // E5d — Edge 컨텍스트 = 실쿠폰 제목(빈 값 = 미선택).
@@ -3680,9 +3656,11 @@ export function CardStudioPage() {
     facilities: cfgFacilities.map((f) => f.text.trim()).filter(Boolean),
     saleStart: labelOfIso(saleStartIso), // E5g — 정본 기간 표기(발행 라벨 포맷 불변 "M/D(요)").
     saleEnd: labelOfIso(saleEndIso),
-    dates: cfgDates,
-    times: cfgTimes,
-    slotsByDate: cfgSlotsByDate,
+    // F3-10b — 실슬롯 주입(45 :2673-2680 동형): 수신 fromDropDetail 과 동일 소스·정렬(거울 자동).
+    //   date_range 모드(slot_time null)는 times 빈 배열 = 미주입 규칙(to-card 게이트가 담당).
+    dates: slotView.dates,
+    times: slotView.times,
+    slotsByDate: slotView.slotsByDate,
     selectedVideo,
     // F3-8(2) — shipping 도 폼 정본(cfgProduct) 파생: product 블록 free_ship/ship_fee_krw 와 동일
     //   소스라 모순 발행이 구조적으로 불가(정확 원칙 — 두 payload 항등).
@@ -4320,17 +4298,6 @@ export function CardStudioPage() {
               <div>
               {(activeBlock.id === "calendar" || activeBlock.id === "seasonal") && (
                 <div className="space-y-2.5">
-                  {/* F3-10a — FIX-62 지혈: 구 프리뷰(미영속)임을 정직 고지. UI 는 보존(v3.0 락 — Phase 2
-                      자체 예약 대비), 발행 유출은 studio49-to-card 에서 봉쇄. seasonal(E5g)은 별개 — 미표시. */}
-                  {activeBlock.id === "calendar" && (
-                    <p
-                      className="rounded-lg bg-[#FFFBEB] px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-[#92400E] [word-break:keep-all]"
-                      style={{ boxShadow: "inset 0 0 0 1px #FDE68A" }}
-                    >
-                      예약 날짜는 준비 중이에요 — 곧 실제 예약 슬롯으로 열려요. 지금 고른 날짜는
-                      카드에 실리지 않아요.
-                    </p>
-                  )}
                   {activeBlock.id === "seasonal" ? (
                     // UI-5-T2-E5g — 상품 유형별 캘린더(제철·생산·판매). 전부 InlineDatePicker 단일 컴포넌트.
                     //   v0 날짜 칩 나열 폐기. 유형 전환 = 라벨·칸 구성만(날짜 상태 유지 — 파괴 리셋 금지).
@@ -4434,221 +4401,31 @@ export function CardStudioPage() {
                       </div>
                     </div>
                   ) : (
-                    // 예약 캘린더 — 정돈된 3단계: 날짜 → 시간 → 자리수
-                    <div className="space-y-3">
-                      {/* STEP 1 — 날짜: 좌우로 밀어서 선택 */}
-                      <section className="rounded-xl border border-[#E8E8EC] p-2.5">
-                        <div className="mb-2 flex items-center gap-1.5">
-                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#0A0A0A] text-[9px] font-extrabold text-white">
-                            1
-                          </span>
-                          <p className="text-[11px] font-bold text-[#0A0A0A]">예약 가능일</p>
-                          <span className="rounded-md bg-[#F4F4F5] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[#525252]">
-                            {DATE_LIST[dateRailIdx].year}.{String(DATE_LIST[dateRailIdx].month).padStart(2, "0")}
-                          </span>
-                          <span className="ml-auto text-[10px] font-semibold text-[#8A8A8A]">
-                            {cfgDates.length}일 선택
-                          </span>
-                        </div>
-
-                        <div className="relative">
-                          <div
-                            ref={dateRailRef}
-                            onScroll={(e) =>
-                              setDateRailIdx(
-                                Math.min(
-                                  DATE_LIST.length - 1,
-                                  Math.max(0, Math.round(e.currentTarget.scrollLeft / 46)),
-                                ),
-                              )
-                            }
-                            className="flex snap-x snap-mandatory gap-1.5 overflow-x-auto scroll-smooth pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                          >
-                            {DATE_LIST.map((d) => {
-                              const on = cfgDates.includes(d.label);
-                              const dowColor = "#8A8A8A";
-                              const seats = cfgSlotsByDate[d.label] ?? 0;
-                              return (
-                                <button
-                                  key={d.label}
-                                  onClick={() =>
-                                    setCfgDates((prev) => {
-                                      const isOn = prev.includes(d.label);
-                                      const next = isOn
-                                        ? prev.filter((x) => x !== d.label)
-                                        : [...prev, d.label];
-                                      const ordered = DATE_OPTIONS.filter((o) => next.includes(o));
-                                      if (ordered.length) setCfgDate(ordered[0]);
-                                      // 날짜별 좌석 기본값 부여 / 해제
-                                      setCfgSlotsByDate((m) => {
-                                        const copy = { ...m };
-                                        if (isOn) delete copy[d.label];
-                                        else copy[d.label] = copy[d.label] ?? 4;
-                                        return copy;
-                                      });
-                                      return ordered;
-                                    })
-                                  }
-                                  className="relative flex h-[50px] w-10 flex-none snap-start flex-col items-center justify-center gap-0.5 rounded-lg border transition-colors"
-                                  style={{
-                                    backgroundColor: on ? "#0A0A0A" : "#F7F7F8",
-                                    borderColor: on ? "#0A0A0A" : "transparent",
-                                  }}
-                                >
-                                  <span
-                                    className="text-[9px] font-bold leading-none"
-                                    style={{ color: on ? "rgba(255,255,255,0.75)" : dowColor }}
-                                  >
-                                    {WEEKDAY_KR[d.dow]}
-                                  </span>
-                                  <span
-                                    className="text-[15px] font-extrabold leading-none tabular-nums"
-                                    style={{ color: on ? "#fff" : "#0A0A0A" }}
-                                  >
-                                    {d.day}
-                                  </span>
-                                  {on && (
-                                    <span
-                                      className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-extrabold tabular-nums text-white"
-                                      style={{ backgroundColor: accent }}
-                                    >
-                                      {seats}
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {/* 우측 페이드 */}
-                          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white to-transparent" />
-                        </div>
-                      </section>
-
-                      {/* STEP 2 — 시간: 좌우로 밀어서 선택 */}
-                      <section className="rounded-xl border border-[#E8E8EC] p-2.5">
-                        <div className="mb-2 flex items-center gap-1.5">
-                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#0A0A0A] text-[9px] font-extrabold text-white">
-                            2
-                          </span>
-                          <p className="text-[11px] font-bold text-[#0A0A0A]">예약 가능 시간</p>
-                          <span className="ml-auto text-[10px] font-semibold text-[#8A8A8A]">
-                            {cfgTimes.length === 0 ? "시간 미지정" : `${cfgTimes.length}개 시간대`}
-                          </span>
-                        </div>
-                        <div className="relative">
-                          <div className="flex snap-x snap-mandatory gap-1.5 overflow-x-auto scroll-smooth pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                            {/* 해당없음 — 시간 구분 없는 종일 예약 */}
-                            {(() => {
-                              const on = cfgTimes.length === 0;
-                              return (
-                                <button
-                                  onClick={() => {
-                                    setCfgTimes([]);
-                                    setCfgTime("");
-                                  }}
-                                  className="flex h-10 flex-none snap-start items-center justify-center rounded-xl border px-4 text-[12px] font-bold transition-colors"
-                                  style={
-                                    on
-                                      ? { backgroundColor: "#0A0A0A", borderColor: "#0A0A0A", color: "#fff" }
-                                      : { backgroundColor: "#fff", borderColor: "#E5E5E5", color: "#8A8A8A" }
-                                  }
-                                >
-                                  해당없음
-                                </button>
-                              );
-                            })()}
-                            {TIME_OPTIONS.map((t) => {
-                              const on = cfgTimes.includes(t);
-                              return (
-                                <button
-                                  key={t}
-                                  onClick={() =>
-                                    setCfgTimes((prev) => {
-                                      const next = prev.includes(t)
-                                        ? prev.filter((x) => x !== t)
-                                        : [...prev, t];
-                                      const ordered = TIME_OPTIONS.filter((o) => next.includes(o));
-                                      if (ordered.length) setCfgTime(ordered[0]);
-                                      return ordered;
-                                    })
-                                  }
-                                  className="flex h-10 flex-none snap-start items-center justify-center rounded-xl border px-4 text-[12px] font-bold tabular-nums transition-colors"
-                                  style={
-                                    on
-                                      ? { backgroundColor: "#0A0A0A", borderColor: "#0A0A0A", color: "#fff" }
-                                      : { backgroundColor: "#F7F7F8", borderColor: "transparent", color: "#525252" }
-                                  }
-                                >
-                                  {t}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white to-transparent" />
-                        </div>
-                      </section>
-
-                      {/* STEP 3 — 날짜별 잔여 자리 */}
-                      <section className="rounded-xl border border-[#E8E8EC] p-2.5">
-                        <div className="mb-2 flex items-center gap-1.5">
-                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#0A0A0A] text-[9px] font-extrabold text-white">
-                            3
-                          </span>
-                          <p className="text-[11px] font-bold text-[#0A0A0A]">날짜별 잔여 자리</p>
-                          <span className="ml-auto text-[10px] text-[#8A8A8A]">날짜마다 다르게</span>
-                        </div>
-                        <div className="space-y-1.5">
-                          {DATE_OPTIONS.filter((d) => cfgDates.includes(d)).map((d) => {
-                            const seats = cfgSlotsByDate[d] ?? 4;
-                            return (
-                              <div
-                                key={d}
-                                className="flex items-center justify-between rounded-lg bg-[#F7F7F8] py-1.5 pl-2.5 pr-2.5"
-                              >
-                                <span className="text-[12px] font-bold tabular-nums text-[#0A0A0A]">{d}</span>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => setSlotForDate(d, seats - 1)}
-                                    className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#0A0A0A] shadow-sm disabled:opacity-40"
-                                    disabled={seats <= 0}
-                                    aria-label={`${d} 좌석 감소`}
-                                  >
-                                    <Minus className="h-3 w-3" strokeWidth={2.5} />
-                                  </button>
-                                  <span
-                                    className="w-11 text-center text-[13px] font-extrabold tabular-nums"
-                                    style={{ color: seats === 0 ? "#A3A3A3" : accent }}
-                                  >
-                                    {seats === 0 ? "마감" : `${seats}석`}
-                                  </span>
-                                  <button
-                                    onClick={() => setSlotForDate(d, seats + 1)}
-                                    className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0A0A0A] text-white shadow-sm"
-                                    aria-label={`${d} 좌석 증가`}
-                                  >
-                                    <Plus className="h-3 w-3" strokeWidth={2.5} />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                          {cfgDates.length === 0 && (
-                            <p className="py-2 text-center text-[11px] text-[#A3A3A3]">
-                              위에서 예약 가능일을 먼저 선택하세요
-                            </p>
-                          )}
-                        </div>
-                      </section>
-
-                      {/* 거울 요약 — 수신자에게 이렇게 보인다 */}
+                    // F3-10b — FIX-62 실슬롯 편집기 이식(45 :4197-4212 동형): PartnerCalendarPage
+                    //   embedded 재사용(upsert/delete_reservation_slot RPC 내장 — 무수술). 저장 성공 →
+                    //   내장 router.invalidate → studio-build49 loader 재조회(get_available_slots) →
+                    //   미리보기 즉시 갱신(수신과 같은 소스 — 거울 자동). 구 3단계 프리뷰 레일
+                    //   (DATE/TIME_OPTIONS 하드코딩) 폐기 — F3-10a 앰버 안내도 실화 완료로 역할 종료.
+                    <div className="space-y-2.5">
+                      <p className="rounded-xl bg-[#F7F7F8] px-3 py-2.5 text-[11px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                        매장 캘린더에 저장돼요 — 이 매장의 모든 카드에 적용됩니다
+                      </p>
+                      {initialStore?.id ? (
+                        <PartnerCalendarPage
+                          partnerId={initialStore.id}
+                          partnerName={initialStore.display_name}
+                          embedded
+                        />
+                      ) : (
+                        <p className="py-2 text-center text-[11px] text-[#A3A3A3]">
+                          매장 등록 후 캘린더를 설정할 수 있어요
+                        </p>
+                      )}
                       <div className="flex items-start gap-1.5 rounded-xl bg-[#F7F7F8] px-3 py-2.5">
                         <Sparkles className="mt-0.5 h-3.5 w-3.5 flex-none text-[#A3A3A3]" strokeWidth={2.5} />
                         <p className="text-[11px] font-medium leading-relaxed text-[#404040] [word-break:keep-all]">
-                          수신자에게{" "}
-                          <b className="font-bold text-[#0A0A0A]">
-                            {cfgDates.length}일 · {cfgTimes.length === 0 ? "시간 미지정" : `${cfgTimes.length}개 시간대`}
-                          </b>
-                          , 날짜별 잔여 좌석까지 그대로 보여요
+                          수신자에게 <b className="font-bold text-[#0A0A0A]">{slotDays}일</b>, 날짜별
+                          잔여 좌석까지 그대로 보여요
                         </p>
                       </div>
                     </div>

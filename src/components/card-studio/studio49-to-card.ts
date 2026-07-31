@@ -102,9 +102,13 @@ export function studio49ToCardModel(s: Studio49Input): CardModel {
     ...(s.clip ? { clip: s.clip } : {}),
     ...(s.applied["brand"] && s.brand.trim() ? { brandText: s.brand.trim() } : {}),
     ...(s.applied["party"] ? { party: s.party } : {}),
-    // F3-10a(FIX-62 지혈 — E5x 감사 1순위) — 구 미영속 프리뷰(cfgDates/Times/SlotsByDate)의 발행
-    //   유출 봉쇄: applied["calendar"] 여도 가짜 슬롯 데이터는 미편입(하드코딩 DATE/TIME_OPTIONS 유래
-    //   — 실카드 오염 차단). 실슬롯 이식(F3-10 본대) 시 실데이터로 재개. 타입·입력 필드는 보존.
+    // F3-10b — 실슬롯 주입 재개(F3-10a 봉쇄의 실데이터 재개): s.dates/times/slotsByDate 는 이제 매장
+    //   DB 실슬롯(get_available_slots → buildReservationSlotView — 45 :2673-2680 동형·거울 자동).
+    //   정본 정리: 실슬롯은 DB 조회 사슬 소유(발행 payload 무편입 — 수신은 get_drop_detail 계열 조회),
+    //   이 파일은 미리보기 CardModel 조립이라 여기 주입 = 수신 표시와 동형(가짜 아님).
+    //   times 게이트 = date_range 모드(slot_time null → 빈 배열) 미주입 규칙(45 동형).
+    ...(s.applied["calendar"] && s.dates.length ? { dates: s.dates, slotsByDate: s.slotsByDate } : {}),
+    ...(s.applied["calendar"] && s.times.length ? { times: s.times } : {}),
     ...(s.applied["seasonal"] && s.saleStart && s.saleEnd ? { saleStart: s.saleStart, saleEnd: s.saleEnd } : {}),
     // 45:2686 — link 게이트(예약 기본 ON), 커머스 시설 셀 미주입.
     ...((s.applied["link"] ?? s.mode === "reserve") && !isCommerce && s.facilities.length
