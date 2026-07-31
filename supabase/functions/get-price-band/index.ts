@@ -19,9 +19,19 @@ const SUPABASE_SECRET_KEY =
   Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // 4-B 도매경락 — data.go.kr aT katRealTime2. 미설정 시 도매 소스 graceful skip.
 const WHOLESALE_API_KEY = Deno.env.get("WHOLESALE_API_KEY");
-// 4-C 인터넷 판매가 — 네이버쇼핑 검색 API(공식). 미설정 시 인터넷 소스 graceful skip.
-const NAVER_CLIENT_ID = Deno.env.get("NAVER_CLIENT_ID") ?? "";
-const NAVER_CLIENT_SECRET = Deno.env.get("NAVER_CLIENT_SECRET") ?? "";
+// ── UI-5-T7-F4b-E — 온라인(4-C) 소스 정직 은퇴 ──
+//   네이버 검색 API "쇼핑" 공식 종료(2026-07 공지 · 7/31 차단 실측 — SE05, blog/news/local 은 정상).
+//   회복 없음 전제(Duke 픽 A: KAMIS 소매+도매경락 2축 운영). 대체 소스 이식 시 이 플래그를
+//   "ok" 로 되살리고 getOnlineSourceKeys 에 새 키를 붙인다(fetchNaverShop 자리 = 도킹 지점).
+const ONLINE_SOURCE_STATUS: "discontinued" | "ok" = "discontinued";
+// F4b-E(1) — env 요청 시 평가(톱레벨 1회 평가 → 핸들러 시점 이동): 콜드 스타트에 키가 박제되지
+//   않게 하는 구조 선확보 — 후속 대체 소스 키도 같은 자리(요청 시점 평가)에 붙는다.
+function getOnlineSourceKeys(): { id: string; secret: string } {
+  return {
+    id: Deno.env.get("NAVER_CLIENT_ID") ?? "",
+    secret: Deno.env.get("NAVER_CLIENT_SECRET") ?? "",
+  };
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -39,6 +49,11 @@ const KAMIS_ACTION = "dailyPriceByCategoryList";
 const PRODUCT_CLS_RETAIL = "02"; // 02=소매 (4-B 도매=01 은 다음 단계)
 const COUNTRY_CODE = "1101"; // 서울
 const DEFAULT_TTL_SEC = 86400;
+// F4b-E(4) — 실패/부재 응답 단기 캐시: 전 소스 무데이터(sources 0건 = KAMIS·도매 동시 실패/휴장
+//   연속) 응답을 24h 박제하지 않는다(F4-3 사고 재발 방지 — 외부 순단이 하루짜리로 굳던 구조).
+//   온라인 축 부재는 discontinued 체제의 "정상 상태"라 실패 판정에서 제외. 후속 대체 소스
+//   복귀 시 online error 도 이 분기(단기)로 확장한다.
+const FAIL_TTL_SEC = 600;
 const FETCH_TIMEOUT_MS = 10_000;
 
 // ── 4-B 도매경락(aT katRealTime2) ──
@@ -175,6 +190,10 @@ type PriceBandResult = {
   // F3-2b ADDITIVE — 품종 필터 결과(kind 요청 시에만). insufficient = 매칭 < KIND_MIN_MATCHED
   //   → 품종 밴드 미산출(혼합 밴드 폴백 금지 — 정직 게이트. 클라가 안내문 표시).
   kind_filter?: { requested: string; matched_count: number; insufficient: boolean } | null;
+  // F4b-E(3) ADDITIVE — 온라인 소스 상태(옵셔널 — 구 클라 무영향):
+  //   discontinued=제공사 공식 종료(현 확정 상태) / ok·empty·error=후속 대체 소스용 예비.
+  //   소스 상태는 저장값이 아니라 시점 사실 → 캐시 적중 응답에도 현재값을 계산 편입.
+  online_status?: "discontinued" | "ok" | "empty" | "error";
 };
 
 // KAMIS item 한 행(필요 필드만).
@@ -1071,12 +1090,16 @@ async function handleSaleMode(
     };
   }
 
-  const naverOn = Boolean(NAVER_CLIENT_ID && NAVER_CLIENT_SECRET);
+  // F4b-E(2) — 정직 은퇴 게이트: 공식 종료로 호출 자체 중단(헛호출 0). 아래 호출 블록은
+  //   삭제 금지 — 대체 소스 도킹 지점(플래그 "ok" 복귀 시 그대로 재가동).
+  const onlineKeys = getOnlineSourceKeys(); // 요청 시 평가(F4b-E(1))
+  const naverOn =
+    (ONLINE_SOURCE_STATUS as string) === "ok" && Boolean(onlineKeys.id && onlineKeys.secret);
 
   // ── count / volume: 네이버만(KAMIS=원/포기·도매=원/kg → 단위 불일치 → 제외). ──
   if (saleMode === "count" || saleMode === "volume") {
     const naver = naverOn
-      ? await fetchNaverShop(itemNameKo, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, {
+      ? await fetchNaverShop(itemNameKo, onlineKeys.id, onlineKeys.secret, {
           mode: saleMode,
           unitQty,
           unitLabel,
@@ -1134,8 +1157,9 @@ async function handleSaleMode(
       wholesaleAvgKg = wholesale.stats.avg;
     }
   }
+  // F4b-E(2) — 은퇴 게이트로 미진입(naverOn=false). 블록 보존 = 대체 소스 도킹 지점.
   if (naverOn) {
-    const naver = await fetchNaverShop(itemNameKo, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, {
+    const naver = await fetchNaverShop(itemNameKo, onlineKeys.id, onlineKeys.secret, {
       mode: "weight",
       unitQty,
       unitLabel,
@@ -1313,6 +1337,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
             item_name: payload.item_name ?? null,
             sources: payload.sources ?? [],
             cached: true,
+            // F4b-E(3) — 소스 상태는 저장값이 아니라 시점 사실 → 캐시 적중에도 현재값 편입.
+            online_status: ONLINE_SOURCE_STATUS,
             base_unit: "kg",
             wholesale: payload.wholesale ?? null,
             online: payload.online ?? null,
@@ -1349,7 +1375,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // 품목 한글명 1회 해결 — kamis 응답 → 없으면 kamis_items 조회(옥수수 등 미조사 품목 대응).
   //   도매(4-B)·인터넷(4-C) 둘 다 이 이름으로 검색.
   let itemNameKo = kamis?.item_name ?? null;
-  const needName = Boolean(WHOLESALE_API_KEY) || Boolean(NAVER_CLIENT_ID && NAVER_CLIENT_SECRET);
+  // F4b-E — 온라인 은퇴로 이름 해석 사유에서 네이버 항 제거(도매만). 대체 소스 복귀 시 항 재추가.
+  const needName = Boolean(WHOLESALE_API_KEY);
   if (!itemNameKo && needName) {
     try {
       const { data: itemRow } = await supabase
@@ -1387,8 +1414,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
   let onlineAxes: { kg: AxisBlock; unit: AxisBlock } | null = null;
   let onlineKinds: Record<string, number> = {};
   let kindFilter: PriceBandResult["kind_filter"] = null; // F3-2b — kind 요청 시에만 채워짐.
-  if (NAVER_CLIENT_ID && NAVER_CLIENT_SECRET && itemNameKo) {
-    const naver = await fetchNaverShop(itemNameKo, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, {
+  // F4b-E(2) — 정직 은퇴: 공식 종료(SE05)로 헛호출 제거. ⛔ 블록 삭제 금지 — 대체 소스 도킹
+  //   지점(ONLINE_SOURCE_STATUS="ok" 복귀 + getOnlineSourceKeys 교체만으로 전 사슬 재가동:
+  //   품종 필터(kindReq)·교차 정합 가드·축 통계·캐시 계약 전부 이 안에 보존돼 있다).
+  const mainOnlineKeys = getOnlineSourceKeys(); // 요청 시 평가(F4b-E(1))
+  const onlineOn =
+    (ONLINE_SOURCE_STATUS as string) === "ok" &&
+    Boolean(mainOnlineKeys.id && mainOnlineKeys.secret);
+  if (onlineOn && itemNameKo) {
+    const naver = await fetchNaverShop(itemNameKo, mainOnlineKeys.id, mainOnlineKeys.secret, {
       perUnitWeightG,
       itemCode,
       wholesaleAvgKg: wholesaleBlock?.avg,
@@ -1454,6 +1488,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     sources,
     cached: false,
     base_unit: "kg",
+    // F4b-E(3) — 현 체제 discontinued 고정. 대체 소스 복귀 시: 밴드 산출=ok / 0건=empty /
+    //   호출 실패=error 로 이 자리에서 실측 분기(예비 계약).
+    online_status: ONLINE_SOURCE_STATUS,
     wholesale: wholesaleBlock,
     online: onlineBlock,
     online_axes: onlineAxes,
@@ -1482,7 +1519,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         },
         ref_date: regday,
         fetched_at: new Date().toISOString(),
-        ttl_sec: DEFAULT_TTL_SEC,
+        // F4b-E(4) — TTL 분기: 성공(신뢰소스 1개+) = 현행 24h / 전 소스 무데이터 = 600초.
+        ttl_sec: sources.length > 0 ? DEFAULT_TTL_SEC : FAIL_TTL_SEC,
         source: "KAMIS(aT)",
       },
       { onConflict: "cache_key" },
