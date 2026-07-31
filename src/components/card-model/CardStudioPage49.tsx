@@ -619,6 +619,17 @@ const HELPER_COPY: Record<string, string> = {
   link: "전화·위치를 확인해 주세요.",
 };
 
+// UI-5-T7-F4-13 — 퍼블릭(general) 도우미 문구 오버라이드: 매장 어휘 오염 제거(video "가게 이름·
+//   메뉴" → 개인 공유 어휘). 키 없으면 공통(HELPER_COPY) 그대로 — reserve·commerce 문구 무변.
+//   general 덱(content·dock·top·boost·marketing) 중 매장 어휘 보유 키는 video(첫 스텝 합성 경유)뿐.
+const HELPER_COPY_GENERAL: Record<string, string> = {
+  video: "좋아하는 영상 제목이나 채널 이름으로 검색해도 되고, 유튜브·인스타 링크를 붙여넣어도 돼요.",
+};
+// F4-13 — 모드 인지 도우미 문구 단일 접근자(발화 지점 전수가 이 함수를 경유 — 이중 사전 직접 조회 금지).
+function helperCopyOf(m: StudioMode, key: string): string | undefined {
+  return m === "general" ? (HELPER_COPY_GENERAL[key] ?? HELPER_COPY[key]) : HELPER_COPY[key];
+}
+
 // UI-5-T1j — 링고 손길 배지(스튜디오 크롬 전용 — 카드 프리뷰 내부 렌더 금지). 확인 필요 = 주황.
 function LingoTouchBadge({ needsConfirm }: { needsConfirm: boolean }) {
   return needsConfirm ? (
@@ -2955,11 +2966,16 @@ export function CardStudioPage({
   function firstStepGuide(m: StudioMode): string {
     const s0 = STEP_PLAN[m][0];
     const key = s0.key === "video" ? "video" : (s0.block ?? "");
-    return HELPER_COPY[key] ?? "아래에서 시작해 주세요.";
+    // F4-13 — 모드 인지 접근자 경유(general = 매장 어휘 0 오버라이드).
+    return helperCopyOf(m, key) ?? "아래에서 시작해 주세요.";
   }
   // UI-5-T2-E4f(3) — 라벨·가이드 첫 구 중복 1회화: 가이드가 1스텝 라벨로 시작하면
   //   "먼저 {라벨}부터 {가이드 잔여}"로 합성(조사 을/를 등 제거) — "상품 사진부터 — 상품 사진을 …" 겹침 해소.
   function introLead(m: StudioMode): string {
+    // UI-5-T7-F4-13 — 퍼블릭 정체성 분리(모드 3벌): general = 개인 공유 카드 문구(매장·손님·예약·
+    //   사장님 어휘 0 — T1f(2) heroExamples 분리 전례 동형). reserve·commerce = 현행 합성 유지.
+    //   E4b "총 2문장 이내" 계약: stepPlanIntro 합성 시에도 2문장 유지(— 연결 1문장).
+    if (m === "general") return "재미있거나 유용한 영상을 담아 공유해 보세요 — 먼저 영상부터 담아 주세요.";
     const s0 = STEP_PLAN[m][0];
     const g = firstStepGuide(m);
     if (g.startsWith(s0.label)) {
@@ -4307,7 +4323,7 @@ export function CardStudioPage({
                           <p className="text-[12px] font-semibold leading-relaxed text-[#16161D] [word-break:keep-all]">
                             {activeBlock.id === "seasonal"
                               ? SEASONAL_HELPER[productKind] /* E5g — 유형 분기(신선·가공·공산) */
-                              : (HELPER_COPY[helperCopyKey ?? activeBlock.id] ?? HELPER_COPY[activeBlock.id] ?? "여기에서 값을 정해 주세요.")}
+                              : (helperCopyOf(mode, helperCopyKey ?? activeBlock.id) ?? helperCopyOf(mode, activeBlock.id) ?? "여기에서 값을 정해 주세요.")}
                           </p>
                         )}
                         {helperPhase === "done" && (
