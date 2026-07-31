@@ -777,6 +777,11 @@ export function CardStudioPage() {
   const couponsLoadedRef = useRef(false); // 1회 로드(패널 재진입 반복 호출 방지 — DB 정본 캐시).
   const [selectedCouponId, setSelectedCouponId] = useState<string | null>(null);
   const selectedCoupon = coupons.find((c) => c.id === selectedCouponId) ?? null;
+  // UI-5-T5-F3-6 — 발행 직전 쿠폰 확인 분기(null=닫힘): fresh=미장착 질문 / attached=기장착 교체 질문 /
+  //   insert_failed=생성 실패 재확인(무언 실패 금지). 분기 UI일 뿐 발행 실행 아님(2단 수동 무변).
+  const [couponAsk, setCouponAsk] = useState<null | "fresh" | "attached" | "insert_failed">(null);
+  // F3-6(3) — 생성된 할인 쿠폰 id(발행 게이트 실패 시 재사용 — 고아 쿠폰 누적 방지). 장착 시도 후 소거.
+  const pendingCouponIdRef = useRef<string | null>(null);
   const [cfgDock, setCfgDock] = useState(DOCK_OPTIONS[0].id);
   const [cfgProductName, setCfgProductName] = useState("");
   const [cfgProductPrice, setCfgProductPrice] = useState("");
@@ -1614,6 +1619,9 @@ export function CardStudioPage() {
     // F3-8(1) — 배송 전용 질문도 새 카드 = 재무장(카드당 1회 기준).
     deliverySuggestUsedRef.current = false;
     setShowDeliverySuggest(false);
+    // F3-6 — 쿠폰 확인 분기·미소비 생성분 리셋(새 카드에 유령 귀속 금지).
+    setCouponAsk(null);
+    pendingCouponIdRef.current = null;
     // L4(B5) — 막힘 감지 리셋(새 카드 = 스텝 예산 재무장).
     setStuckChip(null);
     stuckShownRef.current = new Set();
@@ -3081,8 +3089,78 @@ export function CardStudioPage() {
       return null;
     }
   }
+  // ── UI-5-T5-F3-6 — 예정 할인 → 실쿠폰 발행(A안 — 기존 insert·RPC 재사용, 신설 0). ──
+  //   숫자 락: 할인액·수량 전부 대표님 폼 입력 유래(AI 경로 부착 0) — 여기는 소비만.
+  const plannedDiscountKrw = () => Number(cfgProduct.plannedDiscount.replace(/[^0-9]/g, "")) || 0;
+  const plannedQty = () => Math.floor(Number(cfgProduct.quantity.replace(/[^0-9]/g, ""))) || 0;
+  // F3-6(1) — 발행 직전 확인 분기: 커머스 + 예정 할인 > 0 시에만. 분기는 질문 제시일 뿐 —
+  //   발행(doPublish)은 여전히 확인 모달의 사용자 탭에서만 호출(2단 수동 무변 · 자동 발행 경로 신설 0).
+  function requestPublish() {
+    if (mode === "commerce" && plannedDiscountKrw() > 0) {
+      const hasCoupon = !!applied["coupon"] && !!selectedCouponId;
+      setCouponAsk(hasCoupon ? "attached" : "fresh");
+      return;
+    }
+    void doPublish();
+  }
+  // F3-6(2) — 쿠폰 생성: partner.coupons.tsx :193-210 payload 조립 동형(신규 발명 금지).
+  //   title 자동 문안 · fixed/원 · 기간 = 판매기간 종료 연동(미설정·과거 = 30일) ·
+  //   수량 = 판매 수량 연동(미입력 = 미전송 → null 무제한) · .select("id") 회수.
+  async function createDiscountCoupon(): Promise<string | null> {
+    try {
+      const partnerId = await fetchMyPartnerId();
+      const dv = plannedDiscountKrw();
+      if (!partnerId || dv <= 0) return null;
+      const endMs = saleEndIso ? new Date(`${saleEndIso}T23:59:59+09:00`).getTime() : NaN;
+      const validUntil =
+        Number.isFinite(endMs) && endMs > Date.now()
+          ? new Date(endMs).toISOString()
+          : new Date(Date.now() + 30 * 86_400_000).toISOString();
+      const qty = plannedQty();
+      const payload: Record<string, unknown> = {
+        partner_id: partnerId,
+        title: `${cfgProductName.trim() || "상품"} 할인`,
+        coupon_type: "fixed",
+        discount_value: dv,
+        discount_unit: "원",
+        conditions: {},
+        valid_from: new Date().toISOString(),
+        valid_until: validUntil,
+        is_active: true,
+      };
+      if (qty > 0) payload.total_count = qty;
+      const { data, error } = await getSupabase()
+        .from("coupons")
+        .insert(payload as never)
+        .select("id")
+        .single();
+      if (error) {
+        console.error("[studio49] 할인 쿠폰 생성 실패:", error);
+        return null;
+      }
+      return (data as { id: string } | null)?.id ?? null;
+    } catch (e) {
+      console.error("[studio49] 할인 쿠폰 생성 예외:", e);
+      return null;
+    }
+  }
+  // F3-6(3) — 시퀀스: insert → 발행(dropId) → set_drop_funnel_coupon(발행 내부 기존 관례 체인).
+  //   insert 실패 = 발행 중단 아님 → insert_failed 재확인 1회(무언 실패 금지).
+  //   발행 게이트 실패(doPublish false) 시 생성분은 ref에 보존 — 재시도에서 재사용(중복 생성 방지).
+  async function publishWithNewCoupon() {
+    setCouponAsk(null);
+    const id = pendingCouponIdRef.current ?? (await createDiscountCoupon());
+    if (!id) {
+      setCouponAsk("insert_failed");
+      return;
+    }
+    pendingCouponIdRef.current = id;
+    await doPublish();
+  }
+
   // UI-5-T2-E4·E5f — 발행 실행(2단 수동의 2단째). 45 handlePublish(:2251-2482) 3모드 완전 계승.
   //   호출처 = 거울 시트 [발행하기] 버튼뿐(자동/링고/연출/타이머 유래 0 — 헌장 ⑨). 이중 탭 = saving 가드.
+  //   F3-6 — 확인 분기(requestPublish)가 앞에 붙었을 뿐 실행 경로·게이트 무변(자동 발행 0).
   async function doPublish(): Promise<boolean> {
     // E5f — 커머스 게이트 해제: 필수 = 사진·상품명·가격·판매기간(45 :2256-2270 3종 + 기간). 미충족 사유 1줄.
     if (mode === "commerce") {
@@ -3241,16 +3319,27 @@ export function CardStudioPage() {
         }
       }
       // E5d — 쿠폰 귀속(45 :2412-2423 동형 · 모드 공통): best-effort.
-      if (dropId && hasCoupon) {
+      //   F3-6(3) — 새 할인 쿠폰(pendingCouponIdRef)이 있으면 우선 귀속: 미장착 카드 = 신규 장착 /
+      //   기장착 카드 = "새 할인 쿠폰으로 바꾸기" 경로의 교체. 장착 실패 = 기존 관례(경고·발행 유지).
+      const attachCouponId = pendingCouponIdRef.current ?? (hasCoupon ? selectedCouponId : null);
+      if (dropId && attachCouponId) {
         try {
           const { error: couponErr } = (await supabase.rpc(
             "set_drop_funnel_coupon" as never,
-            { p_drop_id: dropId, p_coupon_id: selectedCouponId } as never,
+            { p_drop_id: dropId, p_coupon_id: attachCouponId } as never,
           )) as { error: { message?: string } | null };
           if (couponErr) console.warn("[studio49] 쿠폰 연결 실패:", couponErr.message);
+          else if (pendingCouponIdRef.current) {
+            // F3-6(4) — 이중 차감 차단: 생성+장착 성공 시 예정 할인 소거. 근거 = profitOf(F3-1b)가
+            //   couponKrw(쿠폰 유래)와 plannedDiscount(예정 할인)를 각각 차감하는 구조라, 소거하지
+            //   않으면 재편집 세션에서 같은 할인이 드로피 할인 행과 예정 할인 행에 이중 차감된다.
+            setCfgProduct((prev) => ({ ...prev, plannedDiscount: "" }));
+          }
         } catch (e) {
           console.warn("[studio49] set_drop_funnel_coupon exception:", e);
         }
+        // 발행이 나간 뒤에는 성공/실패 무관 1회 소비(다음 발행에 유령 귀속 금지).
+        pendingCouponIdRef.current = null;
       }
       // E5e — 셀링포인트 영속화(45 :2425-2434 동형 · 비커머스만): best-effort.
       if (mode !== "commerce") {
@@ -5771,7 +5860,7 @@ export function CardStudioPage() {
               <button
                 type="button"
                 disabled={saving} /* D3f — E5f 잔재 수복: 구 `|| mode === "commerce"` 차단 해제(게이트는 canPublish·doPublish 검증이 담당). */
-                onClick={() => doPublish()}
+                onClick={() => requestPublish()} /* F3-6(1) — 커머스+예정 할인 시 확인 분기 선행(그 외 = doPublish 직행 — 경로 무변). */
                 aria-label="발행하기"
                 className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-[15px] font-bold text-white transition-transform active:translate-y-px disabled:opacity-60"
                 style={{ backgroundColor: accent, boxShadow: `0 10px 30px -8px ${accent}80` }}
@@ -5783,6 +5872,107 @@ export function CardStudioPage() {
                 발행은 대표님이 직접 눌러야 나가요
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* UI-5-T5-F3-6(1) — 발행 직전 쿠폰 확인(직접 구현 — Radix 0 · 완료 오버레이 문법 동형).
+          질문 제시일 뿐 발행 실행 아님 — 발행은 모달 안 사용자 탭(doPublish)만(2단 수동 무변). */}
+      {couponAsk && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center px-8">
+          <div className="absolute inset-0 bg-black/45 animate-fade-in" onClick={() => setCouponAsk(null)} />
+          <div className="relative w-full max-w-[340px] rounded-2xl bg-white p-5 [box-shadow:0_24px_60px_-16px_rgba(10,14,22,0.5)]">
+            {couponAsk === "fresh" && (
+              <>
+                <p className="text-[16px] font-extrabold tracking-ko text-[#16161D] [word-break:keep-all]">
+                  할인을 쿠폰으로 걸까요?
+                </p>
+                {/* 요약 — 할인액·기간(판매기간 연동)·수량(판매 수량 연동). 전부 대표님 입력 유래. */}
+                <p className="mt-1.5 text-[13px] font-medium leading-relaxed tabular-nums tracking-ko text-[#737373] [word-break:keep-all]">
+                  {plannedDiscountKrw().toLocaleString("ko-KR")}원 할인 ·{" "}
+                  {saleEndIso ? `${labelOfIso(saleEndIso)}까지` : "30일간"} ·{" "}
+                  {plannedQty() > 0 ? `${plannedQty().toLocaleString("ko-KR")}장` : "수량 제한 없음"}
+                </p>
+                <div className="mt-4 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => void publishWithNewCoupon()}
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+                  >
+                    쿠폰 걸고 발행하기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCouponAsk(null);
+                      void doPublish();
+                    }}
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-[#E8E8EC] px-4 text-[14px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                  >
+                    쿠폰 없이 발행하기
+                  </button>
+                </div>
+              </>
+            )}
+            {couponAsk === "attached" && (
+              <>
+                <p className="text-[16px] font-extrabold tracking-ko text-[#16161D] [word-break:keep-all]">
+                  이미 {selectedCoupon?.title ?? "쿠폰"}이 걸려 있어요 — 바꿀까요?
+                </p>
+                <p className="mt-1.5 text-[13px] font-medium leading-relaxed tracking-ko text-[#737373] [word-break:keep-all]">
+                  그대로 두면 예정 할인은 이익 계산용 시뮬레이션으로만 남아요.
+                </p>
+                <div className="mt-4 space-y-2">
+                  {/* 첫 번째 = 안전 기본(그대로 두기). */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCouponAsk(null);
+                      void doPublish();
+                    }}
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#16161D] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+                  >
+                    지금 쿠폰 그대로 두기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void publishWithNewCoupon()}
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-[#E8E8EC] px-4 text-[14px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                  >
+                    새 할인 쿠폰으로 바꾸기
+                  </button>
+                </div>
+              </>
+            )}
+            {couponAsk === "insert_failed" && (
+              <>
+                <p className="text-[16px] font-extrabold tracking-ko text-[#16161D] [word-break:keep-all]">
+                  쿠폰을 만들지 못했어요
+                </p>
+                <p className="mt-1.5 text-[13px] font-medium leading-relaxed tracking-ko text-[#737373] [word-break:keep-all]">
+                  카드는 쿠폰 없이 발행할까요? 쿠폰은 나중에 파트너 쿠폰함에서 만들어 걸 수 있어요.
+                </p>
+                <div className="mt-4 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCouponAsk(null);
+                      void doPublish();
+                    }}
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#16161D] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+                  >
+                    쿠폰 없이 발행하기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCouponAsk(null)}
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-[#E8E8EC] px-4 text-[14px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                  >
+                    나중에 할게요
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
