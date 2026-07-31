@@ -107,6 +107,9 @@ type WholesaleBlock = {
   max: number;
   avg: number;
   median?: number;
+  /** F3-2c-f ADDITIVE — 사분위 락(범위 = Q1~Q3) 재료. 구 클라 미소비 → 회귀 0(median 동형). */
+  q1?: number;
+  q3?: number;
   market_count: number;
   as_of: string;
 };
@@ -141,6 +144,9 @@ type AxisBlock = {
   avg: number | null;
   max: number | null;
   median?: number | null;
+  /** F3-2c-f ADDITIVE — 사분위 락(범위 = Q1~Q3) 재료. 구 클라 미소비 → 회귀 0(median 동형). */
+  q1?: number | null;
+  q3?: number | null;
   n: number;
   excluded: number;
 };
@@ -459,6 +465,9 @@ async function fetchWholesale(
       max: source.high,
       avg,
       median: quantile(kgPrices, 0.5),
+      // F3-2c-f — 사분위 동봉(median 동형 · kgPrices 오름차순 정렬 완료).
+      q1: quantile(kgPrices, 0.25),
+      q3: quantile(kgPrices, 0.75),
       market_count: markets.size,
       as_of: usedDate,
     },
@@ -647,13 +656,16 @@ function iqrTrim(values: number[]): { kept: number[]; removed: number } {
 //   F3-2c-1 — median 동봉(대표값 전환 재료 · ADDITIVE).
 function axisBlockOf(kept: number[], removed: number): AxisBlock {
   if (kept.length === 0)
-    return { min: null, avg: null, max: null, median: null, n: 0, excluded: removed };
+    return { min: null, avg: null, max: null, median: null, q1: null, q3: null, n: 0, excluded: removed };
   const avg = Math.round(kept.reduce((s, v) => s + v, 0) / kept.length);
   return {
     min: Math.round(kept[0]),
     avg,
     max: Math.round(kept[kept.length - 1]),
     median: quantile(kept, 0.5),
+    // F3-2c-f — 사분위 동봉(기존 quantile 재사용 · kept 는 오름차순 보장).
+    q1: quantile(kept, 0.25),
+    q3: quantile(kept, 0.75),
     n: kept.length,
     excluded: removed,
   };
