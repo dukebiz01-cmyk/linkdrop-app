@@ -95,6 +95,9 @@ export type PriceBandResult = {
   // F3-2b ADDITIVE — 품종 필터 결과(kind 요청 시에만 · 없으면 기존 경로 그대로 = 45 회귀 0).
   //   insufficient = 매칭 < 5 → 서버가 온라인 밴드 미산출(정직 게이트) — 여기선 안내문만 표시.
   kind_filter?: { requested: string; matched_count: number; insufficient: boolean } | null;
+  // UI-5-T7-F4b ADDITIVE(edge F4b-E) — 온라인 소스 상태. discontinued=제공사 공식 종료 /
+  //   ok·empty·error=후속 대체 소스용 예비. 구응답(구캐시·미배포)엔 없음 → 기존 사유 문구 폴백.
+  online_status?: "discontinued" | "ok" | "empty" | "error";
 };
 
 // 내 판매 구성(등록폼 입력) — 개당 환산·내 판매단위 강조의 기준.
@@ -221,6 +224,7 @@ export function PriceBandAdvisor({
   onRefresh,
   onAdjustPrice,
   answerFirst,
+  requestedKind,
 }: {
   priceBand: PriceBandResult | null;
   loading: boolean;
@@ -237,6 +241,9 @@ export function PriceBandAdvisor({
    *  + 원시 표 [자세히 보기] 접기 + 게이트 확대(표본<5 축 행 미표시 — Duke 재판정, 45 FIX-45b 무접촉)
    *  + 대표값 평균→중앙값(edge v4 median · 구응답 평균 폴백). 미전달 = 기존 렌더 100% 동일. */
   answerFirst?: boolean;
+  /** F4b-C(7) ADDITIVE(49 opt-in) — 대표님이 고른 품종 칩(폼 selectedKind 거울). 온라인 축 중단
+   *  체제에서 품종 필터 실효가 없음을 안내(헛동작·무언 실패 0). 미전달(45) = 기존 렌더 동일. */
+  requestedKind?: string | null;
 }) {
   // F3-2c-1(2) — [자세히 보기] 접기 상태(answerFirst 전용 · 기본 접힘). 훅은 조기 return 앞(규칙).
   const [showDetail, setShowDetail] = useState(false);
@@ -575,11 +582,17 @@ export function PriceBandAdvisor({
         ? myPriceKrw / composition.unitCount
         : myPriceKrw / totalKg
       : null;
-  // 행 사유(자리 유지 원칙): 게이트 숨김(표본<5)과 "데이터 없음"을 구분(정직 — 침묵 금지 문구의 위치 이동).
-  const stdReason =
-    unitHidden || kgHidden || oHidden
+  // F4b-C(6) — 온라인 소스 상태(원인 다르면 말도 다르게 · 정확 원칙): 중단·오류·표본 부족·없음 구분.
+  const onlineDiscontinued = priceBand.online_status === "discontinued";
+  // 행 사유(자리 유지 원칙): 중단(제공사 종료) > 게이트 숨김(표본<5) > 호출 오류(후속 소스 예비) >
+  //   "데이터 없음" 순 — 4종 문구 구분(침묵 금지 문구의 위치 이동).
+  const stdReason = onlineDiscontinued
+    ? "인터넷 시세는 제공사 사정으로 중단됐어요"
+    : unitHidden || kgHidden || oHidden
       ? "표본이 적어(5건 미만) 표시하지 않았어요"
-      : "표시할 유사상품이 없어요";
+      : priceBand.online_status === "error"
+        ? "인터넷 시세를 불러오지 못했어요 — 다시 조회해 주세요"
+        : "표시할 유사상품이 없어요";
   // 숫자 표기 통일(3): 개당 축 = 원 단위 콤마(실값) / kg 축 = 백원 반올림 관례 · "약"은 범위값에만.
   const fmtStd = (v: number, isUnit: boolean) =>
     isUnit ? Math.round(v).toLocaleString("ko-KR") : fmtWonH(v);
@@ -857,9 +870,10 @@ export function PriceBandAdvisor({
           <TrendingUp className="size-4 text-text-strong" strokeWidth={2} />
           <span className="text-sm font-bold tracking-ko text-text-strong">시세 참고 정보</span>
         </div>
-        {/* ① 기준 태그줄 — 칩 3개 고정(자리 유지: 품종 미선택=품종 섞임 · 구성 미입력=구성 미입력 칩). */}
+        {/* ① 기준 태그줄 — 칩 3개 고정(자리 유지: 품종 미선택=품종 섞임 · 구성 미입력=구성 미입력 칩).
+            F4b-C — 온라인 중단 체제: 3번째 칩 "온라인 0건" 대신 "온라인 중단"(사실 라벨 — 자리 유지). */}
         <div className="flex flex-wrap gap-1.5">
-          {[chipItem, chipComp, `온라인 ${chipOnlineN}건`].map((c) => (
+          {[chipItem, chipComp, onlineDiscontinued ? "온라인 중단" : `온라인 ${chipOnlineN}건`].map((c) => (
             <span
               key={c}
               className="inline-flex items-center rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold tracking-ko text-text-muted"
@@ -878,6 +892,13 @@ export function PriceBandAdvisor({
             보여드리지 않아요.
           </p>
         )}
+        {/* F4b-C(7) — 품종 칩 대기 모드: 온라인 축 중단 시 품종 필터 실효 없음 → 칩 탭에 안내 1줄
+            (칩 제거 금지 — F3-2b 사슬 보존·소스 복귀 시 재가동. 헛동작·무언 실패 0). */}
+        {onlineDiscontinued && requestedKind ? (
+          <p className="rounded-lg bg-surface px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-text-muted [word-break:keep-all]">
+            품종별 비교는 인터넷 시세가 다시 열리면 보여드릴게요.
+          </p>
+        ) : null}
         {/* F3-2c-f(2) — 요약 문장 승격(칩 아래·표준표 위 — 요약이 표보다 먼저): Q1~Q3 = 거래 절반.
             사분위 부재(구응답) = 미표시(기존 3행만 — 라벨-값 불일치 금지 동형). */}
         {stdQ && stdAxis ? (
@@ -896,6 +917,19 @@ export function PriceBandAdvisor({
               </p>
             ) : null}
           </div>
+        ) : onlineDiscontinued && (retailKg || w) ? (
+          /* F4b-C(8) — 온라인 축 부재 시 요약 대체: KAMIS 소매·도매경락으로 산출 가능한 범위만
+             사실 나열(소스 간 통합 금지 = FIX-45b 락 준수 — 축별 병기·합산 0). */
+          <p className="text-[15px] font-bold leading-snug tabular-nums tracking-ko text-text-strong [word-break:keep-all]">
+            {retailKg
+              ? `소매 kg당 약 ${fmtWonH(retailKg.min)}~${fmtWonH(retailKg.max)}원`
+              : null}
+            {retailKg && w ? " · " : null}
+            {w ? `도매 kg당 약 ${fmtWonH(w.min)}~${fmtWonH(w.max)}원` : null}{" "}
+            <span className="text-[11px] font-medium text-text-muted">
+              (인터넷 시세 중단 — 소매·도매 기준)
+            </span>
+          </p>
         ) : null}
         {/* ② 표준표 3행 고정 — 값 불가 행도 행 자체는 항상 존재(그 자리에 사유 1줄 · 자리 유지 원칙).
             F3-2c-f — 범위 = 사분위 락(신규 통계 0 — edge quantile 동봉값 소비만). */}
@@ -957,6 +991,13 @@ export function PriceBandAdvisor({
           <div className="rounded-lg bg-surface px-3 py-2.5 text-[13px] font-bold tabular-nums tracking-ko text-text-strong [word-break:keep-all]">
             내 가격 {myPriceKrw.toLocaleString("ko-KR")}원 — {verdict3}
           </div>
+        ) : onlineDiscontinued && myPriceKrw != null && myPriceKrw > 0 ? (
+          /* F4b-C(8) — 판정 박스 자리 유지+사유(F3-2c-e 원칙): 판정 기준(인터넷 Q1~Q3)이 중단돼
+             산출 불가 — 박스는 남기고 사유만(무언 소멸 금지). */
+          <div className="rounded-lg bg-surface px-3 py-2.5 text-[12px] font-medium tracking-ko text-text-muted [word-break:keep-all]">
+            내 가격 {myPriceKrw.toLocaleString("ko-KR")}원 — 비교 판정은 인터넷 시세 기준이라
+            제공사 사정으로 지금은 어려워요
+          </div>
         ) : null}
         {/* F3-2c-f(6) — 방어 캡션 2종(사실 고지 · 권유 어휘 0). */}
         {stdAxis && stdAxis.n < 10 ? (
@@ -964,7 +1005,8 @@ export function PriceBandAdvisor({
             표본이 적어 범위가 흔들릴 수 있어요
           </p>
         ) : null}
-        {chipKindLabel === "품종 섞임" && onlineKindsTop.length > 0 ? (
+        {/* F4b-C(7) — 온라인 중단 시 이 권유는 헛동작 유도라 게이트(칩 자체는 폼에 유지). */}
+        {!onlineDiscontinued && chipKindLabel === "품종 섞임" && onlineKindsTop.length > 0 ? (
           <p className="text-[11px] font-medium tracking-ko text-text-subtle [word-break:keep-all]">
             품종을 고르면 더 정확해져요
           </p>
