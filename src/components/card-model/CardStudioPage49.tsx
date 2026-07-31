@@ -7,6 +7,10 @@ import {
   type ReservationSlotRow,
 } from "./card-model-adapters";
 import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
+// UI-5-T6a — 카톡 인앱 3티어 이식(45 FIX-47·KAKAO-LINGO-1 동형): 감지·크롬 유도 전부 공용 헬퍼
+//   재사용(수정 0·신규 로직 0). 45 :100-104 import 동형.
+import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
+import { startVoiceHandoff } from "@/lib/voice-handoff";
 // UI-5-T2-E1 — 영상 검색 실배선(45 파이프 계승). 45 순수 모듈·공용 타입 import(45 컴포넌트 무수정).
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { getSupabase } from "@/lib/supabase";
@@ -532,6 +536,8 @@ const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "im
 //   49에 잔존 — 실슬롯 이식(F3-10 본대) 전까지 AI 경로 폐쇄(유일 차단 밖 목업 해소).
 //   수동 편집(덱 탭·칸 조작)은 무영향 — 차단은 AI 액션 경로 한정.
 const AI_PENDING_BLOCKS = new Set(["aivideo", "image", "dock", "calendar"]);
+// UI-5-T6a — 인앱 안내 1줄(45 V6_INAPP_NOTICE :424 동형 — 한 글자 락·탭 문법).
+const V6_INAPP_NOTICE = "카카오톡에서는 누르면 크롬에서 이어져요.";
 // UI-5-T1m — 미확정 릴레이 큐 정렬 우선순위: 영상 → 이미지 → 숫자(product/party/…) → 구간(content) → 기타.
 function confirmRank(id: string): number {
   if (id === "__video") return 0;
@@ -1396,6 +1402,12 @@ export function CardStudioPage({
   const [burstKey, setBurstKey] = useState(0);
   // 링고AI 플로팅 어시스턴트 — 어디서나 따라다니며 장착·탈착·편집을 도움
   const [lingoOpen, setLingoOpen] = useState(false);
+  // UI-5-T6a — FIX-47 동형(45 :949-952): 인앱 WebView(카톡 등) 음성 정직 게이트. 마운트 후 판정
+  //   (SSR=null — hydration 안전). 텍스트 대화 무접촉 — 음성 진입점만 크롬 핸드오프로 대체.
+  const [inAppNoMic, setInAppNoMic] = useState<InAppBrowser | null>(null);
+  useEffect(() => {
+    setInAppNoMic(getInAppBrowser());
+  }, []);
   // UI-5-T2-E4c — 자동 양보: 링고가 화면 조작을 요구하면 패널이 스스로 닫힘. 닫힘 직후 FAB 옆 재소환 말풍선 1회.
   const [yieldBubble, setYieldBubble] = useState(false);
   const yieldBubbleShownRef = useRef(false); // 1회성(반복 금지).
@@ -2084,6 +2096,13 @@ export function CardStudioPage({
   function handleOrbTap() {
     primeAudio(); // 오디오 언락은 제스처 컨텍스트 최상단(45 :3489).
     if (thinking) return; // streaming 가드(45 :3490 동형).
+    // T6a — 인앱(마이크 불가) = 크롬 핸드오프(45 B-4 :3492-3495 동형 — 오브 탭 자체가 유도).
+    //   next="/studio-build" — T-6b 스위치 후에도 유효한 복귀 주소. 시트 마이크(L2 단일 경로)도
+    //   이 분기를 자동 공유. 안내는 음성 고스트(45 chat.notify 대응).
+    if (inAppNoMic) {
+      void startVoiceHandoff("/studio-build", showVoiceGhost);
+      return;
+    }
     if (listening) {
       // 청취 중 재탭 = 중지(낮은 톤 + 종료 — 45 :3501-3508 동형).
       playListenStop();
@@ -2980,18 +2999,25 @@ export function CardStudioPage({
     const okActions = (rawActions ?? []).filter((a: any) => isAiActionAllowed(m, a)); // AI_BLOCKED_FIELDS·AI_PENDING_BLOCKS·MODE_ALLOWED·switchMode 차단.
     if (okActions.length < (rawActions?.length ?? 0)) {
       // E4e-2(재) — 차단 사유 분기: 준비 중 블록 히트 = 준비 중 안내(구 모드 오문구 방지) / 그 외 = 기존 모드 안내.
-      const pendingHit = (rawActions ?? []).some((a: any) => {
-        const blk =
-          a?.type === "equip" ? a.blockId : a?.type === "setField" ? FIELD_TO_BLOCK[a.field] : null;
-        return typeof blk === "string" && AI_PENDING_BLOCKS.has(blk);
-      });
+      //   T6a(F3-10c 흡수) — calendar 는 실화(F3-10b)됐지만 AI 차단은 유지(콘텐츠 선택=대표님) —
+      //   "준비 중" 오문구만 교정(정확 원칙 · aivideo/image/dock 기존 문구 유지).
+      const pendingBlk =
+        (rawActions ?? [])
+          .map((a: any) =>
+            a?.type === "equip" ? a.blockId : a?.type === "setField" ? FIELD_TO_BLOCK[a.field] : null,
+          )
+          .find((blk: unknown) => typeof blk === "string" && AI_PENDING_BLOCKS.has(blk as string)) ??
+        null;
       setMessages((mm) => [
         ...mm,
         {
           role: "assistant",
-          text: pendingHit
-            ? "이 부분은 준비 중이에요 — 열리면 제가 먼저 알려드릴게요."
-            : "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요.",
+          text:
+            pendingBlk === "calendar"
+              ? "예약 날짜는 매장 캘린더에서 대표님이 직접 정하는 영역이에요."
+              : pendingBlk
+                ? "이 부분은 준비 중이에요 — 열리면 제가 먼저 알려드릴게요."
+                : "이 기능은 매장 카드에서 쓸 수 있어요 — 퍼블릭 카드엔 적용하지 않았어요.",
         },
       ]);
     }
@@ -6181,7 +6207,20 @@ export function CardStudioPage({
                         placeholder={listening ? "듣고 있어요…" : "링고에게 편집을 부탁해보세요"}
                         className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#9A9A9A]"
                       />
-                      {voiceSupported && lingoText.trim() === "" ? (
+                      {inAppNoMic && lingoText.trim() === "" ? (
+                        /* T6a — 인앱 마이크 자리 = [음성으로 만들기](KAKAO-LINGO-1 동형): 탭 =
+                           handleOrbTap → 내장 인앱 분기가 크롬 핸드오프 실행(단일 경로 유지). */
+                        <button
+                          onClick={handleOrbTap}
+                          disabled={thinking}
+                          aria-label="음성으로 만들기 — 크롬에서 이어져요"
+                          className="flex h-9 shrink-0 items-center justify-center gap-1 rounded-full px-3 text-[12px] font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
+                          style={{ backgroundColor: LINGO }}
+                        >
+                          <Mic className="h-[14px] w-[14px]" strokeWidth={2.5} />
+                          음성으로 만들기
+                        </button>
+                      ) : voiceSupported && lingoText.trim() === "" ? (
                         <button
                           onClick={handleOrbTap} /* L2 — 시트 내 마이크 = L1 오브 동일 시퀀스(primeAudio·띠딩·게이트). */
                           disabled={thinking}
@@ -6206,10 +6245,18 @@ export function CardStudioPage({
                         </button>
                       )}
                     </div>
-                    {!voiceSupported && (
-                      <p className="mt-1.5 text-center text-[10px] font-medium text-[#B4B4B4]">
-                        음성은 크롬에서 쓸 수 있어요. 지금은 입력으로 편집해요.
+                    {/* T6a — 인앱 안내 1줄(45 :5612-5616 동형 — FIX-47 게이트 대체 안내). 인앱은 전용
+                        안내가 구 미지원 문구를 대체(이중 안내 방지). */}
+                    {inAppNoMic ? (
+                      <p className="mt-1.5 text-center text-[10px] font-medium text-[#B4B4B4] [word-break:keep-all]">
+                        {V6_INAPP_NOTICE}
                       </p>
+                    ) : (
+                      !voiceSupported && (
+                        <p className="mt-1.5 text-center text-[10px] font-medium text-[#B4B4B4]">
+                          음성은 크롬에서 쓸 수 있어요. 지금은 입력으로 편집해요.
+                        </p>
+                      )
                     )}
                 {/* UI-5-T1(T-D) — 보조도구 3종(담기·편집·되돌리기) 미이식. */}
               </div>
