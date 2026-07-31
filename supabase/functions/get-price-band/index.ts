@@ -1209,12 +1209,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // P5a — 판매 구성 파라미터(옵셔널). per_unit_weight_g 는 개수-only 리스팅 환산에 사용,
   //   unit_count 는 에코 전용(클라 '내 판매단위' 계산 검증용). 없으면 기존 동작 그대로.
-  const perUnitWeightG =
-    typeof body.per_unit_weight_g === "number" &&
-    Number.isFinite(body.per_unit_weight_g) &&
-    body.per_unit_weight_g > 0
+  // F3-2c-d — 위생 클램프: 1g~100kg 밖 = 미수신 취급(캐시 실측 "puw7.4e+197" 키 오염 재발 방어 —
+  //   isFinite·>0 만으로는 지수 표기 이상값이 통과해 cache_key 파편·에코 오염). 범위 밖 거부(보정 아님).
+  const puwRaw =
+    typeof body.per_unit_weight_g === "number" && Number.isFinite(body.per_unit_weight_g)
       ? Math.round(body.per_unit_weight_g)
-      : undefined;
+      : null;
+  const perUnitWeightG = puwRaw != null && puwRaw >= 1 && puwRaw <= 100_000 ? puwRaw : undefined;
   const unitCount =
     typeof body.unit_count === "number" && Number.isFinite(body.unit_count) && body.unit_count > 0
       ? Math.round(body.unit_count)
