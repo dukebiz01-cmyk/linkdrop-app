@@ -2077,31 +2077,56 @@ export function CardStudioPage({
 
   // L3 — onDone 시그니처 확장(45 useLingoChat speak :530-555 관례: OFF·미지원·오류 전 분기 onDone 보장).
   //   스피커 OFF(speakerOnRef) = 낭독 0 + 즉시 onDone — 텍스트만.
+  // UI-5-T7-F4-8(a) — 발화 직렬화(1슬롯 대기열): 구 "진입 시 무조건 cancel"이 진행 중 낭독을
+  //   자르던 것을 폐지. 낭독 중 신규 발화 = 최신 1건만 대기 → onend 후 재생(중간 발화는 최신으로
+  //   대체·대체된 건의 onDone 은 즉시 호출해 사슬 누수 방지). 절단은 사용자 의도 지점(오브 탭)만.
+  const speakBusyRef = useRef(false);
+  const speakQueueRef = useRef<{ text: string; onDone?: () => void } | null>(null);
   function speak(text: string, onDone?: () => void) {
     if (!text || typeof window === "undefined" || !window.speechSynthesis || !speakerOnRef.current) {
       onDone?.();
       return;
     }
+    if (speakBusyRef.current) {
+      speakQueueRef.current?.onDone?.(); // 대체되는 대기분 사슬 보장.
+      speakQueueRef.current = { text, onDone };
+      return;
+    }
     try {
+      // busy=false 인데 남아 있는 브라우저 잔재(좀비 utterance)만 청소 — 정상 낭독은 위 분기가 보호.
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
       u.lang = "ko-KR";
       u.rate = 1.05;
+      speakBusyRef.current = true;
       // L1 — 낭독 상태 추적(오브 배지 Volume2 전환). cancel 도 onend 발화 → false 복귀.
       u.onstart = () => setSpeaking(true);
-      u.onend = () => {
+      let finished = false; // onend·onerror 이중 발화 가드(1회 종결).
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        speakBusyRef.current = false;
         setSpeaking(false);
         onDone?.();
+        const next = speakQueueRef.current;
+        speakQueueRef.current = null;
+        if (next) speak(next.text, next.onDone); // 대기분 재생(외부 cancel 시엔 호출 전에 대기열이 비워짐).
       };
-      u.onerror = () => {
-        setSpeaking(false);
-        onDone?.();
-      };
+      u.onend = finish;
+      u.onerror = finish;
       window.speechSynthesis.speak(u);
     } catch {
+      speakBusyRef.current = false;
       setSpeaking(false);
       onDone?.();
     }
+  }
+  // F4-8(a) — 사용자 의도 절단 단일 헬퍼: 대기열 소거 → cancel(대기열을 안 비우면 finish 가
+  //   절단 직후 대기분을 재생해 청취 위로 에코 — 절단 지점은 반드시 이 함수 경유).
+  function stopSpeakingHard() {
+    speakQueueRef.current = null;
+    window.speechSynthesis?.cancel();
+    setSpeaking(false);
   }
 
   // UI-5-T3-L1 — 오브 짧은 탭 = 즉시 청취(45 S2b handleOrbTap :3487-3525 이식 · 낭독 대기 0).
@@ -2136,9 +2161,8 @@ export function CardStudioPage({
       setLingoOpen(true); // 시트 폴백(글 입력).
       return;
     }
-    // 낭독 중 탭 = 끊고 즉시 청취(45 :3517 stopSpeaking 동형).
-    window.speechSynthesis?.cancel();
-    setSpeaking(false);
+    // 낭독 중 탭 = 끊고 즉시 청취(45 :3517 stopSpeaking 동형). F4-8(a) — 대기열 동반 소거.
+    stopSpeakingHard();
     playListenStart(); // 띠딩(청취 시작음 — 45 :3520).
     setInterim("");
     try {
@@ -3237,7 +3261,7 @@ export function CardStudioPage({
       if (!assembled && acc && lingoChannelRef.current === "voice" && speakerOn) {
         speakThenProceed({
           speak,
-          stopSpeaking: () => window.speechSynthesis?.cancel(),
+          stopSpeaking: stopSpeakingHard, // F4-8(a) — 가드 절단도 대기열 동반 소거(청취 위 에코 방지).
           text: acc,
           proceed: () => {
             if (!listeningRef.current) showVoiceGhost("이어서 말씀하려면 저를 탭하세요", 3000);
@@ -6187,10 +6211,7 @@ export function CardStudioPage({
                 aria-pressed={speakerOn}
                 onClick={() =>
                   setSpeakerOn((v) => {
-                    if (v) {
-                      window.speechSynthesis?.cancel();
-                      setSpeaking(false);
-                    }
+                    if (v) stopSpeakingHard(); // F4-8(a) — OFF = 명시 절단 의사(대기열 동반 소거).
                     return !v;
                   })
                 }
