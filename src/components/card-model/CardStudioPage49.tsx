@@ -2704,11 +2704,13 @@ export function CardStudioPage() {
     const plan = stepPlanState;
     if (currentStep < plan.length - 1) enterStep(currentStep + 1);
   }
-  // UI-5-T2-E2b — 칩 라벨: 다음이 확인(review)이면 [확인하러 가기](마지막 실스텝 완료·전 스텝 충족 B3 공용).
+  // UI-5-T2-E2b→F3-7 — 칩 주 버튼 라벨: 상태 표기("다음: X")가 아니라 전진 "액션" 문구(하러 가기 —
+  //   완료 알림에서 흐름이 끝난 듯 읽히는 단절 해소). 다음이 확인(review)이면 [발행 확인하러 가기] —
+  //   확인 스텝으로 "이동만"(발행 실행 아님 · 수동 2단 무변 · 자동 발행 금지 락 — 헌장 ⑨).
   function stepChipLabel(target: number): string {
     const s = stepPlanState[target];
-    if (!s) return "다음";
-    return s.key === "review" ? "확인하러 가기" : `다음: ${s.label}`;
+    if (!s) return "다음 하러 가기 →";
+    return s.key === "review" ? "발행 확인하러 가기" : `다음: ${s.label} 하러 가기 →`;
   }
   // UI-5-T2-E2b(B2·B3) — 첫 미확정 스텝 탐색(needsConfirm 잔존=pendingConfirm 큐 또는 isStepDone false)
   //   → 이동 "제안" 칩만 세움(강제 점프 아님 — enterStep은 칩 탭에서만). 순서 = 런타임 플랜 순(planOrder와 동일 기준).
@@ -4006,9 +4008,11 @@ export function CardStudioPage() {
                                 </button>
                               </div>
                             )}
-                            {/* E2b(A1) — 완료 칩 합류: 릴레이 큐가 없으면 스텝 [다음] 칩이 이어받음(중복 렌더 금지·자동 점프 없음). */}
+                            {/* E2b(A1)→F3-7 — 완료 칩 합류: 릴레이 큐가 없으면 스텝 전진 버튼이 이어받음
+                                (중복 렌더 금지·자동 점프 없음). 주=전진(링고 블루·44px — 기존 nextStep/enterStep
+                                경로 그대로) / 부=텍스트 강등(닫힘만) — 독립 렌더부(:5530대)와 동일 재구성. */}
                             {pendingConfirm.length === 0 && stepChip && (
-                              <div className="mt-2 flex flex-wrap gap-1.5">
+                              <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                 <button
                                   onClick={() => {
                                     const t = stepChip;
@@ -4016,13 +4020,13 @@ export function CardStudioPage() {
                                     if (t.kind === "done") nextStep(); // A2 — 헤더 [다음]과 동일 경로.
                                     else enterStep(t.target); // B2 — 사용자 탭 = 이동 의사.
                                   }}
-                                  className="inline-flex min-h-[36px] items-center rounded-full bg-[#16161D] px-3 text-[11px] font-bold text-white active:scale-95"
+                                  className="inline-flex min-h-[44px] items-center rounded-full bg-[#1D4ED8] px-4 text-[12px] font-bold text-white active:scale-95"
                                 >
                                   {stepChipLabel(stepChip.target)}
                                 </button>
                                 <button
                                   onClick={() => setStepChip(null)}
-                                  className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] active:scale-95"
+                                  className="inline-flex min-h-[44px] items-center px-2 text-[11px] font-medium text-[#A3A3A3] active:opacity-70"
                                 >
                                   여기 더 볼게요
                                 </button>
@@ -5525,6 +5529,9 @@ export function CardStudioPage() {
                   ? `✓ ${stepPlanState[currentStep]?.label ?? "이번 스텝"} 완료`
                   : "✦ 링고가 채운 데까지 확인했어요"}
               </span>
+              {/* F3-7(1) — 주객 복원: 주 = 전진 버튼(링고 블루·44px — 이동은 기존 nextStep/enterStep
+                  경로 그대로, 내부 enterStep→onEditField→jumpToBlock 이 해당 칸 스크롤·깜빡 지목까지 수행 —
+                  신규 이동 엔진 0) / 부 = "여기 더 볼게요" 텍스트 강등(닫힘만). 탭 유래 이동뿐 — 자동 점프 0. */}
               <button
                 onClick={() => {
                   const t = stepChip;
@@ -5532,13 +5539,13 @@ export function CardStudioPage() {
                   if (t.kind === "done") nextStep(); // A2 — 헤더 [다음]과 동일 경로(nextStep 경유).
                   else enterStep(t.target); // B2 — 사용자 탭 = 이동 의사(강제 점프 아님).
                 }}
-                className="inline-flex min-h-[36px] items-center rounded-full bg-[#16161D] px-3 text-[11px] font-bold text-white transition-transform active:scale-95"
+                className="inline-flex min-h-[44px] items-center rounded-full bg-[#1D4ED8] px-4 text-[12px] font-bold text-white transition-transform active:scale-95"
               >
                 {stepChipLabel(stepChip.target)}
               </button>
               <button
                 onClick={() => setStepChip(null)}
-                className="inline-flex min-h-[36px] items-center rounded-full border border-[#E8E8EC] bg-white px-3 text-[11px] font-bold text-[#525252] transition-transform active:scale-95"
+                className="inline-flex min-h-[44px] items-center px-2 text-[11px] font-medium text-[#A3A3A3] transition-opacity active:opacity-70"
               >
                 여기 더 볼게요
               </button>
