@@ -998,8 +998,9 @@ export function PriceBandAdvisor({
                 </p>
               ) : null}
               {retailKg && retailKindLabel ? (
-                <p className="text-[11px] font-medium tracking-ko text-text-subtle">
-                  소매 기준: {retailKindLabel}
+                /* F4a(F4-4) — KAMIS 대표 행 kind_name 은 내 품종 선택과 무관(조사 기준) — 오해 차단 명시. */
+                <p className="text-[11px] font-medium tracking-ko text-text-subtle [word-break:keep-all]">
+                  소매 기준: {retailKindLabel} — KAMIS 조사 품종(내 품종 선택과 무관)
                 </p>
               ) : null}
               {retailKg && prevMonthKg != null && prevPct != null ? (
@@ -1151,10 +1152,10 @@ export function PriceBandAdvisor({
             품종 섞임: {onlineKindsTop.map(([k, n]) => `${k} ${n}`).join(" · ")}
           </p>
         ) : null}
-        {/* T3a-ⓑ [3] — 소매 조사 품종 기준(retail_kind). */}
+        {/* T3a-ⓑ [3] — 소매 조사 품종 기준(retail_kind). F4a(F4-4) — 조사 기준임을 명시(오해 차단). */}
         {retailKg && retailKindLabel ? (
-          <p className="text-[11px] font-medium tracking-ko text-text-subtle">
-            소매 기준: {retailKindLabel}
+          <p className="text-[11px] font-medium tracking-ko text-text-subtle [word-break:keep-all]">
+            소매 기준: {retailKindLabel} — KAMIS 조사 품종(내 품종 선택과 무관)
           </p>
         ) : null}
         {/* T3a-ⓑ [4] — 1개월 전 대비(사실만 · 예측 어휘 0). */}

@@ -1317,6 +1317,11 @@ export function CardStudioPage({
   const [videoSearched, setVideoSearched] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoSlot49 | null>(null);
+  // UI-5-T7-F4a(F4-1) — 제목 자동 반영 추적: 자동 반영분(videoId+원문)을 기록해 "사용자 입력 위장"
+  //   차단(실카드 2건 오염 원인 — 구 :2611 조건부 유지의 맹점). ref 불일치 = 수동/AI 작성 흔적.
+  const titleAutoRef = useRef<{ videoId: string; title: string } | null>(null);
+  // F4a(F4-1b) — 교체 확인 게이트 대기 후보(사용자 작성 흔적 보호 — null=닫힘). Radix 금지 직접 구현.
+  const [videoSwapAsk, setVideoSwapAsk] = useState<DiscoverCandidate | null>(null);
   const videoLeadRef = useRef<string | null>(null); // 요약 리드 취소용(영상 바뀌면 이전 무시).
   // UI-5-T2-E2a — 순차 진행: 현재 스텝·완료 집합·잠금 토스트.
   const [currentStep, setCurrentStep] = useState(0);
@@ -2599,8 +2604,26 @@ export function CardStudioPage({
     }
   }
   // 영상 선택 — 45 handleSelectVideo(:2086) 계승 + T1n 통합(장착·관문·도우미). 선택은 대표님.
+  //   UI-5-T7-F4a(F4-1) — 하이브리드 게이트: 교체 시 제목·한마디가 자동 반영분 그대로면 무확인
+  //   교체(a)·사용자 작성 흔적(수동/AI — ref 불일치 or 한마디 존재)이면 확인 게이트(b). 첫 선택은
+  //   게이트 불요(오염 대상 없음). E5c 2단·pendingVideo 호출부 무변 — 이 함수가 단일 합류점.
   async function selectVideo(c: DiscoverCandidate) {
+    if (selectedVideo) {
+      const auto = titleAutoRef.current;
+      const titleUntouched = !cfgTitle.trim() || (auto != null && cfgTitle === auto.title);
+      const subtitleEmpty = !cfgSubtitle.trim();
+      if (!(titleUntouched && subtitleEmpty)) {
+        setVideoSwapAsk(c); // (b) 게이트 — [새로/그대로] 탭 대기.
+        return;
+      }
+    }
+    await applyVideoSelection(c, "auto");
+  }
+  // F4a — 실적용(모드: auto=자동분만 새 영상 기준 교체 / force-new=[새로] 강제 재반영 /
+  //   keep=[그대로] 카피 보존). 공통 리셋(클립·포인트·요약 리드)·videoLeadRef 레이스 가드 무변.
+  async function applyVideoSelection(c: DiscoverCandidate, copyMode: "auto" | "force-new" | "keep") {
     const slot = toVideoSlot(c);
+    const isSwap = selectedVideo != null;
     setSelectedVideo(slot);
     setCfgClip(""); // 구간 초기화(45 :2092/2097) — 영상 바뀌면 구간 잔존 방지.
     // D3b — 영상 교체 = 포인트 픽·후보·제안 초기화(45 :2100 setPickedPoints([]) 동형).
@@ -2608,7 +2631,21 @@ export function CardStudioPage({
     setAiKeyPoints([]);
     setAiSummaryLead(null);
     if (!applied["content"]) equip(blockById("content")); // content 장착 → hasVideo 충족(관문 통과).
-    setCfgTitle((t) => (t.trim() ? t : slot.title)); // 제목 반영(비었을 때만 — 사용자 제목 존중).
+    if (copyMode === "force-new") {
+      // (b)-[새로] — 제목·한마디를 새 영상 기준으로 재작성(제목 = 새 자동 반영·한마디 = 소거).
+      setCfgTitle(slot.title);
+      setCfgSubtitle("");
+      titleAutoRef.current = { videoId: slot.videoId, title: slot.title };
+      setStepToast("영상이 바뀌어 내용을 새로 만들었어요");
+    } else if (copyMode === "auto") {
+      // (a) — 자동 반영분/빈 값만 교체(수동 선입력 존중 = 구 :2611 계약 유지) + ref 기록.
+      const auto = titleAutoRef.current;
+      if (!cfgTitle.trim() || (auto != null && cfgTitle === auto.title)) {
+        setCfgTitle(slot.title);
+        titleAutoRef.current = { videoId: slot.videoId, title: slot.title };
+        if (isSwap) setStepToast("영상이 바뀌어 내용을 새로 만들었어요");
+      }
+    } // "keep" — 카피 무접촉(제목·한마디 유지 — 대표님 선택 존중).
     confirmHelper("content"); // 도우미 완료(영상 담김) + 배지·릴레이 연동.
     // oembed→요약 리드(45 :2103) — 백그라운드 best-effort. 결과 소비는 T-2 AI 포인트 UI 예정.
     videoLeadRef.current = slot.videoId;
@@ -3723,7 +3760,14 @@ export function CardStudioPage({
       <header className="sticky top-0 z-40 border-b border-[#E8E8EC] bg-white/90 backdrop-blur-lg">
         <div className="mx-auto flex max-w-md items-center gap-3 px-5 py-3">
           <button
+            type="button"
             aria-label="닫기"
+            /* UI-5-T7-F4a(F4-2) — 무배선 수복: 45 :3617-3621 동형(back 폴백 /home — 카톡 핸드오프
+               직행 진입 = 히스토리 1 케이스 커버). 3모드 공통 헤더 단일 지점. */
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) window.history.back();
+              else window.location.assign("/home");
+            }}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#525252] transition-colors hover:bg-[#F5F5F5]"
           >
             <X className="h-5 w-5" strokeWidth={2} />
@@ -5998,14 +6042,57 @@ export function CardStudioPage({
         </div>
       )}
 
+      {/* UI-5-T7-F4a(F4-1b) — 영상 교체 확인 게이트(직접 구현 — Radix 0 · 완료 오버레이 문법 동형):
+          사용자 작성 흔적(수동/AI 제목·한마디) 보호 — 교체는 두 버튼 탭에서만. */}
+      {videoSwapAsk && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center px-8">
+          <div className="absolute inset-0 bg-black/45 animate-fade-in" onClick={() => setVideoSwapAsk(null)} />
+          <div className="relative w-full max-w-[340px] rounded-2xl bg-white p-5 [box-shadow:0_24px_60px_-16px_rgba(10,14,22,0.5)]">
+            <p className="text-[16px] font-extrabold tracking-ko text-[#16161D] [word-break:keep-all]">
+              제목·한마디를 새 영상 기준으로 다시 만들까요?
+            </p>
+            <p className="mt-1.5 text-[13px] font-medium leading-relaxed tracking-ko text-[#737373] [word-break:keep-all]">
+              직접 쓰신 내용이 있어요 — 그대로 두면 이전 영상 기준 문구가 남아요.
+            </p>
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const c = videoSwapAsk;
+                  setVideoSwapAsk(null);
+                  if (c) void applyVideoSelection(c, "force-new");
+                }}
+                className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+              >
+                새로 만들게요
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const c = videoSwapAsk;
+                  setVideoSwapAsk(null);
+                  if (c) void applyVideoSelection(c, "keep");
+                }}
+                className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-[#E8E8EC] px-4 text-[14px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+              >
+                그대로 둘게요
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* UI-5-T2-E4 — 발행 성공: share 링크 표시·복사(45 :2471 savedUrl 계승). 오버레이 1개. */}
       {dropped && savedUrl && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center px-8">
           <div className="absolute inset-0 bg-black/45" />
           <div className="relative w-full max-w-[340px] rounded-2xl bg-white p-5 [box-shadow:0_24px_60px_-16px_rgba(10,14,22,0.5)]">
-            <p className="text-[16px] font-extrabold tracking-ko text-[#16161D]">발행 완료! 🎉</p>
+            <p className="text-[16px] font-extrabold tracking-ko text-[#16161D]">
+              카드가 발행됐어요 🎉
+            </p>
+            {/* F4a(F4-2) — 확신 문구 보강: 완료 사실 + 다음 행동(공유/홈) 명시. 저장 URL·복사 무변. */}
             <p className="mt-1.5 text-[13px] font-medium leading-relaxed tracking-ko text-[#737373] [word-break:keep-all]">
-              이 링크로 카드를 공유하세요.
+              지금부터 이 링크로 손님에게 보여줄 수 있어요.
             </p>
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5">
               <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#525252]">{savedUrl}</span>
@@ -6027,6 +6114,14 @@ export function CardStudioPage({
                 닫기
               </button>
             </div>
+            {/* F4a(F4-2) — 탈출 동선: 발행 후 홈 복귀 버튼(오버레이 잔류 해소 — 닫기·복사 무변). */}
+            <button
+              type="button"
+              onClick={() => window.location.assign("/home")}
+              className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#1D4ED8] text-[13px] font-bold text-white transition-transform active:scale-[0.98]"
+            >
+              홈으로 가기
+            </button>
           </div>
         </div>
       )}
