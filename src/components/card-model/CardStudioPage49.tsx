@@ -1367,18 +1367,45 @@ export function CardStudioPage({
   // UI-5-T2-E2b(A1) — 스텝 완료 에지 감지: 현재 스텝 isStepDone false→true 순간 1회 발화(effect+prev ref).
   //   발화 = 완료 칩 제시 + 헤더 [다음] 펄스(A2)뿐 — 자동 점프·자동 발행 없음(탭이 의사).
   //   연출·요약 중엔 침묵(AI 채움 구간은 B1·B2가 담당) · review 스텝 제외(항상 done인 훑어보기).
+  // UI-5-T7-F4-10 — ⓐ 발행 유도 능동화: 다음이 확인(review) 스텝이면 "다 채웠어요 — 이제 발행해
+  //   볼까요?" 발화(토스트+낭독 — speak 가 스피커 OFF 자체 게이트)+칩(구 90초 막힘 대기 제거).
+  //   수동 발행 락 무변 — 칩 탭 = review 이동 유도뿐, 발행 버튼은 대표님 손. ⓑ 침묵 에지 유실
+  //   방지: 연출·요약 중 완료 에지는 pending 보관 → 연출 종료 후 재제시(prev ref 가 에지를
+  //   소진해 버리던 유실 해소).
+  const pendingDoneChipRef = useRef<number | null>(null);
+  function fireDoneChip() {
+    const target = Math.min(currentStep + 1, stepPlanState.length - 1);
+    setStepChip({ kind: "done", target });
+    setNextPulseKey((k) => k + 1); // A2 — 두 진입점(칩·헤더) 동일 경로 = nextStep.
+    if (stepPlanState[target]?.key === "review") {
+      setStepToast("다 채웠어요 — 이제 발행해 볼까요?");
+      speak("다 채웠어요 — 이제 발행해 볼까요?");
+    }
+  }
   useEffect(() => {
     const done = isStepDone(currentStep);
     const prev = prevStepDoneRef.current;
     if (
       prev && prev.idx === currentStep && !prev.done && done &&
-      !assembling && !assembleSummary &&
       stepPlanState[currentStep]?.key !== "review"
     ) {
-      setStepChip({ kind: "done", target: Math.min(currentStep + 1, stepPlanState.length - 1) });
-      setNextPulseKey((k) => k + 1); // A2 — 두 진입점(칩·헤더) 동일 경로 = nextStep.
+      if (assembling || assembleSummary) {
+        pendingDoneChipRef.current = currentStep; // F4-10ⓑ — 침묵 구간 = 유실 대신 보류.
+      } else {
+        fireDoneChip();
+      }
     }
     prevStepDoneRef.current = { idx: currentStep, done };
+  });
+  // F4-10ⓑ — 연출 종료 후 보류분 재제시(같은 스텝·여전히 완료일 때만 — 스텝 이탈 시 폐기).
+  //   에지 effect 동형의 무 deps 형태(assembling 등이 아래에서 선언 — deps 즉시 평가 회피,
+  //   ref 가드로 멱등이라 렌더마다 검사 비용 0 상당).
+  useEffect(() => {
+    if (assembling || assembleSummary) return;
+    const idx = pendingDoneChipRef.current;
+    if (idx == null) return;
+    pendingDoneChipRef.current = null;
+    if (idx === currentStep && isStepDone(currentStep)) fireDoneChip();
   });
   // E2b — 스텝 이동 = 칩 소비/무효(다음 스텝 에지가 새로 발화).
   useEffect(() => {
@@ -2879,7 +2906,8 @@ export function CardStudioPage({
     // F3-7b — "→"는 라벨에서 분리(전진 애니메이션 요소로 승격 — 아래 renderStepForwardButton).
     const s = stepPlanState[target];
     if (!s) return "다음 하러 가기";
-    return s.key === "review" ? "발행 확인하러 가기" : `다음: ${s.label} 하러 가기`;
+    // F4-10ⓐ — 발행 유도 문구 정합(발화와 한 몸: "확인하러" → 능동 "발행해 볼까요").
+    return s.key === "review" ? "이제 발행해 볼까요?" : `다음: ${s.label} 하러 가기`;
   }
   // UI-5-T5-F3-7b — 전진 버튼 공용 렌더(독립·도우미 합류 2곳 동일 적용 — 단일 정의).
   //   ⚠️ 함수 호출 렌더({renderStepForwardButton()}) — 중첩 컴포넌트 정의 금지(매 렌더 재마운트 방지).
@@ -3633,6 +3661,21 @@ export function CardStudioPage({
           ? { msg: "제목·한마디를 채워 주세요", stepKey: "title", block: "content" }
           : null;
   const publishGateMsg = publishGate?.msg ?? null;
+  // UI-5-T7-F4-10 — 게이트 사유 능동 승격: 확인(review) 스텝 "진입 시점"에 부족 사유를 즉시
+  //   토스트로 제시(발행 탭 전 인지 — 구조: 90초 막힘 칩(B6)·발행 바는 2차 리마인더로 존치,
+  //   문구는 publishGateMsg 단일 소스 그대로). 같은 스텝 재진입 시 재제시(사유가 남아있는 한).
+  const reviewGateToastRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (stepPlanState[currentStep]?.key !== "review" || dropped) {
+      reviewGateToastRef.current = null;
+      return;
+    }
+    if (!publishGateMsg) return;
+    if (reviewGateToastRef.current === currentStep) return; // 진입 1회(사유 변경 재토스트는 소음).
+    reviewGateToastRef.current = currentStep;
+    setStepToast(publishGateMsg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, publishGateMsg, dropped]);
 
   // UI-5-T3-L4(B5) — 막힘 감지(45 DRIVE-2e :1483-1515 동형 이식): 현재 스텝 90초 체류 + 무활동 =
   //   스텝(key)당 1회 제안 칩. 연출·청취·시트 열림·생각 중 = 발화 억제 · 활동 deps 변화 = 타이머 리셋.

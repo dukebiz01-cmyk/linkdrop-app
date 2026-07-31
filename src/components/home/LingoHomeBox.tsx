@@ -5,7 +5,9 @@
 //   훅은 useLingo 창구 경유(세션 승계 트랙에서 내부 스토어 교체 예정 — UI는 창구만 바라봄).
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Sparkles, ChevronDown, ArrowUp, Square, Loader2, Rocket, TrendingUp } from "lucide-react";
+import { ChevronDown, ArrowUp, Square, Loader2, Rocket, TrendingUp } from "lucide-react";
+// UI-5-T7-F4-9 — 홈 링고 표면 구 Sparkles → 신오브 미니어처(49 오브 시각 정본의 축소판) 통일.
+import { LingoOrbMini } from "@/components/lingo/LingoOrbMini";
 import { useLingo } from "@/components/lingo/useLingo";
 import { LingoOrb } from "@/components/lingo/LingoOrb";
 import { MicTapButton } from "@/components/lingo/MicTapButton"; // UI-4d — 탭 문법 교체.
@@ -255,7 +257,7 @@ export function LingoHomeBox({
               {chips.map((c) =>
                 c.primary ? (
                   <button key={c.key} type="button" onClick={c.onTap} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95" style={{ backgroundColor: ACCENT }}>
-                    {c.key === "perf" ? <TrendingUp className="h-4 w-4" strokeWidth={2.25} /> : <Sparkles className="h-4 w-4" strokeWidth={2.25} />}
+                    {c.key === "perf" ? <TrendingUp className="h-4 w-4" strokeWidth={2.25} /> : <LingoOrbMini size={16} tone="white" />}
                     {c.label}
                   </button>
                 ) : (

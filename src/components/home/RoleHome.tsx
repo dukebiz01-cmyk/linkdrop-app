@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Sparkles, Users, ChevronRight, ArrowRight, TrendingUp, Bell, Gift, X } from "lucide-react";
+import { Users, ChevronRight, ArrowRight, TrendingUp, Bell, Gift, X } from "lucide-react";
+// UI-5-T7-F4-9 — 홈 링고 표면 구 Sparkles → 신오브 미니어처(49 오브 시각 정본의 축소판) 통일.
+import { LingoOrbMini } from "@/components/lingo/LingoOrbMini";
 import { PerformanceBanner } from "@/components/home/PerformanceBanner";
 // P6-8(형님 확정 A안) — 홈 AI 표면 1개: 링고AI 셸(가이드 상시 + 성과 진단 접힘·lazy).
 //   P6-7 이식분(CreatorCoachCard)은 셸 내부로 수렴 — 이 파일 직접 import 제거.
@@ -181,7 +183,7 @@ function TodayAiCard({ guide, onGoResults }: { guide: HomeGuide; onGoResults: ()
   return (
     <section className="rounded-2xl bg-[#F5F5F5] p-4">
       <h2 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold tracking-ko text-[#0A0A0A]">
-        <Sparkles className="size-4" strokeWidth={2} />
+        <LingoOrbMini size={16} />
         링고AI 매장 진단
       </h2>
 
