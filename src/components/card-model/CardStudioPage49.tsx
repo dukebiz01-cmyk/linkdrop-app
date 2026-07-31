@@ -4568,6 +4568,7 @@ export function CardStudioPage({
                           partnerId={initialStore.id}
                           partnerName={initialStore.display_name}
                           embedded
+                          bulkSetup
                         />
                       ) : (
                         <p className="py-2 text-center text-[11px] text-[#A3A3A3]">
