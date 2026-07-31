@@ -5652,8 +5652,16 @@ export function CardStudioPage({
                   <div className="flex items-center justify-between rounded-xl bg-[#F4F4F5] px-3 py-2.5">
                     <span className="text-[12px] font-semibold text-[#525252]">예약 인원</span>
                     <div className="flex items-center gap-3">
+                      {/* UI-5-T7-F4-7 — 인원 저장 확인 피드백: 변경 반영 시 stepToast(1.8s 사슬 재사용).
+                          연타 시 토스트 문구만 최신값으로 갱신(중첩 없음 — setStepToast 단일 슬롯). */}
                       <button
-                        onClick={() => setCfgParty((n) => Math.max(1, n - 1))}
+                        onClick={() => {
+                          const next = Math.max(1, cfgParty - 1);
+                          if (next !== cfgParty) {
+                            setCfgParty(next);
+                            setStepToast(`인원 ${next}명으로 저장됐어요`);
+                          }
+                        }}
                         className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-[16px] font-bold text-[#404040]"
                         style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
                         aria-label="인원 줄이기"
@@ -5664,7 +5672,13 @@ export function CardStudioPage({
                         {cfgParty}명
                       </span>
                       <button
-                        onClick={() => setCfgParty((n) => Math.min(20, n + 1))}
+                        onClick={() => {
+                          const next = Math.min(20, cfgParty + 1);
+                          if (next !== cfgParty) {
+                            setCfgParty(next);
+                            setStepToast(`인원 ${next}명으로 저장됐어요`);
+                          }
+                        }}
                         className="flex h-7 w-7 items-center justify-center rounded-lg text-[16px] font-bold text-white"
                         style={{ backgroundColor: accent }}
                         aria-label="인원 늘리기"
