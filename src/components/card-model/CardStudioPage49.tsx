@@ -1251,6 +1251,10 @@ export function CardStudioPage() {
   // 확인 스텝 잔여-블록 제안: 1회만(재진입 반복 금지). used=이번 카드에서 이미 제안함.
   const [showReviewSuggest, setShowReviewSuggest] = useState(false);
   const reviewSuggestUsedRef = useRef(false);
+  // UI-5-T5-F3-8(1) — 배송 전용 제안(커머스 한정 · 카드당 1회): 3칩 제안에 선행하는 단독 질문.
+  //   reviewSuggestUsedRef와 별도 ref(부속② 확정 — 괜찮아요 후 기존 3칩 제안은 그대로 이어짐).
+  const [showDeliverySuggest, setShowDeliverySuggest] = useState(false);
+  const deliverySuggestUsedRef = useRef(false);
   const [stepToast, setStepToast] = useState<string | null>(null);
   // UI-5-T2-E2b — 완료 견인·AI 레인 정합 상태.
   //   stepChip: done=현재 스텝 완료 견인(A1) / ai=조립 요약·릴레이 종료 후 첫 미확정 제안(B2·B3). target=이동 제안 스텝.
@@ -1310,7 +1314,7 @@ export function CardStudioPage() {
   const [cfgParty, setCfgParty] = useState(2);
   const [cfgRating, setCfgRating] = useState(5);
   const [cfgReview, setCfgReview] = useState("");
-  const [cfgShipFee, setCfgShipFee] = useState("무료");
+  // F3-8(2) — cfgShipFee(독립 배송비 입력) 제거: 폼(cfgProduct.freeShip/shipFee)이 단일 정본.
   const [cfgShipEta, setCfgShipEta] = useState("2~3일");
   // 배송 안내 — 택배사 · 진행 단계 · 송장번호
   const [cfgCourier, setCfgCourier] = useState(COURIERS[0]);
@@ -1594,8 +1598,7 @@ export function CardStudioPage() {
     setCfgParty(2);
     setCfgRating(5);
     setCfgReview("");
-    setCfgShipFee("무료");
-    setCfgShipEta("2~3일");
+    setCfgShipEta("2~3일"); // F3-8(2) — cfgShipFee 리셋 제거(상태 자체 제거 — 폼 정본 미러).
     setCfgCourier(COURIERS[0]);
     setCfgShipStage(0);
     setCfgTrackingNo("");
@@ -1608,6 +1611,9 @@ export function CardStudioPage() {
     stepPlanRef.current = STEP_PLAN[next];
     reviewSuggestUsedRef.current = false;
     setShowReviewSuggest(false);
+    // F3-8(1) — 배송 전용 질문도 새 카드 = 재무장(카드당 1회 기준).
+    deliverySuggestUsedRef.current = false;
+    setShowDeliverySuggest(false);
     // L4(B5) — 막힘 감지 리셋(새 카드 = 스텝 예산 재무장).
     setStuckChip(null);
     stuckShownRef.current = new Set();
@@ -2680,9 +2686,23 @@ export function CardStudioPage() {
     const s = plan[idx];
     if (s.block) onEditField(s.block, s.key === "video" ? "video" : undefined);
     // E3e(4) — 확인 스텝 진입 1회 제안(잔여 블록 있을 때만). 재진입 반복 금지.
-    if (s.key === "review" && !reviewSuggestUsedRef.current && remainingExtras(plan).length > 0) {
-      reviewSuggestUsedRef.current = true;
-      setShowReviewSuggest(true);
+    //   F3-8(1) — 커머스 한정 배송 전용 질문이 선행(카드당 1회 · delivery 기장착/기편입 시 생략) —
+    //   3칩 제안은 [괜찮아요] 이후 이어짐(부속② — 잔여 제안 유지). 진입 경로 무관(F3-7 전진 버튼·
+    //   헤더 [다음]·번호열 전부 enterStep 합류라 순서 동일).
+    if (s.key === "review") {
+      const planHasDelivery = plan.some((ps) => ps.block === "delivery");
+      if (
+        mode === "commerce" &&
+        !deliverySuggestUsedRef.current &&
+        !applied["delivery"] &&
+        !planHasDelivery
+      ) {
+        deliverySuggestUsedRef.current = true;
+        setShowDeliverySuggest(true);
+      } else if (!reviewSuggestUsedRef.current && remainingExtras(plan).length > 0) {
+        reviewSuggestUsedRef.current = true;
+        setShowReviewSuggest(true);
+      }
     }
   }
   // 미니 번호열 탭: 완료/현재/이전 = 재방문 허용, 미완 미래 = 토스트(순서 강제 · 자동 점프 없음).
@@ -3450,11 +3470,15 @@ export function CardStudioPage() {
     times: cfgTimes,
     slotsByDate: cfgSlotsByDate,
     selectedVideo,
+    // F3-8(2) — shipping 도 폼 정본(cfgProduct) 파생: product 블록 free_ship/ship_fee_krw 와 동일
+    //   소스라 모순 발행이 구조적으로 불가(정확 원칙 — 두 payload 항등).
     shipping: applied["delivery"]
       ? {
           shipMethod: cfgCourier,
-          freeShip: cfgShipFee === "무료",
-          shipFeeKrw: cfgShipFee === "무료" ? null : Number(cfgShipFee.replace(/[^0-9]/g, "")) || null,
+          freeShip: cfgProduct.freeShip,
+          shipFeeKrw: cfgProduct.freeShip
+            ? null
+            : Number(cfgProduct.shipFee.replace(/[^0-9]/g, "")) || null,
           shipNote: cfgShipEta,
         }
       : null,
@@ -3912,6 +3936,43 @@ export function CardStudioPage() {
 
         {/* 장착 액션 (가운데 카드 대상) */}
         <div className="mx-auto mt-4 max-w-md px-5">
+          {/* UI-5-T5-F3-8(1) — 배송 전용 제안(커머스 · 3칩에 선행): 이지선다 1문(60대 쉬움 원칙).
+              [담을게요] = 기존 insertStep("delivery") 재사용(신설 엔진 0 — 스텝 편입·설정 패널 진입).
+              [괜찮아요] = 닫고 기존 3칩 제안으로 진행(잔여 제안 유지 — 부속②). */}
+          {showDeliverySuggest && stepPlanState[currentStep]?.key === "review" && (
+            <div className="mb-3 rounded-2xl bg-white p-3.5 animate-fade-in [box-shadow:inset_0_0_0_1px_#E8E8EC]">
+              <p className="text-[13px] font-bold text-[#16161D] tracking-ko [word-break:keep-all]">
+                배송 안내도 담을까요?
+              </p>
+              <p className="mt-1 text-[12px] font-medium text-[#737373] tracking-ko [word-break:keep-all]">
+                택배사와 배송 진행 상황을 카드에 보여드려요.
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                <button
+                  onClick={() => {
+                    setShowDeliverySuggest(false);
+                    insertStep("delivery"); // E3e 기존 편입 엔진 그대로 — 확인 앞 한 칸 + 패널 이동.
+                  }}
+                  className="min-h-[44px] rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white transition-transform active:scale-95"
+                >
+                  담을게요
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeliverySuggest(false);
+                    // 부속② — 기존 3칩 제안 이어가기(1회 조건은 원래 규칙 그대로).
+                    if (!reviewSuggestUsedRef.current && remainingExtras(stepPlanState).length > 0) {
+                      reviewSuggestUsedRef.current = true;
+                      setShowReviewSuggest(true);
+                    }
+                  }}
+                  className="min-h-[44px] rounded-xl border border-[#E8E8EC] px-4 text-[13px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                >
+                  괜찮아요
+                </button>
+              </div>
+            </div>
+          )}
           {/* UI-5-T2-E3e(4) — 확인 스텝 1회 제안: 잔여 블록 칩(최대 3) + [이대로 좋아요]. 칩=insertStep. */}
           {showReviewSuggest && stepPlanState[currentStep]?.key === "review" && (
             <div className="mb-3 rounded-2xl bg-white p-3.5 animate-fade-in [box-shadow:inset_0_0_0_1px_#E8E8EC]">
@@ -5440,17 +5501,22 @@ export function CardStudioPage() {
                     />
                   </div>
 
-                  {/* 배송비 · 도착 예정 */}
+                  {/* 배송비 — F3-8(2) 동기화(부속① · 정확 원칙): 폼 배송 설정(cfgProduct.freeShip/shipFee)이
+                      정본, 여기는 미러 표시만(독립 입력 제거 = 모순 표기 원천 차단 · 자리 유지 = 덜 파괴적). */}
                   <div className="flex items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5">
                     <Truck className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
                     <span className="text-[12px] font-semibold text-[#525252]">배송비</span>
-                    <input
-                      value={cfgShipFee}
-                      onChange={(e) => setCfgShipFee(e.target.value)}
-                      className="ml-auto w-24 rounded-lg bg-white px-2 py-1 text-right text-[12px] font-bold text-[#0A0A0A] outline-none"
-                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                    />
+                    <span className="ml-auto text-right text-[12px] font-bold tabular-nums text-[#0A0A0A]">
+                      {cfgProduct.freeShip
+                        ? "무료"
+                        : cfgProduct.shipFee
+                          ? `${(Number(cfgProduct.shipFee.replace(/[^0-9]/g, "")) || 0).toLocaleString("ko-KR")}원 (구매자 부담)`
+                          : "별도 (금액 미정)"}
+                    </span>
                   </div>
+                  <p className="text-[10.5px] font-medium text-[#A3A3A3] [word-break:keep-all]">
+                    배송비는 상품 등록의 배송 설정을 그대로 따라요 — 바꾸려면 그 칸에서 바꿔 주세요.
+                  </p>
                   <div className="flex items-center gap-2 rounded-xl bg-[#F4F4F5] px-3 py-2.5">
                     <Calendar className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
                     <span className="text-[12px] font-semibold text-[#525252]">도착 예정</span>
