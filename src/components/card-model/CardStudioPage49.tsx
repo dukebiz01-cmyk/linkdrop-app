@@ -6379,17 +6379,9 @@ export function CardStudioPage() {
                     </span>
                   </>
                 )}
-                {lingo.action && !applied[lingo.action] && !listening && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60" />
-                    <span
-                      className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold"
-                      style={{ color: LINGO }}
-                    >
-                      !
-                    </span>
-                  </span>
-                )}
+                {/* UI-5-T5-F3-4 — 우상단 "!" 배지 제거(이중 알림 정리): 순수 주의 끌기였고 동일 제안
+                    (lingo.text)이 전환 코칭 카드·링고 패널 첫 메시지 두 경로로 이미 전달됨 — 정보 유실 0.
+                    마이크 상태 배지(우하단 Mic/Volume2)·listening 본체 전환은 무접촉(L1·S2b 그대로). */}
               </span>
             </button>
           )}
