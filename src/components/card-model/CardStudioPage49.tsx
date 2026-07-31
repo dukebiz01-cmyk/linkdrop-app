@@ -805,16 +805,85 @@ export function CardStudioPage() {
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  // AI 원페이지 카탈로그(별도 목업 — E5a 범위 밖). 게이트만 실 사진(productImageUrl)으로 전환.
-  const [catStatus, setCatStatus] = useState<"idle" | "generating" | "done">("idle");
-  const catTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startCatalog = () => {
-    if (!productImageUrl || catStatus === "generating") return;
+  // UI-5-T5-E5i-2 — AI 카탈로그 실연결: catalog-gen(E5i-1 배포분) 호출만 · Edge 무수정.
+  //   초안 락: 결과 = catDraft 보관뿐(카드 데이터 즉시 미기입) — 기입은 [이대로 쓰기] 명시 탭 유래만.
+  //   구 목업 타이머(2.6s 가짜 done) 폐기. 상태에 error/quota 분리(무언 실패 금지 · 안내 문구 구분).
+  type CatalogDraft = { title: string; desc: string; features: string[]; caution: string };
+  const [catStatus, setCatStatus] = useState<"idle" | "generating" | "done" | "error" | "quota">(
+    "idle",
+  );
+  const [catDraft, setCatDraft] = useState<CatalogDraft | null>(null);
+  // E5i-2(3) — 다필드 일괄 기입이라 덮어쓰기 확인 1회 필요(D3e 단일 필드 카피 버튼과 계약 상이 —
+  //   그쪽은 한 칸·빈 칸 위주라 확인 없음, 여기는 headline+sellingPoints 동시 대체라 확인 게이트).
+  const [catOverwriteAsk, setCatOverwriteAsk] = useState(false);
+  async function startCatalog() {
+    if (!productImageUrl || catStatus === "generating") return; // 활성 조건 + 중복 탭 방지.
     setCatStatus("generating");
-    if (catTimer.current) clearTimeout(catTimer.current);
-    catTimer.current = setTimeout(() => setCatStatus("done"), 2600);
-  };
-  useEffect(() => () => { if (catTimer.current) clearTimeout(catTimer.current); }, []);
+    setCatOverwriteAsk(false);
+    try {
+      // 기존 Edge 호출 관례 동형(:youtube-search invoke — functions.invoke 가 세션 JWT 자동 동봉).
+      const { data, error } = await getSupabase().functions.invoke("catalog-gen", {
+        body: { imageUrl: productImageUrl, productName: cfgProductName.trim() || undefined },
+      });
+      if (error) {
+        // 비 2xx — quota(429 QUOTA_EXCEEDED) 구분 판독(check_ai_quota 응답 계약).
+        try {
+          const body = (await (
+            error as { context?: { json?: () => Promise<{ error?: string }> } }
+          ).context?.json?.()) as { error?: string } | undefined;
+          if ((body?.error ?? "").includes("QUOTA")) {
+            setCatStatus("quota");
+            return;
+          }
+        } catch {
+          /* 판독 실패 = 일반 오류로 */
+        }
+        console.error("[studio49] catalog-gen 실패:", error);
+        setCatStatus("error");
+        return;
+      }
+      const d = data as Partial<CatalogDraft> & { error?: string };
+      if (!d || d.error || typeof d.title !== "string" || !d.title.trim()) {
+        if ((d?.error ?? "").includes("QUOTA")) {
+          setCatStatus("quota");
+          return;
+        }
+        console.error("[studio49] catalog-gen 응답 이상:", d);
+        setCatStatus("error");
+        return;
+      }
+      setCatDraft({
+        title: d.title.trim(),
+        desc: typeof d.desc === "string" ? d.desc.trim() : "",
+        features: Array.isArray(d.features) ? d.features.filter((f) => typeof f === "string" && f.trim()) : [],
+        caution: typeof d.caution === "string" ? d.caution.trim() : "",
+      });
+      setCatStatus("done");
+    } catch (e) {
+      console.error("[studio49] catalog-gen 예외:", e);
+      setCatStatus("error");
+    }
+  }
+  // E5i-2(3) — [이대로 쓰기] 실기입: 기존 필드 반영 경로만(신규 쓰기 경로 금지).
+  //   매핑: title→cfgProduct.headline / features→cfgProduct.sellingPoints(5개 상한 slice — cleanKeyPoints
+  //   정합) — 폼 onChange 패치와 동일한 setCfgProduct 상태 싱크(수동 타이핑과 동일 종단).
+  //   desc·caution = 대응 폼 필드 부재 → 초안 미리보기 전용·미기입(발행 payload 무변 락 준수).
+  //   NUMBER_CRITICAL 정합: 가격·수량·날짜 기입 0(매핑 자체에 부재 — Edge 가드와 이중).
+  //   셀링포인트 "채택=대표님" 원칙 정합: features 일괄 기입은 [이대로 쓰기] 명시 탭 유래(근거 — F3-3
+  //   후보 칩의 "칩 탭 = 채택"과 동일하게 사용자 제스처가 기입 의사).
+  function applyCatalogDraft() {
+    if (!catDraft) return;
+    setCfgProduct((prev) => ({
+      ...prev,
+      headline: catDraft.title,
+      sellingPoints: catDraft.features.slice(0, 5),
+    }));
+    // E5i-2(4) — ✦ AI 손길 문법: 폼 필드 단위 배지 인프라 부재 → 기존 lingoTouched 사슬(덱 product
+    //   카드 LingoTouchBadge) 재사용. 수동 수정 자유(직접 장착/수정 시 기존 untouch 사슬이 소멸 담당).
+    touch(["product"]);
+    setCatOverwriteAsk(false);
+    setStepToast("카탈로그 초안을 반영했어요 — 자유롭게 고치세요");
+  }
   // UI-5-T2-E5a — 상품 사진 업로드(45 handleHeroImageChange :2132 파이프 계승). 갤러리·촬영 공용.
   //   BUG-5 방어: 오직 input change(사용자 제스처)에서만 실행 · effect 동기화 없음 · objectURL revoke ·
   //   조건 없는 setState 렌더 루프 없음(setApplied/confirmHelper 는 성공 1회). 크기/형식 = resizeToJpegBlob 가드.
@@ -5346,26 +5415,51 @@ export function CardStudioPage() {
                             <span className="text-[11px] font-bold">AI가 카탈로그를 만드는 중…</span>
                           </span>
                         )}
-                        {catStatus === "done" && (
+                        {/* E5i-2 — 실패 2종 분리(무언 실패 금지): 일반 오류 = 재시도 유도 / quota = 한도 안내. */}
+                        {catStatus === "error" && (
+                          <span className="flex flex-col items-center gap-1.5 px-4 text-center">
+                            <span className="text-[11px] font-semibold text-[#DC2626] [word-break:keep-all]">
+                              카탈로그를 만들지 못했어요 — 아래 버튼으로 다시 시도해 주세요
+                            </span>
+                          </span>
+                        )}
+                        {catStatus === "quota" && (
+                          <span className="flex flex-col items-center gap-1.5 px-4 text-center">
+                            <span className="text-[11px] font-semibold text-[#92400E] [word-break:keep-all]">
+                              오늘 AI 사용 한도를 다 썼어요 — 내일 다시 만들 수 있어요
+                            </span>
+                          </span>
+                        )}
+                        {/* E5i-2(3) — 초안 패널(✦ 초안 배지): 실제 catalog-gen 결과 표시 — 카드 데이터
+                            즉시 미기입(초안 락) · 기입은 아래 [이대로 쓰기]만. */}
+                        {catStatus === "done" && catDraft && (
                           <div className="w-full p-2.5 text-left">
+                            <span className="mb-1.5 inline-flex items-center gap-0.5 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-1.5 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                              ✦ 초안 — 아직 카드에 안 담겼어요
+                            </span>
                             <div className="flex gap-2.5">
-                              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-[#F0F0F0]">
-                                <ImageIcon className="h-6 w-6 text-[#A3A3A3]" strokeWidth={1.75} />
-                              </div>
+                              {productImageUrl ? (
+                                <img
+                                  src={productImageUrl}
+                                  alt=""
+                                  className="h-16 w-16 shrink-0 rounded-md object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-[#F0F0F0]">
+                                  <ImageIcon className="h-6 w-6 text-[#A3A3A3]" strokeWidth={1.75} />
+                                </div>
+                              )}
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-[13px] font-bold text-[#0A0A0A]">
-                                  {cfgProductName.trim() || "우리 매장 대표 상품"}
+                                <p className="text-[13px] font-bold text-[#0A0A0A] [word-break:keep-all]">
+                                  {catDraft.title}
                                 </p>
-                                <p className="mt-0.5 text-[12px] font-bold text-[#0A0A0A]">
-                                  {cfgProductPrice.trim() ? `${cfgProductPrice}원` : "가격 문의"}
-                                </p>
-                                <p className="mt-1 line-clamp-2 text-[10px] font-medium leading-relaxed text-[#8A8A8A]">
-                                  신선한 재료와 정성으로 준비한 대표 상품이에요. 지금 카드 한 장으로 바로 확인해 보세요.
+                                <p className="mt-1 text-[10px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                                  {catDraft.desc}
                                 </p>
                               </div>
                             </div>
                             <div className="mt-2 flex flex-wrap gap-1">
-                              {["대표 상품", "신선함", "빠른 준비"].map((t) => (
+                              {catDraft.features.map((t) => (
                                 <span
                                   key={t}
                                   className="rounded-md px-1.5 py-0.5 text-[9px] font-semibold"
@@ -5375,13 +5469,84 @@ export function CardStudioPage() {
                                 </span>
                               ))}
                             </div>
+                            {catDraft.caution ? (
+                              <p className="mt-1.5 text-[9.5px] font-medium text-[#A3A3A3] [word-break:keep-all]">
+                                ⓘ {catDraft.caution}
+                              </p>
+                            ) : null}
                           </div>
                         )}
                       </div>
 
-                      {/* 생성 / 재생성 버튼 */}
+                      {/* E5i-2(3) — 초안 3버튼: 이대로 쓰기(기입) / 고쳐 줘(sendToLingo 기존 사슬) / 버리기. */}
+                      {catStatus === "done" && catDraft && !catOverwriteAsk && (
+                        <div className="mb-2.5 flex gap-1.5">
+                          <button
+                            onClick={() => {
+                              // 기존값 존재 시 일괄 덮어쓰기 확인 1회(다필드 계약 — 위 주석 근거).
+                              if (
+                                cfgProduct.headline.trim() ||
+                                cfgProduct.sellingPoints.some((s) => s.trim())
+                              ) {
+                                setCatOverwriteAsk(true);
+                              } else {
+                                applyCatalogDraft();
+                              }
+                            }}
+                            className="flex-1 rounded-xl bg-[#1D4ED8] py-2.5 text-[12px] font-bold text-white transition-transform active:scale-[0.98]"
+                          >
+                            이대로 쓰기
+                          </button>
+                          <button
+                            onClick={() => {
+                              lingoChannelRef.current = "text";
+                              setLingoOpen(true);
+                              void sendToLingo(
+                                `방금 만든 카탈로그 초안을 고치고 싶어요 — 제목 "${catDraft.title}" · 설명 "${catDraft.desc}". 어떻게 바꿀까요?`,
+                              );
+                            }}
+                            className="flex-1 rounded-xl border border-[#E8E8EC] bg-white py-2.5 text-[12px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                          >
+                            고쳐 줘
+                          </button>
+                          <button
+                            onClick={() => {
+                              setCatDraft(null);
+                              setCatStatus("idle");
+                              setCatOverwriteAsk(false);
+                            }}
+                            className="rounded-xl border border-[#E8E8EC] bg-white px-3 py-2.5 text-[12px] font-bold text-[#A3A3A3] transition-colors active:bg-[#F5F5F7]"
+                          >
+                            버리기
+                          </button>
+                        </div>
+                      )}
+                      {/* 덮어쓰기 확인 1회 — 홍보 문구·셀링포인트 기존값 일괄 대체 경고. */}
+                      {catStatus === "done" && catDraft && catOverwriteAsk && (
+                        <div className="mb-2.5 rounded-xl bg-[#FFFBEB] p-2.5" style={{ boxShadow: "inset 0 0 0 1px #FDE68A" }}>
+                          <p className="text-[11px] font-semibold text-[#92400E] [word-break:keep-all]">
+                            이미 적어둔 홍보 문구·셀링포인트를 초안으로 덮어써요 — 계속할까요?
+                          </p>
+                          <div className="mt-2 flex gap-1.5">
+                            <button
+                              onClick={applyCatalogDraft}
+                              className="flex-1 rounded-lg bg-[#16161D] py-2 text-[12px] font-bold text-white active:scale-[0.98]"
+                            >
+                              네, 덮어쓰기
+                            </button>
+                            <button
+                              onClick={() => setCatOverwriteAsk(false)}
+                              className="flex-1 rounded-lg border border-[#E8E8EC] bg-white py-2 text-[12px] font-bold text-[#525252] active:bg-[#F5F5F7]"
+                            >
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 생성 / 재생성 버튼 — 활성 조건: 실 사진 존재(idle 카피가 미충족 사유 안내). */}
                       <button
-                        onClick={startCatalog}
+                        onClick={() => void startCatalog()}
                         disabled={!productImageUrl || catStatus === "generating"}
                         className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-bold text-white transition-transform active:translate-y-px disabled:opacity-50"
                         style={{ backgroundColor: accent }}
@@ -5394,7 +5559,11 @@ export function CardStudioPage() {
                         ) : (
                           <>
                             <Wand2 className="h-4 w-4" strokeWidth={2.5} />
-                            {catStatus === "done" ? "다시 생성" : "AI 카탈로그 생성"}
+                            {catStatus === "done"
+                              ? "다시 생성"
+                              : catStatus === "error"
+                                ? "다시 시도"
+                                : "✦ AI 카탈로그 만들기"}
                           </>
                         )}
                       </button>
