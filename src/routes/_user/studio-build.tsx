@@ -1,15 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getAuthClient } from "@/lib/auth-context";
 import type { CouponRow } from "@/routes/_partner/partner.coupons";
-// ST3(S5-1) — 구 스튜디오(CardStudioPage)·?legacy=1 스위치백 장례: 렌더 = 신 스튜디오
-//   (CardStudioPage45) 단일 경로. 구 컴포넌트가 홀로 소비하던 사슬(CardBody·DropCardShell·
-//   ProductWidget·CouponPreview·buildProductWidget 등)은 S5-2에서 파일 단위 정리.
-//   진입 계약 무변경: ?purpose 딥링크·/studio 리다이렉트·비사업자 잠금 열람(loader 게이트).
-import {
-  CardStudioPage45,
-  type StudioLabCoupon,
-  type StudioLabStore,
-} from "@/components/card-model/CardStudioPage45";
+// ST3(S5-1) — 구 스튜디오(CardStudioPage)·?legacy=1 스위치백 장례 → UI-5-T6b — 렌더 = 49 신스튜디오.
+//   ⚠️ 거울 취급 파일 — Duke 명시 수정 승인 2호(T-6b: 주소 유지·내용물 교체 (b)안 확정).
+//   45(CardStudioPage45)는 import 만 해제·파일 무수정 보존 = 롤백 자산(이 import 되돌림 한 줄 = revert).
+//   진입 계약 무변경: 주소 /studio-build 유지 → 탭바·홈·수신 유도·카톡 핸드오프(DEFAULT_NEXT) 전부
+//   무수정 도달. ?purpose 딥링크는 URL 계약 유지(validateSearch 존치 — 49 미소비 = 무영향 통과).
+import { CardStudioPage } from "@/components/card-model/CardStudioPage49";
+import { Link } from "@tanstack/react-router";
 // FIX-62 — 실슬롯 행 타입(수신 /d loader 와 동일 RPC get_available_slots 소비).
 import type { ReservationSlotRow } from "@/components/card-model/card-model-adapters";
 
@@ -202,20 +200,37 @@ export const Route = createFileRoute("/_user/studio-build")({
   component: StudioBuild,
 });
 
-// ST3(S5-1) — 신 스튜디오 단일 렌더(구 스위치 제거). 타입 호환:
-//   StudioBuildStore ⊂ StudioLabStore(facilities 옵셔널) · StudioBuildCoupon ≡ StudioLabCoupon.
+// UI-5-T6b — 49 렌더(주소 유지·내용물 교체). loader 무변(상위집합) — 49 소비분만 주입:
+//   initialStore(id·display_name — StudioBuildStore 구조적 상위집합이라 그대로 통과) · initialSlots.
+//   45 전용 props 미전달 정리 근거: coupons/manageCoupons = 49 가 get_active_store_coupons 자체
+//   로드(E5d) / dockCount = 49 dock 은 목업(E4e-2 차단) / myRewards = 49 헤더 미표시 /
+//   initialPurpose = 49 모드 프리셋 미지원(딥링크는 URL 계약만 유지). 잉여 loader 재료는 45
+//   롤백 자산 겸 후속 이식분으로 보존(loader 수술 금지 — 조사 확정).
 function StudioBuild() {
-  const search = Route.useSearch();
   const data = Route.useLoaderData();
-  return (
-    <CardStudioPage45
-      isBusiness={data.isBusiness}
-      store={data.store as StudioLabStore | null}
-      coupons={data.coupons as StudioLabCoupon[]}
-      manageCoupons={data.manageCoupons}
-      dockCount={data.dockCount}
-      initialPurpose={search.purpose}
-      initialSlots={data.slots}
-    />
-  );
+  // UI-5-T6b — 비사업자 = ⓑ 등록 유도 화면(Duke 확정): 강제 이송 금지(P6-3 잠금 열람 취지 승계),
+  //   판정 = 기존 loader 재료(isBusiness·store) 재사용.
+  if (!data.isBusiness || !data.store) {
+    return (
+      <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col items-center justify-center gap-4 px-8 text-center">
+        <p className="text-[17px] font-extrabold leading-snug tracking-ko text-[#16161D] [word-break:keep-all]">
+          카드 만들기는 사장님 전용이에요 — 1분이면 등록할 수 있어요
+        </p>
+        <Link
+          to="/partner/register"
+          className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+        >
+          파트너 등록하기
+        </Link>
+        <button
+          type="button"
+          onClick={() => window.history.back()}
+          className="min-h-[44px] px-2 text-[13px] font-medium text-[#8A8A8A] transition-opacity active:opacity-70"
+        >
+          둘러보기
+        </button>
+      </main>
+    );
+  }
+  return <CardStudioPage initialStore={data.store} initialSlots={data.slots} />;
 }
