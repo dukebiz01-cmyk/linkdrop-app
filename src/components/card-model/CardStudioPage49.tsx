@@ -1482,6 +1482,9 @@ export function CardStudioPage({
   const [pendingConfirm, setPendingConfirm] = useState<string[]>([]);
   const [blinkBlock, setBlinkBlock] = useState<string | null>(null);
   const helperTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // UI-5-T7-F4-5 — 영상 담기 직후 핵심 구간 칸 지목(T1k 깜빡 문법 재사용 · 1.6s 상주 금지).
+  const [clipCoach, setClipCoach] = useState(false);
+  const clipCoachTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // done 단계에 남은 미확정이 없으면 전체 완료로 승격.
   useEffect(() => {
     if (helperPhase === "done" && pendingConfirm.length === 0) setHelperPhase("allDone");
@@ -2709,6 +2712,12 @@ export function CardStudioPage({
       }
     } // "keep" — 카피 무접촉(제목·한마디 유지 — 대표님 선택 존중).
     confirmHelper("content"); // 도우미 완료(영상 담김) + 배지·릴레이 연동.
+    // F4-5 — 영상 담기 직후 핵심 구간 칸 1.6s 지목: 기존 jumpToBlock(스크롤·이동) 경유 +
+    //   칸 한정 깜빡(패널 전체 blinkBlock 과 별개 — 구간은 대표님 몫이라는 코치).
+    jumpToBlock("content");
+    setClipCoach(true);
+    if (clipCoachTimer.current) clearTimeout(clipCoachTimer.current);
+    clipCoachTimer.current = setTimeout(() => setClipCoach(false), 1600);
     // oembed→요약 리드(45 :2103) — 백그라운드 best-effort. 결과 소비는 T-2 AI 포인트 UI 예정.
     videoLeadRef.current = slot.videoId;
     try {
@@ -5057,7 +5066,14 @@ export function CardStudioPage({
                   {/* UI-5-T2-E5c(B1·B2) — 핵심구간 직접 입력(시작·끝 2칸, 45 파서 parseClock 재사용).
                       확정 = blur/Enter → commitClip 검증(끝>시작·영상 길이 초과 = 45 정책 계승) →
                       cfgClip "시작~끝" 커밋 = 어댑터 model.clip 즉시 반영. 값은 대표님만(AI clip 불가침 유지 B4). */}
-                  <div className="rounded-xl bg-[#F4F4F5] px-3 py-2.5">
+                  <div
+                    className="rounded-xl bg-[#F4F4F5] px-3 py-2.5"
+                    style={clipCoach ? { animation: "lingo-spot-blink 0.8s ease-in-out 2" } : undefined}
+                  >
+                    {/* F4-5 — 지목 깜빡(T1k lingo-spot-blink 동일 키프레임 · clipCoach 1.6s 한정). */}
+                    {clipCoach && (
+                      <style>{`@keyframes lingo-spot-blink{0%,100%{box-shadow:inset 0 0 0 1px #E8E8EC}50%{box-shadow:inset 0 0 0 2px #1D4ED8,0 0 0 5px rgba(29,78,216,0.28)}}`}</style>
+                    )}
                     <p className="flex items-center gap-1.5 text-[12px] font-semibold text-[#525252]">
                       <Video className="h-4 w-4 shrink-0 text-[#8A8A8A]" strokeWidth={2.25} />
                       핵심 구간 (시작~끝)
@@ -5102,6 +5118,12 @@ export function CardStudioPage({
                     )}
                     {!clipError && cfgClip.includes("~") && (
                       <p className="mt-1.5 text-[11px] font-semibold tabular-nums text-[#525252]">적용된 구간: {cfgClip}</p>
+                    )}
+                    {/* F4-5 — 코치 안내(미입력 상태 한정 · 자동 구간 제안 아님 — 값은 대표님만). */}
+                    {!clipError && !cfgClip.includes("~") && (
+                      <p className="mt-1.5 text-[11px] font-medium text-[#8A8A8A] [word-break:keep-all]">
+                        여기에 시작 시간을 적어요 — 예: 0:42
+                      </p>
                     )}
                   </div>
                 </div>
