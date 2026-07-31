@@ -62,7 +62,9 @@ const MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 1024;
 // T-A §3 — 액션 모드 전용 상향(1024→1500, 액션 JSON 여유분). 비-스튜디오 경로는 §6
 // 하위호환(기존 요청과 동일)을 위해 기존 1024 유지.
-const MAX_TOKENS_STUDIO = 1500;
+// UI-5-T7-F4-8-E — 1500→2048: 긴 설계 응답 + 액션 JSON 동시 방출 시 max_tokens 절단(문장 중간
+//   뚝 → 클라 낭독까지 절단 체감)의 실여유 확보. 비-스튜디오 1024 유지(하위호환 §6 그대로).
+const MAX_TOKENS_STUDIO = 2048;
 const MAX_MESSAGE_CHARS = 2000;
 // T-B — surface 는 요청 필드('studio' 기본 | 'home'). lingo_sessions/lingo_user_state 에 그대로 기록.
 const DEFAULT_SURFACE: LingoSurface = "studio";
@@ -560,6 +562,8 @@ Deno.serve(async (req) => {
         });
 
         // 8) 중계 + 전문 버퍼링(+ 도구 입력 버퍼링).
+        // F4-8-E — 절단 감지 재료: message_delta 의 stop_reason 캡처(max_tokens = 상한 절단).
+        let stopReason: string | null = null;
         for await (const event of aiStream) {
           if (event.type === "message_start") {
             inTok = event.message.usage.input_tokens ?? 0;
@@ -582,7 +586,17 @@ Deno.serve(async (req) => {
             if (buf) buf.json += event.delta.partial_json;
           } else if (event.type === "message_delta") {
             outTok = event.usage.output_tokens ?? outTok;
+            stopReason =
+              (event.delta as { stop_reason?: string | null }).stop_reason ?? stopReason;
           }
+        }
+        // F4-8-E — max_tokens 절단 = 문장 경계 정리: 델타는 이미 실시간 중계돼 회수 불가(전체
+        //   버퍼링 = 스트리밍 UX 파괴라 기각) → 잘린 꼬리를 정직한 마감 1줄로 닫는다(클라 낭독·
+        //   기록(fullText) 동기 — 무언 절단 0).
+        if (stopReason === "max_tokens" && fullText.trim()) {
+          const closure = "\n…말이 길어져 여기서 줄일게요 — 이어서 물어봐 주세요.";
+          fullText += closure;
+          controller.enqueue(sseFrame("delta", { text: closure }));
         }
         // T-A — 도구 호출만 있고 텍스트가 빈 응답은 정상(EMPTY_RESULT 아님).
         if (!fullText.trim() && Object.keys(toolBufByIndex).length === 0) {
