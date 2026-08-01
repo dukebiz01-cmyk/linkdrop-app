@@ -21,15 +21,18 @@ export const VOICE_UNSUPPORTED_NOTICE = "이 브라우저에서는 음성을 쓸
 /** 안내 낭독 → 진행(띵→청취)을 타임아웃 가드와 병행. onDone 미도착 시 강제 진행 — 이때만
  *  stopSpeaking 으로 지각 낭독을 끊어 에코를 차단. proceed 는 fired 플래그로 정확히 1회.
  *
- *  UI-5-T7-F4-8(b) — 가드 고정 3초 → 텍스트 길이 비례(L3 낭독 완주 락 정합):
- *  구 가드는 utterance drop(Chrome 버그 — 위 진단) 방어가 목적이었는데, 타이머가 낭독 길이와
- *  무관한 고정 3초라 "정상 낭독 중인 긴 응답"까지 3초에 절단했다(AI 말 끊김의 실기전).
- *  가드 = max(3초, 글자수×80ms), 상한 30초 — 짧은 안내는 기존 3초 방어 그대로, 긴 응답은
- *  낭독 시간만큼 기다린 뒤에만 강제 진행(절단은 drop/지연 병리 케이스로 한정).
+ *  UI-5-T7-F4-8(b) — 가드 고정 3초 → 텍스트 길이 비례(L3 낭독 완주 락 정합).
+ *  UI-5-T7-F5-4(1) — 계수·상한 재정의: 구 80ms/자는 실제 한국어 TTS(rate 1.05 ≈ 자당
+ *  160~200ms)의 절반이라 "정상 낭독을 절반 지점에서 절단"하는 진범이었다(F4-8 후 잔존 끊김).
+ *  onboundary/onend 실측 기반이 정석이나 speak 추상화가 utterance 를 비노출(홈·스튜디오 공용
+ *  onDone 계약 — 시그니처 확장 = 호출부 계약 변경)이라 불가 → 계수 180ms/자로 실속도 상회.
+ *  상한 30s→60s: 이 타이머는 "낭독 길이 가드"가 아니라 utterance drop(위 Chrome 진단) 대비
+ *  "무응답 안전망"이다 — 정상 낭독을 자르지 않는 값이어야 한다(Edge max_tokens 완화로 응답
+ *  길이 실질 상한 존재 → 60s면 전 구간 커버).
  *  timeoutMs 명시 전달 시 그 값 우선(기존 호출 계약 무변). */
 const GUARD_MIN_MS = 3000;
-const GUARD_PER_CHAR_MS = 80;
-const GUARD_MAX_MS = 30000;
+const GUARD_PER_CHAR_MS = 180;
+const GUARD_MAX_MS = 60000;
 export function speakThenProceed(opts: {
   speak: (text: string, onDone?: () => void) => void;
   stopSpeaking?: () => void;

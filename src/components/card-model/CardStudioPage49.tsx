@@ -579,6 +579,14 @@ const STEP_PLAN: Record<StudioMode, PlanStep[]> = {
   ],
 };
 
+// UI-5-T7-F5-4(3) — 커머스 여정 대본(완료→다음 연결형 · 발화만 — 자동 점프 0). 키 = "다음" 스텝
+//   key(fireDoneChip 의 target 기준). review 진입은 기존 F4-10 발행 유도가 담당(중복 금지).
+const COMMERCE_JOURNEY_LINES: Record<string, string> = {
+  title: "사진 담겼어요 — 이제 상품 이름을 지어볼까요?",
+  price: "이름 좋아요 — 가격을 정해볼까요?",
+  season: "가격 정했어요 — 이제 판매 기간을 골라볼까요?",
+};
+
 // UI-5-T2-E1 — 영상 슬롯·유틸(45 :561–594 동형 복제 — 45 컴포넌트 무수정 · 거울 파일 import 회피).
 type VideoSlot49 = {
   videoId: string;
@@ -754,6 +762,9 @@ export function CardStudioPage({
   const [bizGateOpen, setBizGateOpen] = useState(false);
   // UI-5-T7-F5-11 — 나가기 확인 오버레이(헤더 X). 발행 완료(dropped)는 미경유 즉시 홈.
   const [exitAsk, setExitAsk] = useState(false);
+  // UI-5-T7-F5-4(4) — 동행 발화 토글(여정 대본만 게이트 — 응답 낭독은 스피커 토글 소관).
+  //   기본 on(Duke 제안 채택): 동행이 원샷 흐름의 본체·부담 시 끄기. 스피커 OFF 면 speak 자체가 무음.
+  const [companionOn, setCompanionOn] = useState(true);
   // UI-5-T2-E3c — 실모드 라이브 ref. 렌더마다 동기화 → stale 클로저(마운트 1회 음성 effect 등)도
   //   modeRef.current 로 현재 실모드를 본다. 요청·응답 간 전환·E3b 리셋 레이스 정합의 단일 근거.
   const modeRef = useRef<StudioMode>(mode);
@@ -1400,6 +1411,11 @@ export function CardStudioPage({
     if (stepPlanState[target]?.key === "review") {
       setStepToast("다 채웠어요 — 이제 발행해 볼까요?");
       speak("다 채웠어요 — 이제 발행해 볼까요?");
+    } else if (mode === "commerce" && companionOn) {
+      // F5-4(3) — 여정 대본: 완료→다음 연결 1줄(발화만 — 이동은 기존 칩/헤더 탭이 의사 · 자동 점프 0).
+      //   speakerOn 게이트는 speak 내부(speakerOnRef) — OFF 면 무음 통과.
+      const line = COMMERCE_JOURNEY_LINES[stepPlanState[target]?.key ?? ""];
+      if (line) speak(line);
     }
   }
   useEffect(() => {
@@ -2127,19 +2143,24 @@ export function CardStudioPage({
 
   // L3 — onDone 시그니처 확장(45 useLingoChat speak :530-555 관례: OFF·미지원·오류 전 분기 onDone 보장).
   //   스피커 OFF(speakerOnRef) = 낭독 0 + 즉시 onDone — 텍스트만.
-  // UI-5-T7-F4-8(a) — 발화 직렬화(1슬롯 대기열): 구 "진입 시 무조건 cancel"이 진행 중 낭독을
-  //   자르던 것을 폐지. 낭독 중 신규 발화 = 최신 1건만 대기 → onend 후 재생(중간 발화는 최신으로
-  //   대체·대체된 건의 onDone 은 즉시 호출해 사슬 누수 방지). 절단은 사용자 의도 지점(오브 탭)만.
+  // UI-5-T7-F4-8(a) — 발화 직렬화: 구 "진입 시 무조건 cancel"이 진행 중 낭독을 자르던 것을 폐지.
+  // UI-5-T7-F5-4(2) — 1슬롯(최신 교체 = 중간 발화 유실) → FIFO 순서 큐(상한 3 · 순서 재생 · 유실 0).
+  //   초과분은 가장 오래된 대기분부터 밀어내되 onDone 은 즉시 호출(사슬 누수 방지). 절단은 사용자
+  //   의도 지점(오브 탭·스피커 OFF)만 — stopSpeakingHard 가 전체 소거. 호출부 계약(speak(text,
+  //   onDone)) 무변.
   const speakBusyRef = useRef(false);
-  const speakQueueRef = useRef<{ text: string; onDone?: () => void } | null>(null);
+  const speakQueueRef = useRef<{ text: string; onDone?: () => void }[]>([]);
   function speak(text: string, onDone?: () => void) {
     if (!text || typeof window === "undefined" || !window.speechSynthesis || !speakerOnRef.current) {
       onDone?.();
       return;
     }
     if (speakBusyRef.current) {
-      speakQueueRef.current?.onDone?.(); // 대체되는 대기분 사슬 보장.
-      speakQueueRef.current = { text, onDone };
+      // F5-4(2) — FIFO 적재. 상한 3 초과분은 최고참부터 밀어내며 onDone 만 즉시 호출.
+      speakQueueRef.current.push({ text, onDone });
+      while (speakQueueRef.current.length > 3) {
+        speakQueueRef.current.shift()?.onDone?.();
+      }
       return;
     }
     try {
@@ -2158,9 +2179,8 @@ export function CardStudioPage({
         speakBusyRef.current = false;
         setSpeaking(false);
         onDone?.();
-        const next = speakQueueRef.current;
-        speakQueueRef.current = null;
-        if (next) speak(next.text, next.onDone); // 대기분 재생(외부 cancel 시엔 호출 전에 대기열이 비워짐).
+        const next = speakQueueRef.current.shift(); // F5-4(2) — FIFO 순서 재생(외부 cancel 시엔 호출 전에 대기열이 비워짐).
+        if (next) speak(next.text, next.onDone);
       };
       u.onend = finish;
       u.onerror = finish;
@@ -2174,7 +2194,7 @@ export function CardStudioPage({
   // F4-8(a) — 사용자 의도 절단 단일 헬퍼: 대기열 소거 → cancel(대기열을 안 비우면 finish 가
   //   절단 직후 대기분을 재생해 청취 위로 에코 — 절단 지점은 반드시 이 함수 경유).
   function stopSpeakingHard() {
-    speakQueueRef.current = null;
+    speakQueueRef.current = []; // F5-4(2) — 전체 소거(FIFO 전환 후에도 절단 = 사용자 의도 지점만).
     window.speechSynthesis?.cancel();
     setSpeaking(false);
   }
@@ -6406,7 +6426,22 @@ export function CardStudioPage({
               </div>
             }
             headerAction={
-              /* L3 — 스피커 토글: 낭독 전체 on/off(사용자 설정 — 리셋 무관). OFF 전환 시 진행 중 낭독 즉시 중단. */
+              /* L3 — 스피커 토글: 낭독 전체 on/off(사용자 설정 — 리셋 무관). OFF 전환 시 진행 중 낭독 즉시 중단.
+                 F5-4(4) — 동행 토글 병치: 여정 대본(연결 발화)만 게이트 — 낭독 전체는 스피커 소관. */
+              <div className="flex items-center gap-1.5">
+              <button
+                aria-label={companionOn ? "동행 안내 끄기" : "동행 안내 켜기"}
+                aria-pressed={companionOn}
+                onClick={() => setCompanionOn((v) => !v)}
+                className="flex h-8 shrink-0 items-center justify-center rounded-full px-2.5 text-[11px] font-bold transition-transform active:scale-95"
+                style={
+                  companionOn
+                    ? { backgroundColor: "#EEF3FE", color: "#1D4ED8" }
+                    : { backgroundColor: "#F4F4F5", color: "#9A9A9A" }
+                }
+              >
+                동행
+              </button>
               <button
                 aria-label={speakerOn ? "낭독 끄기" : "낭독 켜기"}
                 aria-pressed={speakerOn}
@@ -6421,6 +6456,7 @@ export function CardStudioPage({
               >
                 {speakerOn ? <Volume2 className="h-4 w-4" strokeWidth={2.5} /> : <VolumeX className="h-4 w-4" strokeWidth={2.5} />}
               </button>
+              </div>
             }
             log={
               <>
