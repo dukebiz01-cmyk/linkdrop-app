@@ -3145,7 +3145,8 @@ export function CardStudioPage({
         mode: m, // E3c — 실모드 라이브(studio_state.mode 항상 현재 실모드와 일치).
         applied_blocks,
         score,
-        card_title: cfgTitle.trim() || (applied["product"] && cfgProductName ? cfgProductName : content.title),
+        // F5-5-S2 — AI 재료 데모 폴백 제거: 제목 비움 = 빈값 전달(링고가 데모 제목을 실카드로 오인 금지).
+        card_title: cfgTitle.trim() || (applied["product"] && cfgProductName ? cfgProductName : ""),
         ...(cfgProductName ? { product_name: cfgProductName } : {}),
         ...(cfgProductPrice ? { product_price: Number(cfgProductPrice.replace(/[^0-9]/g, "")) || undefined } : {}),
       },
@@ -3480,6 +3481,12 @@ export function CardStudioPage({
       setSaveError("영상을 먼저 담아 주세요");
       return false;
     }
+    // F5-5-S2 — 제목 게이트(데모 폴백 content.title 발행 편입 제거 · 무언 실패 금지).
+    //   커머스는 상품명이 정당 폴백이라 위 검증(상품명 필수)으로 이미 충족.
+    if (!(cfgTitle.trim() || (applied["product"] && cfgProductName.trim()))) {
+      setSaveError("카드 제목을 입력해 주세요.");
+      return false;
+    }
     if (saving) return false; // 이중 탭 방지(45 :2271).
     setSaving(true);
     setSaveError(null);
@@ -3487,8 +3494,9 @@ export function CardStudioPage({
       const isPublic = visibility === "public";
       const hasCoupon = !!applied["coupon"] && !!selectedCouponId; // E5d — 실쿠폰 UUID.
       // 제목 WYSIWYG(45 resolvedCardTitle FIX-57) — 어댑터 titleText 와 동일 산출(미리보기=발행 동일값).
+      // F5-5-S2 — `|| content.title` 데모 폴백 제거(위 제목 게이트가 빈값을 선차단).
       const resolvedCardTitle =
-        cfgTitle.trim() || (applied["product"] && cfgProductName.trim() ? cfgProductName.trim() : "") || content.title;
+        cfgTitle.trim() || (applied["product"] && cfgProductName.trim() ? cfgProductName.trim() : "");
       let dropId: string | null;
       let publishedShareUuid: string;
       let shareableUrl: string | null;
