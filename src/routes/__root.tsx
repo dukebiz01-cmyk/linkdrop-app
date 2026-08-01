@@ -195,8 +195,9 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* FIX-47b — 인앱 유도 배너(전역 셸 상단 1줄): 자동 리다이렉트·팝업 0(§13). */}
-      <InAppBrowserBanner />
+      {/* UI-5-T7-F5-7 — 구 FIX-47b 인앱 상시 배너 렌더 해제: 안내는 T-6a 행동 시점(마이크 →
+          크롬 핸드오프·V6_INAPP_NOTICE)으로 일원화. 컴포넌트는 아래 보존(롤백 자산) ·
+          getInAppBrowser 헬퍼·타 소비처(홈 마이크 분기·49 3티어) 무접촉. */}
       <Outlet />
       {!isApp &&
         (pathname === "/" ? (
@@ -215,6 +216,7 @@ function RootComponent() {
 //   (useLingoVoice TTS 세션 키 관례 동일 — localStorage 아님). 일반 브라우저 = 미렌더.
 const INAPP_BANNER_KEY = "ld-inapp-banner-dismissed";
 
+// UI-5-T7-F5-7 — 렌더 해제(위 셸 주석). 정의는 롤백 자산으로 보존 — 참조 0.
 function InAppBrowserBanner() {
   const [inApp, setInApp] = useState<InAppBrowser | null>(null);
   useEffect(() => {
