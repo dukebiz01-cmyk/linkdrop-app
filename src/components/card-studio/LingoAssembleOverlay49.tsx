@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react"
-import { LingoAvatar } from "@/components/brand/LingoMascot"
+// UI-5-T7-L6b 후속 — 구판 brand/LingoMascot(물방울판) 폐선에 따른 신정본 교체. 두 소비처(36/32
+//   solid) 모두 spin 미사용이라 시그니처 동일 — 조립 연출(딤·체크리스트·요약 카드) 무접촉.
+import { LingoAvatar } from "@/components/brand/lingo-mascot"
 
 export interface AssembleStep {
   label: string

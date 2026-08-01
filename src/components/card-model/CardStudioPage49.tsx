@@ -78,7 +78,7 @@ import {
 import { primeAudio, playListenStart, playListenStop } from "@/lib/lingo-sound";
 import { canUseSpeechRecognition, VOICE_UNSUPPORTED_NOTICE, speakThenProceed } from "@/lib/lingo-voice-tap";
 // UI-5-T7-L6b — FAB 오브 = Mascot 정본(brand/lingo-mascot) + 지니 연출 래퍼로 통일.
-//   구 brand/LingoMascot(물방울판·spin)은 보존 — 잔여 소비처 = LingoAssembleOverlay49.
+//   구 물방울판(LingoMascot.tsx 대문자)은 케이스 충돌 해소 차 폐선 완료(소비처 전환 후 삭제).
 import { LingoGenie } from "@/components/lingo/LingoGenie";
 // UI-5-T3-L2 — 기록실 시트(구 패널 대체 · 직접 구현).
 import { LingoRecordSheet49 } from "@/components/lingo/LingoRecordSheet49";
