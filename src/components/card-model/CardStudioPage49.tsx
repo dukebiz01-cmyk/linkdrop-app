@@ -752,6 +752,8 @@ export function CardStudioPage({
   const [mode, setMode] = useState<StudioMode>("general");
   // F5-3 — 잠금 탭 탭 시 인라인 유도 패널(강제 이송 0 · Radix 금지 — 조건부 렌더).
   const [bizGateOpen, setBizGateOpen] = useState(false);
+  // UI-5-T7-F5-11 — 나가기 확인 오버레이(헤더 X). 발행 완료(dropped)는 미경유 즉시 홈.
+  const [exitAsk, setExitAsk] = useState(false);
   // UI-5-T2-E3c — 실모드 라이브 ref. 렌더마다 동기화 → stale 클로저(마운트 1회 음성 effect 등)도
   //   modeRef.current 로 현재 실모드를 본다. 요청·응답 간 전환·E3b 리셋 레이스 정합의 단일 근거.
   const modeRef = useRef<StudioMode>(mode);
@@ -3885,11 +3887,15 @@ export function CardStudioPage({
           <button
             type="button"
             aria-label="닫기"
-            /* UI-5-T7-F4a(F4-2) — 무배선 수복: 45 :3617-3621 동형(back 폴백 /home — 카톡 핸드오프
-               직행 진입 = 히스토리 1 케이스 커버). 3모드 공통 헤더 단일 지점. */
+            /* UI-5-T7-F5-11 — 나가기 확인이 구 F4-2 history.back 즉시 이탈을 대체: back 폴백은
+               오버레이 행선지(홈/내 페이지)로 흡수(실수 이탈 차단 — 카톡 핸드오프 직행 진입 케이스도
+               행선지 버튼이 커버). 발행 완료(dropped) = 오버레이 미경유 즉시 홈(F4-2 동선 정합). */
             onClick={() => {
-              if (typeof window !== "undefined" && window.history.length > 1) window.history.back();
-              else window.location.assign("/home");
+              if (dropped) {
+                window.location.assign("/home");
+                return;
+              }
+              setExitAsk(true);
             }}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#525252] transition-colors hover:bg-[#F5F5F5]"
           >
@@ -6268,6 +6274,50 @@ export function CardStudioPage({
               >
                 그대로 둘게요
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UI-5-T7-F5-11 — 나가기 확인(중앙 오버레이 — 발행 완료 오버레이 문법 동형 · Radix 0).
+          작성분(hasWork) 유무 = 앰버 경고줄만 분기. 임시저장 암시 문구 금지(미구현 정직 —
+          초안 임시저장은 post-pilot 파킹). */}
+      {exitAsk && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center px-8">
+          <div className="absolute inset-0 bg-black/45" onClick={() => setExitAsk(false)} />
+          <div className="relative w-full max-w-[340px] rounded-2xl bg-white p-5 [box-shadow:0_24px_60px_-16px_rgba(10,14,22,0.5)]">
+            <p className="text-[16px] font-extrabold tracking-ko text-[#16161D]">
+              스튜디오에서 나갈까요?
+            </p>
+            {hasWork() && (
+              <p className="mt-1.5 text-[12.5px] font-semibold leading-relaxed tracking-ko text-[#B45309] [word-break:keep-all]">
+                나가면 쓰던 내용은 사라져요
+              </p>
+            )}
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                onClick={() => setExitAsk(false)}
+                className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+              >
+                계속 만들기
+              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.location.assign("/home")}
+                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E8E8EC] bg-white text-[13px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                >
+                  홈으로
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.location.assign("/me")}
+                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E8E8EC] bg-white text-[13px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                >
+                  내 페이지로
+                </button>
+              </div>
             </div>
           </div>
         </div>
