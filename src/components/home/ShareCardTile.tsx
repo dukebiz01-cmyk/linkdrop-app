@@ -415,8 +415,8 @@ export function ShareCardTile({
                   style={{ color: accent }}
                 >
                   <Route className="size-3.5 flex-none" strokeWidth={2.25} />
+                  {/* UI-5-T7-F6-9 — "여정" 옆 ArrowUpRight 제거(Duke 검수 — 라벨+아이콘이면 충분). */}
                   여정
-                  <ArrowUpRight className="size-3.5" strokeWidth={2.5} />
                 </button>
               ) : null}
             </div>
