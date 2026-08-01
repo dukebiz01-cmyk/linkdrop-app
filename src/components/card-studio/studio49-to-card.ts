@@ -42,13 +42,11 @@ export type Studio49Input = {
   slotsByDate: Record<string, number>; // cfgSlotsByDate
   selectedVideo: Studio49VideoSlot | null;
   shipping: { shipMethod?: string | null; freeShip?: boolean; shipFeeKrw?: number | null; shipNote?: string | null } | null;
-  // MODE_CONTENT 폴백
+  // 모드 라벨(카테고리 칩 — 데모 아님). UI-5-T7-F5-5-S1: 데모 폴백(source/titleFallback/
+  //   subtitleFallback) 폐기 — storeName 은 실매장 display_name 배선(빈값 = 정본 미렌더).
   categoryLabel: string;
   categoryIcon: LucideIcon;
-  source: string;
   storeName: string;
-  titleFallback: string;
-  subtitleFallback: string;
   pageBg: string;
 };
 
@@ -88,17 +86,24 @@ export function studio49ToCardModel(s: Studio49Input): CardModel {
 
   const shippingView = isCommerce && s.shipping ? buildShippingView(s.shipping) : null;
 
+  // UI-5-T7-F5-5-S1 — 데모 폴백 승격 차단: 제목·한마디는 실값 있을 때만 override — 비움은 거울
+  //   정본(fromStudioState)의 진실 폴백(commerce="상품 이름" 라벨 · 비커머스=매장명→영상 제목→빈값)
+  //   이 흐른다. "회색 플레이스홀더" 스타일링은 CardModelBody(거울) 접촉이라 미적용(STOP 규칙 준수
+  //   — 정본 폴백이 데모 문안 없이 비움을 커버).
+  const previewTitle =
+    s.title.trim() || (s.applied["product"] && s.productName ? s.productName : "");
+  const previewSubtitle =
+    s.subtitle.trim() ||
+    (s.applied["product"] && s.productHeadline.trim() ? s.productHeadline.trim() : "");
+
   // 45:2660–2705 프리뷰 오버라이드(미영속 로컬 설정 → 거울에 흐름).
   const preview: Partial<CardModel> = {
     pageBg: s.pageBg,
     category: s.categoryLabel,
     categoryIcon: s.categoryIcon,
-    source: s.source,
-    titleText:
-      s.title.trim() || (s.applied["product"] && s.productName ? s.productName : "") || s.titleFallback,
-    subtitleText:
-      s.subtitle.trim() ||
-      (s.applied["product"] && s.productHeadline.trim() ? s.productHeadline.trim() : s.subtitleFallback),
+    // F5-5-S1 — 데모 source 무조건 주입 폐기(미주입 = 정본 값).
+    ...(previewTitle ? { titleText: previewTitle } : {}),
+    ...(previewSubtitle ? { subtitleText: previewSubtitle } : {}),
     ...(s.clip ? { clip: s.clip } : {}),
     ...(s.applied["brand"] && s.brand.trim() ? { brandText: s.brand.trim() } : {}),
     ...(s.applied["party"] ? { party: s.party } : {}),

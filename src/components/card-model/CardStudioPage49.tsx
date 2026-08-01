@@ -3884,10 +3884,8 @@ export function CardStudioPage({
       : null,
     categoryLabel: content.category,
     categoryIcon: content.categoryIcon,
-    source: content.source,
-    storeName: content.store,
-    titleFallback: content.title,
-    subtitleFallback: content.subtitle,
+    // F5-5-S1 — 실매장 배선(데모 storeName "괴산 햇사과 농장" 폐기): 부재 = 빈값 → 정본 미렌더.
+    storeName: initialStore?.display_name ?? "",
     pageBg,
   });
 
@@ -3934,10 +3932,14 @@ export function CardStudioPage({
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-bold leading-tight text-[#0A0A0A]">카드 스튜디오</p>
-            <span className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-[#737373]">
-              <Store className="h-3 w-3 shrink-0" strokeWidth={2} />
-              <span className="truncate">{content.store}</span>
-            </span>
+            {/* F5-5-S1 — 헤더 매장명 데모 폐기: 실매장(display_name)만 · general 은 "내 채널"
+                (매장 주장 아님) · 그 외 부재 = 미렌더. */}
+            {(initialStore?.display_name || mode === "general") && (
+              <span className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-[#737373]">
+                <Store className="h-3 w-3 shrink-0" strokeWidth={2} />
+                <span className="truncate">{initialStore?.display_name ?? "내 채널"}</span>
+              </span>
+            )}
           </div>
 
           {/* 등급 칩 — 별점 + 라벨 */}
