@@ -713,8 +713,11 @@ function MePage() {
             ))}
           </div>
 
-          {/* 보조 스탯(v0) — 만든 카드 / 보낸 카드 / 구독. */}
-          <div className="mt-3 grid grid-cols-3">
+          {/* 보조 스탯(v0) — 만든 카드 / 보낸 카드 / 구독.
+              UI-5-T7-F6-5 — 정적 스탯 표시 전용(핸들러 없음 · 목록 화면 신설은 파킹): 위 자산
+              스트립(버튼·hover·ChevronRight)과 시각 구분 — cursor-default·select-none 명시 +
+              값 톤 다운(흰 강조 제거)으로 '탭 대상 아님'을 드러낸다. */}
+          <div className="mt-3 grid select-none grid-cols-3" aria-label="활동 통계">
             {(
               [
                 { key: "made", label: "만든 카드", value: data.myDrops.length },
@@ -724,9 +727,9 @@ function MePage() {
             ).map((s, i) => (
               <div
                 key={s.key}
-                className={`flex items-center justify-center gap-1.5 py-0.5 ${i > 0 ? "border-l border-white/10" : ""}`}
+                className={`flex cursor-default items-center justify-center gap-1.5 py-0.5 ${i > 0 ? "border-l border-white/10" : ""}`}
               >
-                <span className="text-[13px] font-bold tabular-nums text-white">{s.value}</span>
+                <span className="text-[13px] font-bold tabular-nums text-[#B6C2D2]">{s.value}</span>
                 <span className="text-[11px] font-medium text-[#8A99AD]">{s.label}</span>
               </div>
             ))}
