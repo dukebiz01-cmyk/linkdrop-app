@@ -1,7 +1,8 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
-import { LandingPageV5 } from "@/components/landing-v5/landing-page-v5";
+// UI-5-T7-L6 — 랜딩 v6 스위치(v0 전면 이식). v5 계열 파일은 무삭제 보존(롤백 = import 1줄 복귀).
+import { LandingPageV6 } from "@/components/landing-v6/landing-page-v6";
 import { BottomNav } from "@/components/bottom-nav";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { getAuthClient } from "@/lib/auth-context";
@@ -105,12 +106,12 @@ function IndexHomePage() {
     );
   }
 
-  // LAND-1 — 비로그인 랜딩 = LandingPageV5(v0 48 정본). CTA는 컴포넌트 내부에서 /login 유도.
+  // UI-5-T7-L6 — 비로그인 랜딩 = LandingPageV6(v0 전면 이식 — 링고 오브 히어로·디바이스 프레임).
   // 공통 BottomNav (v0 검정 4탭) 는 무로그인 진입점에서도 렌더.
   return (
     <>
       <div className="pb-[calc(6rem+env(safe-area-inset-bottom))]">
-        <LandingPageV5 />
+        <LandingPageV6 />
         {/* 사업자 푸터는 __root 글로벌 BusinessFooter(공개 경로)로 이전 — 중복 제거. */}
       </div>
       <BottomNav />
