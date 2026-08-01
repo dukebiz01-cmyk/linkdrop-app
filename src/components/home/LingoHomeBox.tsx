@@ -9,7 +9,6 @@ import { ChevronDown, ArrowUp, Square, Loader2, Rocket, TrendingUp } from "lucid
 // UI-5-T7-F4-9 — 홈 링고 표면 구 Sparkles → 신오브 미니어처(49 오브 시각 정본의 축소판) 통일.
 import { LingoOrbMini } from "@/components/lingo/LingoOrbMini";
 import { useLingo } from "@/components/lingo/useLingo";
-import { LingoOrb } from "@/components/lingo/LingoOrb";
 import { MicTapButton } from "@/components/lingo/MicTapButton"; // UI-4d — 탭 문법 교체.
 import { playListenStart, playListenStop, primeAudio } from "@/lib/lingo-sound";
 import { canUseSpeechRecognition, speakThenProceed, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
@@ -222,11 +221,10 @@ export function LingoHomeBox({
         aria-expanded={open}
         className="flex min-h-[44px] w-full items-center gap-2.5 px-4 py-3 text-left"
       >
-        {/* LINGO-UI-3a — 공용 LingoOrb 로 통일(발화 연동). onClick 미주입 = span(중첩 button 방지). */}
-        <LingoOrb
-          size={36}
-          state={chat.streaming ? "busy" : voice.speaking ? "speaking" : open ? "active" : "idle"}
-        />
+        {/* UI-5-T7-F5-1 — 구 물방울 LingoOrb → 신오브 미니어처(F4-9 정본) 교체. 흰 카드 배경
+            = tone 기본(blue) · size 36 유지(레이아웃 점프 0). 구 상태 4종 연동은 오브 표면에서
+            제거 — 진행 상태는 메시지 영역 스피너·입력줄 placeholder 가 이미 담당. */}
+        <LingoOrbMini size={36} />
         <span className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#0F172A] [word-break:keep-all]">
           {HEADER_COPY}
         </span>
