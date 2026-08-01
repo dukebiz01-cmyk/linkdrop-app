@@ -1287,14 +1287,15 @@ function CouponClaimCard({
               {ctaLabel}
             </button>
             {/* 친구에게 보내기 = 출처 드롭 재공유. 아웃라인(보더/투명/검정 글자). 출처 있을 때만. */}
+            {/* UI-5-T7-F6-7 — 종이비행기(Send) 아이콘 제거 + 한 줄 고정(nowrap) + [쿠폰 사용]과
+                동일 높이·패딩(px-4) 열 정렬. 색·문구·onClick 무접촉. */}
             {canReshare ? (
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={sending}
-                className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm font-bold text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-50"
+                className="flex min-h-[44px] flex-1 items-center justify-center whitespace-nowrap rounded-lg border border-[#E2E8F0] bg-white px-4 text-sm font-bold text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-50"
               >
-                <Send className="size-4" strokeWidth={2} />
                 쿠폰 선물
               </button>
             ) : null}
