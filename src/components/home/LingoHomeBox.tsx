@@ -118,31 +118,52 @@ export function LingoHomeBox({
   // 채팅 전송 — surface='home'(T-B 홈 인텐트). 메이커면 context.performance=true(T-D 성과 진단 재료).
   //   LINGO-UI-2-FIX-2 — 완주 응답 낭독 배선(원천 미배선 수복 · 스튜디오 sendChatText 패턴 복제):
   //   채널 무관(텍스트·마이크 유래 모두 이 함수 경유). ttsOn 게이트는 speak 내부가 담당.
-  const sendChat = async (text: string) => {
+  // UI-5-T7-F6-10 S4 — 대화 루프 무장 ref(홈 한정 락 예외 — Duke 승인 · 49 락 존치):
+  //   true = 음성 유래 대화(응답 낭독 종료 후 자동 재청취). 명시 종료(마이크 탭·스피커 OFF·
+  //   입력창 포커스·타이핑 전송) = false. 무발화 ~8초 대기 복귀는 S3 no-speech 가 담당(가드 ③).
+  const convLoopRef = useRef(false);
+  const sendChat = async (text: string, viaVoice = false) => {
     const t = text.trim();
     if (!t || chat.streaming || voice.listening) return;
     voice.stopSpeaking(); // 새 입력 = 진행 중 낭독 즉시 중단(기존 관례).
     setChatInput("");
     const finalText = await chat.send(t, "text", isMaker ? { performance: true } : {}, "home");
-    if (finalText) voice.speak(stripMarkdown(finalText)); // LINGO-FIX-4 — 낭독도 기호 정제.
+    if (!finalText) return;
+    // F6-10 S4 — 음성 유래 + ttsOn + 루프 무장일 때만 onDone 재청취(FIX-48 2인자 계약 소비).
+    //   가드: ①재청취 = 낭독 종료 후에만(onDone 계약 — 에코 차단) ④ttsOn OFF = 1인자(반이중 유지).
+    if (viaVoice && voice.ttsOn && convLoopRef.current) {
+      voice.speak(stripMarkdown(finalText), () => {
+        if (!convLoopRef.current) return; // 가드 ② — 낭독 중 명시 종료 반영.
+        playListenStart();
+        startMic(); // 왕복: 응답 낭독 종료 → 띵 → 즉시 재청취.
+      });
+    } else {
+      voice.speak(stripMarkdown(finalText)); // LINGO-FIX-4 — 낭독도 기호 정제.
+    }
   };
   // LINGO-MIC-AUTOSEND-1 — final → 입력창 잠깐 표시(600ms) → 기존 sendChat(자동 전송). 빈 final=무전송.
   const micAutoSendRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startMic = () => {
     voice.stopSpeaking();
     if (voice.listening) return;
+    convLoopRef.current = true; // F6-10 S4 — 음성 유래 대화 무장.
     voice.startListening((final) => {
       const t = final.trim();
       if (!t) return;
+      // F6-10 S3 — 전송 확정 = 청취 의도 해제(자동 재시작 중단 — 재청취는 S4 onDone 이 재무장).
+      voice.stopListening();
       setChatInput(t);
       if (micAutoSendRef.current) clearTimeout(micAutoSendRef.current);
       micAutoSendRef.current = setTimeout(() => {
         micAutoSendRef.current = null;
-        void sendChat(t); // sendChat 이 입력창 비움·빈값·streaming 가드 담당(신규 전송 로직 0).
+        void sendChat(t, true); // sendChat 이 입력창 비움·빈값·streaming 가드 담당(신규 전송 로직 0).
       }, 600);
     });
   };
-  const stopMic = () => voice.stopListening();
+  const stopMic = () => {
+    convLoopRef.current = false; // F6-10 S4 가드 ② — 마이크 탭 = 명시 종료.
+    voice.stopListening();
+  };
   // UI-4e-b — 홈도 스튜디오와 동일 탭 시퀀스: 탭 → placeholder 전환+안내 낭독 → 띵 → 청취.
   //   ttsOn OFF/미지원 = speak 가 onDone 즉시 호출 → 표시+띵→청취 degrade. 에코 방지 =
   //   낭독 완료 후에만 마이크 오픈. 자동전송(600ms)·재탭 종료 기존 무변경.
@@ -151,9 +172,11 @@ export function LingoHomeBox({
   useEffect(() => {
     if (micPromptOn && !voice.listening && !voice.speaking) setMicPromptOn(false);
   }, [micPromptOn, voice.listening, voice.speaking]);
+  // F6-10 S2 — 안내 낭독은 세션 첫 탭 1회만(TTS 세션 키 관례 — sessionStorage).
+  const MIC_PROMPT_ONCE_KEY = "ld-home-mic-prompt-done";
   const startMicSequence = () => {
     // UI-4d-FIX-1 — ① 오디오 언락은 제스처 컨텍스트(핸들러 최상단)에서. ② 탭 시점 재판정 —
-    //   불능이면 1회 안내 후 종료. ③ 낭독은 3초 타임아웃 가드 병행(onDone drop 방어) —
+    //   불능이면 1회 안내 후 종료. ③ 낭독은 타임아웃 가드 병행(onDone drop 방어) —
     //   낭독 실패·미지원이어도 띵→청취는 반드시 시작.
     primeAudio();
     if (!canUseSpeechRecognition()) {
@@ -161,6 +184,23 @@ export function LingoHomeBox({
       return;
     }
     voice.stopSpeaking();
+    // F6-10 S2 — 재탭·재무장 = 안내 낭독 생략, 띵만 후 즉시 청취(활성 지연 해소).
+    let prompted = false;
+    try {
+      prompted = window.sessionStorage.getItem(MIC_PROMPT_ONCE_KEY) === "1";
+    } catch {
+      /* sessionStorage 차단 — 매 탭 안내 허용(정직 폴백) */
+    }
+    if (prompted) {
+      playListenStart();
+      startMic();
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(MIC_PROMPT_ONCE_KEY, "1");
+    } catch {
+      /* 저장 실패 — 다음 탭 재안내 허용 */
+    }
     setMicPromptOn(true);
     speakThenProceed({
       speak: voice.speak,
@@ -224,8 +264,10 @@ export function LingoHomeBox({
         className="flex min-h-[44px] w-full items-center gap-2.5 px-4 py-3 text-left"
       >
         {/* UI-5-T7-L6b — Mascot 정본 통일 + 지니 소환 연출(①마운트 1회 소환 → ②상시 부유).
-            흰 카드 배경 = tone blue · size 36 유지(레이아웃 점프 0). */}
-        <LingoGenie size={36} tone="blue" />
+            흰 카드 배경 = tone blue · size 36 유지(레이아웃 점프 0).
+            F6-10 S1 — 주체 분기: 링고 발화·생각 중 = 오브 ③ 확장(발광+궤도 스파클) /
+            사용자 발화 = MicTapButton 파형(기존 유지) — 이원 연출. */}
+        <LingoGenie size={36} tone="blue" talking={voice.speaking || chat.streaming} />
         <span className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#0F172A] [word-break:keep-all]">
           {HEADER_COPY}
         </span>
@@ -328,7 +370,15 @@ export function LingoHomeBox({
           {/* ④ 입력줄 — 기존 삼항 그대로 이식(마이크/핸드오프) + 스피커 토글(낭독 on/off 보존). */}
           <div className="mt-3 flex items-end gap-2">
             <span className="flex h-11 shrink-0 items-center">
-              <SpeakerToggle ttsOn={voice.ttsOn} speaking={voice.speaking} onToggle={voice.toggleTts} accent={ACCENT} />
+              <SpeakerToggle
+                ttsOn={voice.ttsOn}
+                speaking={voice.speaking}
+                onToggle={() => {
+                  convLoopRef.current = false; // F6-10 S4 가드 ②·④ — 스피커 조작 = 루프 해제.
+                  voice.toggleTts();
+                }}
+                accent={ACCENT}
+              />
             </span>
             <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5">
               <input
@@ -337,7 +387,10 @@ export function LingoHomeBox({
                 disabled={chat.streaming || voice.listening}
                 placeholder={micPromptOn || voice.listening ? "여기에 대고 말씀하세요" : chat.streaming ? "링고가 생각 중…" : "링고AI에게 물어보기"}
                 onChange={(e) => setChatInput(e.target.value)}
-                onFocus={() => voice.stopSpeaking()}
+                onFocus={() => {
+                  convLoopRef.current = false; // F6-10 S4 가드 ② — 손 입력 전환 = 명시 종료.
+                  voice.stopSpeaking();
+                }}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); void sendChat(chatInput); } }}
                 className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#9A9A9A] disabled:opacity-60"
               />

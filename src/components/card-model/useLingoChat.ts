@@ -385,7 +385,8 @@ type RecognitionLike = {
         results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal?: boolean }>;
       }) => void)
     | null;
-  onerror: (() => void) | null;
+  // F6-10 S3 — error 코드 판독(no-speech/권한류 분기). 구현체가 인자 없이 불러도 안전(옵셔널).
+  onerror: ((e?: { error?: string }) => void) | null;
   onend: (() => void) | null;
   start: () => void;
   /** FIX-43 — 우아한 종료([말 끝났어요]): 지금까지 발화의 최종 결과를 확정한 뒤 onend. */
@@ -418,6 +419,10 @@ export function useLingoVoice() {
     }
   });
   const recRef = useRef<RecognitionLike | null>(null);
+  // UI-5-T7-F6-10 S3 — 청취 "의도" ref: continuous=false 크롬이 짧은 무음에 onend 를 내려도
+  //   의도가 살아있으면 자동 재시작(조기 종료 수복). 해제 지점 = 사용자 종료(stopListening)·
+  //   말 끝났어요 확정(finishListening)·무발화 no-speech(~8초 — 자동 대기 복귀 가드 ③)·권한류 오류.
+  const listenIntentRef = useRef(false);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showNotice = useCallback((msg: string) => {
@@ -436,6 +441,7 @@ export function useLingoVoice() {
   }, []);
 
   const stopListening = useCallback(() => {
+    listenIntentRef.current = false; // F6-10 S3 — 사용자 종료 = 의도 해제(자동 재시작 차단).
     recRef.current?.abort();
     recRef.current = null;
     setListening(false);
@@ -446,6 +452,7 @@ export function useLingoVoice() {
   const finishListening = useCallback(() => {
     const rec = recRef.current;
     if (!rec) return;
+    listenIntentRef.current = false; // F6-10 S3 — 확정 종료 = 의도 해제(onend 재시작 차단).
     try {
       rec.stop();
     } catch {
@@ -457,6 +464,7 @@ export function useLingoVoice() {
 
   useEffect(
     () => () => {
+      listenIntentRef.current = false; // F6-10 S3 — 언마운트 = 의도 해제(재시작 루프 차단).
       recRef.current?.abort();
       try {
         window.speechSynthesis?.cancel();
@@ -478,48 +486,75 @@ export function useLingoVoice() {
         showNotice("음성 대화는 크롬·삼성인터넷에서 쓸 수 있어요");
         return;
       }
-      try {
-        const rec = new Ctor();
-        rec.lang = "ko-KR";
-        rec.continuous = false;
-        rec.interimResults = !!opts?.onInterim;
-        rec.maxAlternatives = 1;
-        rec.onresult = (e) => {
-          if (!opts?.onInterim) {
-            // 기존 경로(최종 1건만) — 무변경.
-            const t = e.results[0]?.[0]?.transcript?.trim() ?? "";
-            if (t) onText(t);
-            return;
-          }
-          // FIX-43 — interim 경로: 중간 결과는 표시 콜백으로만, 입력창 반영(onText)은 최종만.
-          let finalT = "";
-          let interimT = "";
-          for (let i = 0; i < e.results.length; i++) {
-            const r = e.results[i];
-            const t = r[0]?.transcript ?? "";
-            if (r.isFinal) finalT += t;
-            else interimT += t;
-          }
-          const merged = `${finalT} ${interimT}`.trim();
-          if (merged) opts.onInterim(merged);
-          if (finalT.trim()) onText(finalT.trim());
-        };
-        rec.onerror = () => {
-          // 조용한 폴백 — 텍스트 모드 유지 + 안내 1줄.
-          showNotice("음성 인식이 잘 안 됐어요 — 글로 입력해 주세요");
-        };
-        rec.onend = () => {
+      // F6-10 S3 — begin 을 분리해 onend 자동 재시작이 같은 핸들러로 재무장(조기 종료 수복).
+      const begin = () => {
+        if (recRef.current) return; // 이중 시작 가드(재청취 트리거 경합 방어).
+        try {
+          const rec = new Ctor();
+          rec.lang = "ko-KR";
+          rec.continuous = false;
+          rec.interimResults = !!opts?.onInterim;
+          rec.maxAlternatives = 1;
+          rec.onresult = (e) => {
+            if (!opts?.onInterim) {
+              // 기존 경로(최종 1건만) — 무변경.
+              const t = e.results[0]?.[0]?.transcript?.trim() ?? "";
+              if (t) onText(t);
+              return;
+            }
+            // FIX-43 — interim 경로: 중간 결과는 표시 콜백으로만, 입력창 반영(onText)은 최종만.
+            let finalT = "";
+            let interimT = "";
+            for (let i = 0; i < e.results.length; i++) {
+              const r = e.results[i];
+              const t = r[0]?.transcript ?? "";
+              if (r.isFinal) finalT += t;
+              else interimT += t;
+            }
+            const merged = `${finalT} ${interimT}`.trim();
+            if (merged) opts.onInterim(merged);
+            if (finalT.trim()) onText(finalT.trim());
+          };
+          rec.onerror = (e) => {
+            // F6-10 S3 — 의도 검사 분기: no-speech(무발화 ~8초) = 조용한 자동 대기 복귀(가드 ③ —
+            //   안내 소음 0) / 권한·장치·네트워크 = 의도 해제 + 안내 1줄 / 그 외 일시 오류 =
+            //   의도 유지 → onend 재시작에 위임.
+            const err = e?.error;
+            if (err === "no-speech") {
+              listenIntentRef.current = false;
+              return;
+            }
+            if (
+              err === "not-allowed" ||
+              err === "service-not-allowed" ||
+              err === "audio-capture" ||
+              err === "network"
+            ) {
+              listenIntentRef.current = false;
+              showNotice("음성 인식이 잘 안 됐어요 — 글로 입력해 주세요");
+            }
+          };
+          rec.onend = () => {
+            recRef.current = null;
+            // F6-10 S3 — 의도 살아있으면 즉시 재시작(브라우저 임의 종료 흡수). 해제 시에만 내림.
+            if (listenIntentRef.current) {
+              begin();
+              return;
+            }
+            setListening(false);
+          };
+          recRef.current = rec;
+          setListening(true);
+          rec.start();
+        } catch {
           recRef.current = null;
+          listenIntentRef.current = false;
           setListening(false);
-        };
-        recRef.current = rec;
-        setListening(true);
-        rec.start();
-      } catch {
-        recRef.current = null;
-        setListening(false);
-        showNotice("음성 인식이 잘 안 됐어요 — 글로 입력해 주세요");
-      }
+          showNotice("음성 인식이 잘 안 됐어요 — 글로 입력해 주세요");
+        }
+      };
+      listenIntentRef.current = true;
+      begin();
     },
     [showNotice],
   );
