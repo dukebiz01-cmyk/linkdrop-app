@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+// UI-5-T7-F5-3 — 비사업자 모드 게이트 인라인 유도의 [파트너 등록하기] 이동용.
+import { Link } from "@tanstack/react-router";
 import { ProductRegisterForm, EMPTY_PRODUCT, type ProductForm } from "@/components/card-studio/ProductRegisterForm49";
 // F3-10b — FIX-62 실슬롯 이식(45 동형): 집계 순수 모듈(수신 fromDropDetail 공유 — 거울 자동·무수정 소비)
 //   + 검증된 실슬롯 편집기(upsert/delete RPC·router.invalidate 내장 — 무수술 재사용).
@@ -734,11 +736,17 @@ function parsePointCandidates(text: string): string[] {
 export function CardStudioPage({
   initialStore = null,
   initialSlots = [],
+  businessLocked = false,
 }: {
   initialStore?: { id: string; display_name: string } | null;
   initialSlots?: ReservationSlotRow[];
+  // UI-5-T7-F5-3 — 비사업자 잠금 열람: reserve·commerce 탭 잠금(인라인 유도) · general 전 기능
+  //   정상. 저장측 이중 방어 = create_drop_v2 v7.4 비사업자 purpose 게이트(정보만).
+  businessLocked?: boolean;
 } = {}) {
   const [mode, setMode] = useState<StudioMode>("general");
+  // F5-3 — 잠금 탭 탭 시 인라인 유도 패널(강제 이송 0 · Radix 금지 — 조건부 렌더).
+  const [bizGateOpen, setBizGateOpen] = useState(false);
   // UI-5-T2-E3c — 실모드 라이브 ref. 렌더마다 동기화 → stale 클로저(마운트 1회 음성 effect 등)도
   //   modeRef.current 로 현재 실모드를 본다. 요청·응답 간 전환·E3b 리셋 레이스 정합의 단일 근거.
   const modeRef = useRef<StudioMode>(mode);
@@ -3994,12 +4002,20 @@ export function CardStudioPage({
             { key: "commerce", label: "상품판매", Icon: Store },
           ].map(({ key, label, Icon }) => {
             const isOn = mode === key;
+            // F5-3 — 비사업자 잠금 탭(reserve·commerce): 자물쇠 표시 + 탭 시 인라인 유도(모드 전환 0).
+            const locked = businessLocked && key !== "general";
             return (
               <button
                 key={key}
-                onClick={() => attemptSwitchMode(key as StudioMode)}
+                onClick={() => {
+                  if (locked) {
+                    setBizGateOpen(true);
+                    return;
+                  }
+                  attemptSwitchMode(key as StudioMode);
+                }}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-bold transition-all duration-200 ${
-                  isOn ? "text-white" : "text-[#737373]"
+                  isOn ? "text-white" : locked ? "text-[#A3A3A3]" : "text-[#737373]"
                 }`}
                 style={
                   isOn
@@ -4010,13 +4026,42 @@ export function CardStudioPage({
                     : undefined
                 }
                 aria-pressed={isOn}
+                aria-disabled={locked || undefined}
               >
-                <Icon className="h-4 w-4" strokeWidth={2.25} />
+                {locked ? (
+                  <Lock className="h-4 w-4" strokeWidth={2.25} />
+                ) : (
+                  <Icon className="h-4 w-4" strokeWidth={2.25} />
+                )}
                 {label}
               </button>
             );
           })}
         </div>
+
+        {/* F5-3 — 잠금 탭 인라인 유도(Radix 금지 · 조건부 렌더). [퍼블릭으로 계속]=닫기(현 모드 유지). */}
+        {businessLocked && bizGateOpen && (
+          <div className="mt-2 space-y-3 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
+            <p className="text-[13px] font-bold leading-relaxed text-[#0A0A0A] [word-break:keep-all]">
+              이 기능은 사장님 전용이에요 — 1분이면 등록할 수 있어요
+            </p>
+            <div className="flex gap-2">
+              <Link
+                to="/partner/register"
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white transition-transform active:scale-[0.98]"
+              >
+                파트너 등록하기
+              </Link>
+              <button
+                type="button"
+                onClick={() => setBizGateOpen(false)}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E8E8EC] bg-white px-4 text-[13px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+              >
+                퍼블릭으로 계속
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* UI-5-T1f(1b·1c) — 상단 AI 빌더 섹션 제거: AI 진입은 우하단 FAB→링고 패널 단일화.
             역할별 예시 문구(heroExamples)는 패널 첫 진입 화면으로 이동. 헤더 아래 = 바로 미리보기. */}

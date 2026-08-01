@@ -206,31 +206,39 @@ export const Route = createFileRoute("/_user/studio-build")({
 //   로드(E5d) / dockCount = 49 dock 은 목업(E4e-2 차단) / myRewards = 49 헤더 미표시 /
 //   initialPurpose = 49 모드 프리셋 미지원(딥링크는 URL 계약만 유지). 잉여 loader 재료는 45
 //   롤백 자산 겸 후속 이식분으로 보존(loader 수술 금지 — 조사 확정).
+// UI-5-T7-F5-3 — 구 T-6b ⓑ 전면 차단 화면: 렌더에서 해제(정책 정합 — 랜딩 명문 "정보 알리기
+//   =누구나"). 재사용 자산으로 보존(무삭제) — 후속에서 다른 관문이 필요하면 이 컴포넌트 재사용.
+function BusinessRegisterPrompt() {
+  return (
+    <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col items-center justify-center gap-4 px-8 text-center">
+      <p className="text-[17px] font-extrabold leading-snug tracking-ko text-[#16161D] [word-break:keep-all]">
+        카드 만들기는 사장님 전용이에요 — 1분이면 등록할 수 있어요
+      </p>
+      <Link
+        to="/partner/register"
+        className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+      >
+        파트너 등록하기
+      </Link>
+      <button
+        type="button"
+        onClick={() => window.history.back()}
+        className="min-h-[44px] px-2 text-[13px] font-medium text-[#8A8A8A] transition-opacity active:opacity-70"
+      >
+        둘러보기
+      </button>
+    </main>
+  );
+}
+void BusinessRegisterPrompt; // 보존 참조(미사용 경고 억제) — 렌더 0.
+
 function StudioBuild() {
   const data = Route.useLoaderData();
-  // UI-5-T6b — 비사업자 = ⓑ 등록 유도 화면(Duke 확정): 강제 이송 금지(P6-3 잠금 열람 취지 승계),
-  //   판정 = 기존 loader 재료(isBusiness·store) 재사용.
+  // UI-5-T7-F5-3 — 비사업자 = general 한정 잠금 열람(Duke 확정 정책: 정보 알리기=누구나 /
+  //   예약·쿠폰·상품판매=사장님 전용). 전면 차단(구 ⓑ) 해제 — 모드 게이트는 49 businessLocked 가,
+  //   저장측은 create_drop_v2 비사업자 purpose 게이트(v7.4)가 이중 방어. 강제 이송 0.
   if (!data.isBusiness || !data.store) {
-    return (
-      <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col items-center justify-center gap-4 px-8 text-center">
-        <p className="text-[17px] font-extrabold leading-snug tracking-ko text-[#16161D] [word-break:keep-all]">
-          카드 만들기는 사장님 전용이에요 — 1분이면 등록할 수 있어요
-        </p>
-        <Link
-          to="/partner/register"
-          className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
-        >
-          파트너 등록하기
-        </Link>
-        <button
-          type="button"
-          onClick={() => window.history.back()}
-          className="min-h-[44px] px-2 text-[13px] font-medium text-[#8A8A8A] transition-opacity active:opacity-70"
-        >
-          둘러보기
-        </button>
-      </main>
-    );
+    return <CardStudioPage businessLocked initialSlots={data.slots} />;
   }
   return <CardStudioPage initialStore={data.store} initialSlots={data.slots} />;
 }
