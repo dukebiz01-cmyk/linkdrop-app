@@ -759,7 +759,9 @@ export function CardStudioPage({
   initialSlots = [],
   businessLocked = false,
 }: {
-  initialStore?: { id: string; display_name: string } | null;
+  // UI-5-T7-F6-3 — contact_phone 편입: 커머스 발행 게이트(연락처 필수) 재료. studio-build loader 의
+  //   store 가 구조적 상위집합이라 라우트 무수정 통과.
+  initialStore?: { id: string; display_name: string; contact_phone?: string | null } | null;
   initialSlots?: ReservationSlotRow[];
   // UI-5-T7-F5-3 — 비사업자 잠금 열람: reserve·commerce 탭 잠금(인라인 유도) · general 전 기능
   //   정상. 저장측 이중 방어 = create_drop_v2 v7.4 비사업자 purpose 게이트(정보만).
@@ -988,6 +990,11 @@ export function CardStudioPage({
     // 검증(무언 실패 금지) — /api/drops 필수(사진·가격) + 이름(45 handlePublish :2256-2270 3종 동형).
     if (!productImageUrl) {
       setProductSaveError("상품 사진을 먼저 올려 주세요 — 1스텝(상품 사진)에서 올릴 수 있어요.");
+      return;
+    }
+    // UI-5-T7-F6-3 — E5b 등록 경로도 동형 게이트(등록 드롭이 발행 재사용되는 P6-6 경로 봉쇄).
+    if (!initialStore?.contact_phone?.trim()) {
+      setProductSaveError("손님이 연락드릴 전화번호가 필요해요 — 파트너 정보에서 전화번호를 등록해 주세요.");
       return;
     }
     if (!cfgProductName.trim()) {
@@ -3482,6 +3489,12 @@ export function CardStudioPage({
       }
       if (!(applied["seasonal"] && saleStartIso && saleEndIso)) {
         setSaveError("판매 기간을 정해 주세요.");
+        return false;
+      }
+      // UI-5-T7-F6-3 — 검증 5종째(연락처 필수): 결제·배송이 "전화 확정" 모델이라 contact_phone
+      //   부재 = 손님이 연락 불가(수신 '전화하기'의 단일 소스 = partners.contact_phone).
+      if (!initialStore?.contact_phone?.trim()) {
+        setSaveError("손님이 연락드릴 전화번호가 필요해요 — 파트너 정보에서 전화번호를 등록해 주세요.");
         return false;
       }
     } else if (!selectedVideo) {
