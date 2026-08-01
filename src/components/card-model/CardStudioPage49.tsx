@@ -77,7 +77,9 @@ import {
 // UI-5-T3-L1 — 오브=마이크(45 S2b 이식): 즉시 청취 시퀀스·사운드·게이트(보존 lib 무수정 소비만).
 import { primeAudio, playListenStart, playListenStop } from "@/lib/lingo-sound";
 import { canUseSpeechRecognition, VOICE_UNSUPPORTED_NOTICE, speakThenProceed } from "@/lib/lingo-voice-tap";
-import { LingoAvatar } from "@/components/brand/LingoMascot";
+// UI-5-T7-L6b — FAB 오브 = Mascot 정본(brand/lingo-mascot) + 지니 연출 래퍼로 통일.
+//   구 brand/LingoMascot(물방울판·spin)은 보존 — 잔여 소비처 = LingoAssembleOverlay49.
+import { LingoGenie } from "@/components/lingo/LingoGenie";
 // UI-5-T3-L2 — 기록실 시트(구 패널 대체 · 직접 구현).
 import { LingoRecordSheet49 } from "@/components/lingo/LingoRecordSheet49";
 // UI-5-T2-E3 — 위지윅: 미리보기 = 정본 CardModelBody(거울) + 어댑터. CardBody49(v0 목업) 폐기.
@@ -6805,50 +6807,17 @@ export function CardStudioPage({
               <span
                 className={`relative flex h-14 w-14 items-center justify-center transition-transform duration-100 ${orbPressed && !fabDragging ? "scale-95" : ""}`}
               >
-                {/* UI-5-T5-F3-9 — 상태 연출 재설계: 배지 전폐(F3-4 느낌표 + S2b 마이크/스피커 배지 —
-                    오브 부착물 0 확정) · 오브 자체가 상태를 연기(전부 링고 블루 #1D4ED8 계열 — 빨강 퇴출).
-                    CSS 애니메이션만(JS 타이머 신설 0 — 기존 listening/thinking/speaking 상태 소비만).
-                    파동/막대/칩 전부 pointer-events-none — 탭 히트 영역 = 기존 button 56px 불변. */}
-                <style>{`
-                  @keyframes lingo-orb-wave{0%{transform:scale(1);opacity:.65}100%{transform:scale(1.8);opacity:0}}
-                  @keyframes lingo-orb-eq{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
-                `}</style>
-                {/* b. 듣는 중 — 파동 링 2겹(1.6s 주기·시차 0.8s·오브 테두리 → 바깥). 구 흰 원+빨강 Mic
-                    본체 전환(S2b) 대체 — 오브는 마스코트 그대로(점프 0 유지). */}
-                {listening && (
-                  <>
-                    <span
-                      className="pointer-events-none absolute inset-0 rounded-full border-2 border-[#1D4ED8]"
-                      style={{ animation: "lingo-orb-wave 1.6s ease-out infinite" }}
-                      aria-hidden="true"
-                    />
-                    <span
-                      className="pointer-events-none absolute inset-0 rounded-full border-2 border-[#1D4ED8]"
-                      style={{ animation: "lingo-orb-wave 1.6s ease-out infinite", animationDelay: "0.8s" }}
-                      aria-hidden="true"
-                    />
-                  </>
-                )}
-                {/* a. 평시 = 오브만 완전 정적 / c. 생각 중 = 기존 궤도 회전(spin) 유지 — 무수정. */}
-                <LingoAvatar size={56} spin={thinking} className="ring-[3px] ring-white" />
-                {/* d. 말하는 중 — 오브 내부 소리 막대 4개(흰색·scaleY 시차 0.15s). 구 Volume2 배지 대체. */}
-                {speaking && !listening && (
-                  <span
-                    className="pointer-events-none absolute inset-0 flex items-center justify-center gap-[3px]"
-                    aria-hidden="true"
-                  >
-                    {[0, 1, 2, 3].map((i) => (
-                      <span
-                        key={i}
-                        className="h-4 w-[3px] origin-center rounded-full bg-white [box-shadow:0_1px_3px_rgba(15,23,42,0.35)]"
-                        style={{
-                          animation: "lingo-orb-eq 0.9s ease-in-out infinite",
-                          animationDelay: `${i * 0.15}s`,
-                        }}
-                      />
-                    ))}
-                  </span>
-                )}
+                {/* UI-5-T7-L6b — 지니 연출 v2(Duke 확정): 구 F3-9 wave(듣기)/eq(말하기) 연출 폐기,
+                    그 상태 트리거를 ③(대화 중 — 발광 펄스+궤도 스파클)에 재배선. thinking 도 구
+                    spin(구판 전용 prop) 소멸로 ③에 통합(대화 사이클 단일 언어 — 판단 보고).
+                    ① 소환 = FAB 첫 등장(마운트 1회 — 조건부 렌더라 등장 시가 곧 마운트) · ② 상시 부유.
+                    연출 전부 pointer-events-none — 탭 히트 영역 = 기존 button 56px 불변. */}
+                <LingoGenie
+                  size={56}
+                  variant="avatar"
+                  talking={listening || speaking || thinking}
+                  className="rounded-full ring-[3px] ring-white"
+                />
                 {/* b. "듣고 있어요" 칩 — listening 중에만 렌더·종료 즉시 소거(조건부 렌더 자체가 소거).
                     스크린 판독 가능 실텍스트(아이콘 단독 의존 제거 — 접근성 개선). */}
                 {listening && (

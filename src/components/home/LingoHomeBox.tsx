@@ -6,8 +6,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronDown, ArrowUp, Square, Loader2, Rocket, TrendingUp } from "lucide-react";
-// UI-5-T7-F4-9 — 홈 링고 표면 구 Sparkles → 신오브 미니어처(49 오브 시각 정본의 축소판) 통일.
-import { LingoOrbMini } from "@/components/lingo/LingoOrbMini";
+// UI-5-T7-L6b — 링고 표면 Mascot 정본 통일(구 LingoOrbMini 폐선): 헤더 = LingoGenie(소환·부유
+//   연출 래퍼) / 칩 = LingoMascot 심볼 직접.
+import { LingoMascot } from "@/components/brand/lingo-mascot";
+import { LingoGenie } from "@/components/lingo/LingoGenie";
 import { useLingo } from "@/components/lingo/useLingo";
 import { MicTapButton } from "@/components/lingo/MicTapButton"; // UI-4d — 탭 문법 교체.
 import { playListenStart, playListenStop, primeAudio } from "@/lib/lingo-sound";
@@ -221,10 +223,9 @@ export function LingoHomeBox({
         aria-expanded={open}
         className="flex min-h-[44px] w-full items-center gap-2.5 px-4 py-3 text-left"
       >
-        {/* UI-5-T7-F5-1 — 구 물방울 LingoOrb → 신오브 미니어처(F4-9 정본) 교체. 흰 카드 배경
-            = tone 기본(blue) · size 36 유지(레이아웃 점프 0). 구 상태 4종 연동은 오브 표면에서
-            제거 — 진행 상태는 메시지 영역 스피너·입력줄 placeholder 가 이미 담당. */}
-        <LingoOrbMini size={36} />
+        {/* UI-5-T7-L6b — Mascot 정본 통일 + 지니 소환 연출(①마운트 1회 소환 → ②상시 부유).
+            흰 카드 배경 = tone blue · size 36 유지(레이아웃 점프 0). */}
+        <LingoGenie size={36} tone="blue" />
         <span className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-[#0F172A] [word-break:keep-all]">
           {HEADER_COPY}
         </span>
@@ -255,7 +256,7 @@ export function LingoHomeBox({
               {chips.map((c) =>
                 c.primary ? (
                   <button key={c.key} type="button" onClick={c.onTap} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-white active:scale-95" style={{ backgroundColor: ACCENT }}>
-                    {c.key === "perf" ? <TrendingUp className="h-4 w-4" strokeWidth={2.25} /> : <LingoOrbMini size={16} tone="white" />}
+                    {c.key === "perf" ? <TrendingUp className="h-4 w-4" strokeWidth={2.25} /> : <LingoMascot size={16} tone="white" />}
                     {c.label}
                   </button>
                 ) : (
