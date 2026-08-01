@@ -165,6 +165,9 @@ const STORAGE_OPTIONS: { id: StorageType; label: string }[] = [
   { id: "frozen", label: "냉동" },
 ];
 
+// UI-5-T7-F5-8 — 발송 안내 프리셋(가공·공산품). 프리셋 불일치 = 직접 입력 모드(파생 — 로컬 상태 0).
+const SHIP_ETA_PRESETS = ["당일 발송", "1~2일", "3~5일"];
+
 const onlyDigits = (v: string) => v.replace(/[^0-9]/g, "");
 
 // UI-5-T5-F3-2b — 품종 선택 칩 후보: Edge get-price-band VARIETY_TAGS 의 거울(정본 = Edge 사전 —
@@ -238,10 +241,16 @@ export function ProductRegisterForm({
   aiPointCandidates,
   onConsumePointCandidate,
   couponDiscount,
+  shipEta,
+  onShipEtaChange,
 }: {
   value: ProductForm;
   onChange: (patch: Partial<ProductForm>) => void;
   accent: string;
+  /** UI-5-T7-F5-8 — 발송 안내(가공·공산품 한정 노출). 값 = 49 cfgShipEta 단일 소스
+   *  (delivery 블록 '도착 예정'·미리보기 배송정보 shipNote 와 동일 상태 — 신규 값 상태 0). */
+  shipEta?: string;
+  onShipEtaChange?: (v: string) => void;
   /** UI-5-T2-E5a — 상품 사진 = 스텝 1 단일 입구. 폼은 표시 전용(업로드 경로 0). */
   photoUrl?: string;
   onEditPhoto?: () => void;
@@ -516,7 +525,11 @@ export function ProductRegisterForm({
 
       {/* 날짜 — 유형별: 수확·발송(기간) / 소비기한(단일) / 발송(기간).
           F2① — fresh·goods 단일 date 잔재를 시작~끝 기간으로 수복(E5g2 확정 정합 · 시작=끝 = 하루).
-          processed 소비기한은 의미상 단일이 정답 — 유지. */}
+          processed 소비기한은 의미상 단일이 정답 — 유지.
+          UI-5-T7-F5-8 — goods 발송 예정일(달력 기간 축) 숨김: "주문 후 며칠" 개념과 헷갈림 유발 →
+          아래 발송 안내 1칸이 대체. processed 소비기한은 발송 축이 아니라(식품 정보) 유지 판단.
+          fresh 는 현행 유지(F1(재) 유형별 게이트 정합 — 칩 주입도 fresh 한정 기존 가드). */}
+      {value.type !== "goods" && (
       <Field label={copy.dateLabel} hint={copy.dateHint}>
         {value.type === "processed" ? (
           <input
@@ -555,6 +568,64 @@ export function ProductRegisterForm({
           </div>
         )}
       </Field>
+      )}
+
+      {/* UI-5-T7-F5-8 — 가공·공산품 발송 안내: "주문 받고 며칠 안에 보내세요?" 선택지형.
+          직접 입력 판정 = 프리셋 불일치 파생(로컬 상태 0 · 프리셋 탭 = 값 교체). */}
+      {value.type !== "fresh" && onShipEtaChange && (
+        <Field label="발송 안내" hint="선택">
+          <p className="mb-1.5 text-[11px] font-medium text-[#8A8A8A]">
+            주문 받고 며칠 안에 보내세요?
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {SHIP_ETA_PRESETS.map((p) => {
+              const on = shipEta === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => onShipEtaChange(p)}
+                  className="rounded-lg px-2.5 py-1.5 text-[12px] font-semibold transition-colors"
+                  style={
+                    on
+                      ? { backgroundColor: accent, color: "#fff" }
+                      : { backgroundColor: "#F4F4F5", color: "#525252" }
+                  }
+                >
+                  {p}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => onShipEtaChange("")}
+              className="rounded-lg px-2.5 py-1.5 text-[12px] font-semibold transition-colors"
+              style={
+                !SHIP_ETA_PRESETS.includes(shipEta ?? "")
+                  ? { backgroundColor: accent, color: "#fff" }
+                  : { backgroundColor: "#F4F4F5", color: "#525252" }
+              }
+            >
+              직접 입력
+            </button>
+          </div>
+          {!SHIP_ETA_PRESETS.includes(shipEta ?? "") && (
+            <input
+              value={shipEta ?? ""}
+              onChange={(e) => onShipEtaChange(e.target.value)}
+              placeholder="예: 주문 후 2~3일"
+              className="mt-1.5 w-full rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+              style={{ boxShadow: "inset 0 0 0 1px transparent" }}
+              onFocus={focusRing}
+              onBlur={blurRing}
+            />
+          )}
+          {/* 정직 안내 — 이 값이 카드 어디에 뜨는지. */}
+          <p className="mt-1.5 text-[10.5px] font-medium text-[#A3A3A3]">
+            받는 분 카드의 [배송정보]에 그대로 보여요
+          </p>
+        </Field>
+      )}
 
       {/* 가공식품 전용 — 보관 방법 */}
       {value.type === "processed" && (

@@ -1018,6 +1018,9 @@ export function CardStudioPage({
       ...(p.type === "goods" && p.spec.trim() ? { spec: p.spec.trim() } : {}),
       free_ship: p.freeShip,
       ...(!p.freeShip && p.shipFee ? { ship_fee_krw: Math.floor(Number(digits(p.shipFee))) } : {}),
+      // F5-8 — 발송 안내 편입(free_ship 선례 동형 additive 키). 수신 adapters.ts ship_note 소비
+      //   기배선(S4-5) → [배송정보] 표기 — 폼 안내 문구("받는 분께 보여요")의 근거.
+      ...(cfgShipEta.trim() ? { ship_note: cfgShipEta.trim() } : {}),
     };
     setProductSaving(true);
     setProductSaveError(null);
@@ -1226,6 +1229,8 @@ export function CardStudioPage({
       brand: str(bd.brand),
       spec: str(bd.spec),
     }));
+    // F5-8 — 발송 안내 왕복 정합: 저장분(ship_note) 복원(없으면 현행 유지 — 기본값 안 덮음).
+    if (typeof bd.ship_note === "string" && bd.ship_note.trim()) setCfgShipEta(bd.ship_note);
     if (row.imageUrl) {
       // E5a 정합 — 재사용 = 기존 실 URL 재연결(업로드 아님 · 단일 소스 유지).
       setProductImageUrl(row.imageUrl);
@@ -4776,6 +4781,9 @@ export function CardStudioPage({
                   </div>
                 <ProductRegisterForm
                   accent={accent}
+                  /* F5-8 — 발송 안내 = cfgShipEta 단일 소스(delivery 블록 '도착 예정'과 동일 상태). */
+                  shipEta={cfgShipEta}
+                  onShipEtaChange={setCfgShipEta}
                   value={{ ...cfgProduct, name: cfgProductName, price: cfgProductPrice }}
                   onChange={(patch) => {
                     if (patch.name !== undefined) setCfgProductName(patch.name);
