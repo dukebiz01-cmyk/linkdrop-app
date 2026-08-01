@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { InfoDropPage } from "@/components/info-drop-page";
+import type { ReactNode } from "react";
+// UI-5-T7-F6-2 — 손님 홈 진입 대칭화: 수신 전 렌더(mock 폴백 포함)에 BottomNav 동반.
+import { BottomNav } from "@/components/bottom-nav";
 import { ReserveFunnelSheet } from "@/components/receiver/ReserveFunnelSheet";
 import { PreorderSheet } from "@/components/receiver/PreorderSheet";
 import type { ReservationSelection } from "@/components/reservation-calendar-page";
@@ -327,6 +330,18 @@ export const Route = createFileRoute("/d/$shareUuid")({
   component: DropPage,
 });
 
+// UI-5-T7-F6-2 — 수신 셸: 하단 탭(비로그인 전례 index.tsx BottomNav 동형) + 본문 pb(탭바
+//   실높이 66px+safe-area). mock 폴백 3경로(에러·미설정·조회실패)도 실사용자 노출이라 공통 래핑.
+//   sticky CTA 바와의 층위는 info-drop-page:2405 오프셋(거울 승인 예외 4호)이 담당.
+function ReceiverShell({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <div className="pb-[calc(66px+env(safe-area-inset-bottom))]">{children}</div>
+      <BottomNav />
+    </>
+  );
+}
+
 function ShareUuidRouteErrorFallback({ error }: { error: Error }) {
   console.error("[d/$shareUuid route error]", error);
   let shareUuid = "test";
@@ -337,7 +352,7 @@ function ShareUuidRouteErrorFallback({ error }: { error: Error }) {
   } catch {
     /* defaults */
   }
-  return renderMockInfoDropPage(shareUuid, variant);
+  return <ReceiverShell>{renderMockInfoDropPage(shareUuid, variant)}</ReceiverShell>;
 }
 
 function DropPage() {
@@ -424,12 +439,16 @@ function DropPage() {
   const isReshare = Boolean(search.parentShareId || (search.shareDepth ?? 0) > 0 || search.ref);
 
   if (loaderData.mode === "mock") {
-    return renderMockInfoDropPage(
-      loaderData.shareUuid,
-      loaderData.variant,
-      loaderData.reservationDates,
-      loaderData.reservationUrl,
-      isReshare,
+    return (
+      <ReceiverShell>
+        {renderMockInfoDropPage(
+          loaderData.shareUuid,
+          loaderData.variant,
+          loaderData.reservationDates,
+          loaderData.reservationUrl,
+          isReshare,
+        )}
+      </ReceiverShell>
     );
   }
 
@@ -437,7 +456,7 @@ function DropPage() {
 
   // 실제 share_uuid 인데 조회 실패 → mock info 변형으로 fallback (무로그인 화면 깨짐 방지)
   if (!detail) {
-    return renderMockInfoDropPage(shareUuid, "info");
+    return <ReceiverShell>{renderMockInfoDropPage(shareUuid, "info")}</ReceiverShell>;
   }
 
   const props = infoDropAdapter(detail);
@@ -625,7 +644,7 @@ function DropPage() {
   }, [authChecked, search.preorder, userId]);
 
   return (
-    <>
+    <ReceiverShell>
       <InfoDropPage
         {...props}
         reservationDates={reservationDatesFromQuery}
@@ -797,6 +816,6 @@ function DropPage() {
           partnerPhone={props.local?.phone?.trim() || null}
         />
       ) : null}
-    </>
+    </ReceiverShell>
   );
 }

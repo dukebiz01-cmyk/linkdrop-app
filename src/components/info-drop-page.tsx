@@ -2402,7 +2402,10 @@ export function InfoDropPage({
             정보/구매/상담 드롭 = sticky 없음.
             S18-A(P4) — 카드 내부 CTA(cta-coupon-inline)가 뷰포트에 보이면 숨김(IO), 벗어나면 복귀. */}
       {hasStickyBar && !inlineCouponCtaVisible ? (
-        <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#E5E7EB] bg-white">
+        /* UI-5-T7-F6-2 (거울 승인 예외 4호 — 오프셋 한정): /d BottomNav(66px+safe-area) 도입에
+           맞춰 sticky 바를 탭바 위로. 본문 pb 는 라우트 셸 pb(66px+safe)가 대수적으로 커버
+           (기존 :1542 pb 88px + 셸 66px ≥ 바 76px + 탭바 66px — 계산 무수정 성립). */
+        <div className="fixed bottom-[calc(66px+env(safe-area-inset-bottom))] left-0 right-0 z-20 border-t border-[#E5E7EB] bg-white">
           <div className="mx-auto w-full max-w-[480px] px-6 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
             <button
               type="button"
