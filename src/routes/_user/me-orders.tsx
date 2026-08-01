@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, CalendarDays, Package, Store, Phone } from "lucide-react";
+import { ArrowLeft, CalendarDays, Package, Store, Phone, Truck } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
 // UI-5-T7-F6-1 — 기기 내 예약 결합(localStorage 단일 정본 — RPC 신설 금지 유지).
@@ -32,6 +32,11 @@ type MyPreorderRow = {
   /** ST2b-3(v8.8) — 취소 요청 표식(구매자 요청만, 실행은 파트너 — Duke 락 ⓐ). */
   cancel_requested_at?: string | null;
   customer_message?: string | null;
+  /** UI-5-T7-F6-4b — 배송지(v7.11 컬럼 · RLS preorders_catcher_select 보강 조회 병합 —
+   *  get_my_preorders 반환형 무수정). */
+  receiver_name?: string | null;
+  shipping_address?: string | null;
+  shipping_address_detail?: string | null;
 };
 
 type LoaderData = {
@@ -59,7 +64,39 @@ export const Route = createFileRoute("/_user/me-orders")({
         console.error("[me.orders-loader] error:", error);
         return empty;
       }
-      return { preorders: preorders ?? [] };
+      // F6-4b — 배송지 보강 조회(RLS preorders_catcher_select — 본인 행만) → 행 병합.
+      //   실패해도 주문 목록은 정상(배송지 미표시 graceful).
+      let rows = preorders ?? [];
+      try {
+        const { data: shipRows } = await supabase
+          .from("preorders")
+          .select("id, receiver_name, shipping_address, shipping_address_detail")
+          .eq("catcher_user_id", userId);
+        if (Array.isArray(shipRows)) {
+          const shipMap = new Map(
+            (shipRows as {
+              id: string;
+              receiver_name: string | null;
+              shipping_address: string | null;
+              shipping_address_detail: string | null;
+            }[]).map((s) => [s.id, s]),
+          );
+          rows = rows.map((r) => {
+            const s = shipMap.get(r.preorder_id);
+            return s
+              ? {
+                  ...r,
+                  receiver_name: s.receiver_name,
+                  shipping_address: s.shipping_address,
+                  shipping_address_detail: s.shipping_address_detail,
+                }
+              : r;
+          });
+        }
+      } catch (e) {
+        console.error("[me.orders-loader] shipping load failed:", e);
+      }
+      return { preorders: rows };
     } catch (e) {
       console.error("[me.orders-loader] error:", e);
       return empty;
@@ -261,6 +298,18 @@ function MyPreorderCard({ row }: { row: MyPreorderRow }) {
         <Store className="size-4 text-text-subtle" strokeWidth={2} />
         {row.partner_name?.trim() || "농가"}
       </div>
+
+      {/* UI-5-T7-F6-4b — 배송지(본인 입력분 · 있을 때만). */}
+      {row.shipping_address ? (
+        <div className="mt-1.5 flex gap-2 text-sm text-text-muted">
+          <Truck className="mt-0.5 size-4 shrink-0 text-text-subtle" strokeWidth={2} />
+          <p className="min-w-0 leading-relaxed [word-break:keep-all]">
+            {row.shipping_address}
+            {row.shipping_address_detail ? ` ${row.shipping_address_detail}` : ""}
+            {row.receiver_name ? ` · ${row.receiver_name}` : ""}
+          </p>
+        </div>
+      ) : null}
 
       {/* 진행 중 — 결제 안내 + 농가 전화 */}
       {isActive ? (

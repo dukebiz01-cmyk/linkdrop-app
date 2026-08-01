@@ -814,6 +814,8 @@ function DropPage() {
           harvestDate={props.commerce.harvestDate ?? null}
           stockLimit={props.commerce.stockLimit ?? null}
           partnerPhone={props.local?.phone?.trim() || null}
+          // F6-4b — 배송형 판정(서버 v7.12 게이트 동일 규칙): '직접 전달'만 픽업형.
+          isDelivery={props.commerce.shipMethod !== "직접 전달"}
         />
       ) : null}
     </ReceiverShell>

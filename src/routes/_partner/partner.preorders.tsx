@@ -36,15 +36,25 @@ type PreorderRow = {
   cancel_requested_at?: string | null;
 };
 
+/** UI-5-T7-F6-4b — 배송지(v7.11 컬럼 · RLS preorders_owner_select 직접 조회 보강 —
+ *  get_partner_preorders 반환형 무수정). preorder_id 키 맵. */
+type ShippingInfo = {
+  receiver_name: string | null;
+  receiver_phone: string | null;
+  shipping_address: string | null;
+  shipping_address_detail: string | null;
+};
+
 type LoaderData = {
   preorders: PreorderRow[];
+  shipping: Record<string, ShippingInfo>;
 };
 
 
 export const Route = createFileRoute("/_partner/partner/preorders")({
   head: () => ({ meta: [{ title: "주문예약 관리 — LinkDrop" }] }),
   loader: async (): Promise<LoaderData> => {
-    const empty: LoaderData = { preorders: [] };
+    const empty: LoaderData = { preorders: [], shipping: {} };
     const supabase = await getAuthClient();
     if (!supabase) return empty;
 
@@ -71,7 +81,31 @@ export const Route = createFileRoute("/_partner/partner/preorders")({
         console.error("[preorder-loader] error:", error);
         return empty;
       }
-      return { preorders: preorders ?? [] };
+      // F6-4b — 배송지 보강 조회(RLS preorders_owner_select · RPC 반환형 무수정 원칙).
+      //   실패해도 주문 목록은 정상(graceful 빈 맵).
+      let shipping: Record<string, ShippingInfo> = {};
+      try {
+        const { data: shipRows } = await supabase
+          .from("preorders")
+          .select("id, receiver_name, receiver_phone, shipping_address, shipping_address_detail")
+          .eq("partner_id", partner.id);
+        if (Array.isArray(shipRows)) {
+          shipping = Object.fromEntries(
+            (shipRows as ({ id: string } & ShippingInfo)[]).map((r) => [
+              r.id,
+              {
+                receiver_name: r.receiver_name ?? null,
+                receiver_phone: r.receiver_phone ?? null,
+                shipping_address: r.shipping_address ?? null,
+                shipping_address_detail: r.shipping_address_detail ?? null,
+              },
+            ]),
+          );
+        }
+      } catch (e) {
+        console.error("[preorder-loader] shipping load failed:", e);
+      }
+      return { preorders: preorders ?? [], shipping };
     } catch (e) {
       console.error("[preorder-loader] error:", e);
       return empty;
@@ -200,6 +234,7 @@ function PartnerPreordersPage() {
                 <PreorderCard
                   key={r.preorder_id}
                   row={r}
+                  shipping={data.shipping[r.preorder_id] ?? null}
                   acting={actingId === r.preorder_id}
                   onConfirm={handleConfirm}
                   onFulfill={handleFulfill}
@@ -221,6 +256,7 @@ function PartnerPreordersPage() {
                 <PreorderCard
                   key={r.preorder_id}
                   row={r}
+                  shipping={data.shipping[r.preorder_id] ?? null}
                   acting={actingId === r.preorder_id}
                   onConfirm={handleConfirm}
                   onFulfill={handleFulfill}
@@ -282,12 +318,14 @@ function StatusBadge({ status }: { status: string }) {
 //   ⚠️ 전화번호/전화하기·payment 배지 없음(선주문은 전화 미수집·결제 off-platform).
 function PreorderCard({
   row,
+  shipping = null,
   acting = false,
   onConfirm,
   onFulfill,
   onCancel,
 }: {
   row: PreorderRow;
+  shipping?: ShippingInfo | null;
   acting?: boolean;
   onConfirm: (id: string) => void;
   onFulfill: (id: string) => void;
@@ -296,6 +334,20 @@ function PreorderCard({
   const isPending = row.status === "pending";
   const isConfirmed = row.status === "confirmed";
   const hasActions = isPending || isConfirmed;
+  // F6-4b — [주소 복사]: 이름·전화·주소 한 줄 포맷(택배 접수 창 바로 붙여넣기).
+  const copyAddress = () => {
+    const line = [
+      shipping?.receiver_name,
+      shipping?.receiver_phone,
+      [shipping?.shipping_address, shipping?.shipping_address_detail].filter(Boolean).join(" "),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    navigator.clipboard
+      ?.writeText(line)
+      .then(() => toast.success("주소를 복사했어요."))
+      .catch(() => toast.error("복사에 실패했어요 — 길게 눌러 직접 복사해 주세요."));
+  };
   return (
     <li
       className={`rounded-2xl border border-border bg-bg p-4 ${hasActions ? "" : "opacity-80"}`}
@@ -343,6 +395,34 @@ function PreorderCard({
         <User className="size-4 text-text-subtle" strokeWidth={2} />
         {row.customer_name?.trim() || "손님"}
       </div>
+
+      {/* UI-5-T7-F6-4b — 배송지 블록(있을 때만 · v7.11 컬럼): 이름·전화·주소 + [주소 복사].
+          요청 메시지는 아래 기존 손님 메모 블록이 담당(중복 표기 금지). */}
+      {shipping?.shipping_address ? (
+        <div className="mt-3 space-y-1.5 rounded-xl border border-border bg-surface p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-text-strong">
+              <Truck className="size-4 text-text-subtle" strokeWidth={2} />
+              배송지
+            </p>
+            <button
+              type="button"
+              onClick={copyAddress}
+              className="flex min-h-[32px] items-center rounded-lg border border-border bg-bg px-2.5 text-xs font-semibold text-text-strong hover:border-text-muted"
+            >
+              주소 복사
+            </button>
+          </div>
+          <p className="text-sm font-semibold text-text-strong">
+            {shipping.receiver_name ?? "받는 분"}
+            {shipping.receiver_phone ? ` · ${shipping.receiver_phone}` : ""}
+          </p>
+          <p className="text-sm leading-relaxed text-text-muted [word-break:keep-all]">
+            {shipping.shipping_address}
+            {shipping.shipping_address_detail ? ` ${shipping.shipping_address_detail}` : ""}
+          </p>
+        </div>
+      ) : null}
 
       {/* 손님 메모 (있으면, 2줄 클램프) */}
       {row.customer_message?.trim() ? (

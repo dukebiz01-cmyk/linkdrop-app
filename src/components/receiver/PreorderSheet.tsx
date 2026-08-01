@@ -26,6 +26,9 @@ type Props = {
   harvestDate: string | null;
   stockLimit: number | null;
   partnerPhone: string | null;
+  /** UI-5-T7-F6-4b — 배송형 여부(ship_method '직접 전달'만 false — 서버 게이트와 동일 규칙).
+   *  미지정 = true(택배 전제 — 현행 등록 폼 축). */
+  isDelivery?: boolean;
 };
 
 // "YYYY-MM-DD" → "M월 D일 수확·발송 예정". 형식 안 맞으면 원문.
@@ -46,10 +49,16 @@ export function PreorderSheet({
   harvestDate,
   stockLimit,
   partnerPhone,
+  isDelivery = true,
 }: Props) {
   const [step, setStep] = useState<Step>("form");
   const [qty, setQty] = useState(1);
   const [message, setMessage] = useState("");
+  // F6-4b — 배송 정보 4필드(배송형만 노출·검증 — 서버 게이트 v7.12 와 동일 규칙).
+  const [receiverName, setReceiverName] = useState("");
+  const [receiverPhone, setReceiverPhone] = useState("");
+  const [shippingAddress, setShippingAddress] = useState("");
+  const [shippingAddressDetail, setShippingAddressDetail] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,6 +66,10 @@ export function PreorderSheet({
       setStep("form");
       setQty(1);
       setMessage("");
+      setReceiverName("");
+      setReceiverPhone("");
+      setShippingAddress("");
+      setShippingAddressDetail("");
       setErrorMsg(null);
     }
   }, [open]);
@@ -73,6 +86,11 @@ export function PreorderSheet({
 
   async function handleSubmit() {
     if (step !== "form") return;
+    // F6-4b — 배송형 클라 선검증(무언 실패 금지 — 서버 v7.12 게이트의 거울).
+    if (isDelivery && !(receiverName.trim() && receiverPhone.trim() && shippingAddress.trim())) {
+      setErrorMsg("배송 정보(받는 분·연락처·주소)를 입력해 주세요.");
+      return;
+    }
     setErrorMsg(null);
     setStep("submitting");
     try {
@@ -86,6 +104,12 @@ export function PreorderSheet({
           p_quantity: qty,
           p_share_uuid: shareUuid,
           p_customer_message: message.trim() || null,
+          // F6-4b — 배송지 4인자(v7.12). 픽업형(직접 전달)은 NULL 그대로.
+          p_receiver_name: isDelivery ? receiverName.trim() : null,
+          p_receiver_phone: isDelivery ? receiverPhone.trim() : null,
+          p_shipping_address: isDelivery ? shippingAddress.trim() : null,
+          p_shipping_address_detail:
+            isDelivery && shippingAddressDetail.trim() ? shippingAddressDetail.trim() : null,
         } as never,
       )) as { error: { message?: string } | null };
       if (error) {
@@ -117,8 +141,11 @@ export function PreorderSheet({
           <div className="space-y-4">
             <header>
               <SheetTitle className="text-lg font-bold tracking-ko text-text-strong">주문예약</SheetTitle>
+              {/* F6-4b — 배송형 톤 정합("전화 확정" → "입력 주소 배송"). 픽업형 기존 유지. */}
               <p className="mt-1 text-sm font-medium tracking-ko text-text-muted">
-                결제는 농가와 직접 확정해요. 주문을 보내면 농가가 연락드려요.
+                {isDelivery
+                  ? "결제는 농가와 전화로 확정해요. 상품은 입력하신 주소로 배송해 드려요."
+                  : "결제는 농가와 직접 확정해요. 주문을 보내면 농가가 연락드려요."}
               </p>
             </header>
 
@@ -176,6 +203,43 @@ export function PreorderSheet({
                 </span>
               </div>
 
+              {/* UI-5-T7-F6-4b — 배송 정보(배송형만 · 픽업형 미렌더). 30초 완결 원칙 — 4필드 추가
+                  외 구조 무변. 주소 검색(다음 우편번호)은 현행 미사용 확인 → 수동 입력, 검색 도입 후속. */}
+              {isDelivery ? (
+                <div className="space-y-2 border-t border-border pt-3">
+                  <p className="text-xs font-semibold tracking-ko text-text-strong">배송 정보</p>
+                  <input
+                    value={receiverName}
+                    onChange={(e) => setReceiverName(e.target.value)}
+                    placeholder="받는 분"
+                    autoComplete="name"
+                    className="block w-full rounded-xl border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko text-text-strong placeholder:text-text-subtle"
+                  />
+                  <input
+                    value={receiverPhone}
+                    onChange={(e) => setReceiverPhone(e.target.value)}
+                    placeholder="연락처 (예: 010-1234-5678)"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    className="block w-full rounded-xl border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko text-text-strong placeholder:text-text-subtle"
+                  />
+                  <input
+                    value={shippingAddress}
+                    onChange={(e) => setShippingAddress(e.target.value)}
+                    placeholder="주소"
+                    autoComplete="street-address"
+                    className="block w-full rounded-xl border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko text-text-strong placeholder:text-text-subtle"
+                  />
+                  <input
+                    value={shippingAddressDetail}
+                    onChange={(e) => setShippingAddressDetail(e.target.value)}
+                    placeholder="상세 주소 (동·호수 등, 선택)"
+                    className="block w-full rounded-xl border border-border bg-bg px-4 py-3 text-sm font-medium tracking-ko text-text-strong placeholder:text-text-subtle"
+                  />
+                </div>
+              ) : null}
+
               {/* 요청 메시지 (선택) */}
               <label className="block">
                 <span className="text-xs font-semibold tracking-ko text-text-strong">
@@ -194,7 +258,9 @@ export function PreorderSheet({
               <div className="space-y-2 rounded-xl border border-border bg-surface p-4">
                 <p className="flex items-start gap-2 text-sm font-medium leading-relaxed tracking-ko text-text-muted">
                   <Truck className="mt-0.5 size-4 shrink-0 text-text-subtle" strokeWidth={2} />
-                  결제는 준비중이에요. 주문 후 농가에 전화로 결제·배송을 확정해주세요.
+                  {isDelivery
+                    ? "결제는 준비중이에요. 주문 후 농가와 전화로 결제를 확정하면, 입력하신 주소로 배송해 드려요."
+                    : "결제는 준비중이에요. 주문 후 농가에 전화로 결제·배송을 확정해주세요."}
                 </p>
                 {partnerPhone ? (
                   <a
@@ -244,7 +310,9 @@ export function PreorderSheet({
             <div className="text-center">
               <h2 className="text-lg font-bold tracking-ko text-text-strong">주문이 접수됐어요</h2>
               <p className="mt-2 text-sm font-medium tracking-ko text-text-muted">
-                결제·배송은 농가와 전화로 확정해 주세요.
+                {isDelivery
+                  ? "결제는 농가와 전화로 확정해 주세요. 상품은 입력하신 주소로 배송돼요."
+                  : "결제·배송은 농가와 전화로 확정해 주세요."}
               </p>
             </div>
             {partnerPhone ? (
