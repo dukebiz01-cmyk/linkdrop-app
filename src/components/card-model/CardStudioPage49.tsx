@@ -486,7 +486,12 @@ const COPY_FIELDS = new Set(["title", "subtitle"]);
 function isAiActionAllowed(mode: StudioMode, a: any): boolean {
   if (!a || typeof a.type !== "string") return false;
   const allowed = DECK_IDS[mode];
-  if (a.type === "switchMode") return false; // 사용자 확인 없는 AI 모드 전환 금지.
+  // UI-5-T7-F5-10 — switchMode 허용(구: 무조건 차단 = SAY-DO 불일치 · 실행부 유령화).
+  //   "사용자 확인 없는 AI 모드 전환 금지"는 실행부(applyOneLingoAction)가 수동 탭과 동일
+  //   확인 사슬(attemptSwitchMode — hasWork 시 확인 오버레이)·businessLocked 정직 분기를
+  //   경유하는 것으로 승계 — 무확인 초기화는 여전히 불가.
+  if (a.type === "switchMode")
+    return a.mode === "general" || a.mode === "reserve" || a.mode === "commerce";
   if (a.type === "detach") return true; // 해제(제거)는 항상 안전.
   if (a.type === "equip")
     return (
@@ -2232,7 +2237,20 @@ export function CardStudioPage({
     if (!isAiActionAllowed(modeRef.current, a)) return; // E3c — 연출은 setTimeout 지연 재생 → 실모드 라이브 가드.
     {
       if (a.type === "switchMode" && a.mode) {
-        switchMode(a.mode);
+        // F5-10 — SAY-DO 일치: 전환은 수동 탭과 동일 사슬(attemptSwitchMode — 작성분 있으면
+        //   확인 오버레이 = 무확인 초기화 금지). 비사업자 잠금 = 정직 안내 + F5-3 패널 재사용.
+        if (businessLocked && a.mode !== "general") {
+          setBizGateOpen(true);
+          setMessages((mm) => [
+            ...mm,
+            {
+              role: "assistant",
+              text: "이 기능은 사장님 전용이라 제가 바꿔드릴 순 없어요 — 1분 등록하면 열려요.",
+            },
+          ]);
+          return;
+        }
+        attemptSwitchMode(a.mode);
       } else if (a.type === "equip" && a.blockId) {
         const b = STUDIO_BLOCKS.find((x) => x.id === a.blockId);
         if (b && !(b.isPaid && score < ENHANCE_UNLOCK)) {
