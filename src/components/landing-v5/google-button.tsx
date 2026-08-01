@@ -13,12 +13,13 @@ export function GoogleButton({
   size?: "md" | "lg"
   onClick?: () => void
 }) {
-  const pad = size === "lg" ? "h-14 text-[16px]" : "h-12 text-[15px]"
+  // UI-5-T7-F5-2 — CTA 공통 스타일(h-14 rounded-2xl text-base)은 lg 한정 · md 무변.
+  const pad = size === "lg" ? "h-14 text-base rounded-2xl" : "h-12 text-[15px] rounded-[14px]"
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex ${pad} w-full items-center justify-center gap-2 rounded-[14px] border border-[#E2E8F0] bg-white font-bold text-[#0F172A] transition-transform active:scale-[0.98] ${className ?? ""}`}
+      className={`flex ${pad} w-full items-center justify-center gap-2 border border-[#E2E8F0] bg-white font-bold text-[#0F172A] transition-transform active:scale-[0.98] ${className ?? ""}`}
     >
       <GoogleG className="h-[18px] w-[18px]" />
       구글로 시작하기

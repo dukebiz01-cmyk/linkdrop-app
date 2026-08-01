@@ -16,7 +16,8 @@ export function LandingPageV5() {
   const goLogin = () => navigate({ to: "/login" })
   return (
     <div className="min-h-dvh bg-[#F8FAFC] font-sans text-[#0F172A]">
-      <div className="mx-auto w-full max-w-[390px] bg-[#F8FAFC]">
+      {/* UI-5-T7-F5-2 — 페이지 단일 컨테이너 560 통일(헤더·히어로·3단계·목적카드·하단CTA 동시 정렬). */}
+      <div className="mx-auto w-full max-w-[560px] bg-[#F8FAFC]">
         <header className="sticky top-0 z-20 border-b border-[#E8EDF3] bg-[#F8FAFC]/90 backdrop-blur-sm">
           <div className="flex h-14 items-center justify-between px-5">
             {/* 좌: 브랜드 락업 */}

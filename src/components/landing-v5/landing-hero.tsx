@@ -61,7 +61,7 @@ export function LandingHero() {
       <button
         type="button"
         onClick={goLogin}
-        className="mt-6 flex h-14 min-h-[44px] w-full items-center justify-center gap-2 rounded-[14px] bg-[#FEE500] text-[16px] font-bold text-[#1A1A1A] transition-transform active:scale-[0.98]"
+        className="mt-6 flex h-14 min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-[#FEE500] text-base font-bold text-[#1A1A1A] transition-transform active:scale-[0.98]"
       >
         💬 카카오로 3초 만에 시작하기
       </button>

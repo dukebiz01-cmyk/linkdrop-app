@@ -13,12 +13,13 @@ export function KakaoButton({
   size?: "md" | "lg"
   onClick?: () => void
 }) {
-  const pad = size === "lg" ? "h-14 text-[16px]" : "h-12 text-[15px]"
+  // UI-5-T7-F5-2 — CTA 공통 스타일(h-14 rounded-2xl text-base)은 lg 한정 · md 무변.
+  const pad = size === "lg" ? "h-14 text-base rounded-2xl" : "h-12 text-[15px] rounded-[14px]"
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex ${pad} w-full items-center justify-center gap-2 rounded-[14px] bg-[#FEE500] font-bold text-[#1A1A1A] transition-transform active:scale-[0.98] ${className ?? ""}`}
+      className={`flex ${pad} w-full items-center justify-center gap-2 bg-[#FEE500] font-bold text-[#1A1A1A] transition-transform active:scale-[0.98] ${className ?? ""}`}
     >
       <KakaoBubble className="h-[18px] w-[18px]" />
       카카오로 시작하기
