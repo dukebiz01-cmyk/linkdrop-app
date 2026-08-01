@@ -20,7 +20,29 @@ export type StoredMyReservation = {
 /** ②장 배지 → ①화면 재표시 신호(시트 [내 예약 확인하기] → 카드 배지 블록 리스너). */
 export const MY_RESV_OPEN_EVENT = "ld:my-reservation-open";
 
-const keyFor = (dropId: string) => `ld_my_resv_${dropId}`;
+const KEY_PREFIX = "ld_my_resv_";
+const keyFor = (dropId: string) => `${KEY_PREFIX}${dropId}`;
+
+/** UI-5-T7-F6-1 — 이 기기 예약 전수(prefix 스캔 · RPC 신설 금지 유지). 만료·형식 검증은
+ *  readMyReservation 재사용(무효·만료분은 스캔 중 자동 소거). 키를 먼저 수집한 뒤 판독 —
+ *  소거로 인한 localStorage 인덱스 밀림 방지. 반환 = 접수 최신순. */
+export function readAllMyReservations(): StoredMyReservation[] {
+  const out: StoredMyReservation[] = [];
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(KEY_PREFIX)) keys.push(k);
+    }
+    for (const k of keys) {
+      const r = readMyReservation(k.slice(KEY_PREFIX.length));
+      if (r) out.push(r);
+    }
+  } catch {
+    /* localStorage 차단(시크릿 등) — 빈 목록(예약 자체는 무영향). */
+  }
+  return out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+}
 
 /** 예약번호 축약 표기 규칙 — uuid 하이픈 제거 앞 8자 대문자(전체 uuid 는 저장 보존). */
 export function formatResvCode(uuid: string): string {

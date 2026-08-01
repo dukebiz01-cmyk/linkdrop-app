@@ -1,8 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, CalendarDays, Package, Store, Phone } from "lucide-react";
 import { getAuthClient } from "@/lib/auth-context";
 import { getSupabase } from "@/lib/supabase";
+// UI-5-T7-F6-1 — 기기 내 예약 결합(localStorage 단일 정본 — RPC 신설 금지 유지).
+import {
+  formatKDateIso,
+  formatResvCode,
+  readAllMyReservations,
+  type StoredMyReservation,
+} from "@/lib/my-reservation";
 
 // STEP 1 손님 주문상태 — 본인 선주문 읽기전용 뷰. partner.preorders.tsx 미러(액션 버튼 전부 제거).
 //   _user 자식 규칙: 세션/userId 없어도 throw 금지 → graceful 빈 배열(리다이렉트 루프 방지).
@@ -78,6 +85,11 @@ function formatMonthDay(iso: string): string {
 
 function MyOrdersPage() {
   const data = Route.useLoaderData();
+  // F6-1 — 예약은 클라 저장(localStorage)이라 마운트 후 판독(SSR 부재 — hydration 안전).
+  const [myResvs, setMyResvs] = useState<StoredMyReservation[] | null>(null);
+  useEffect(() => {
+    setMyResvs(readAllMyReservations());
+  }, []);
 
   const active = data.preorders.filter(
     (r) => r.status === "pending" || r.status === "confirmed",
@@ -97,7 +109,8 @@ function MyOrdersPage() {
           나
         </Link>
         <h1 className="mt-1 text-lg font-bold text-text-strong">내 주문</h1>
-        <p className="mt-0.5 text-xs text-text-muted">주문예약한 상품의 진행 상태예요</p>
+        {/* F6-1 — 부제를 주문·예약 포괄로 교정(예약 섹션 결합). */}
+        <p className="mt-0.5 text-xs text-text-muted">주문·예약 내역과 진행 상태예요</p>
       </header>
 
       <div className="space-y-4 px-5 pt-4">
@@ -136,6 +149,39 @@ function MyOrdersPage() {
             ) : null}
           </>
         )}
+
+        {/* UI-5-T7-F6-1 — 예약 섹션(주문과 분리 — 상태 모델 상이). 클라 저장 유래라 정직 고지 1줄.
+            0건 = 미렌더(빈 껍데기 금지). 상태는 접수 시점 "확인 대기" 고정(§0 — 단정 금지 승계). */}
+        {myResvs && myResvs.length > 0 ? (
+          <section>
+            <h2 className="mb-1 px-1 text-sm font-semibold text-text-strong">
+              예약 ({myResvs.length})
+            </h2>
+            <p className="mb-2 px-1 text-[11px] text-text-subtle">이 기기에서 예약한 내역이에요</p>
+            <ul className="space-y-3">
+              {myResvs.map((r) => (
+                <li key={r.reservationId} className="rounded-2xl border border-border bg-bg p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-bold text-text-strong">
+                      {r.storeName ?? "매장"}
+                    </p>
+                    <span className="inline-flex shrink-0 items-center rounded-full bg-intent-warning-bg px-2 py-0.5 text-[11px] font-bold text-intent-warning">
+                      확인 대기
+                    </span>
+                  </div>
+                  <p className="mt-1.5 flex items-center gap-1.5 text-xs text-text-muted">
+                    <CalendarDays className="size-3.5 shrink-0" strokeWidth={2} />
+                    {formatKDateIso(r.checkIn)}
+                    {r.checkOut ? ` ~ ${formatKDateIso(r.checkOut)}` : ""} · {r.guestCount}명
+                  </p>
+                  <p className="mt-0.5 text-[11px] tabular-nums text-text-subtle">
+                    예약번호 {formatResvCode(r.reservationId)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </div>
     </main>
   );

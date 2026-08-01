@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
+// UI-5-T7-F6-1 — [내 예약 확인하기] = /me-orders 실라우트(주문 정본 동형). 구 CustomEvent
+//   dispatch 폐선 — 카드 내 [내 예약] 배지·MY_RESV_OPEN_EVENT 리스너(카드 측)는 존치.
+import { Link } from "@tanstack/react-router";
 import { Calendar, Phone, User, MessageSquare, CheckCircle2 } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { getSupabase } from "@/lib/supabase";
-import {
-  MY_RESV_OPEN_EVENT,
-  formatResvCode,
-  readMyReservation,
-  saveMyReservation,
-} from "@/lib/my-reservation";
+import { formatResvCode, readMyReservation, saveMyReservation } from "@/lib/my-reservation";
 
 /**
  * 직접예약 (인앱 예약 신청) 시트 — A안. 네이버로 내보내지 않고 /d 안에서 예약 *신청*.
@@ -559,18 +557,14 @@ function DoneBody({
       ) : null}
 
       <div className="space-y-2">
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            // ②장 배지 블록(카드)의 ①화면 재표시 — 카드가 리스너로 오버레이를 연다.
-            if (typeof window !== "undefined")
-              window.dispatchEvent(new CustomEvent(MY_RESV_OPEN_EVENT));
-          }}
+        {/* F6-1 — 주문 완료(PreorderSheet /me-orders) 정본 정합: 실라우트 이동. 비로그인 손님은
+            /me-orders 가 _user 하위라 /login 유도 — 예약 자체는 무로그인 유지(카드 배지가 커버). */}
+        <Link
+          to="/me-orders"
           className="flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#0A0A0A] px-6 py-3 text-base font-bold text-white"
         >
           내 예약 확인하기
-        </button>
+        </Link>
         <button
           type="button"
           onClick={onClose}
@@ -579,8 +573,9 @@ function DoneBody({
           카드로 돌아가기
         </button>
       </div>
+      {/* F6-1 — 목적지 정합: 주 동선 = 내 주문, 카드 배지는 보조 확인처. */}
       <p className="text-center text-xs font-medium text-[#94A3B8] [word-break:keep-all]">
-        카드의 [내 예약]에서 언제든 다시 볼 수 있어요.
+        내 주문에서 언제든 다시 볼 수 있어요. 카드의 [내 예약]에서도 보여요.
       </p>
     </div>
   );
