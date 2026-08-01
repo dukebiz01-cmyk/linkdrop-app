@@ -579,6 +579,14 @@ const STEP_PLAN: Record<StudioMode, PlanStep[]> = {
   ],
 };
 
+// UI-5-T7-F5-5-S3 — 판매유형 유래 source 캡션(데모 "내 농장 · 산지직송" 고정 폐기 후 실유형 배선).
+//   ⚠️ 수신(fromDropDetail)의 source 셀은 "YouTube" 폴백 — 수신 반영은 거울 접촉이라 별도 판정 대기.
+const COMMERCE_SOURCE_CAPTION: Record<"fresh" | "processed" | "goods", string> = {
+  fresh: "내 농장 · 산지직송",
+  processed: "직접 만든 가공식품",
+  goods: "내 상품 · 직접 배송",
+};
+
 // UI-5-T7-F5-4(3) — 커머스 여정 대본(완료→다음 연결형 · 발화만 — 자동 점프 0). 키 = "다음" 스텝
 //   key(fireDoneChip 의 target 기준). review 진입은 기존 F4-10 발행 유도가 담당(중복 금지).
 const COMMERCE_JOURNEY_LINES: Record<string, string> = {
@@ -3894,6 +3902,11 @@ export function CardStudioPage({
     categoryIcon: content.categoryIcon,
     // F5-5-S1 — 실매장 배선(데모 storeName "괴산 햇사과 농장" 폐기): 부재 = 빈값 → 정본 미렌더.
     storeName: initialStore?.display_name ?? "",
+    // F5-5-S3 — 판매유형 유래 캡션: 상품 실값(장착+이름) 있을 때만 — 그 전엔 정본 source 유지.
+    sourceCaption:
+      mode === "commerce" && applied["product"] && cfgProductName.trim()
+        ? COMMERCE_SOURCE_CAPTION[cfgProduct.type]
+        : undefined,
     pageBg,
   });
 

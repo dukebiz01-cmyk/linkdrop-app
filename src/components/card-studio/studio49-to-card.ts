@@ -47,6 +47,8 @@ export type Studio49Input = {
   categoryLabel: string;
   categoryIcon: LucideIcon;
   storeName: string;
+  // F5-5-S3 — 판매유형 유래 캡션(실값 유래 한정 · 미주입 = 정본 source 유지).
+  sourceCaption?: string;
   pageBg: string;
 };
 
@@ -101,7 +103,8 @@ export function studio49ToCardModel(s: Studio49Input): CardModel {
     pageBg: s.pageBg,
     category: s.categoryLabel,
     categoryIcon: s.categoryIcon,
-    // F5-5-S1 — 데모 source 무조건 주입 폐기(미주입 = 정본 값).
+    // F5-5-S1 — 데모 source 무조건 주입 폐기 · S3 — 판매유형 유래 캡션만(미주입 = 정본 값).
+    ...(s.sourceCaption ? { source: s.sourceCaption } : {}),
     ...(previewTitle ? { titleText: previewTitle } : {}),
     ...(previewSubtitle ? { subtitleText: previewSubtitle } : {}),
     ...(s.clip ? { clip: s.clip } : {}),
