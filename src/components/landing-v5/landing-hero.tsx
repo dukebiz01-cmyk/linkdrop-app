@@ -33,7 +33,8 @@ export function LandingHero() {
         <br />
         행동하는 카드로
       </h1>
-      <p className="mx-auto mt-2.5 max-w-[320px] text-pretty text-[14px] leading-relaxed text-white/75 [word-break:keep-all]">
+      {/* UI-5-T7-F6-6 — 부제 폭 320→420: 560 컨테이너에서 CTA(풀폭)와 축 정합(390 시절 잔재 수치 해소). */}
+      <p className="mx-auto mt-2.5 max-w-[420px] text-pretty text-[14px] leading-relaxed text-white/75 [word-break:keep-all]">
         말만 하세요 — 정보 알림부터 예약·판매까지 링고가 목적에 맞는 카드로 만들어 드려요
       </p>
 

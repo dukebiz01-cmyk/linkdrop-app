@@ -16,23 +16,24 @@ export function LandingPageV5() {
   const goLogin = () => navigate({ to: "/login" })
   return (
     <div className="min-h-dvh bg-[#F8FAFC] font-sans text-[#0F172A]">
-      {/* UI-5-T7-F5-2 — 페이지 단일 컨테이너 560 통일(헤더·히어로·3단계·목적카드·하단CTA 동시 정렬). */}
+      {/* UI-5-T7-F6-6 — 헤더를 560 컨테이너 밖 풀폭 래퍼로: 배경·보더는 화면 풀폭, 콘텐츠만 560
+          (데스크톱에서 border-b 가 560 지점에서 끊기던 어긋남 해소). 색·문구·버튼 무변. */}
+      <header className="sticky top-0 z-20 border-b border-[#E8EDF3] bg-[#F8FAFC]/90 backdrop-blur-sm">
+        <div className="mx-auto flex h-14 w-full max-w-[560px] items-center justify-between px-5">
+          {/* 좌: 브랜드 락업 */}
+          <LinkDropLockup script="korean" tone="color" symbolSize={26} />
+          {/* 우: 로그인 필 버튼 */}
+          <button
+            type="button"
+            onClick={goLogin}
+            className="flex h-9 items-center rounded-full border border-[#CBD5E1] bg-white px-4 text-[13px] font-bold text-[#0F172A] transition-transform active:scale-[0.97]"
+          >
+            로그인
+          </button>
+        </div>
+      </header>
+      {/* UI-5-T7-F5-2 — 페이지 단일 컨테이너 560 통일(히어로·3단계·목적카드·하단CTA 동시 정렬). */}
       <div className="mx-auto w-full max-w-[560px] bg-[#F8FAFC]">
-        <header className="sticky top-0 z-20 border-b border-[#E8EDF3] bg-[#F8FAFC]/90 backdrop-blur-sm">
-          <div className="flex h-14 items-center justify-between px-5">
-            {/* 좌: 브랜드 락업 */}
-            <LinkDropLockup script="korean" tone="color" symbolSize={26} />
-            {/* 우: 로그인 필 버튼 */}
-            <button
-              type="button"
-              onClick={goLogin}
-              className="flex h-9 items-center rounded-full border border-[#CBD5E1] bg-white px-4 text-[13px] font-bold text-[#0F172A] transition-transform active:scale-[0.97]"
-            >
-              로그인
-            </button>
-          </div>
-        </header>
-
         <LandingHero />
         <HowItWorks />
         <PurposeCards />
