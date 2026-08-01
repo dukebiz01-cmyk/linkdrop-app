@@ -62,5 +62,8 @@ supabase/.temp/
 check-*.sql
 del-*.sql
 
+# Edge deploy convention leftovers (.env.local BOM workaround)
+*.bak
+
 # UI-5 v0-49 참조 원본 — 커밋 금지(이식 소스 보관용)
 _v0-49-ref/
