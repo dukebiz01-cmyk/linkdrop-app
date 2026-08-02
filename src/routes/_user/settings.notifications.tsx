@@ -1,10 +1,14 @@
 // /settings/notifications — 알림 설정 (v0-43 notification-settings-page 이식).
 //   _user 자식: 인증 가드는 부모 _user.tsx. 로더 없음(순수 클라 UI) → 리다이렉트 루프 무관.
-//   가 방침(E-3): 모든 토글·빈도는 로컬 useState 로 화면만. 저장 백엔드·가짜 성공 토스트·테스트발송 없음.
+//   F7-2b — 실배선: 전 토글·빈도·방해금지 = profiles.settings.notifications 영속(user-settings 공유
+//   헬퍼 · 변경 즉시 300ms 디바운스 저장 · 실패 인라인 표시 — 가짜 성공 표시 없음).
+//   F7-2c-2 — 정직화(노출=동작): 푸시·이메일 행 숨김(발송 백엔드 미구현 — 조건 숨김·코드 보존),
+//   카카오 알림톡·방해 금지는 유지+저장.
 //   ⚠️ 원본의 마케팅 토스트·"테스트 알림 보내기"·"마지막 알림/알림 기록"(mock)·시스템설정 링크(dead)는 §0 로 제거.
 //      "매장 운영"(사장님) 섹션은 실 isBusiness 게이트가 없으면 mock 노출이 되므로 미이식(백엔드/게이트 확정 후).
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { loadSettings, saveSettings } from "@/lib/user-settings";
 import type { ComponentType } from "react";
 import {
   ArrowLeft,
@@ -75,8 +79,11 @@ function ToggleRow({
   );
 }
 
+// F7-2c-2 — 푸시·이메일 채널 행 숨김(발송 백엔드 미구현 — 노출=동작 원칙). 코드 보존: 백엔드 구현 시 플래그만 복원.
+const SHOW_PUSH_EMAIL = false;
+
 function NotificationSettingsPage() {
-  // 화면만 — 로컬 상태(새로고침 시 리셋). 저장 연동 없음.
+  // F7-2b — profiles.settings.notifications 실배선(마운트 로드 → 변경 300ms 디바운스 저장).
   const [master, setMaster] = useState(true);
   const [newDrop, setNewDrop] = useState(true);
   const [friendActivity, setFriendActivity] = useState(true);
@@ -93,6 +100,86 @@ function NotificationSettingsPage() {
   const [dnd, setDnd] = useState(false);
   const [dndStart, setDndStart] = useState("22:00");
   const [dndEnd, setDndEnd] = useState("08:00");
+  const [loaded, setLoaded] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    void (async () => {
+      const s = await loadSettings();
+      const n = (s?.notifications ?? null) as Record<string, unknown> | null;
+      if (n) {
+        const b = (k: string, set: (v: boolean) => void) => {
+          if (typeof n[k] === "boolean") set(n[k] as boolean);
+        };
+        b("master", setMaster);
+        b("newDrop", setNewDrop);
+        b("friendActivity", setFriendActivity);
+        b("couponReceived", setCouponReceived);
+        b("couponExpiry", setCouponExpiry);
+        b("reservationConfirm", setReservationConfirm);
+        b("visitReminder", setVisitReminder);
+        b("resultSummary", setResultSummary);
+        b("newUsage", setNewUsage);
+        if (
+          n.resultFrequency === "daily" ||
+          n.resultFrequency === "weekly" ||
+          n.resultFrequency === "none"
+        ) {
+          setResultFrequency(n.resultFrequency);
+        }
+        const ch = (n.channels ?? null) as Record<string, unknown> | null;
+        if (ch && typeof ch.alimtalk === "boolean") setKakaoEnabled(ch.alimtalk);
+        const d = (n.dnd ?? null) as Record<string, unknown> | null;
+        if (d) {
+          if (typeof d.enabled === "boolean") setDnd(d.enabled);
+          if (typeof d.start === "string") setDndStart(d.start);
+          if (typeof d.end === "string") setDndEnd(d.end);
+        }
+      }
+      setLoaded(true);
+    })();
+  }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void saveSettings({
+        notifications: {
+          master,
+          newDrop,
+          friendActivity,
+          couponReceived,
+          couponExpiry,
+          reservationConfirm,
+          visitReminder,
+          resultSummary,
+          resultFrequency,
+          newUsage,
+          channels: { alimtalk: kakaoEnabled },
+          dnd: { enabled: dnd, start: dndStart, end: dndEnd },
+        },
+      }).then((ok) => setSaveError(!ok));
+    }, 300);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [
+    loaded,
+    master,
+    newDrop,
+    friendActivity,
+    couponReceived,
+    couponExpiry,
+    reservationConfirm,
+    visitReminder,
+    resultSummary,
+    resultFrequency,
+    newUsage,
+    kakaoEnabled,
+    dnd,
+    dndStart,
+    dndEnd,
+  ]);
 
   const off = !master;
 
@@ -113,6 +200,12 @@ function NotificationSettingsPage() {
       </header>
 
       <div className="px-4 py-4">
+        {/* F7-2b — 저장 실패 인라인 표시(무언 실패 금지). */}
+        {saveError ? (
+          <p className="mb-3 rounded-lg bg-[#FEF2F2] px-3 py-2 text-[12px] font-semibold text-[#DC2626]">
+            저장에 실패했어요. 잠시 후 다시 시도해 주세요.
+          </p>
+        ) : null}
         <div className="flex items-center justify-between rounded-2xl bg-[#F8FAFC] p-5">
           <div>
             <p className="text-base font-bold text-[#0F172A]">전체 알림</p>
@@ -223,14 +316,17 @@ function NotificationSettingsPage() {
 
       <SectionHeader>어떻게 받을까요?</SectionHeader>
       <div>
-        <ToggleRow
-          icon={Smartphone}
-          label="푸시 알림"
-          description="앱이 백그라운드일 때"
-          enabled={pushEnabled}
-          onChange={setPushEnabled}
-          disabled={off}
-        />
+        {/* F7-2c-2 — 푸시 행 숨김(발송 백엔드 미구현 — 코드 보존·SHOW_PUSH_EMAIL 복원 시 재노출). */}
+        {SHOW_PUSH_EMAIL ? (
+          <ToggleRow
+            icon={Smartphone}
+            label="푸시 알림"
+            description="앱이 백그라운드일 때"
+            enabled={pushEnabled}
+            onChange={setPushEnabled}
+            disabled={off}
+          />
+        ) : null}
         <ToggleRow
           icon={MessageCircle}
           label="카카오 알림톡"
@@ -239,14 +335,17 @@ function NotificationSettingsPage() {
           onChange={setKakaoEnabled}
           disabled={off}
         />
-        <ToggleRow
-          icon={Mail}
-          label="이메일"
-          description="중요한 알림만 이메일"
-          enabled={emailEnabled}
-          onChange={setEmailEnabled}
-          disabled={off}
-        />
+        {/* F7-2c-2 — 이메일 행 숨김(동일 사유·코드 보존). */}
+        {SHOW_PUSH_EMAIL ? (
+          <ToggleRow
+            icon={Mail}
+            label="이메일"
+            description="중요한 알림만 이메일"
+            enabled={emailEnabled}
+            onChange={setEmailEnabled}
+            disabled={off}
+          />
+        ) : null}
       </div>
 
       <SectionHeader>방해 금지</SectionHeader>
@@ -289,10 +388,6 @@ function NotificationSettingsPage() {
           </div>
         ) : null}
       </div>
-
-      <p className="px-4 pt-4 text-[11px] leading-relaxed text-[#94A3B8]">
-        알림 설정은 이 화면에서 켜고 끌 수 있어요. 저장 연동은 서비스 오픈 후 순차 적용됩니다.
-      </p>
     </main>
   );
 }

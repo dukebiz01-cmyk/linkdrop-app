@@ -1,10 +1,14 @@
 // /settings/language — 언어·테마 설정 (v0-43 language-theme-settings-page 이식).
 //   _user 자식: 인증 가드는 부모 _user.tsx 담당. 로더 없음(순수 클라 UI) → 리다이렉트 루프 무관.
-//   가 방침(E-3): 언어/테마/자동전환은 로컬 useState 로 화면만. 저장 백엔드·가짜 성공 토스트 없음.
+//   F7-2b — 실배선: 언어 선택 = profiles.settings jsonb 영속(user-settings 공유 헬퍼 · 변경 즉시
+//   300ms 디바운스 저장 · 실패 인라인 표시 — 가짜 성공 표시 없음).
+//   F7-2c — 정직화(노출=동작): 언어 = 한국어만 노출(i18n 미구현 — 조건 숨김·코드 보존) ·
+//   테마 섹션 전체 숨김(다크 모드 전역 실적용 실체 없음 — 아래 SHOW_THEME 주석 근거).
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Monitor, Sun, Moon, Clock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { loadSettings, saveSettings } from "@/lib/user-settings";
 
 type Language = "ko" | "en" | "ja" | "zh";
 type Theme = "system" | "light" | "dark";
@@ -45,25 +49,62 @@ function SettingsHeader({ title }: { title: string }) {
   );
 }
 
+// F7-2c-3 — 테마 섹션 숨김(코드 보존): 다크 모드의 전역 실적용 실체 없음 — styles.css 에 .dark
+//   variant 선언만 있고 토글 기제(documentElement class·data-theme 쓰기) 0 · dark: 클래스는 shadcn
+//   원시(ui/*)뿐, 피처 표면은 raw hex 고정. 실적용 구현 시 이 플래그만 복원.
+const SHOW_THEME = false;
+
 function LanguageThemeSettingsPage() {
-  // 화면만 — 로컬 상태(새로고침 시 리셋). 저장 연동 없음(§0: 가짜 저장/토스트 금지).
+  // F7-2b — profiles.settings 실배선: 마운트 1회 로드 → 변경 시 300ms 디바운스 저장.
   const [language, setLanguage] = useState<Language>("ko");
   const [theme, setTheme] = useState<Theme>("system");
   const [autoSwitch, setAutoSwitch] = useState(false);
   const [darkStart, setDarkStart] = useState("22:00");
   const [darkEnd, setDarkEnd] = useState("06:00");
+  const [loaded, setLoaded] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    void (async () => {
+      const s = await loadSettings();
+      if (
+        s &&
+        (s.language === "ko" || s.language === "en" || s.language === "ja" || s.language === "zh")
+      ) {
+        setLanguage(s.language as Language);
+      }
+      setLoaded(true);
+    })();
+  }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void saveSettings({ language }).then((ok) => setSaveError(!ok));
+    }, 300);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [loaded, language]);
 
   return (
     <main className="min-h-screen bg-white tracking-ko pb-16">
       <SettingsHeader title="언어 · 테마" />
 
       <div className="mx-auto max-w-md px-4 pt-6">
+        {/* F7-2b — 저장 실패 인라인 표시(무언 실패 금지). */}
+        {saveError ? (
+          <p className="mb-3 rounded-lg bg-[#FEF2F2] px-3 py-2 text-[12px] font-semibold text-[#DC2626]">
+            저장에 실패했어요. 잠시 후 다시 시도해 주세요.
+          </p>
+        ) : null}
         {/* 언어 */}
         <h2 className="mb-3 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94A3B8]">
           언어
         </h2>
         <div className="grid grid-cols-2 gap-3">
-          {LANGUAGES.map((lang) => {
+          {/* F7-2c-1 — 한국어만 노출(i18n 미구현 — 노출=동작 원칙 · 타 언어 행 조건 숨김, 목록 코드 보존). */}
+          {LANGUAGES.filter((l) => l.code === "ko").map((lang) => {
             const selected = language === lang.code;
             const disabled = !lang.available;
             return (
@@ -100,86 +141,96 @@ function LanguageThemeSettingsPage() {
           선택한 언어는 LinkDrop 전체 UI에 적용됩니다. 영상 자막은 영상 원본 언어를 따릅니다.
         </p>
 
-        {/* 테마 */}
-        <h2 className="mb-3 mt-8 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94A3B8]">
-          테마
-        </h2>
-        <div className="flex flex-col gap-3">
-          {THEMES.map((t) => {
-            const selected = theme === t.id;
-            const Icon = t.icon;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTheme(t.id)}
-                className={`flex w-full items-center gap-3 rounded-xl border-2 p-4 text-left transition-all ${
-                  selected
-                    ? "border-[#0F172A] bg-[#F1F5F9]"
-                    : "border-[#E8EDF3] bg-white hover:border-[#CBD5E1] hover:bg-[#F8FAFC]"
-                }`}
-              >
-                <span
-                  className={`flex size-9 items-center justify-center rounded-lg ${
-                    selected ? "bg-[#0F172A] text-white" : "bg-[#F1F5F9] text-[#94A3B8]"
-                  }`}
-                >
-                  <Icon className="size-[18px]" strokeWidth={2} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-bold text-[#0F172A]">{t.label}</span>
-                  <span className="mt-0.5 block text-[12px] text-[#94A3B8]">{t.desc}</span>
-                </span>
-                {selected ? (
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#0F172A]">
-                    <Check className="size-3 text-white" strokeWidth={3} />
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 자동 전환 시간 — 로컬 UI만(실제 테마 적용 없음). */}
-        <div className="mt-4 rounded-xl border border-[#E8EDF3] bg-white p-4">
-          <div className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-[#F1F5F9] text-[#94A3B8]">
-                <Clock className="size-5" strokeWidth={2} />
-              </span>
-              <span>
-                <span className="block text-[14px] font-medium text-[#0F172A]">자동 전환 시간</span>
-                <span className="mt-0.5 block text-[12px] text-[#94A3B8]">
-                  지정 시간에 다크 모드 활성화
-                </span>
-              </span>
-            </span>
-            <Switch checked={autoSwitch} onCheckedChange={setAutoSwitch} />
-          </div>
-          {autoSwitch ? (
-            <div className="mt-4 flex items-center gap-3 border-t border-[#F1F5F9] pt-4">
-              <div className="flex-1">
-                <label className="mb-1 block text-[11px] font-medium text-[#94A3B8]">다크 시작</label>
-                <input
-                  type="time"
-                  value={darkStart}
-                  onChange={(e) => setDarkStart(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-[#E8EDF3] bg-[#F8FAFC] px-3 text-sm text-[#0F172A]"
-                />
-              </div>
-              <span className="mt-5 text-[#94A3B8]">~</span>
-              <div className="flex-1">
-                <label className="mb-1 block text-[11px] font-medium text-[#94A3B8]">다크 종료</label>
-                <input
-                  type="time"
-                  value={darkEnd}
-                  onChange={(e) => setDarkEnd(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-[#E8EDF3] bg-[#F8FAFC] px-3 text-sm text-[#0F172A]"
-                />
-              </div>
+        {/* 테마 — F7-2c-3: SHOW_THEME(전역 실적용 부재) 동안 숨김. 코드 보존 — 플래그 복원 시 그대로 재노출. */}
+        {SHOW_THEME ? (
+          <>
+            <h2 className="mb-3 mt-8 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[#94A3B8]">
+              테마
+            </h2>
+            <div className="flex flex-col gap-3">
+              {THEMES.map((t) => {
+                const selected = theme === t.id;
+                const Icon = t.icon;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTheme(t.id)}
+                    className={`flex w-full items-center gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                      selected
+                        ? "border-[#0F172A] bg-[#F1F5F9]"
+                        : "border-[#E8EDF3] bg-white hover:border-[#CBD5E1] hover:bg-[#F8FAFC]"
+                    }`}
+                  >
+                    <span
+                      className={`flex size-9 items-center justify-center rounded-lg ${
+                        selected ? "bg-[#0F172A] text-white" : "bg-[#F1F5F9] text-[#94A3B8]"
+                      }`}
+                    >
+                      <Icon className="size-[18px]" strokeWidth={2} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14px] font-bold text-[#0F172A]">{t.label}</span>
+                      <span className="mt-0.5 block text-[12px] text-[#94A3B8]">{t.desc}</span>
+                    </span>
+                    {selected ? (
+                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#0F172A]">
+                        <Check className="size-3 text-white" strokeWidth={3} />
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
-          ) : null}
-        </div>
+
+            {/* 자동 전환 시간 — 로컬 UI만(실제 테마 적용 없음). */}
+            <div className="mt-4 rounded-xl border border-[#E8EDF3] bg-white p-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-3">
+                  <span className="flex size-10 items-center justify-center rounded-xl bg-[#F1F5F9] text-[#94A3B8]">
+                    <Clock className="size-5" strokeWidth={2} />
+                  </span>
+                  <span>
+                    <span className="block text-[14px] font-medium text-[#0F172A]">
+                      자동 전환 시간
+                    </span>
+                    <span className="mt-0.5 block text-[12px] text-[#94A3B8]">
+                      지정 시간에 다크 모드 활성화
+                    </span>
+                  </span>
+                </span>
+                <Switch checked={autoSwitch} onCheckedChange={setAutoSwitch} />
+              </div>
+              {autoSwitch ? (
+                <div className="mt-4 flex items-center gap-3 border-t border-[#F1F5F9] pt-4">
+                  <div className="flex-1">
+                    <label className="mb-1 block text-[11px] font-medium text-[#94A3B8]">
+                      다크 시작
+                    </label>
+                    <input
+                      type="time"
+                      value={darkStart}
+                      onChange={(e) => setDarkStart(e.target.value)}
+                      className="h-10 w-full rounded-lg border border-[#E8EDF3] bg-[#F8FAFC] px-3 text-sm text-[#0F172A]"
+                    />
+                  </div>
+                  <span className="mt-5 text-[#94A3B8]">~</span>
+                  <div className="flex-1">
+                    <label className="mb-1 block text-[11px] font-medium text-[#94A3B8]">
+                      다크 종료
+                    </label>
+                    <input
+                      type="time"
+                      value={darkEnd}
+                      onChange={(e) => setDarkEnd(e.target.value)}
+                      className="h-10 w-full rounded-lg border border-[#E8EDF3] bg-[#F8FAFC] px-3 text-sm text-[#0F172A]"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </div>
     </main>
   );
