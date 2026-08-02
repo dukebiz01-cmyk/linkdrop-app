@@ -636,6 +636,28 @@ const DIRECTOR_CHECK_RESERVE: { key: string; steps: DirectorStep[]; label: strin
   { key: "coupon", steps: ["coupon"], label: "쿠폰" },
   { key: "reserve", steps: ["reserveAsk", "calendar"], label: "예약" },
 ];
+// T5-W1c(P2) — 스텝 → 소속 블록(화면 동행: 스텝 진입 = jumpToBlock 스크롤 + 슬롯 하이라이트 좌표원).
+//   비표시 필드(분류·원산지·단위·보상 등 카드 미노출 항목) = 소속 블록(상품정보)으로 스크롤.
+//   reserveAsk(분기 질문)·done 은 이동 없음(미등록 = 현 위치 유지).
+const DIRECTOR_STEP_BLOCK: Partial<Record<DirectorStep, string>> = {
+  photo: "productimage",
+  name: "product",
+  type: "product",
+  category: "product",
+  origin: "product",
+  unit: "product",
+  price: "product",
+  shipmethod: "delivery",
+  shipfee: "delivery",
+  droppy: "product",
+  qty: "product",
+  period: "seasonal",
+  harvest: "seasonal",
+  shipnote: "delivery",
+  link: "content",
+  coupon: "coupon",
+  calendar: "calendar",
+};
 
 // UI-5-T7-F5-5-S3 — 판매유형 유래 source 캡션(데모 "내 농장 · 산지직송" 고정 폐기 후 실유형 배선).
 //   ⚠️ 수신(fromDropDetail)의 source 셀은 "YouTube" 폴백 — 수신 반영은 거울 접촉이라 별도 판정 대기.
@@ -1013,6 +1035,9 @@ export function CardStudioPage({
   const [dVideoErr, setDVideoErr] = useState<string | null>(null);
   // T5-W3 — 예약 분기 답(프리체크의 달력 요구 여부 판정 재료).
   const [dReserveYes, setDReserveYes] = useState(false);
+  // T5-W1c(P1) — 프리셋 스켈레톤 장착분 추적: 시작 시 일괄 장착한 블록 중 아직 실값 미확정분.
+  //   이탈(X) 시 이 집합 기준으로 빈 껍데기만 해제(실값 입력분 보존) — 실값 승격 차단(F5-5)과 정합.
+  const dPresetRef = useRef<Set<string>>(new Set());
   // T5-W1a — KAMIS 품목 목록(폼 :312-315 동형 1회 로드 — 분류 후보·category_code 역참조 재료).
   const [dKamisList, setDKamisList] = useState<{ item_code: string; item_name: string; category_code: string }[]>([]);
   // T5-W1a — 가격 스텝 KAMIS 참고 1줄(생산자=신선 한정 · §0 락: 파트너 화면 전용 참고 — payload 무유출).
@@ -1048,9 +1073,48 @@ export function CardStudioPage({
     setDReserveYes(false);
     dCatalogHandledRef.current = false;
     dLinkDoneRef.current = null;
+    // T5-W1c(P1) — 커머스 기본 패키지 일괄 장착(MODE_MAIN 구성 그대로): 시작 화면 = 완성 카드의
+    //   흑백 스케치. 미충족 슬롯 표시는 F5-5 정본 폴백(회색 라벨) 소관 — 값 주입 0(실값 승격 차단
+    //   유지 · 발행 payload 는 기존 빌더가 실값만 편입). 기장착분은 프리셋 집합에서 제외(이탈 정리 비대상).
+    if (mode === "commerce") {
+      const preset = MODE_MAIN_IDS.commerce.filter((id) => !applied[id]);
+      dPresetRef.current = new Set(preset);
+      if (preset.length > 0) {
+        setApplied((p) => {
+          const n = { ...p };
+          for (const id of preset) n[id] = true;
+          return n;
+        });
+      }
+    } else {
+      dPresetRef.current = new Set();
+    }
     dSay(DIRECTOR_MENTS.start);
     // T5-W2 — 모드별 첫 스텝: 커머스 = 사진 / 퍼블릭·예약쿠폰 = 영상 링크.
     dGo(mode === "commerce" ? "photo" : "link");
+  }
+  // T5-W1c(P1-3) — 지휘 종료 단일 출구: 실값 입력분만 보존, 빈 스켈레톤 블록은 해제(미완성 껍데기
+  //   장착 상태 정리 — 발행 방어는 프리체크·canPublish 가 기담당, 여기는 장착 정합).
+  function closeDirector() {
+    const preset = dPresetRef.current;
+    if (preset.size > 0) {
+      const filled = (id: string) =>
+        id === "productimage"
+          ? !!productImageUrl
+          : id === "product"
+            ? !!(cfgProductName.trim() || cfgProductPrice.replace(/[^0-9]/g, ""))
+            : false; // seasonal 은 기간 확정 시 집합에서 제거 — 남아 있으면 미확정 스켈레톤.
+      const drop = [...preset].filter((id) => !filled(id));
+      if (drop.length > 0) {
+        setApplied((p) => {
+          const n = { ...p };
+          for (const id of drop) n[id] = false;
+          return n;
+        });
+      }
+    }
+    dPresetRef.current = new Set();
+    setDirectorOn(false);
   }
   // 사진 수신 → startCatalog 백그라운드 + 다음 스텝(effect — 업로드 파이프는 기존 핸들러 재사용).
   useEffect(() => {
@@ -1131,6 +1195,8 @@ export function CardStudioPage({
   //   정지(폴백 정위치 고정)+스파클 정지 · 스파클 = 답 반영(user echo) 시 직전 슬롯 1회(스텝당 상한 1).
   const dDockRef = useRef<HTMLDivElement>(null);
   const [dOrbPos, setDOrbPos] = useState<{ x: number; y: number } | null>(null);
+  // T5-W1c(P2) — 현재 슬롯 하이라이트 사각(스튜디오 오버레이 층 — 카드 렌더 무접촉).
+  const [dSlotRect, setDSlotRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [dSpark, setDSpark] = useState<{ x: number; y: number; key: number } | null>(null);
   const dSparkedRef = useRef<Set<string>>(new Set());
   const dPrevStepRef = useRef<DirectorStep>("photo");
@@ -1154,10 +1220,13 @@ export function CardStudioPage({
   useEffect(() => {
     dPrevStepRef.current = dStep;
   }, [dStep]);
-  // 슬롯 실측 → 오브 좌표(스텝 진입·스크롤·리사이즈 시 재측정 — 전부 읽기 전용).
+  // 슬롯 실측 → 하이라이트 사각 + 오브 좌표(스텝 진입·스크롤·리사이즈·정착 지연 재측정 — 전부 읽기 전용).
+  //   T5-W1c(P2) — 실측 슬롯 확대: photo/name = 미리보기(hero/img 랜드마크) · 그 외 스텝 = 소속 블록
+  //   (DIRECTOR_STEP_BLOCK)의 덱 카드(jumpToBlock 목적지와 동일 좌표원 — aria-label 실측). 미가시 = 폴백.
   useEffect(() => {
     if (!directorOn) {
       setDOrbPos(null);
+      setDSlotRect(null);
       setDSpark(null);
       dSparkedRef.current = new Set();
       return;
@@ -1170,36 +1239,56 @@ export function CardStudioPage({
       const fb = dock
         ? { x: Math.max(8, dock.right - ORB - 16), y: Math.max(8, dock.top - ORB - 8) }
         : { x: window.innerWidth - ORB - 16, y: Math.max(8, window.innerHeight - 320) };
+      const inView = (r: DOMRect | null | undefined): r is DOMRect =>
+        !!r && r.width > 0 && r.bottom > 72 && r.top < window.innerHeight - 160;
+      let slot: { x: number; y: number; w: number; h: number } | null = null;
+      const host = document.querySelector('[data-assemble-anchor="hero"]');
+      const hostRect = host?.getBoundingClientRect();
+      if (dStep === "photo") {
+        if (inView(hostRect)) slot = { x: hostRect.left, y: hostRect.top, w: hostRect.width, h: Math.min(hostRect.height, 220) };
+      } else if (dStep === "name") {
+        const imgRect = host?.querySelector("img")?.getBoundingClientRect();
+        if (inView(imgRect)) slot = { x: imgRect.left, y: imgRect.bottom - 8, w: imgRect.width, h: 56 };
+        else if (inView(hostRect)) slot = { x: hostRect.left, y: hostRect.top, w: hostRect.width, h: Math.min(hostRect.height, 220) };
+      } else {
+        const targetBlock = DIRECTOR_STEP_BLOCK[dStep];
+        const label = targetBlock ? STUDIO_BLOCKS.find((b) => b.id === targetBlock)?.label : undefined;
+        const cardRect = label
+          ? deckRef.current?.querySelector(`button[aria-label="${label}"]`)?.getBoundingClientRect()
+          : undefined;
+        if (inView(cardRect)) slot = { x: cardRect.left, y: cardRect.top, w: cardRect.width, h: cardRect.height };
+      }
+      setDSlotRect(slot);
       if (reduced) {
-        setDOrbPos(fb); // 이동 정지 — 정위치 고정 표시.
+        setDOrbPos(fb); // P2-5 — 이동·스파클 정지(정위치 고정) · 하이라이트만 동행.
         return;
       }
-      let pos = fb;
-      const host = document.querySelector('[data-assemble-anchor="hero"]');
-      const hostRect = host?.getBoundingClientRect() ?? null;
-      const hostVisible = !!hostRect && hostRect.bottom > 72 && hostRect.top < window.innerHeight - 200 && hostRect.width > 0;
-      if (hostVisible && hostRect) {
-        if (dStep === "photo") {
-          // 사진 슬롯 = 히어로 상단(이미지 영역 우상단).
-          pos = { x: Math.max(8, hostRect.right - ORB - 8), y: Math.max(8, hostRect.top + 8) };
-        } else if (dStep === "name") {
-          // 이름 슬롯 = 히어로 이미지 하단(제목대) — img 실측, 없으면 히어로 좌상 폴백.
-          const img = host?.querySelector("img");
-          const r = img?.getBoundingClientRect() ?? null;
-          pos = r && r.width > 0
-            ? { x: Math.max(8, r.left - 6), y: Math.max(8, r.bottom - ORB / 2) }
-            : { x: Math.max(8, hostRect.left + 8), y: Math.max(8, hostRect.top + 8) };
-        }
+      // 오브 = 슬롯 옆 정렬(우측 우선 · 화면 밖이면 좌측) — 슬롯 미실측 = 독 상단 폴백.
+      if (slot) {
+        const rightX = slot.x + slot.w + 6;
+        const x = rightX + ORB + 8 <= window.innerWidth ? rightX : Math.max(8, slot.x - ORB - 6);
+        setDOrbPos({ x, y: Math.max(8, slot.y + slot.h / 2 - ORB / 2) });
+      } else {
+        setDOrbPos(fb);
       }
-      setDOrbPos(pos);
     };
     measure();
+    const settle = setTimeout(measure, 420); // 덱 캐러셀(300ms)·smooth 스크롤 정착 후 재실측.
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
     return () => {
+      clearTimeout(settle);
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorOn, dStep]);
+  // T5-W1c(P2-1) — 화면 동행: 스텝 진입 = 소속 블록으로 자동 스크롤(W3 달력 jumpToBlock 기제의
+  //   전 스텝 확장 · 비표시 필드는 소속 블록으로). 미등록 스텝(reserveAsk·done) = 현 위치 유지.
+  useEffect(() => {
+    if (!directorOn) return;
+    const target = DIRECTOR_STEP_BLOCK[dStep];
+    if (target) jumpToBlock(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directorOn, dStep]);
   // T5-W1a — 보상 스텝 진입 헬퍼: 추천값 프리필(제안 → 사장님 확정 — 숫자 입력 그대로).
@@ -1402,6 +1491,7 @@ export function CardStudioPage({
     setSaleStartIso(dStart);
     setSaleEndIso(dEnd);
     setApplied((p) => ({ ...p, seasonal: true }));
+    dPresetRef.current.delete("seasonal"); // P1 — 기간 확정 = 실값 승격(이탈 정리 비대상).
     dEcho(`${dStart} ~ ${dEnd}`);
     setDStart("");
     setDEnd("");
@@ -2511,7 +2601,11 @@ export function CardStudioPage({
 
   // ── 링고AI 실행 헬퍼: 덱으로 스크롤·특정 블록으로 이동·추천 장착·탈착·편집 ──
   const scrollToDeck = () =>
-    deckRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    deckRef.current?.scrollIntoView({
+      // T5-W1c(P2-5) — prefers-reduced-motion = instant 스크롤(연출 정지 · 이동 자체는 유지).
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "center",
+    });
 
   function jumpToBlock(id: string) {
     const idx = DECK.findIndex((b) => b.id === id);
@@ -6854,6 +6948,22 @@ export function CardStudioPage({
       {/* UI-5-T7-T5-W1 — 지휘자 하단 독(스튜디오 B안 상하 2분할 정합): 위 = 기존 실시간 미리보기
           그대로 노출 · 아래 = 대화 레일. 체크리스트 = 오버레이 ✓/⟳/○ 문법 차용(인라인 — runAssembly
           타이머 연출은 인터뷰형과 충돌이라 미사용·판단 보고). 종료·탈출 시 입력분 보존(상태 직결). */}
+      {/* T5-W1c(P2-2) — 현재 슬롯 하이라이트(링고블루 테두리 · z-54 = 독 아래·페이지 위): 스튜디오
+          오버레이 층 — 카드 렌더 무접촉(box-shadow 링 · pointer-events 0). motion-reduce = 전환 정지. */}
+      {directorOn && dSlotRect && (
+        <div
+          className="pointer-events-none fixed left-0 top-0 z-[54] motion-reduce:transition-none"
+          style={{
+            transform: `translate(${dSlotRect.x - 4}px, ${dSlotRect.y - 4}px)`,
+            width: dSlotRect.w + 8,
+            height: dSlotRect.h + 8,
+            borderRadius: 24,
+            boxShadow: "0 0 0 2px #1D4ED8, 0 0 0 6px rgba(29,78,216,0.12)",
+            transition: "transform 350ms ease, width 350ms ease, height 350ms ease",
+          }}
+          aria-hidden="true"
+        />
+      )}
       {/* T5-W1b(D2) — 떠다니는 링고 오브(z-56: 독 55 위·거울 60 아래 — 스튜디오 오버레이 층, 카드 렌더
           무접촉). 이동 = transform transition(CSS 전용) · motion-reduce 시 transition 정지(정위치 고정). */}
       {directorOn && dOrbPos && (
@@ -6923,7 +7033,7 @@ export function CardStudioPage({
                 <button
                   type="button"
                   onClick={() => {
-                    setDirectorOn(false);
+                    closeDirector(); // P1-3 — 이탈 정리 경유(실값 보존·빈 스켈레톤 해제).
                     jumpToBlock("product"); // 탈출구 — 동일 상태 수렴(경량 폼 = 기존 상품 폼).
                   }}
                   className="flex min-h-[32px] items-center rounded-lg border border-[#E8E8EC] bg-white px-2 text-[11px] font-semibold text-[#525252]"
@@ -6933,7 +7043,7 @@ export function CardStudioPage({
                 <button
                   type="button"
                   aria-label="제작시키기 닫기"
-                  onClick={() => setDirectorOn(false)}
+                  onClick={closeDirector}
                   className="flex h-8 w-8 items-center justify-center rounded-full text-[#8A8A8A] active:bg-[#F5F5F5]"
                 >
                   <X className="h-4 w-4" strokeWidth={2.25} />
@@ -7355,7 +7465,7 @@ export function CardStudioPage({
                   )}
                   <button
                     type="button"
-                    onClick={() => setDirectorOn(false)}
+                    onClick={closeDirector}
                     className="flex min-h-[48px] flex-1 items-center justify-center rounded-2xl border border-[#E8E8EC] bg-white text-[14px] font-bold text-[#525252] active:bg-[#F5F5F7]"
                   >
                     닫기
