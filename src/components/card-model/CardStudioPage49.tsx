@@ -557,6 +557,8 @@ const DIRECTOR_MENTS = {
   photo: "상품 사진을 한 장 올려주세요. 카드에 바로 반영해 드리겠습니다.",
   name: "상품 이름을 알려주세요. 카드 제목으로 사용됩니다.",
   type: "어떤 상품인가요? 신선식품은 수확일 기준 예약 판매로, 가공·공산품은 재고 판매로 준비해 드립니다.",
+  // T5-W2 — 퍼블릭(정보) 멘트 정본(Duke 확정 · 재량 작문 금지). 시작·완성은 기존 정본 재사용.
+  link: "알리고 싶은 영상 링크를 붙여주세요. 제목과 요약을 만들어 카드에 담아드리겠습니다.",
   // T5-W1a(v4) — 신규 멘트 정본(Duke 확정 · 재량 작문 금지).
   category: "품목 분류를 확인해 주세요. 시세와 제철 정보 연동에 사용됩니다.",
   origin: "원산지를 알려주세요. 상품 정보 고시에 필수로 표시됩니다.",
@@ -593,6 +595,8 @@ type DirectorStep =
   | "period"
   | "harvest"
   | "shipnote"
+  // T5-W2 — 퍼블릭: 영상 링크 1개(기존 미니 지휘자 applyVideoSelection 위에 독·내레이션만).
+  | "link"
   | "done";
 // T5-W1a — 공유 보상 추천 기본값(rate %). 판단: 정본 미지정 — 폼 슬라이더 0~30% 범위 중앙 하단
 //   보수값 10 제안(확정은 사장님 · 숫자 입력 그대로). Duke 판정으로 교체 가능(이 상수만 수정).
@@ -611,6 +615,10 @@ const DIRECTOR_CHECK: { key: string; steps: DirectorStep[]; label: string }[] = 
   { key: "qty", steps: ["qty"], label: "준비 수량" },
   { key: "period", steps: ["period"], label: "판매 기간" },
   { key: "branch", steps: ["harvest", "shipnote"], label: "출하·발송" },
+];
+// T5-W2 — 퍼블릭 체크리스트(링크 1개 조립).
+const DIRECTOR_CHECK_GENERAL: { key: string; steps: DirectorStep[]; label: string }[] = [
+  { key: "link", steps: ["link"], label: "영상 링크" },
 ];
 
 // UI-5-T7-F5-5-S3 — 판매유형 유래 source 캡션(데모 "내 농장 · 산지직송" 고정 폐기 후 실유형 배선).
@@ -984,6 +992,9 @@ export function CardStudioPage({
   const [dCatSearch, setDCatSearch] = useState(false);
   const [dUnitGrams, setDUnitGrams] = useState(false);
   const [dFeePaid, setDFeePaid] = useState(false);
+  // T5-W2 — 링크 스텝 로컬: oembed 조회 중 / 실패 안내(기존 문구 재사용 — 링고 발화 아님·캡션 표기).
+  const [dVideoBusy, setDVideoBusy] = useState(false);
+  const [dVideoErr, setDVideoErr] = useState<string | null>(null);
   // T5-W1a — KAMIS 품목 목록(폼 :312-315 동형 1회 로드 — 분류 후보·category_code 역참조 재료).
   const [dKamisList, setDKamisList] = useState<{ item_code: string; item_name: string; category_code: string }[]>([]);
   // T5-W1a — 가격 스텝 KAMIS 참고 1줄(생산자=신선 한정 · §0 락: 파트너 화면 전용 참고 — payload 무유출).
@@ -1001,7 +1012,8 @@ export function CardStudioPage({
   // 시작 — 게이트: 연락처(F6-3 문구 재사용 — 발행 게이트 선제) · 로그인은 _user 셸 보장.
   //   시작 1회 고지(start 멘트)가 초안(✦) 자동 반영의 명시 제스처(Duke 계약 갱신 승인분).
   function startDirector() {
-    if (!initialStore?.contact_phone?.trim()) {
+    // T5-W2 — 연락처 게이트는 커머스 전용(퍼블릭 = 일반회원 개방 — F5-3 정합 · 예약쿠폰 = 모드 게이트가 담당).
+    if (mode === "commerce" && !initialStore?.contact_phone?.trim()) {
       setSaveError("손님이 연락드릴 전화번호가 필요해요 — 파트너 정보에서 전화번호를 등록해 주세요.");
       return;
     }
@@ -1014,9 +1026,12 @@ export function CardStudioPage({
     setDUnitGrams(false);
     setDFeePaid(false);
     setDBandLine(null);
+    setDVideoErr(null);
     dCatalogHandledRef.current = false;
+    dLinkDoneRef.current = null;
     dSay(DIRECTOR_MENTS.start);
-    dGo("photo");
+    // T5-W2 — 모드별 첫 스텝: 커머스 = 사진 / 퍼블릭·예약쿠폰 = 영상 링크.
+    dGo(mode === "commerce" ? "photo" : "link");
   }
   // 사진 수신 → startCatalog 백그라운드 + 다음 스텝(effect — 업로드 파이프는 기존 핸들러 재사용).
   useEffect(() => {
@@ -1027,7 +1042,7 @@ export function CardStudioPage({
   }, [directorOn, dStep, productImageUrl]);
   // catalog 완료/실패 소비 — done = ✦ 자동 반영(명시 제스처 = 시작 고지 승인분) / error·quota = 폴백 멘트.
   useEffect(() => {
-    if (!directorOn || dCatalogHandledRef.current) return;
+    if (!directorOn || modeRef.current !== "commerce" || dCatalogHandledRef.current) return; // T5-W2 — 카탈로그 소비 = 커머스 전용.
     if (catStatus === "done" && catDraft) {
       dCatalogHandledRef.current = true;
       applyCatalogDraft(); // touch(product) 내장 = ✦ 표시.
@@ -1173,19 +1188,69 @@ export function CardStudioPage({
     setDText(String(DIRECTOR_DROPPY_RATE_DEFAULT));
     dGo("droppy");
   }
+  // T5-W2 — 영상 링크 제출: 기존 미니 지휘자 위 승차(oembed :3230 동형 조회 → DiscoverCandidate →
+  //   selectVideo 단일 합류점 — 제목 자동 승계·generate-summary 백그라운드 ✦ 전부 기존 사슬 소관).
+  async function submitDirectorLink() {
+    const raw = dText.trim();
+    const id = parseYouTubeId(raw);
+    if (!id || dVideoBusy) return;
+    setDVideoErr(null);
+    setDVideoBusy(true);
+    try {
+      const vUrl = `https://www.youtube.com/watch?v=${id}`;
+      const res = await fetch("/api/oembed?url=" + encodeURIComponent(vUrl));
+      const meta = (await res.json()) as {
+        title?: string | null;
+        author_name?: string | null;
+        thumbnail_url?: string | null;
+        duration_sec?: number | null;
+        message?: string;
+      };
+      if (!res.ok) {
+        setDVideoErr(meta.message ?? "영상 정보를 불러올 수 없어요. 링크를 확인해 주세요."); // 기존 문구 재사용(:3240).
+        return;
+      }
+      dEcho(raw);
+      setDText("");
+      void selectVideo({
+        provider: "youtube",
+        source_url: vUrl,
+        source_id: id,
+        canonical_url: vUrl,
+        title: meta.title ?? null,
+        thumbnail_url: meta.thumbnail_url ?? null,
+        author_name: meta.author_name ?? null,
+        duration_sec: meta.duration_sec ?? null,
+        raw_meta: {},
+      }); // 진행은 아래 selectedVideo 감시 effect(상태 커밋 후 프리체크 — stale 읽기 회피).
+    } catch {
+      setDVideoErr("지금 검색이 잘 안돼요 — 링크를 직접 붙여넣어 주세요."); // 기존 문구 재사용(:3255).
+    } finally {
+      setDVideoBusy(false);
+    }
+  }
+  // T5-W2 — 링크 스텝 진행 가드 ref(effect 본체는 selectedVideo 선언부 아래 — TDZ 회피 · :1793 인근).
+  const dLinkDoneRef = useRef<string | null>(null);
   // T5-W1a(D1) — 프리체크: done 선언 전 발행 게이트 판정 체인(:3906 publishGate 동일 순서) 자체 점검.
   //   미충족 = 해당 스텝 복귀(복귀 질문 = 그 스텝 멘트 정본 재제시 — 재량 작문 0).
   function finishDirector() {
-    const priceNum = Number(cfgProductPrice.replace(/[^0-9]/g, "")) || 0;
-    const back: DirectorStep | null = !productImageUrl
-      ? "photo"
-      : !cfgProductName.trim()
-        ? "name"
-        : priceNum <= 0
-          ? "price"
-          : !(applied["seasonal"] && saleStartIso && saleEndIso)
-            ? "period"
-            : null;
+    let back: DirectorStep | null = null;
+    if (mode === "commerce") {
+      const priceNum = Number(cfgProductPrice.replace(/[^0-9]/g, "")) || 0;
+      back = !productImageUrl
+        ? "photo"
+        : !cfgProductName.trim()
+          ? "name"
+          : priceNum <= 0
+            ? "price"
+            : !(applied["seasonal"] && saleStartIso && saleEndIso)
+              ? "period"
+              : null;
+    } else {
+      // T5-W2 — 퍼블릭·예약쿠폰 공통 기저: 발행 게이트(:4143 canPublish 비커머스 판정) 동일 문법 —
+      //   영상·제목(자동 승계 실패 포함) 미충족 = 링크 스텝 복귀(정본 멘트 재질문).
+      if (!selectedVideo || !(cfgTitle.trim().length > 0 || cfgProductName.trim().length > 0)) back = "link";
+    }
     if (back) {
       dGo(back);
       return;
@@ -1787,6 +1852,15 @@ export function CardStudioPage({
   const [videoSearched, setVideoSearched] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoSlot49 | null>(null);
+  // T5-W2 — 링크 스텝 진행(photo effect 동형 패턴): 영상 확정 "커밋 후" 프리체크(stale 읽기 회피).
+  //   videoId 1회 처리 가드 = 프리체크 복귀(같은 영상·제목 미충족) 시 재발화 루프 방지 — 새 링크만 재진행.
+  useEffect(() => {
+    if (!directorOn || dStep !== "link" || !selectedVideo) return;
+    if (dLinkDoneRef.current === selectedVideo.videoId) return;
+    dLinkDoneRef.current = selectedVideo.videoId;
+    finishDirector();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorOn, dStep, selectedVideo]);
   // UI-5-T7-F4a(F4-1) — 제목 자동 반영 추적: 자동 반영분(videoId+원문)을 기록해 "사용자 입력 위장"
   //   차단(실카드 2건 오염 원인 — 구 :2611 조건부 유지의 맹점). ref 불일치 = 수동/AI 작성 흔적.
   const titleAutoRef = useRef<{ videoId: string; title: string } | null>(null);
@@ -4531,8 +4605,9 @@ export function CardStudioPage({
           })}
         </div>
 
-        {/* UI-5-T7-T5-W1 — 제작시키기 입구(커머스 한정·비사업자 잠금 제외·지휘 중 미표시). */}
-        {mode === "commerce" && !businessLocked && !directorOn && (
+        {/* UI-5-T7-T5-W1 — 제작시키기 입구(지휘 중 미표시). T5-W2 — 퍼블릭 개방(일반회원 — F5-3 정합:
+            비사업자 잠금은 사업자 모드만). 예약쿠폰 입구는 W3에서 개방. */}
+        {(mode === "general" || (mode === "commerce" && !businessLocked)) && !directorOn && (
           <button
             type="button"
             onClick={startDirector}
@@ -6762,11 +6837,16 @@ export function CardStudioPage({
               <div className="flex min-w-0 flex-1 flex-wrap gap-x-2.5 gap-y-1">
                 {(() => {
                   // T5-W1a(v4) — 유효 순서(분기 반영 · shipfee 는 직접 전달 시 통과 스킵이라 지나가면 ✓).
+                  // T5-W2 — 모드별 순서·체크리스트 분기(퍼블릭 = 링크 1개 조립).
                   const isFreshType = cfgProduct.type === "fresh";
                   const branchStep: DirectorStep = isFreshType ? "harvest" : "shipnote";
-                  const order: DirectorStep[] = ["photo", "name", "type", "category", "origin", "unit", "price", "shipmethod", "shipfee", "droppy", "qty", "period", branchStep, "done"];
+                  const order: DirectorStep[] =
+                    mode === "commerce"
+                      ? ["photo", "name", "type", "category", "origin", "unit", "price", "shipmethod", "shipfee", "droppy", "qty", "period", branchStep, "done"]
+                      : ["link", "done"];
+                  const checks = mode === "commerce" ? DIRECTOR_CHECK : DIRECTOR_CHECK_GENERAL;
                   const cur = order.indexOf(dStep);
-                  return DIRECTOR_CHECK.map((c) => {
+                  return checks.map((c) => {
                     const label = c.key === "branch" ? (isFreshType ? "출하 기간" : "발송 안내") : c.label;
                     const idxs = c.steps.map((s) => order.indexOf(s)).filter((i) => i >= 0);
                     const doing = idxs.includes(cur);
@@ -6830,6 +6910,36 @@ export function CardStudioPage({
                   사진 올리기
                   <input type="file" accept="image/*" className="hidden" onChange={handleProductImageChange} />
                 </label>
+              )}
+              {/* T5-W2 — 영상 링크 입력(비커머스 첫 스텝 · 기존 미니 지휘자 합류점 경유). */}
+              {dStep === "link" && (
+                <div className="space-y-1.5">
+                  {dVideoErr && <p className="text-[11px] font-semibold text-[#DC2626]">{dVideoErr}</p>}
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={dText}
+                      onChange={(e) => setDText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                          e.preventDefault();
+                          void submitDirectorLink();
+                        }
+                      }}
+                      inputMode="url"
+                      placeholder="유튜브 링크 붙여넣기"
+                      className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void submitDirectorLink()}
+                      disabled={dVideoBusy || !parseYouTubeId(dText.trim())}
+                      className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                    >
+                      입력
+                    </button>
+                  </div>
+                </div>
               )}
               {(dStep === "name" || dStep === "origin" || dStep === "price" || dStep === "qty" || dStep === "droppy") && (
                 <div className="space-y-1.5">
