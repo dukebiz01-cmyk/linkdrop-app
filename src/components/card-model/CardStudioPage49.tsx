@@ -1053,12 +1053,9 @@ export function CardStudioPage({
   // T5-W1c(P1) — 프리셋 스켈레톤 장착분 추적: 시작 시 일괄 장착한 블록 중 아직 실값 미확정분.
   //   이탈(X) 시 이 집합 기준으로 빈 껍데기만 해제(실값 입력분 보존) — 실값 승격 차단(F5-5)과 정합.
   const dPresetRef = useRef<Set<string>>(new Set());
-  // T5-W5a — 모일수록 할인(gb): 확정분 3종 = 페이지 상태(E5b payload·역파싱 왕복 — 재편집 복원 대상).
-  //   dGbDraft = 지휘 편집 초안(확정 전 payload 무기록 — NUMBER_CRITICAL). 값 주입 없는 대화 스텝이라
-  //   W1c 스켈레톤 사슬과 무간섭(applied/블록 장착 무접촉).
-  const [gbEnabled, setGbEnabled] = useState(false);
-  const [gbTiers, setGbTiers] = useState<{ qty: number; price: number }[]>([]);
-  const [gbFailMode, setGbFailMode] = useState<"base" | "cancel" | null>(null);
+  // T5-W5a — 모일수록 할인(gb): 확정분 = cfgProduct.gb* 단일 소스(W5a+ (a) 이관 — 폼·지휘·payload·
+  //   역파싱 공유). dGbDraft = 지휘 편집 초안(확정 전 payload 무기록 — NUMBER_CRITICAL). 값 주입 없는
+  //   대화 스텝이라 W1c 스켈레톤 사슬과 무간섭(applied/블록 장착 무접촉).
   const [dGbDraft, setDGbDraft] = useState<{ qty: string; price: string }[]>([]);
   // T5-W1a — KAMIS 품목 목록(폼 :312-315 동형 1회 로드 — 분류 후보·category_code 역참조 재료).
   const [dKamisList, setDKamisList] = useState<{ item_code: string; item_name: string; category_code: string }[]>([]);
@@ -1351,17 +1348,17 @@ export function CardStudioPage({
   // T5-W5a — gbTiers 진입 시 초안 보장(프리체크 복귀 포함): 비면 확정분 → 제안 순 채움(편집 중이면 유지).
   useEffect(() => {
     if (!directorOn || dStep !== "gbTiers" || dGbDraft.length > 0) return;
+    const saved = cfgProduct.gbTiers ?? []; // W5a+ — 확정분 소스 = cfgProduct.gb*(단일 소스 이관).
     setDGbDraft(
-      gbTiers.length > 0 ? gbTiers.map((t) => ({ qty: String(t.qty), price: String(t.price) })) : buildGbProposal(),
+      saved.length > 0 ? saved.map((t) => ({ qty: String(t.qty), price: String(t.price) })) : buildGbProposal(),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directorOn, dStep]);
   function pickGbAsk(open: boolean) {
     dEcho(open ? "열게요" : "이번엔 안 열래요");
     if (!open) {
-      // 안 열래요 = gb 키 미기록 보장(현행 흐름 복귀).
-      setGbEnabled(false);
-      setGbFailMode(null);
+      // 안 열래요 = 3필드 초기화(undefined) — payload 키 미기록 보장(폼 OFF 전환과 대칭).
+      setCfgProduct((p) => ({ ...p, gbEnabled: undefined, gbTiers: undefined, gbFailMode: undefined }));
       dGo("period");
       return;
     }
@@ -1371,14 +1368,13 @@ export function CardStudioPage({
     const rows = parsedGbDraft();
     const stockN = Math.floor(Number(cfgProduct.quantity.replace(/[^0-9]/g, ""))) || 0;
     if (rows.length === 0 || rows.some((_, i) => gbRowInvalid(rows, i, stockN))) return;
-    // 확정 시점에만 기록(NUMBER_CRITICAL — 제안·편집값은 이 지점 전 payload 무접촉).
-    setGbTiers(rows);
-    setGbEnabled(true);
+    // 확정 시점에만 기록(NUMBER_CRITICAL — 제안·편집값은 이 지점 전 payload 무접촉). 기록처 = cfgProduct.gb*.
+    setCfgProduct((p) => ({ ...p, gbEnabled: true, gbTiers: rows }));
     dEcho("이대로");
     dGo("gbFail");
   }
   function pickGbFail(m: "base" | "cancel", label: string) {
-    setGbFailMode(m);
+    setCfgProduct((p) => ({ ...p, gbFailMode: m }));
     dEcho(label);
     dGo("period");
   }
@@ -1440,13 +1436,15 @@ export function CardStudioPage({
             : !(applied["seasonal"] && saleStartIso && saleEndIso)
               ? "period"
               : null;
-      // T5-W5a — gb 프리체크(열기 확정 시에만): 단계표 존재·유효성(양수·오름/내림·천장)·실패 모드 존재.
-      //   gb_min_qty 는 payload 에서 tiers[0].qty 파생이라 정합 자동 보장. 미충족 = 해당 스텝 복귀(정본 재질문).
-      if (!back && gbEnabled) {
+      // T5-W5a — gb 프리체크(열기 확정 시에만 · 소스 = cfgProduct.gb* — W5a+ 이관): 단계표 존재·유효성
+      //   (양수·오름/내림·천장)·실패 모드 존재. gb_min_qty 는 payload 에서 tiers[0].qty 파생이라 정합
+      //   자동 보장. 미충족 = 해당 스텝 복귀(정본 재질문).
+      if (!back && cfgProduct.gbEnabled === true) {
         const stockN = Math.floor(Number(cfgProduct.quantity.replace(/[^0-9]/g, ""))) || 0;
-        const tiersOk = gbTiers.length > 0 && gbTiers.every((_, i) => !gbRowInvalid(gbTiers, i, stockN));
+        const rows = cfgProduct.gbTiers ?? [];
+        const tiersOk = rows.length > 0 && rows.every((_, i) => !gbRowInvalid(rows, i, stockN));
         if (!tiersOk) back = "gbTiers";
-        else if (!gbFailMode) back = "gbFail";
+        else if (!cfgProduct.gbFailMode) back = "gbFail";
       }
     } else {
       // T5-W2 — 퍼블릭·예약쿠폰 공통 기저: 발행 게이트(:4143 canPublish 비커머스 판정) 동일 문법 —
@@ -1763,14 +1761,18 @@ export function CardStudioPage({
       //   수신 adapters ship_method 소비 기배선). "직접 전달" = 픽업형(배송지 게이트 면제).
       ...(cfgCourier ? { ship_method: cfgCourier } : {}),
       // T5-W5a — 모일수록 할인 additive 4키(ship_note/ship_method 선례 문법 — 미기록 = 수신 미렌더,
-      //   3면 안전 · 수신 소비는 W5b 소관). gb_min_qty = tiers[0].qty 파생(정합 보장). 마감 시각 =
-      //   기존 판매기간(sale_start/sale_end) 재사용 — 신규 키 없음. 미개설·미완성은 키 자체 미기록.
-      ...(gbEnabled && gbTiers.length > 0 && gbFailMode
+      //   3면 안전 · 수신 소비는 W5b 소관). 소스 = cfgProduct.gb*(W5a+ 단일 소스 — 폼·지휘 공용).
+      //   gb_min_qty = tiers[0].qty 파생(정합 보장). 마감 시각 = 기존 판매기간(sale_start/sale_end)
+      //   재사용 — 신규 키 없음. 미개설·미완성·유효성 위반은 키 자체 미기록(폼 저장 차단·프리체크가 1차 방어).
+      ...(p.gbEnabled === true &&
+      (p.gbTiers?.length ?? 0) > 0 &&
+      p.gbFailMode &&
+      p.gbTiers!.every((_, i) => !gbRowInvalid(p.gbTiers!, i, qty ?? 0))
         ? {
             gb_enabled: true,
-            gb_tiers: gbTiers,
-            gb_min_qty: gbTiers[0].qty,
-            gb_fail_mode: gbFailMode,
+            gb_tiers: p.gbTiers,
+            gb_min_qty: p.gbTiers![0].qty,
+            gb_fail_mode: p.gbFailMode,
           }
         : {}),
     };
@@ -1983,7 +1985,8 @@ export function CardStudioPage({
     }));
     // F5-8 — 발송 안내 왕복 정합: 저장분(ship_note) 복원(없으면 현행 유지 — 기본값 안 덮음).
     if (typeof bd.ship_note === "string" && bd.ship_note.trim()) setCfgShipEta(bd.ship_note);
-    // T5-W5a — gb 왕복 정합(:1873 관례 동형): 저장분 복원 · 없으면 초기화(타 상품 잔존값 오염 방지).
+    // T5-W5a — gb 왕복 정합(:1873 관례 동형 · W5a+ 이관: 복원 대상 = cfgProduct.gb*): 저장분 복원 ·
+    //   없으면 초기화(undefined — 타 상품 잔존값 오염 방지).
     const gbT = Array.isArray(bd.gb_tiers)
       ? (bd.gb_tiers as unknown[])
           .map((t) => {
@@ -1995,9 +1998,12 @@ export function CardStudioPage({
           })
           .filter((t) => t.qty > 0 && t.price > 0)
       : [];
-    setGbTiers(gbT);
-    setGbEnabled(bd.gb_enabled === true && gbT.length > 0);
-    setGbFailMode(bd.gb_fail_mode === "base" ? "base" : bd.gb_fail_mode === "cancel" ? "cancel" : null);
+    setCfgProduct((p) => ({
+      ...p,
+      gbEnabled: bd.gb_enabled === true && gbT.length > 0 ? true : undefined,
+      gbTiers: gbT.length > 0 ? gbT : undefined,
+      gbFailMode: bd.gb_fail_mode === "base" ? "base" : bd.gb_fail_mode === "cancel" ? "cancel" : undefined,
+    }));
     if (row.imageUrl) {
       // E5a 정합 — 재사용 = 기존 실 URL 재연결(업로드 아님 · 단일 소스 유지).
       setProductImageUrl(row.imageUrl);
@@ -5607,6 +5613,8 @@ export function CardStudioPage({
                   /* F5-8 — 발송 안내 = cfgShipEta 단일 소스(delivery 블록 '도착 예정'과 동일 상태). */
                   shipEta={cfgShipEta}
                   onShipEtaChange={setCfgShipEta}
+                  /* T5-W5a++ 마개 2 — 판매 기간 확정 신호(commerceSaleReady 동일식 — 최소 접촉 1 prop). */
+                  saleReady={!!applied["seasonal"] && !!saleStartIso && !!saleEndIso}
                   value={{ ...cfgProduct, name: cfgProductName, price: cfgProductPrice }}
                   onChange={(patch) => {
                     if (patch.name !== undefined) setCfgProductName(patch.name);

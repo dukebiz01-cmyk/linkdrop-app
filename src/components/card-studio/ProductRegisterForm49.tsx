@@ -48,6 +48,11 @@ export type ProductForm = {
   //   구조적 무유출). ProductForm 소속 = resetForMode 의 setCfgProduct(EMPTY_PRODUCT) 리셋 자동 편입.
   packCost: string; // 포장비(원) — 박스·아이스팩 등
   miscCost: string; // 기타비용(원) — 수수료 등
+  // T5-W5a+ — 모일수록 할인(공동구매) optional 3필드: 미개설 = undefined = payload 키 미기록
+  //   (additive 계약 — E5b 빌더·역파싱·지휘 3스텝과 단일 소스, W5a+ (a) 최소 접촉안).
+  gbEnabled?: boolean;
+  gbTiers?: { qty: number; price: number }[];
+  gbFailMode?: "base" | "cancel";
 };
 
 export const EMPTY_PRODUCT: ProductForm = {
@@ -234,6 +239,7 @@ export function ProductRegisterForm({
   registerSaving,
   registerError,
   registeredName,
+  saleReady,
   onAiWrite,
   aiWriting,
   onAiSuggestPoints,
@@ -251,6 +257,8 @@ export function ProductRegisterForm({
    *  (delivery 블록 '도착 예정'·미리보기 배송정보 shipNote 와 동일 상태 — 신규 값 상태 0). */
   shipEta?: string;
   onShipEtaChange?: (v: string) => void;
+  /** T5-W5a++ 마개 2 — 판매 기간 확정 여부(페이지 commerceSaleReady 동일식 전달 — 폼은 존재 검사·안내만). */
+  saleReady?: boolean;
   /** UI-5-T2-E5a — 상품 사진 = 스텝 1 단일 입구. 폼은 표시 전용(업로드 경로 0). */
   photoUrl?: string;
   onEditPhoto?: () => void;
@@ -434,6 +442,46 @@ export function ProductRegisterForm({
   const [categoryNotice, setCategoryNotice] = useState(false);
   const categoryNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const CATEGORY_PENDING_MSG = "품목 이름을 입력하면 후보를 찾아드려요";
+  // ── T5-W5a+/W5a++ — 모일수록 할인(공동구매) ─────────────────────────────
+  //   값 흐름 = onChange(controlled)만 · 단일 판매(기본)/미완성 = undefined = payload 미기록(additive).
+  //   W5a++ F1 — 제안 불가 원인별 안내(가격/수량 미입력 · 확정 문구 2종만).
+  const [gbHint, setGbHint] = useState<"price" | "qty" | null>(null);
+  const gbStockN = Math.floor(Number(onlyDigits(value.quantity))) || 0;
+  const gbRows = value.gbTiers ?? [];
+  // 행별 유효성(W5a 지휘 동일 3규칙 — 데이터 층 무변): 양수 · qty 순오름차순 · price 순내림차순 · 마지막 qty ≤ 수량.
+  const gbRowBad = (i: number): boolean => {
+    const r = gbRows[i];
+    if (!r || r.qty <= 0 || r.price <= 0) return true;
+    if (i > 0 && (r.qty <= gbRows[i - 1].qty || r.price >= gbRows[i - 1].price)) return true;
+    if (i === gbRows.length - 1 && gbStockN > 0 && r.qty > gbStockN) return true;
+    return false;
+  };
+  const gbTiersOk = gbRows.length > 0 && !gbRows.some((_, i) => gbRowBad(i));
+  // W5a++ 마개 2 — 모일수록 선택 시 필수 승격: 가격·수량·판매 기간(saleReady — 페이지 소관 값은 존재
+  //   검사만) 미충족도 [상품 등록하기] 차단에 편입.
+  const gbBlocked =
+    value.gbEnabled === true &&
+    (!gbTiersOk ||
+      !value.gbFailMode ||
+      !(Number(onlyDigits(value.price)) > 0) ||
+      gbStockN <= 0 ||
+      !saleReady);
+  // W5a++ 마개 1 — 이익 계산 최저 단계 병기 재료: 최저가 = 마지막 행(price 내림차순 정본) · 시나리오 =
+  //   기존 profitOf 재사용(가격만 최저가로 치환 — 계산 로직 무수정, 공유 보상 반영 방식 자동 동일).
+  const gbMinPrice = value.gbEnabled === true && gbTiersOk ? gbRows[gbRows.length - 1].price : null;
+  // 단계표 제안 산식([결정적 — AI 생성 숫자 아님] · W5a 지휘와 동일): 임계 후보 [3,10,20,30,50,100]
+  //   중 수량 이하만 채택(사다리 천장) · 앞에서부터 최대 4단계(후보 0 = 수량 단일 폴백) ·
+  //   가격 = 기본가 × (1 − 0.07×단계차수) 백원 단위 절사(단계당 7% 체감 · 하한 100원). 확정은 사장님.
+  const buildGbProposal = (): { qty: number; price: number }[] => {
+    const base = Number(onlyDigits(value.price)) || 0;
+    if (base <= 0 || gbStockN <= 0) return [];
+    const cands = [3, 10, 20, 30, 50, 100].filter((q) => q <= gbStockN).slice(0, 4);
+    const qtys = cands.length > 0 ? cands : [gbStockN];
+    return qtys.map((q, i) => ({
+      qty: q,
+      price: Math.max(100, Math.floor((base * (1 - 0.07 * (i + 1))) / 100) * 100),
+    }));
+  };
   const notifyCategoryHint = () => {
     // E5b — KAMIS 매칭 해제(F2-C 준비 중 → 실기능): 버튼 = 매칭 열기 + 입력 유도 안내.
     setKamisOpen(true);
@@ -929,6 +977,49 @@ export function ProductRegisterForm({
       )}
 
       {/* 가격 */}
+      {/* T5-W5a++ — 판매 방식 입구(가격 직전 · 카드형 2택): 기본 = 단일 판매(gbEnabled undefined —
+          현행 카드·재편집 하위호환 자동, gb 저장 카드 재편집 = 역파싱 gbEnabled true 로 자동 선택 복원).
+          모일수록 부제 = W5a 정본 재사용. 단일 전환 = 3필드 undefined 초기화(기존 OFF 로직 재사용). */}
+      <Field label="판매 방식">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            aria-pressed={value.gbEnabled !== true}
+            onClick={() => {
+              setGbHint(null);
+              onChange({ gbEnabled: undefined, gbTiers: undefined, gbFailMode: undefined });
+            }}
+            className="flex flex-col items-start rounded-xl border p-3 text-left transition-all active:scale-[0.98]"
+            style={
+              value.gbEnabled !== true
+                ? { borderColor: accent, backgroundColor: "#EEF3FE", boxShadow: `inset 0 0 0 1px ${accent}` }
+                : { borderColor: "#E8E8EC", backgroundColor: "#fff" }
+            }
+          >
+            <span className="text-[13px] font-bold text-[#0A0A0A]">단일 판매</span>
+            <span className="mt-0.5 text-[10.5px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+              정해진 가격 그대로
+            </span>
+          </button>
+          <button
+            type="button"
+            aria-pressed={value.gbEnabled === true}
+            onClick={() => set("gbEnabled", true)}
+            className="flex flex-col items-start rounded-xl border p-3 text-left transition-all active:scale-[0.98]"
+            style={
+              value.gbEnabled === true
+                ? { borderColor: accent, backgroundColor: "#EEF3FE", boxShadow: `inset 0 0 0 1px ${accent}` }
+                : { borderColor: "#E8E8EC", backgroundColor: "#fff" }
+            }
+          >
+            <span className="text-[13px] font-bold text-[#0A0A0A]">모일수록 할인</span>
+            <span className="mt-0.5 text-[10.5px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+              여러 분이 모일수록 가격이 내려가는 판매 방식입니다
+            </span>
+          </button>
+        </div>
+      </Field>
+
       <Field label="가격" required>
         <div
           className="flex items-center rounded-xl bg-[#F4F4F5] px-3 focus-within:bg-white"
@@ -948,6 +1039,134 @@ export function ProductRegisterForm({
         {/* F3-1b(2) — 이익 계산 카드는 공유 보상·예정 할인·수량 아래로 이동(읽기 순서: 비용 확정 → 최종 이익).
             카드 자체에 앵커/코치마커 참조 없음(grep 0) — 이동 회귀 0. */}
       </Field>
+
+      {/* 판매 수량 — W5a++ 마개 2: 모일수록 선택 시 필수 승격(마커 동적 · 단일 판매 = 현행 그대로). */}
+      <Field
+        label="몇 개나 판매하시겠어요?"
+        required={value.gbEnabled === true}
+        hint={value.gbEnabled === true ? undefined : "선택 · 한정 수량"}
+      >
+        <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
+          <input
+            value={value.quantity}
+            onChange={(e) => set("quantity", onlyDigits(e.target.value))}
+            inputMode="numeric"
+            placeholder="예: 30"
+            className="w-full bg-transparent px-1 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+          />
+          <span className="text-[13px] font-semibold text-[#8A8A8A]">개</span>
+        </div>
+      </Field>
+
+
+      {/* T5-W5a++F2 — gb 펼침(수량 직후 · 기간 배너 포함): 블록 이동만 — 내부 마크업·로직 무수정. */}
+        {value.gbEnabled === true && (
+          <div className="mt-2 space-y-2">
+            <div className="flex items-center gap-1.5">
+              {/* "제안" 라벨 명시 — 값 확정은 사장님 입력(NUMBER_CRITICAL · 산식 = 컴포넌트 상단 주석). */}
+              <span className="inline-flex items-center rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                제안
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  // W5a++ F1 — 빈 결과 = set 생략(기존 행 보존 · 파괴적 교체 봉합) + 원인별 안내.
+                  const rows = buildGbProposal();
+                  if (rows.length === 0) {
+                    setGbHint(Number(onlyDigits(value.price)) > 0 ? "qty" : "price");
+                    return;
+                  }
+                  setGbHint(null);
+                  set("gbTiers", rows);
+                }}
+                className="flex min-h-[36px] items-center rounded-lg bg-[#F4F4F5] px-3 text-[11.5px] font-bold text-[#525252] transition-colors active:bg-[#ECECEC]"
+              >
+                단계표 제안 받기
+              </button>
+            </div>
+            {gbHint && (
+              <p className="rounded-xl bg-[#FEF2F2] px-3 py-2 text-[12px] font-semibold text-[#DC2626] [word-break:keep-all]">
+                {gbHint === "price" ? "판매 가격을 먼저 입력해 주세요" : "판매 수량을 먼저 입력해 주세요"}
+              </p>
+            )}
+            {gbRows.map((r, i) => (
+              <div
+                key={i}
+                className={`flex items-center gap-2 rounded-xl bg-[#F4F4F5] p-2 ${gbRowBad(i) ? "ring-1 ring-inset ring-[#DC2626]" : ""}`}
+              >
+                <input
+                  value={r.qty > 0 ? String(r.qty) : ""}
+                  inputMode="numeric"
+                  onChange={(e) =>
+                    set(
+                      "gbTiers",
+                      gbRows.map((x, j) => (j === i ? { ...x, qty: Number(onlyDigits(e.target.value)) || 0 } : x)),
+                    )
+                  }
+                  className="h-10 w-0 min-w-0 flex-1 rounded-lg bg-white px-2 text-center text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none"
+                  style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                />
+                <span className="shrink-0 text-[11px] font-semibold text-[#8A8A8A]">개</span>
+                <input
+                  value={r.price > 0 ? String(r.price) : ""}
+                  inputMode="numeric"
+                  onChange={(e) =>
+                    set(
+                      "gbTiers",
+                      gbRows.map((x, j) => (j === i ? { ...x, price: Number(onlyDigits(e.target.value)) || 0 } : x)),
+                    )
+                  }
+                  className="h-10 w-0 min-w-0 flex-[1.6] rounded-lg bg-white px-2 text-center text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none"
+                  style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                />
+                <span className="shrink-0 text-[11px] font-semibold text-[#8A8A8A]">원</span>
+                <button
+                  type="button"
+                  aria-label="행 삭제"
+                  onClick={() => set("gbTiers", gbRows.filter((_, j) => j !== i))}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[#8A8A8A] active:bg-[#ECECEC]"
+                >
+                  <X className="h-4 w-4" strokeWidth={2.25} />
+                </button>
+              </div>
+            ))}
+            {gbRows.length < 6 && (
+              <button
+                type="button"
+                aria-label="행 추가"
+                onClick={() => set("gbTiers", [...gbRows, { qty: 0, price: 0 }])}
+                className="flex min-h-[36px] w-full items-center justify-center gap-1 rounded-xl border border-dashed border-[#D4D4D4] text-[11.5px] font-bold text-[#8A8A8A] active:bg-[#F5F5F5]"
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />행 추가
+              </button>
+            )}
+            {/* W5a++ 마개 3 — 취소 역전 고지(정본 확정). */}
+            <p className="flex items-start gap-1 text-[10.5px] leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+              <Info className="mt-0.5 h-3 w-3 flex-none" strokeWidth={2.25} />
+              참여 취소가 나와도 이미 내려간 가격은 유지됩니다.
+            </p>
+            {/* 미달 처리(필수) — 고지 = W5a gbFail 정본 문안 그대로. */}
+            <p className="flex items-start gap-1 text-[10.5px] leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+              <Info className="mt-0.5 h-3 w-3 flex-none" strokeWidth={2.25} />
+              목표 수량이 안 모이면 어떻게 할지 정해주세요. 카드에 그대로 안내됩니다.
+            </p>
+            <Segmented
+              options={[
+                { id: "base", label: "기본가로 정산" },
+                { id: "cancel", label: "자동 취소" },
+              ]}
+              value={(value.gbFailMode ?? "") as "base" | "cancel"}
+              onSelect={(id) => set("gbFailMode", id)}
+              accent={accent}
+            />
+            {/* 마개 2 — 판매 기간 필수(페이지 소관 값 = 존재 검사·안내만, 문구 = 발행 게이트 기존 문구 재사용). */}
+            {!saleReady && (
+              <p className="rounded-xl bg-[#FEF2F2] px-3 py-2 text-[12px] font-semibold text-[#DC2626] [word-break:keep-all]">
+                판매 기간을 정해 주세요
+              </p>
+            )}
+          </div>
+        )}
 
       {/* 배송 */}
       <Field label="배송">
@@ -1078,20 +1297,6 @@ export function ProductRegisterForm({
         </p>
       </Field>
 
-      {/* 판매 수량 */}
-      <Field label="몇 개나 판매하시겠어요?" hint="선택 · 한정 수량">
-        <div className="flex items-center rounded-xl bg-[#F4F4F5] px-3">
-          <input
-            value={value.quantity}
-            onChange={(e) => set("quantity", onlyDigits(e.target.value))}
-            inputMode="numeric"
-            placeholder="예: 30"
-            className="w-full bg-transparent px-1 py-2.5 text-[13px] font-bold tabular-nums text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
-          />
-          <span className="text-[13px] font-semibold text-[#8A8A8A]">개</span>
-        </div>
-      </Field>
-
       {/* UI-5-T5-F3-1b — 이익 계산 완전판: 배송·공유 보상·예정 할인·수량 아래 배치(비용 확정 → 최종 이익
           읽기 순서 — 위 배치는 아래 값을 참조하는 역방향 시선이라 흑자 오표시 혼란의 근원). 원가 +
           포장비/기타 2칸(대표님 입력만·저장 안 함) + 드로피 할인(쿠폰 자동)·공유 보상·예정 할인 자동 행
@@ -1219,6 +1424,22 @@ export function ProductRegisterForm({
                 <span>{profit.regular.toLocaleString()}원</span>
               </p>
             )}
+            {/* W5a++ 마개 1 — 최저 단계 시나리오 병기: 계산 = 기존 profitOf 재사용(가격만 최저가 치환 —
+                로직 무수정 · 공유 보상 반영 방식 자동 동일). 적자 = 기존 색 관례(#EF4444). */}
+            {(() => {
+              if (gbMinPrice == null) return null;
+              const sc = profitOf({ ...value, price: String(gbMinPrice) }, couponDiscountKrw);
+              if (sc === null) return null;
+              return (
+                <p
+                  className="flex justify-between text-[11.5px] font-bold"
+                  style={{ color: sc.regular > 0 ? accent : "#EF4444" }}
+                >
+                  <span>최저 단계(전원 {gbMinPrice.toLocaleString()}원 정산) 기준</span>
+                  <span>{sc.regular.toLocaleString()}원</span>
+                </p>
+              );
+            })()}
             {/* F3-1b(3) — 적자 경고: 최종 이익(할인 있으면 할인 이익) ≤ 0 — 적자 줄은 위 색으로 이미 지목. */}
             {(profit.discounted ?? profit.regular) <= 0 && (
               <p className="text-[11px] font-semibold text-[#EF4444] [word-break:keep-all]">
@@ -1401,7 +1622,7 @@ export function ProductRegisterForm({
           <button
             type="button"
             onClick={onRegister}
-            disabled={registerSaving}
+            disabled={registerSaving || gbBlocked} /* T5-W5a+ — gb 유효성 위반/미완성 = 저장 차단. */
             className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-xl text-[14px] font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-50"
             style={{ backgroundColor: accent }}
           >
