@@ -576,6 +576,10 @@ const DIRECTOR_MENTS = {
   shipfee: "배송비는 어떻게 하시겠어요? 무료배송은 사장님 부담, 별도는 구매자 부담으로 카드에 안내됩니다.",
   droppy: "공유 보상을 정해주세요. 카드를 전달한 분께 판매 성사 시 분배되는 몫입니다. 추천값을 제안해 드리니 확정만 해주세요.",
   qty: "준비하실 수량을 알려주세요. 수량만큼만 주문을 받습니다.",
+  // T5-W5a — 모일수록 할인 멘트 정본(Duke 확정 · 재량 작문 금지). 단계표 숫자 = 결정적 산식(AI 생성 아님).
+  gbAsk: "모일수록 할인을 여시겠어요? 여러 분이 모일수록 가격이 내려가는 판매 방식입니다.",
+  gbTiers: "단계표를 제안해 드릴 테니 금액은 직접 확정해 주세요.",
+  gbFail: "목표 수량이 안 모이면 어떻게 할지 정해주세요. 카드에 그대로 안내됩니다.",
   period: "판매 기간을 정해주세요. 기간이 지나면 주문이 자동으로 마감됩니다.",
   // T5-W1a(D3) — 단일일 → 기간 교체분(정본). "순차 발송" 표기는 기존 정본 사슬(:1186
   //   date_range_label → CardModelBody 칩)이 담당 — 멘트도 발송 어휘로 일치.
@@ -602,6 +606,10 @@ type DirectorStep =
   | "shipfee"
   | "droppy"
   | "qty"
+  // T5-W5a — 모일수록 할인 분기(수량 확정 직후 · 커머스 지휘 전용 사슬).
+  | "gbAsk"
+  | "gbTiers"
+  | "gbFail"
   | "period"
   | "harvest"
   | "shipnote"
@@ -655,6 +663,9 @@ const DIRECTOR_STEP_BLOCK: Partial<Record<DirectorStep, string>> = {
   shipfee: "delivery",
   droppy: "product",
   qty: "product",
+  gbAsk: "product",
+  gbTiers: "product",
+  gbFail: "product",
   period: "seasonal",
   harvest: "seasonal",
   shipnote: "delivery",
@@ -1042,6 +1053,13 @@ export function CardStudioPage({
   // T5-W1c(P1) — 프리셋 스켈레톤 장착분 추적: 시작 시 일괄 장착한 블록 중 아직 실값 미확정분.
   //   이탈(X) 시 이 집합 기준으로 빈 껍데기만 해제(실값 입력분 보존) — 실값 승격 차단(F5-5)과 정합.
   const dPresetRef = useRef<Set<string>>(new Set());
+  // T5-W5a — 모일수록 할인(gb): 확정분 3종 = 페이지 상태(E5b payload·역파싱 왕복 — 재편집 복원 대상).
+  //   dGbDraft = 지휘 편집 초안(확정 전 payload 무기록 — NUMBER_CRITICAL). 값 주입 없는 대화 스텝이라
+  //   W1c 스켈레톤 사슬과 무간섭(applied/블록 장착 무접촉).
+  const [gbEnabled, setGbEnabled] = useState(false);
+  const [gbTiers, setGbTiers] = useState<{ qty: number; price: number }[]>([]);
+  const [gbFailMode, setGbFailMode] = useState<"base" | "cancel" | null>(null);
+  const [dGbDraft, setDGbDraft] = useState<{ qty: string; price: string }[]>([]);
   // T5-W1a — KAMIS 품목 목록(폼 :312-315 동형 1회 로드 — 분류 후보·category_code 역참조 재료).
   const [dKamisList, setDKamisList] = useState<{ item_code: string; item_name: string; category_code: string }[]>([]);
   // T5-W1a — 가격 스텝 KAMIS 참고 1줄(생산자=신선 한정 · §0 락: 파트너 화면 전용 참고 — payload 무유출).
@@ -1075,6 +1093,7 @@ export function CardStudioPage({
     setDBandLine(null);
     setDVideoErr(null);
     setDReserveYes(false);
+    setDGbDraft([]); // W5a — 초안 리셋(확정분 gbTiers 는 페이지 상태로 유지 — 재진입 시 재편집 기반).
     dCatalogHandledRef.current = false;
     dLinkDoneRef.current = null;
     // T5-W1c(P1) — 커머스 기본 패키지 일괄 장착(MODE_MAIN 구성 그대로): 시작 화면 = 완성 카드의
@@ -1300,6 +1319,69 @@ export function CardStudioPage({
     setDText(String(DIRECTOR_DROPPY_RATE_DEFAULT));
     dGo("droppy");
   }
+  // T5-W5a — 단계표 제안 산식([결정적 — AI 생성 숫자 아님]): 임계 후보 [3,10,20,30,50,100] 중
+  //   stock_limit 이하만 채택(사다리 천장 — 초과 임계는 제안 자체 제외) · 앞에서부터 최대 4단계
+  //   (후보 0개 = stock_limit 단일 단계 폴백). 가격 = 기본가 × (1 − 0.07×단계차수)를 백원 단위
+  //   절사(단계당 7% 체감 — 지시 범위 5~10% 내 고정값 · 하한 100원). 제안일 뿐 — 확정은 사장님.
+  function buildGbProposal(): { qty: string; price: string }[] {
+    const base = Number(cfgProductPrice.replace(/[^0-9]/g, "")) || 0;
+    const stockN = Math.floor(Number(cfgProduct.quantity.replace(/[^0-9]/g, ""))) || 0;
+    if (base <= 0 || stockN <= 0) return [];
+    const cands = [3, 10, 20, 30, 50, 100].filter((q) => q <= stockN).slice(0, 4);
+    const qtys = cands.length > 0 ? cands : [stockN];
+    return qtys.map((q, i) => ({
+      qty: String(q),
+      price: String(Math.max(100, Math.floor((base * (1 - 0.07 * (i + 1))) / 100) * 100)),
+    }));
+  }
+  // 행별 유효성: 양수 · qty 순오름차순 · price 순내림차순 · 마지막 qty ≤ stock_limit(사다리 천장).
+  function gbRowInvalid(rows: { qty: number; price: number }[], i: number, stockN: number): boolean {
+    const r = rows[i];
+    if (!r || r.qty <= 0 || r.price <= 0) return true;
+    if (i > 0 && (r.qty <= rows[i - 1].qty || r.price >= rows[i - 1].price)) return true;
+    if (i === rows.length - 1 && stockN > 0 && r.qty > stockN) return true;
+    return false;
+  }
+  function parsedGbDraft(): { qty: number; price: number }[] {
+    return dGbDraft.map((r) => ({
+      qty: Math.floor(Number(r.qty.replace(/[^0-9]/g, ""))) || 0,
+      price: Math.floor(Number(r.price.replace(/[^0-9]/g, ""))) || 0,
+    }));
+  }
+  // T5-W5a — gbTiers 진입 시 초안 보장(프리체크 복귀 포함): 비면 확정분 → 제안 순 채움(편집 중이면 유지).
+  useEffect(() => {
+    if (!directorOn || dStep !== "gbTiers" || dGbDraft.length > 0) return;
+    setDGbDraft(
+      gbTiers.length > 0 ? gbTiers.map((t) => ({ qty: String(t.qty), price: String(t.price) })) : buildGbProposal(),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorOn, dStep]);
+  function pickGbAsk(open: boolean) {
+    dEcho(open ? "열게요" : "이번엔 안 열래요");
+    if (!open) {
+      // 안 열래요 = gb 키 미기록 보장(현행 흐름 복귀).
+      setGbEnabled(false);
+      setGbFailMode(null);
+      dGo("period");
+      return;
+    }
+    dGo("gbTiers"); // 초안은 위 effect가 보장(확정분 있으면 재편집).
+  }
+  function confirmGbTiers() {
+    const rows = parsedGbDraft();
+    const stockN = Math.floor(Number(cfgProduct.quantity.replace(/[^0-9]/g, ""))) || 0;
+    if (rows.length === 0 || rows.some((_, i) => gbRowInvalid(rows, i, stockN))) return;
+    // 확정 시점에만 기록(NUMBER_CRITICAL — 제안·편집값은 이 지점 전 payload 무접촉).
+    setGbTiers(rows);
+    setGbEnabled(true);
+    dEcho("이대로");
+    dGo("gbFail");
+  }
+  function pickGbFail(m: "base" | "cancel", label: string) {
+    setGbFailMode(m);
+    dEcho(label);
+    dGo("period");
+  }
   // T5-W2 — 영상 링크 제출: 기존 미니 지휘자 위 승차(oembed :3230 동형 조회 → DiscoverCandidate →
   //   selectVideo 단일 합류점 — 제목 자동 승계·generate-summary 백그라운드 ✦ 전부 기존 사슬 소관).
   async function submitDirectorLink() {
@@ -1358,6 +1440,14 @@ export function CardStudioPage({
             : !(applied["seasonal"] && saleStartIso && saleEndIso)
               ? "period"
               : null;
+      // T5-W5a — gb 프리체크(열기 확정 시에만): 단계표 존재·유효성(양수·오름/내림·천장)·실패 모드 존재.
+      //   gb_min_qty 는 payload 에서 tiers[0].qty 파생이라 정합 자동 보장. 미충족 = 해당 스텝 복귀(정본 재질문).
+      if (!back && gbEnabled) {
+        const stockN = Math.floor(Number(cfgProduct.quantity.replace(/[^0-9]/g, ""))) || 0;
+        const tiersOk = gbTiers.length > 0 && gbTiers.every((_, i) => !gbRowInvalid(gbTiers, i, stockN));
+        if (!tiersOk) back = "gbTiers";
+        else if (!gbFailMode) back = "gbFail";
+      }
     } else {
       // T5-W2 — 퍼블릭·예약쿠폰 공통 기저: 발행 게이트(:4143 canPublish 비커머스 판정) 동일 문법 —
       //   영상·제목(자동 승계 실패 포함) 미충족 = 링크 스텝 복귀(정본 멘트 재질문).
@@ -1437,9 +1527,9 @@ export function CardStudioPage({
       setCfgProduct((p) => ({ ...p, quantity: digits }));
       dEcho(v);
       setDText("");
-      // [T5-W5 훅 자리 — 모일수록 할인 분기(성장설계 §2): 수량 확정 직후 단계표 제안 삽입 지점.
-      //   이번(W1)은 미노출 — 예약 W5 에서 이 지점에 분기 UI 배선.]
-      dGo("period");
+      // T5-W5a — W5 훅 배선(성장설계 §2): 수량 확정 직후 모일수록 분기 제안. qty 스텝 자체가
+      //   커머스 지휘 전용 사슬이라 타 목적(퍼블릭·예약쿠폰) 무접촉.
+      dGo("gbAsk");
     }
   }
   // T5-W1a — 유형 3분기(실폼 TYPE_OPTIONS 정합: 신선식품/가공식품/공산품·잡화) + productKind 동기
@@ -1672,6 +1762,17 @@ export function CardStudioPage({
       // T5-W1 — 배송 방식 편입(F6-4 서버 게이트 v7.12 의 판정 재료 = block_data.ship_method ·
       //   수신 adapters ship_method 소비 기배선). "직접 전달" = 픽업형(배송지 게이트 면제).
       ...(cfgCourier ? { ship_method: cfgCourier } : {}),
+      // T5-W5a — 모일수록 할인 additive 4키(ship_note/ship_method 선례 문법 — 미기록 = 수신 미렌더,
+      //   3면 안전 · 수신 소비는 W5b 소관). gb_min_qty = tiers[0].qty 파생(정합 보장). 마감 시각 =
+      //   기존 판매기간(sale_start/sale_end) 재사용 — 신규 키 없음. 미개설·미완성은 키 자체 미기록.
+      ...(gbEnabled && gbTiers.length > 0 && gbFailMode
+        ? {
+            gb_enabled: true,
+            gb_tiers: gbTiers,
+            gb_min_qty: gbTiers[0].qty,
+            gb_fail_mode: gbFailMode,
+          }
+        : {}),
     };
     setProductSaving(true);
     setProductSaveError(null);
@@ -1882,6 +1983,21 @@ export function CardStudioPage({
     }));
     // F5-8 — 발송 안내 왕복 정합: 저장분(ship_note) 복원(없으면 현행 유지 — 기본값 안 덮음).
     if (typeof bd.ship_note === "string" && bd.ship_note.trim()) setCfgShipEta(bd.ship_note);
+    // T5-W5a — gb 왕복 정합(:1873 관례 동형): 저장분 복원 · 없으면 초기화(타 상품 잔존값 오염 방지).
+    const gbT = Array.isArray(bd.gb_tiers)
+      ? (bd.gb_tiers as unknown[])
+          .map((t) => {
+            const o = (t ?? {}) as { qty?: unknown; price?: unknown };
+            return {
+              qty: typeof o.qty === "number" ? Math.floor(o.qty) : 0,
+              price: typeof o.price === "number" ? Math.floor(o.price) : 0,
+            };
+          })
+          .filter((t) => t.qty > 0 && t.price > 0)
+      : [];
+    setGbTiers(gbT);
+    setGbEnabled(bd.gb_enabled === true && gbT.length > 0);
+    setGbFailMode(bd.gb_fail_mode === "base" ? "base" : bd.gb_fail_mode === "cancel" ? "cancel" : null);
     if (row.imageUrl) {
       // E5a 정합 — 재사용 = 기존 실 URL 재연결(업로드 아님 · 단일 소스 유지).
       setProductImageUrl(row.imageUrl);
@@ -7010,7 +7126,7 @@ export function CardStudioPage({
                   const branchStep: DirectorStep = isFreshType ? "harvest" : "shipnote";
                   const order: DirectorStep[] =
                     mode === "commerce"
-                      ? ["photo", "name", "type", "category", "origin", "unit", "price", "shipmethod", "shipfee", "droppy", "qty", "period", branchStep, "done"]
+                      ? ["photo", "name", "type", "category", "origin", "unit", "price", "shipmethod", "shipfee", "droppy", "qty", "gbAsk", "gbTiers", "gbFail", "period", branchStep, "done"]
                       : mode === "reserve"
                         ? ["link", "coupon", "reserveAsk", "calendar", "done"]
                         : ["link", "done"];
@@ -7393,6 +7509,73 @@ export function CardStudioPage({
                   </button>
                   <button type="button" onClick={() => pickDirectorType("goods", "공산품·잡화")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
                     공산품·잡화
+                  </button>
+                </div>
+              )}
+              {/* T5-W5a — 모일수록 분기(정본 라벨 외 문구 0 · 값 주입 없는 대화 스텝 — 확정 전 payload 무기록). */}
+              {dStep === "gbAsk" && (
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => pickGbAsk(true)} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white active:scale-[0.98]">
+                    열게요
+                  </button>
+                  <button type="button" onClick={() => pickGbAsk(false)} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
+                    이번엔 안 열래요
+                  </button>
+                </div>
+              )}
+              {dStep === "gbTiers" &&
+                (() => {
+                  const rows = parsedGbDraft();
+                  const stockN = Math.floor(Number(cfgProduct.quantity.replace(/[^0-9]/g, ""))) || 0;
+                  const anyInvalid = rows.length === 0 || rows.some((_, i) => gbRowInvalid(rows, i, stockN));
+                  return (
+                    <div className="space-y-2">
+                      {/* "제안" 라벨 명시 — 확정 전 표시 전용(payload 무기록). */}
+                      <span className="inline-flex items-center rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                        제안
+                      </span>
+                      {dGbDraft.map((r, i) => {
+                        const bad = gbRowInvalid(rows, i, stockN);
+                        return (
+                          <div
+                            key={i}
+                            className={`flex items-center gap-2 rounded-xl bg-[#F4F4F5] p-2 ${bad ? "ring-1 ring-inset ring-[#DC2626]" : ""}`}
+                          >
+                            <input
+                              value={r.qty}
+                              inputMode="numeric"
+                              onChange={(e) => setDGbDraft((d) => d.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))}
+                              className="h-10 w-0 min-w-0 flex-1 rounded-lg bg-white px-2 text-center text-[13px] font-semibold text-[#0A0A0A] outline-none"
+                              style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                            />
+                            <input
+                              value={r.price}
+                              inputMode="numeric"
+                              onChange={(e) => setDGbDraft((d) => d.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)))}
+                              className="h-10 w-0 min-w-0 flex-[1.6] rounded-lg bg-white px-2 text-center text-[13px] font-semibold tabular-nums text-[#0A0A0A] outline-none"
+                              style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                            />
+                          </div>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={confirmGbTiers}
+                        disabled={anyInvalid}
+                        className="flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-[#1D4ED8] text-[14px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                      >
+                        이대로
+                      </button>
+                    </div>
+                  );
+                })()}
+              {dStep === "gbFail" && (
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => pickGbFail("base", "기본가로 정산")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white active:scale-[0.98]">
+                    기본가로 정산
+                  </button>
+                  <button type="button" onClick={() => pickGbFail("cancel", "자동 취소")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
+                    자동 취소
                   </button>
                 </div>
               )}
