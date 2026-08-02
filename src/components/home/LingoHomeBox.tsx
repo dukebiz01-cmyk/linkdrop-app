@@ -224,7 +224,10 @@ export function LingoHomeBox({
   //   발화(+낭독) → 실카드 새 창 → 후속 발화 + [같이 만들어 볼래요] 칩(기존 렌더 구조 재사용).
   const [demoFollowChip, setDemoFollowChip] = useState(false);
   const showDemoCard = () => {
-    const line = "직접 보시는 게 빨라요 — 실제 카드를 새 창으로 열어드릴게요. 구경하고 돌아오세요!";
+    // UI-5-T7-F6-11 — 홈 표면 "카드" 첫 정의(Duke STOP ① (b) 판정): 칩(한 글자 락)은 유지,
+    //   칩 탭 후 첫 발화에 정본 풀어쓰기 삽입(퍼블릭 일반회원 = "나만의 카드").
+    const line =
+      "카톡으로 보낼 수 있는 나만의 카드 — 직접 보시는 게 빨라요. 실제 카드를 새 창으로 열어드릴게요. 구경하고 돌아오세요!";
     chat.notify(line);
     voice.speak(line); // ttsOn 게이트는 speak 내부 담당(호출부 검사 불요).
     window.open(DEMO_CARD_URL, "_blank", "noopener,noreferrer");

@@ -552,8 +552,12 @@ const STEP_PLAN: Record<StudioMode, PlanStep[]> = {
 // UI-5-T7-T5-W1 — "링고에게 제작시키기" 멘트 정본(Duke 확정 · CC 재량 작문 금지 — 수정은 이
 //   상수만). 화법 3규칙: 정중 존댓말 / 요청+용도 설명 세트 / 정의 용어만. 이모지·감탄사 0.
 const DIRECTOR_MENTS = {
+  // UI-5-T7-F6-11 — 개방 멘트 = 독 표면 "카드" 첫 등장: 정본 풀어쓰기 분기(사업자=우리 가게 /
+  //   퍼블릭 일반회원=나만의 — W3a done 분기 선례 동형). 이후 done 등 재등장은 "카드" 유지.
   start:
-    "링고AI가 카드를 제작하고 있어요 — 화면을 보면서 잠시만 기다려 주세요! 초안 문구는 ✦ 표시로 제안해 드리며, 확인 후 수정하실 수 있습니다.",
+    "링고AI가 카톡으로 보낼 수 있는 우리 가게 카드를 제작하고 있어요 — 화면을 보면서 잠시만 기다려 주세요! 초안 문구는 ✦ 표시로 제안해 드리며, 확인 후 수정하실 수 있습니다.",
+  startPublic:
+    "링고AI가 카톡으로 보낼 수 있는 나만의 카드를 제작하고 있어요 — 화면을 보면서 잠시만 기다려 주세요! 초안 문구는 ✦ 표시로 제안해 드리며, 확인 후 수정하실 수 있습니다.",
   photo: "상품 사진을 한 장 올려주세요. 카드에 바로 반영해 드리겠습니다.",
   name: "상품 이름을 알려주세요. 카드 제목으로 사용됩니다.",
   type: "어떤 상품인가요? 신선식품은 수확일 기준 예약 판매로, 가공·공산품은 재고 판매로 준비해 드립니다.",
@@ -1089,7 +1093,7 @@ export function CardStudioPage({
     } else {
       dPresetRef.current = new Set();
     }
-    dSay(DIRECTOR_MENTS.start);
+    dSay(mode === "general" ? DIRECTOR_MENTS.startPublic : DIRECTOR_MENTS.start); // F6-11 — 첫 정의 분기.
     // T5-W2 — 모드별 첫 스텝: 커머스 = 사진 / 퍼블릭·예약쿠폰 = 영상 링크.
     dGo(mode === "commerce" ? "photo" : "link");
   }
@@ -3743,7 +3747,9 @@ export function CardStudioPage({
   // UI-5-T2-E4b — 행동 지시형 인사(1화면 1행동). 단계 나열·"더 넣고 싶으면" 폐지 —
   //   진행 지도(스텝 헤더)·확인 스텝 제안(E3e)이 각각 대체(정보 중복 금지). 총 2문장 이내.
   function stepPlanIntro(m: StudioMode): string {
-    return `${MODE_NAME[m]} 카드를 만들어요. ${introLead(m)}`;
+    // UI-5-T7-F6-11 — 스튜디오 첫 발화 = "카드" 첫 등장: 정본 풀어쓰기(퍼블릭=나만의 / 사업자=우리 가게).
+    //   모드 맥락은 introLead(m)가 담당 · 이후 등장(새 카드 시작 등)은 "카드" 유지(두 번째 규칙).
+    return `카톡으로 보낼 수 있는 ${m === "general" ? "나만의" : "우리 가게"} 카드를 만들어요. ${introLead(m)}`;
   }
 
   // UI-5-T2-E2 — 49 컨텍스트 → LingoContext(45 페이로드 형태 계승: studio_state + studio{deck,fields}).
