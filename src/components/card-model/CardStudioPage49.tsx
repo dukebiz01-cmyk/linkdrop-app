@@ -559,6 +559,10 @@ const DIRECTOR_MENTS = {
   type: "어떤 상품인가요? 신선식품은 수확일 기준 예약 판매로, 가공·공산품은 재고 판매로 준비해 드립니다.",
   // T5-W2 — 퍼블릭(정보) 멘트 정본(Duke 확정 · 재량 작문 금지). 시작·완성은 기존 정본 재사용.
   link: "알리고 싶은 영상 링크를 붙여주세요. 제목과 요약을 만들어 카드에 담아드리겠습니다.",
+  // T5-W3 — 예약·쿠폰 멘트 정본(Duke 확정 · 재량 작문 금지). 쿠폰 내용·달력 슬롯 = 사장님(AI_BLOCKED/PENDING).
+  coupon: "손님께 드릴 쿠폰을 정해주세요. 만들어 두신 쿠폰을 고르시거나, 지금 새로 만드실 수 있습니다.",
+  reserveAsk: "예약도 받으시나요? 받으시면 예약 달력을 함께 넣어 드립니다.",
+  calendar: "예약 날짜를 선택해 주세요. 선택하신 날짜만 손님이 예약할 수 있습니다.",
   // T5-W1a(v4) — 신규 멘트 정본(Duke 확정 · 재량 작문 금지).
   category: "품목 분류를 확인해 주세요. 시세와 제철 정보 연동에 사용됩니다.",
   origin: "원산지를 알려주세요. 상품 정보 고시에 필수로 표시됩니다.",
@@ -597,6 +601,10 @@ type DirectorStep =
   | "shipnote"
   // T5-W2 — 퍼블릭: 영상 링크 1개(기존 미니 지휘자 applyVideoSelection 위에 독·내레이션만).
   | "link"
+  // T5-W3 — 예약·쿠폰(반자동): 쿠폰 = "대표님 차례"(do) → 예약 분기 → 달력(do · AI_PENDING).
+  | "coupon"
+  | "reserveAsk"
+  | "calendar"
   | "done";
 // T5-W1a — 공유 보상 추천 기본값(rate %). 판단: 정본 미지정 — 폼 슬라이더 0~30% 범위 중앙 하단
 //   보수값 10 제안(확정은 사장님 · 숫자 입력 그대로). Duke 판정으로 교체 가능(이 상수만 수정).
@@ -619,6 +627,12 @@ const DIRECTOR_CHECK: { key: string; steps: DirectorStep[]; label: string }[] = 
 // T5-W2 — 퍼블릭 체크리스트(링크 1개 조립).
 const DIRECTOR_CHECK_GENERAL: { key: string; steps: DirectorStep[]; label: string }[] = [
   { key: "link", steps: ["link"], label: "영상 링크" },
+];
+// T5-W3 — 예약·쿠폰 체크리스트(쿠폰 핵심 · 예약 분기).
+const DIRECTOR_CHECK_RESERVE: { key: string; steps: DirectorStep[]; label: string }[] = [
+  { key: "link", steps: ["link"], label: "영상 링크" },
+  { key: "coupon", steps: ["coupon"], label: "쿠폰" },
+  { key: "reserve", steps: ["reserveAsk", "calendar"], label: "예약" },
 ];
 
 // UI-5-T7-F5-5-S3 — 판매유형 유래 source 캡션(데모 "내 농장 · 산지직송" 고정 폐기 후 실유형 배선).
@@ -995,6 +1009,8 @@ export function CardStudioPage({
   // T5-W2 — 링크 스텝 로컬: oembed 조회 중 / 실패 안내(기존 문구 재사용 — 링고 발화 아님·캡션 표기).
   const [dVideoBusy, setDVideoBusy] = useState(false);
   const [dVideoErr, setDVideoErr] = useState<string | null>(null);
+  // T5-W3 — 예약 분기 답(프리체크의 달력 요구 여부 판정 재료).
+  const [dReserveYes, setDReserveYes] = useState(false);
   // T5-W1a — KAMIS 품목 목록(폼 :312-315 동형 1회 로드 — 분류 후보·category_code 역참조 재료).
   const [dKamisList, setDKamisList] = useState<{ item_code: string; item_name: string; category_code: string }[]>([]);
   // T5-W1a — 가격 스텝 KAMIS 참고 1줄(생산자=신선 한정 · §0 락: 파트너 화면 전용 참고 — payload 무유출).
@@ -1027,6 +1043,7 @@ export function CardStudioPage({
     setDFeePaid(false);
     setDBandLine(null);
     setDVideoErr(null);
+    setDReserveYes(false);
     dCatalogHandledRef.current = false;
     dLinkDoneRef.current = null;
     dSay(DIRECTOR_MENTS.start);
@@ -1250,6 +1267,11 @@ export function CardStudioPage({
       // T5-W2 — 퍼블릭·예약쿠폰 공통 기저: 발행 게이트(:4143 canPublish 비커머스 판정) 동일 문법 —
       //   영상·제목(자동 승계 실패 포함) 미충족 = 링크 스텝 복귀(정본 멘트 재질문).
       if (!selectedVideo || !(cfgTitle.trim().length > 0 || cfgProductName.trim().length > 0)) back = "link";
+      // T5-W3 — 예약쿠폰 추가 게이트: 쿠폰 실UUID + (예약 선택 시) 달력 실슬롯(:3325 판정 동형).
+      if (!back && mode === "reserve") {
+        if (!(applied["coupon"] && selectedCouponId)) back = "coupon";
+        else if (dReserveYes && !(applied["calendar"] && slotDays > 0)) back = "calendar";
+      }
     }
     if (back) {
       dGo(back);
@@ -1257,6 +1279,28 @@ export function CardStudioPage({
     }
     setDStep("done");
     dSay(DIRECTOR_MENTS.done);
+  }
+  // T5-W3 — 쿠폰 1탭 선택(패널 :5180 동형: 실 UUID 보관 + 도우미 완료) + 블록 장착(탭 유래 —
+  //   혜택·조건·유효기간 등 쿠폰 내용은 사장님 소관 AI_BLOCKED — 링고는 절대 미선택).
+  function pickDirectorCoupon(c: StudioCoupon) {
+    setSelectedCouponId(c.id);
+    confirmHelper("coupon");
+    if (!applied["coupon"]) setApplied((p) => ({ ...p, coupon: true }));
+    dEcho(c.title ?? "이름 없는 쿠폰");
+    dGo("reserveAsk");
+  }
+  // T5-W3 — 예약 분기: 예 = 달력+인원 세트 "대표님 차례"(calendar AI_PENDING — 슬롯 선택은 사장님,
+  //   기존 실슬롯 편집기 표면으로 지목) / 아니오 = 쿠폰 카드 완성(프리체크 경유).
+  function pickDirectorReserve(yes: boolean) {
+    setDReserveYes(yes);
+    dEcho(yes ? "예" : "아니오");
+    if (yes) {
+      if (!applied["calendar"]) setApplied((p) => ({ ...p, calendar: true }));
+      jumpToBlock("calendar");
+      dGo("calendar");
+    } else {
+      finishDirector();
+    }
   }
   // 텍스트/숫자 답 제출 — 스텝별 기존 setter 직결(신규 쓰기 경로 0 · NUMBER_CRITICAL: digits 그대로).
   function submitDirectorText() {
@@ -1858,7 +1902,13 @@ export function CardStudioPage({
     if (!directorOn || dStep !== "link" || !selectedVideo) return;
     if (dLinkDoneRef.current === selectedVideo.videoId) return;
     dLinkDoneRef.current = selectedVideo.videoId;
-    finishDirector();
+    // T5-W3 — 예약쿠폰: 링크 다음 = 쿠폰 스텝(대표님 차례 · 기쿠폰 1회 로드) / 그 외 = 프리체크→done.
+    if (modeRef.current === "reserve") {
+      void loadCoupons();
+      dGo("coupon");
+    } else {
+      finishDirector();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directorOn, dStep, selectedVideo]);
   // UI-5-T7-F4a(F4-1) — 제목 자동 반영 추적: 자동 반영분(videoId+원문)을 기록해 "사용자 입력 위장"
@@ -4605,9 +4655,9 @@ export function CardStudioPage({
           })}
         </div>
 
-        {/* UI-5-T7-T5-W1 — 제작시키기 입구(지휘 중 미표시). T5-W2 — 퍼블릭 개방(일반회원 — F5-3 정합:
-            비사업자 잠금은 사업자 모드만). 예약쿠폰 입구는 W3에서 개방. */}
-        {(mode === "general" || (mode === "commerce" && !businessLocked)) && !directorOn && (
+        {/* UI-5-T7-T5-W1 — 제작시키기 입구(지휘 중 미표시). T5-W2 — 퍼블릭 개방(일반회원 — F5-3 정합).
+            T5-W3 — 예약쿠폰 개방(사업자 전용 — 기존 모드 게이트 businessLocked 그대로). */}
+        {(mode === "general" || !businessLocked) && !directorOn && (
           <button
             type="button"
             onClick={startDirector}
@@ -6843,8 +6893,11 @@ export function CardStudioPage({
                   const order: DirectorStep[] =
                     mode === "commerce"
                       ? ["photo", "name", "type", "category", "origin", "unit", "price", "shipmethod", "shipfee", "droppy", "qty", "period", branchStep, "done"]
-                      : ["link", "done"];
-                  const checks = mode === "commerce" ? DIRECTOR_CHECK : DIRECTOR_CHECK_GENERAL;
+                      : mode === "reserve"
+                        ? ["link", "coupon", "reserveAsk", "calendar", "done"]
+                        : ["link", "done"];
+                  const checks =
+                    mode === "commerce" ? DIRECTOR_CHECK : mode === "reserve" ? DIRECTOR_CHECK_RESERVE : DIRECTOR_CHECK_GENERAL;
                   const cur = order.indexOf(dStep);
                   return checks.map((c) => {
                     const label = c.key === "branch" ? (isFreshType ? "출하 기간" : "발송 안내") : c.label;
@@ -6980,6 +7033,83 @@ export function CardStudioPage({
                       {dStep === "droppy" ? "확정" : "입력"}
                     </button>
                   </div>
+                </div>
+              )}
+              {/* T5-W3 — 쿠폰 스텝(대표님 차례): 기쿠폰 1탭 / 없으면 생성 표면(파트너 쿠폰) 연결 — 내용은 사장님(AI_BLOCKED). */}
+              {dStep === "coupon" && (
+                <div className="space-y-2">
+                  {couponsError && (
+                    <div className="flex items-center justify-between gap-2 rounded-xl bg-[#FEF2F2] px-3 py-2.5">
+                      <span className="text-[12px] font-semibold text-[#DC2626] [word-break:keep-all]">{couponsError}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          couponsLoadedRef.current = false;
+                          void loadCoupons();
+                        }}
+                        className="shrink-0 text-[12px] font-bold text-[#1D4ED8]"
+                      >
+                        다시 시도
+                      </button>
+                    </div>
+                  )}
+                  {coupons.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {coupons.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => pickDirectorCoupon(c)}
+                          className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+                        >
+                          <Ticket className="h-4 w-4" strokeWidth={2.25} />
+                          {c.title ?? "이름 없는 쿠폰"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {!couponsLoading && !couponsError && coupons.length === 0 && (
+                    <p className="text-[12px] font-medium text-[#8A8A8A] [word-break:keep-all]">
+                      등록된 쿠폰이 없어요 — 파트너 페이지에서 만들 수 있어요
+                    </p>
+                  )}
+                  <a
+                    href="/partner/coupons"
+                    className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
+                  >
+                    쿠폰 만들러 가기
+                  </a>
+                </div>
+              )}
+              {/* T5-W3 — 예약 분기(예/아니오). */}
+              {dStep === "reserveAsk" && (
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => pickDirectorReserve(true)} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white active:scale-[0.98]">
+                    예
+                  </button>
+                  <button type="button" onClick={() => pickDirectorReserve(false)} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
+                    아니오
+                  </button>
+                </div>
+              )}
+              {/* T5-W3 — 달력 스텝(대표님 차례 · AI_PENDING): 실슬롯 편집기 표면으로 지목, 확정 = 실슬롯 존재 시(:3325 판정). */}
+              {dStep === "calendar" && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => jumpToBlock("calendar")}
+                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
+                  >
+                    달력 설정 열기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={finishDirector}
+                    disabled={!(applied["calendar"] && slotDays > 0)}
+                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#1D4ED8] text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                  >
+                    확정
+                  </button>
                 </div>
               )}
               {/* T5-W1a — 품목 분류: 신선 = 상품명 기반 후보 1탭 확정 + [직접 찾기] 폴백 / 가공·공산품 = 자유 입력. */}
