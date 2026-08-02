@@ -1985,6 +1985,13 @@ export function CardStudioPage({
     }));
     // F5-8 — 발송 안내 왕복 정합: 저장분(ship_note) 복원(없으면 현행 유지 — 기본값 안 덮음).
     if (typeof bd.ship_note === "string" && bd.ship_note.trim()) setCfgShipEta(bd.ship_note);
+    // W5b-F3-1 — 판매 기간 복원(발행 시 p_block_patch 로 영속된 sale_end 존재 시): 기간 확정 기존 규칙
+    //   동일 경로(setSaleEndIso+seasonal 장착) — gb 재등록 saleReady 차단 해소. sale_start = 기존 규칙
+    //   기본값 유지 · sale_end 부재 구카드 = 현행대로(복원 생략).
+    if (typeof bd.sale_end === "string" && bd.sale_end.trim()) {
+      setSaleEndIso(bd.sale_end.trim());
+      setApplied((prev) => ({ ...prev, seasonal: true }));
+    }
     // T5-W5a — gb 왕복 정합(:1873 관례 동형 · W5a+ 이관: 복원 대상 = cfgProduct.gb*): 저장분 복원 ·
     //   없으면 초기화(undefined — 타 상품 잔존값 오염 방지).
     const gbT = Array.isArray(bd.gb_tiers)
@@ -4633,6 +4640,16 @@ export function CardStudioPage({
       applied["seasonal"] && productKind === "fresh" && kindRanges.fresh.harvestStart
         ? kindRanges.fresh.harvestStart
         : undefined,
+    // T5-W5b — 모일수록 프리뷰 관통(확정분만 — 미완성 = null = 미렌더 · 마감 = 기존 판매기간 ISO 재사용).
+    groupBuy:
+      cfgProduct.gbEnabled === true && (cfgProduct.gbTiers?.length ?? 0) > 0 && cfgProduct.gbFailMode
+        ? {
+            tiers: cfgProduct.gbTiers!,
+            minQty: cfgProduct.gbTiers![0].qty,
+            failMode: cfgProduct.gbFailMode,
+            endsAt: applied["seasonal"] && saleEndIso ? saleEndIso : null,
+          }
+        : null,
     title: cfgTitle,
     subtitle: cfgSubtitle,
     clip: cfgClip,
@@ -5615,6 +5632,16 @@ export function CardStudioPage({
                   onShipEtaChange={setCfgShipEta}
                   /* T5-W5a++ 마개 2 — 판매 기간 확정 신호(commerceSaleReady 동일식 — 최소 접촉 1 prop). */
                   saleReady={!!applied["seasonal"] && !!saleStartIso && !!saleEndIso}
+                  /* T5-W5b-F1 — 기간 배너 이동 = 기존 jumpToBlock 기제 재사용(W1c 화면 동행 — 신규 스크롤 0). */
+                  onGoSalePeriod={() => jumpToBlock("seasonal")}
+                  /* T5-W5b-F2-A — 통합 달력 마감 기록(승인 콜백 1개): 기존 saleEndIso 기록 경로 연결 —
+                     sale_start 무변(기본값 유지)·seasonal 장착은 기간 확정 기존 규칙 동일. */
+                  onSetSaleEnd={(iso) => {
+                    setSaleEndIso(iso);
+                    setApplied((p) => ({ ...p, seasonal: true }));
+                  }}
+                  /* T5-W5b-F2a — 재편집 마감 표시(승인 값 prop 1개 — 기록 경로 무변). */
+                  saleEndIso={saleEndIso}
                   value={{ ...cfgProduct, name: cfgProductName, price: cfgProductPrice }}
                   onChange={(patch) => {
                     if (patch.name !== undefined) setCfgProductName(patch.name);
@@ -7765,8 +7792,10 @@ export function CardStudioPage({
       {/* ───────── 링고AI 플로팅 어시스턴트 (스튜디오 어디서나 따라다녀요) ───────── */}
       {/* T5-W1b(D2) — 단일 무대: 지휘(directorOn) 중 여타 대화 표면 전부 숨김(이 프래그먼트가 전수:
           기록실 시트·FAB 오브·응원/재소환 말풍선·막힘 제안 칩·음성 고스트). 종료(X·done 닫기) 시
-          directorOn=false 로 자동 복귀. 거울 시트(z-60)는 별도 층 — 기존 z 정합 그대로 위 허용. */}
-      {!dropped && !directorOn && (
+          directorOn=false 로 자동 복귀. 거울 시트(z-60)는 별도 층 — 기존 z 정합 그대로 위 허용.
+          W5b-F3-3(a안) — 상품 폼 패널 활성(activeBlock=product) 중에도 동일 숨김(게이트 1줄 확장 —
+          폼 우측 입력열과 z-40 부유물 겹침 봉합). 덱 이동으로 폼 이탈 = 즉시 복귀. */}
+      {!dropped && !directorOn && activeBlock.id !== "product" && (
         <>
           {/* UI-5-T3-L2 — 기록실 시트(구 플로팅 패널·백드롭·이동 핸들 폐지 · 비모달 — 판단 근거는
               LingoRecordSheet49 헤더 주석). 소환 = 오브 길게 탭(L1 타이머). 이관: 웰컴·제안 칩·로그·

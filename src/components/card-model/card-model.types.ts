@@ -85,6 +85,18 @@ export type CardModel = {
   // ── 상품(가격) — ProductWidgetProps 데이터부 발췌 ──
   /** 표시용 확정 가격 문자열(예: "12,000원"). */
   priceText?: string;
+  /** T5-W5b — 모일수록 할인(거울 예외 6호 확장 · additive): 미주입 = 미렌더(비-gb·기존 카드 무변).
+   *  실집계(totalQty)는 W5c get_groupbuy_status 소관 — 모델은 정적 재료만 운반.
+   *  필드명 = groupBuyPanel: 구 groupBuy(GroupBuyView45 — 구 2필드 카드 문구 섹션 현역)와 병존(충돌 0). */
+  groupBuyPanel?: {
+    tiers: { qty: number; price: number }[];
+    minQty: number;
+    failMode: "base" | "cancel";
+    basePrice: number;
+    endsAt: string | null;
+    /** W5b-F2 — 시간표 재료(수확 시작 대표일 · fresh 한정 공급 — 부재 = 시간표 미표시). */
+    harvestStart?: string | null;
+  };
   productType?: string;
   productOrigin?: string;
   productUnitLabel?: string;

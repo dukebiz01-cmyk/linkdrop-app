@@ -185,6 +185,11 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     group_buy_target_n?: unknown;
     group_buy_price_krw?: unknown;
     group_buy_deadline?: unknown;
+    // T5-W5b — 모일수록(신 다단계 스키마 · additive — 거울 예외 6호 확장 승인분).
+    gb_enabled?: unknown;
+    gb_tiers?: unknown;
+    gb_min_qty?: unknown;
+    gb_fail_mode?: unknown;
     sale_end?: unknown;
     // S4-5 — 배송 정보(additive 키): 방법·안내문구(신규) + 무료배송·배송비(기존 저장 키 소비 개시).
     ship_method?: unknown;
@@ -262,6 +267,24 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     typeof data.group_buy_deadline === "string" && data.group_buy_deadline.trim()
       ? data.group_buy_deadline.trim()
       : null;
+  // T5-W5b — 모일수록(신 다단계) 표시 키(폼·지휘가 유효 통과분만 저장 — 여기선 형 검증만 · 구 선례 동형).
+  //   gb_enabled true + 유효 tiers 일 때만 동봉(미충족 = 키 미주입 = 미렌더).
+  const gbTiersNew =
+    data.gb_enabled === true && Array.isArray(data.gb_tiers)
+      ? (data.gb_tiers as unknown[])
+          .map((t) => {
+            const o = (t ?? {}) as { qty?: unknown; price?: unknown };
+            return {
+              qty: typeof o.qty === "number" ? Math.floor(o.qty) : 0,
+              price: typeof o.price === "number" ? Math.floor(o.price) : 0,
+            };
+          })
+          .filter((t) => t.qty > 0 && t.price > 0)
+      : [];
+  const gbMinQtyNew =
+    typeof data.gb_min_qty === "number" && data.gb_min_qty > 0 ? Math.floor(data.gb_min_qty) : null;
+  const gbFailModeNew =
+    data.gb_fail_mode === "base" || data.gb_fail_mode === "cancel" ? data.gb_fail_mode : null;
   // ST2b-2b B2 — 판매기간 마감(sale_end · 영속화 additive 키). 부스터 D-day 근거.
   const saleEndIso =
     typeof data.sale_end === "string" && data.sale_end.trim() ? data.sale_end.trim() : null;
@@ -273,8 +296,21 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
   const freeShip = data.free_ship === true;
   const shipFeeKrw =
     typeof data.ship_fee_krw === "number" && data.ship_fee_krw > 0 ? data.ship_fee_krw : null;
-  return {
+  // T5-W5b — 반환을 변수 경유로(신 gb 3키는 InfoDropPageProps 타입 미확장 유지 — 승인 범위 밖 파일
+  //   무접촉·구조적 할당으로 동봉 · toDropDetailInput 캐스트 소비 · 후속 타입 정식화 별도 제안).
+  const out: NonNullable<InfoDropPageProps["commerce"]> & {
+    gbTiers?: { qty: number; price: number }[];
+    gbMinQty?: number;
+    gbFailMode?: "base" | "cancel";
+  } = {
     // ST2b-2 — additive 동봉(전부 미주입 = 미렌더).
+    ...(gbTiersNew.length > 0
+      ? {
+          gbTiers: gbTiersNew,
+          gbMinQty: gbMinQtyNew ?? gbTiersNew[0].qty,
+          ...(gbFailModeNew ? { gbFailMode: gbFailModeNew } : {}),
+        }
+      : {}),
     ...(noticeRows.length > 0 ? { noticeRows } : {}),
     ...(stockUnitLabel !== "개" ? { stockUnitLabel } : {}),
     ...(gbTargetN != null && gbPriceKrw != null
@@ -302,6 +338,7 @@ function buildCommerce(d: DropDetailRpc): InfoDropPageProps["commerce"] {
     // BADGE-ⓑ(4b) — 있을 때만 동봉(미주입=미렌더).
     ...(dropyReward != null && dropyReward > 0 ? { dropyReward } : {}),
   };
+  return out;
 }
 
 /**
@@ -587,6 +624,11 @@ export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
             harvestDate: c.harvestDate,
             saleEndIso: c.saleEndIso,
             groupBuy: c.groupBuy,
+            // T5-W5b — 모일수록(신 다단계) 관통: buildCommerce 동봉분 캐스트 소비(타입 미확장 유지 —
+            //   런타임 동일 · DropDetailInput.commerce 측 3키는 기배선).
+            gbTiers: (c as { gbTiers?: { qty: number; price: number }[] }).gbTiers,
+            gbMinQty: (c as { gbMinQty?: number }).gbMinQty,
+            gbFailMode: (c as { gbFailMode?: "base" | "cancel" }).gbFailMode,
             // S4-6 — 배송정보 셀 재료 관통(buildShippingView 입력).
             shipMethod: c.shipMethod,
             freeShip: c.freeShip,

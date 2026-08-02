@@ -155,6 +155,11 @@ export type DropDetailInput = {
     saleEndIso?: string;
     /** S4 — 공동구매 원시 키(buildGroupBuyView 입력 — 스튜디오 :2170 동일 빌더). */
     groupBuy?: { targetN: number; priceKrw: number; deadline: string | null };
+    /** T5-W5b — 모일수록(신 다단계 스키마 · additive): 공급원이 gb_enabled true + 유효 tiers 검사 후
+     *  채움(미주입 = model.groupBuy 미주입 = 미렌더). */
+    gbTiers?: { qty: number; price: number }[];
+    gbMinQty?: number;
+    gbFailMode?: "base" | "cancel";
   };
   /** ← InfoDropPageProps.remainingStock (get_drop_detail v8.1 파생 재고). */
   remainingStock?: number | null;
@@ -361,6 +366,21 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
     //   히어로라 영상 임베드 미적용(정보/쿠폰/예약 영상 카드에서만).
     ...(!isCommerce && input.videoEmbed ? { videoEmbed: input.videoEmbed } : {}),
     priceText: isCommerce ? won(input.commerce?.priceKrw) : undefined,
+    // T5-W5b — 모일수록(gb) 관통(거울 예외 6호 확장 · additive — 유효 재료 전부 있을 때만 주입).
+    ...(isCommerce &&
+    (input.commerce?.gbTiers?.length ?? 0) > 0 &&
+    input.commerce?.priceKrw != null
+      ? {
+          groupBuyPanel: {
+            tiers: input.commerce.gbTiers!,
+            minQty: input.commerce.gbMinQty ?? input.commerce.gbTiers![0].qty,
+            failMode: input.commerce.gbFailMode ?? "base",
+            basePrice: input.commerce.priceKrw,
+            endsAt: input.commerce.saleEndIso ?? null,
+            harvestStart: input.commerce.harvestDate ?? null, // W5b-F2 — 시간표 재료(fresh 대표일).
+          },
+        }
+      : {}),
     productQty: qty != null && qty > 0 ? String(qty) : undefined,
     // BUG-2 T2 — 한정 배지 단위 라벨(FIX-45c): commerce 재고 단위 관통(미주입 = CardModelBody '개' 폴백).
     productQtyUnit: isCommerce ? input.commerce?.stockUnitLabel : undefined,

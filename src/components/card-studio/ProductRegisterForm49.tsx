@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ImageIcon, Sparkles, Plus, X, Search, Calculator, Info, Check, Loader2 } from "lucide-react";
+import { ImageIcon, Sparkles, Plus, X, Search, Calculator, Info, Check, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 // UI-5-T4-D3c — 시세 참고(45 계승): 공용 presentational 어드바이저(무수정 import 소비만 · §0 파트너 전용).
 import { PriceBandAdvisor, type PriceBandResult } from "@/components/commerce/PriceBandAdvisor";
@@ -240,6 +240,9 @@ export function ProductRegisterForm({
   registerError,
   registeredName,
   saleReady,
+  onGoSalePeriod,
+  onSetSaleEnd,
+  saleEndIso,
   onAiWrite,
   aiWriting,
   onAiSuggestPoints,
@@ -259,6 +262,14 @@ export function ProductRegisterForm({
   onShipEtaChange?: (v: string) => void;
   /** T5-W5a++ 마개 2 — 판매 기간 확정 여부(페이지 commerceSaleReady 동일식 전달 — 폼은 존재 검사·안내만). */
   saleReady?: boolean;
+  /** T5-W5b-F1 — 기간 배너 [판매 기간 설정하기] 이동(페이지 jumpToBlock 기제 — 미지정 = 버튼 미노출). */
+  onGoSalePeriod?: () => void;
+  /** T5-W5b-F2-A — 통합 달력 마감 기록(승인 콜백 1개): 페이지 saleEndIso 기존 경로 연결.
+   *  미지정 = 마감 칩 비활성(죽은 입구 금지 — 이때 기간 배너 폴백 유지). */
+  onSetSaleEnd?: (iso: string) => void;
+  /** T5-W5b-F2a — 마감 표시 초기값(승인 값 prop 1개): 재편집 진입 시 기존 saleEndIso 표시.
+   *  확정 신호는 saleReady 와 결합(페이지 기본값 오표시 방지) · 기록 경로(onSetSaleEnd)는 무변. */
+  saleEndIso?: string | null;
   /** UI-5-T2-E5a — 상품 사진 = 스텝 1 단일 입구. 폼은 표시 전용(업로드 경로 0). */
   photoUrl?: string;
   onEditPhoto?: () => void;
@@ -472,6 +483,8 @@ export function ProductRegisterForm({
   // 단계표 제안 산식([결정적 — AI 생성 숫자 아님] · W5a 지휘와 동일): 임계 후보 [3,10,20,30,50,100]
   //   중 수량 이하만 채택(사다리 천장) · 앞에서부터 최대 4단계(후보 0 = 수량 단일 폴백) ·
   //   가격 = 기본가 × (1 − 0.07×단계차수) 백원 단위 절사(단계당 7% 체감 · 하한 100원). 확정은 사장님.
+  //   W5b-F1 — [행 추가] 연장 규칙(동일 결정적 산식의 연장): 임계 = 후보에서 마지막 행 다음 값
+  //   (후보 소진 = 마지막 임계×2) · 천장 초과 = 추가 차단 · 가격 = 직전 행가 × 0.93 백원 절사·하한 100원.
   const buildGbProposal = (): { qty: number; price: number }[] => {
     const base = Number(onlyDigits(value.price)) || 0;
     if (base <= 0 || gbStockN <= 0) return [];
@@ -481,6 +494,96 @@ export function ProductRegisterForm({
       qty: q,
       price: Math.max(100, Math.floor((base * (1 - 0.07 * (i + 1))) / 100) * 100),
     }));
+  };
+  // W5b-F1 — [행 추가] 다음 임계(연장 규칙): 마지막 행 다음 후보 · 소진 = ×2. 행 0개 = null(제안 1행 경로).
+  const gbNextQty = (() => {
+    const last = gbRows[gbRows.length - 1];
+    if (!last) return null;
+    return [3, 10, 20, 30, 50, 100].find((q) => q > last.qty) ?? last.qty * 2;
+  })();
+  // 천장 차단 신호: 재료 충족 상태에서 다음 임계가 수량 초과 = [행 추가] 비활성(신규 문구 0).
+  const gbAddBlocked =
+    gbRows.length > 0 &&
+    Number(onlyDigits(value.price)) > 0 &&
+    gbStockN > 0 &&
+    gbNextQty != null &&
+    gbNextQty > gbStockN;
+  // ── W5b-F2-A — 통합 판매 일정 달력(gb 모드 한정 · (a) 2칩 설계 Duke 승인) ─────────────
+  //   렌더 관례 = reservation-calendar-page 읽기 참조(grid-cols-7·정방 셀·rounded-lg — 해당 파일 무수정).
+  //   기록(기존 필드만·신규 키 0): 마감 → onSetSaleEnd(페이지 saleEndIso 기존 경로 · sale_start 무변) /
+  //   수확·발송(fresh) → harvest_date/end 현행 · 발송(goods) → 동일 필드(ship_date/end 조립 현행) —
+  //   date_range_label 파생(:E5b)도 같은 필드라 자동 동작.
+  const [gbCalStep, setGbCalStep] = useState<"deadline" | "ship">("deadline");
+  // 마감 로컬 에코 + W5b-F2a — 표시 소스 = 로컬 최신 우선, 없으면 확정분(saleReady && saleEndIso —
+  //   페이지 기본값(미확정 오늘+6)의 오표시 방지). 기록 경로는 onSetSaleEnd 그대로.
+  const [gbDeadline, setGbDeadline] = useState<string | null>(null);
+  const gbDeadlineShown = gbDeadline ?? (saleReady && saleEndIso ? saleEndIso : null);
+  const [gbCalMonth, setGbCalMonth] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const gbIsFresh = value.type === "fresh";
+  const gbShipLabel = gbIsFresh ? "수확·발송" : "발송";
+  const gbShipColor = gbIsFresh ? "#16A34A" : "#2563EB";
+  const gbIsoOf = (y: number, m: number, d: number) =>
+    `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const gbMd = (iso: string) => {
+    const p = iso.split("-");
+    return p[1] && p[2] ? `${Number(p[1])}/${Number(p[2])}` : iso;
+  };
+  const gbPickDay = (iso: string) => {
+    if (gbCalStep === "deadline") {
+      if (!onSetSaleEnd) return; // 죽은 입구 금지 — 칩도 비활성.
+      setGbDeadline(iso);
+      onSetSaleEnd(iso); // 페이지 기존 saleEndIso 기록 경로(승인 콜백).
+      setGbCalStep("ship");
+      return;
+    }
+    // 범위 2탭: 시작 미확정/완결 범위/역방향 = 새 시작(=끝) · 시작 단일 상태에서 이후 탭 = 끝 확정.
+    const s = value.harvestDate;
+    const e = value.harvestDateEnd;
+    if (!s || (e && e !== s) || iso < s) onChange({ harvestDate: iso, harvestDateEnd: iso });
+    else onChange({ harvestDateEnd: iso });
+  };
+  const gbShipRangeLabel =
+    value.harvestDate && value.harvestDateEnd
+      ? value.harvestDate === value.harvestDateEnd
+        ? `${gbMd(value.harvestDate)} ${gbShipLabel}`
+        : `${gbMd(value.harvestDate)}~${gbMd(value.harvestDateEnd)} ${gbShipLabel}`
+      : null;
+  // 요약 시간표(품목 병기) — category 괄호 병기는 한 줄 초과 상시라 생략(판단 보고 · 상품명만).
+  const gbSummary = (() => {
+    const parts = [
+      ...(gbDeadlineShown ? [`${gbMd(gbDeadlineShown)} 마감`] : []),
+      ...(gbShipRangeLabel ? [gbShipRangeLabel] : []),
+    ];
+    if (parts.length === 0) return null;
+    const nm = value.name.trim();
+    return `${nm ? `${nm} — ` : ""}${parts.join(" → ")}`;
+  })();
+  // 순서 경고(차단 없음): 발송(수확·발송) 시작 < 마감.
+  const gbOrderWarn = !!(gbDeadlineShown && value.harvestDate && value.harvestDate < gbDeadlineShown);
+  // W5b-F1 — 행 추가 = 산식 자동 채움(빈 행 폐지). 재료 미입력 = 원인별 배너 + 미추가.
+  const addGbRow = () => {
+    const base = Number(onlyDigits(value.price)) || 0;
+    if (base <= 0) {
+      setGbHint("price");
+      return;
+    }
+    if (gbStockN <= 0) {
+      setGbHint("qty");
+      return;
+    }
+    setGbHint(null);
+    if (gbRows.length === 0) {
+      const first = buildGbProposal()[0];
+      if (first) set("gbTiers", [first]); // 제안 받기 1행분과 동일 산출.
+      return;
+    }
+    if (gbNextQty == null || gbNextQty > gbStockN) return; // 천장 — 미동작(버튼 비활성 병행).
+    const last = gbRows[gbRows.length - 1];
+    const price = Math.max(100, Math.floor((last.price * 0.93) / 100) * 100);
+    set("gbTiers", [...gbRows, { qty: gbNextQty, price }]);
   };
   const notifyCategoryHint = () => {
     // E5b — KAMIS 매칭 해제(F2-C 준비 중 → 실기능): 버튼 = 매칭 열기 + 입력 유도 안내.
@@ -1134,8 +1237,9 @@ export function ProductRegisterForm({
               <button
                 type="button"
                 aria-label="행 추가"
-                onClick={() => set("gbTiers", [...gbRows, { qty: 0, price: 0 }])}
-                className="flex min-h-[36px] w-full items-center justify-center gap-1 rounded-xl border border-dashed border-[#D4D4D4] text-[11.5px] font-bold text-[#8A8A8A] active:bg-[#F5F5F5]"
+                onClick={addGbRow} /* W5b-F1 — 산식 자동 채움(빈 행 생성 경로 폐지). */
+                disabled={gbAddBlocked}
+                className="flex min-h-[36px] w-full items-center justify-center gap-1 rounded-xl border border-dashed border-[#D4D4D4] text-[11.5px] font-bold text-[#8A8A8A] active:bg-[#F5F5F5] disabled:opacity-40"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />행 추가
               </button>
@@ -1159,11 +1263,137 @@ export function ProductRegisterForm({
               onSelect={(id) => set("gbFailMode", id)}
               accent={accent}
             />
-            {/* 마개 2 — 판매 기간 필수(페이지 소관 값 = 존재 검사·안내만, 문구 = 발행 게이트 기존 문구 재사용). */}
-            {!saleReady && (
-              <p className="rounded-xl bg-[#FEF2F2] px-3 py-2 text-[12px] font-semibold text-[#DC2626] [word-break:keep-all]">
-                판매 기간을 정해 주세요
-              </p>
+            {/* W5b-F2-A — 통합 판매 일정 달력(2칩 · 콜백 존재 시). 배너 처리 판단: 달력이 폼 내에서
+                마감을 직접 기록하므로 기간 배너+이동 버튼은 콜백 부재 폴백으로만 유지(죽은 안내 금지). */}
+            {onSetSaleEnd && (
+              <div className="space-y-2 rounded-xl bg-[#F8FAFC] p-3">
+                {/* 순서 칩 — 현재 차례 강조 · 완료 칩 탭 = 재선택. */}
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setGbCalStep("deadline")}
+                    className="flex min-h-[32px] flex-1 items-center justify-center gap-1 rounded-lg text-[11px] font-bold transition-colors"
+                    style={
+                      gbCalStep === "deadline"
+                        ? { backgroundColor: "#DC2626", color: "#fff" }
+                        : { backgroundColor: "#fff", color: gbDeadlineShown ? "#DC2626" : "#8A8A8A", boxShadow: "inset 0 0 0 1px #E5E5E5" }
+                    }
+                  >
+                    {gbDeadlineShown ? <Check className="h-3 w-3" strokeWidth={3} /> : null}1 모집 마감
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGbCalStep("ship")}
+                    className="flex min-h-[32px] flex-1 items-center justify-center gap-1 rounded-lg text-[11px] font-bold transition-colors"
+                    style={
+                      gbCalStep === "ship"
+                        ? { backgroundColor: gbShipColor, color: "#fff" }
+                        : { backgroundColor: "#fff", color: gbShipRangeLabel ? gbShipColor : "#8A8A8A", boxShadow: "inset 0 0 0 1px #E5E5E5" }
+                    }
+                  >
+                    {gbShipRangeLabel ? <Check className="h-3 w-3" strokeWidth={3} /> : null}2 {gbShipLabel}
+                  </button>
+                </div>
+                {/* 월 내비 + 그리드(예약 달력 관례: grid-cols-7 · 정방 셀 · rounded-lg — 읽기 참조 자체 구현). */}
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    aria-label="이전 달"
+                    onClick={() => setGbCalMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+                    className="flex size-8 items-center justify-center rounded-lg text-[#8A8A8A] active:bg-[#ECECEC]"
+                  >
+                    <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
+                  </button>
+                  <span className="text-[12px] font-bold text-[#0A0A0A] tabular-nums">
+                    {gbCalMonth.getFullYear()}년 {gbCalMonth.getMonth() + 1}월
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="다음 달"
+                    onClick={() => setGbCalMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+                    className="flex size-8 items-center justify-center rounded-lg text-[#8A8A8A] active:bg-[#ECECEC]"
+                  >
+                    <ChevronRight className="h-4 w-4" strokeWidth={2.25} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-7">
+                  {["일", "월", "화", "수", "목", "금", "토"].map((w) => (
+                    <span key={w} className="flex aspect-square items-center justify-center text-[10px] font-semibold text-[#94A3B8]">
+                      {w}
+                    </span>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-0.5">
+                  {(() => {
+                    const y = gbCalMonth.getFullYear();
+                    const m = gbCalMonth.getMonth();
+                    const lead = new Date(y, m, 1).getDay();
+                    const dim = new Date(y, m + 1, 0).getDate();
+                    const now = new Date();
+                    const todayIso = gbIsoOf(now.getFullYear(), now.getMonth(), now.getDate());
+                    return [
+                      ...Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />),
+                      ...Array.from({ length: dim }, (_, i) => {
+                        const iso = gbIsoOf(y, m, i + 1);
+                        const isDeadline = iso === gbDeadlineShown;
+                        const s = value.harvestDate;
+                        const e = value.harvestDateEnd;
+                        const inRange = !!(s && e && iso >= s && iso <= e);
+                        const isEdge = iso === s || iso === e;
+                        return (
+                          <button
+                            key={iso}
+                            type="button"
+                            onClick={() => gbPickDay(iso)}
+                            className={`relative aspect-square rounded-lg text-[12px] font-semibold tabular-nums transition-colors ${iso === todayIso && !isDeadline && !inRange ? "ring-1 ring-inset ring-[#CBD5E1]" : ""}`}
+                            style={
+                              isDeadline
+                                ? { backgroundColor: "#DC2626", color: "#fff", fontWeight: 700 }
+                                : isEdge
+                                  ? { backgroundColor: gbShipColor, color: "#fff", fontWeight: 700 }
+                                  : inRange
+                                    ? { backgroundColor: `${gbShipColor}22`, color: gbShipColor }
+                                    : { color: "#0A0A0A" }
+                            }
+                          >
+                            {i + 1}
+                          </button>
+                        );
+                      }),
+                    ];
+                  })()}
+                </div>
+                {/* 요약 시간표(품목 병기 — 선택 즉시 자동 생성). */}
+                {gbSummary && (
+                  <p className="rounded-lg bg-white px-3 py-2 text-[12px] font-bold text-[#0A0A0A] tabular-nums [word-break:keep-all]">
+                    {gbSummary}
+                  </p>
+                )}
+                {/* 순서 경고(차단 없음 — 지정 문구). */}
+                {gbOrderWarn && (
+                  <p className="rounded-lg bg-[#FEF2F2] px-3 py-2 text-[11.5px] font-semibold text-[#DC2626] [word-break:keep-all]">
+                    발송 시작이 모집 마감보다 빨라요. 공동구매는 마감 후 일괄 발송이 원칙이에요
+                  </p>
+                )}
+              </div>
+            )}
+            {/* 마개 2 — 기간 배너: 콜백 부재 폴백만(달력이 마감을 기록하므로 — 죽은 안내 금지). */}
+            {!saleReady && !onSetSaleEnd && (
+              <div className="space-y-1.5 rounded-xl bg-[#FEF2F2] px-3 py-2">
+                <p className="text-[12px] font-semibold text-[#DC2626] [word-break:keep-all]">
+                  판매 기간을 정해 주세요
+                </p>
+                {/* W5b-F1 — 이동 버튼(신규 문구 승인 1건 · 미지정 = 미노출 — 죽은 입구 금지). */}
+                {onGoSalePeriod && (
+                  <button
+                    type="button"
+                    onClick={onGoSalePeriod}
+                    className="flex min-h-[36px] w-full items-center justify-center rounded-lg bg-white text-[12px] font-bold text-[#DC2626] [box-shadow:inset_0_0_0_1px_#FECACA] active:bg-[#FEF2F2]"
+                  >
+                    판매 기간 설정하기
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -1613,6 +1843,23 @@ export function ProductRegisterForm({
               {registerError}
             </p>
           )}
+          {/* W5b-F3-2 — 무언 차단 폐지: gbBlocked 시 원인별 배너(기확정 문구만 재사용 · 단계표 위반/미달
+              미선택은 기존 빨간 링·required 마커가 유도 — 문구 생략 조항 적용, 신규 작문 0). */}
+          {gbBlocked &&
+            (() => {
+              const msg = !(Number(onlyDigits(value.price)) > 0)
+                ? "판매 가격을 먼저 입력해 주세요"
+                : gbStockN <= 0
+                  ? "판매 수량을 먼저 입력해 주세요"
+                  : !saleReady
+                    ? "판매 기간을 정해 주세요"
+                    : null;
+              return msg ? (
+                <p className="rounded-xl bg-[#FEF2F2] px-3 py-2 text-[12px] font-semibold text-[#DC2626] [word-break:keep-all]">
+                  {msg}
+                </p>
+              ) : null;
+            })()}
           {registeredName && !registerError && (
             <p className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: accent }}>
               <Check className="h-3 w-3" strokeWidth={2.75} />

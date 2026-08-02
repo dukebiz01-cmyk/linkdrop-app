@@ -49,6 +49,14 @@ export type Studio49Input = {
   storeName: string;
   // F5-5-S3 — 판매유형 유래 캡션(실값 유래 한정 · 미주입 = 정본 source 유지).
   sourceCaption?: string;
+  // T5-W5b — 모일수록(gb) 프리뷰 관통: 페이지가 확정분(cfgProduct.gb*)+판매 종료 ISO만 전달.
+  //   미전달/미완성 = 미주입 = 미렌더(비-gb 프리뷰 무변).
+  groupBuy?: {
+    tiers: { qty: number; price: number }[];
+    minQty: number;
+    failMode: "base" | "cancel";
+    endsAt: string | null;
+  } | null;
   pageBg: string;
 };
 
@@ -125,6 +133,10 @@ export function studio49ToCardModel(s: Studio49Input): CardModel {
     ...(isCommerce && s.productUnitLabel ? { productUnitLabel: s.productUnitLabel } : {}),
     ...(isCommerce ? { ctaLabel: "주문예약" } : {}),
     ...(shippingView ? { shipping: shippingView } : {}),
+    // T5-W5b — 모일수록(gb) 프리뷰 주입(수신 fromDropDetail 매핑과 동형 — 3면 거울 자동).
+    ...(isCommerce && s.groupBuy && s.groupBuy.tiers.length > 0 && priceNum != null
+      ? { groupBuyPanel: { ...s.groupBuy, basePrice: priceNum, harvestStart: s.harvestDate ?? null } }
+      : {}),
   };
 
   return fromStudioState(input, preview);

@@ -42,6 +42,8 @@ import {
 // ST2b-0 — 쿠폰 마감 타이머(1-A 배지 재사용 · 수신카드 1-C couponTimer 동형 — 거울 원칙).
 //   L6 예외: 미리보기 한정 클라 시계 폴백(31창 승인 — 구 studio-build 주석 승계), serverNow 미주입.
 import { TimerBadge } from "@/components/home/ShareCardTile";
+// T5-W5b — 모일수록 패널(거울 예외 6호): model.groupBuy 존재 시에만 판매가 행 대체 — 미주입 = 무변.
+import { GroupBuyPanel } from "@/components/groupbuy/GroupBuyPanel";
 
 /**
  * CardModelBody — CardModel 거울 2.0 렌더러. 정본: docs/ref/v0-45-card-body.tsx (868줄).
@@ -555,7 +557,50 @@ export function CardModelBody({
                 </div>
               )}
 
-              {/* 판매가 */}
+              {/* 판매가 — T5-W5b(거울 예외 6호): gb 카드 = GroupBuyPanel 이 이 행을 대체(기존 마크업
+                  무삭제 · 조건 분기 래핑). totalQty = W5c(get_groupbuy_status) 배선 전 0 고정(허수 금지). */}
+              {model.groupBuyPanel ? (
+                (() => {
+                  const gb = model.groupBuyPanel!;
+                  const totalQty = 0; // TODO(W5c) — get_groupbuy_status 실집계 배선.
+                  const tiers = gb.tiers.map((t) => ({ ...t, reached: totalQty >= t.qty }));
+                  const next = tiers.find((t) => !t.reached) ?? null;
+                  const current = tiers.filter((t) => t.reached).pop() ?? null;
+                  // W5b-F2 — 배송비 별도(표시형 shipping rows 재파싱 — buildShippingView 단일 소스 파생 ·
+                  //   "무료배송" 행 = 미표시). 시간표 = 마감(endsAt)+수확 시작(model.harvestDate — fresh 대표
+                  //   주입분)이 다 있을 때만 지정 포맷 조립 · 재료 부재(가공·공산품 등) = null = 정직 미표시.
+                  const feeRow = model.shipping?.rows.find(
+                    (r) => r.label === "배송비" && r.value !== "무료배송",
+                  );
+                  const gbShipFee = feeRow ? Number(feeRow.value.replace(/[^0-9]/g, "")) || null : null;
+                  const md = (iso: string) => {
+                    const p = iso.split("-");
+                    return p[1] && p[2] ? `${Number(p[1])}/${Number(p[2])}` : iso;
+                  };
+                  const gbSchedule =
+                    gb.endsAt && gb.harvestStart
+                      ? `${md(gb.endsAt)} 마감 · 수확 후 ${md(gb.harvestStart)}부터 순차 발송`
+                      : null;
+                  return (
+                    <GroupBuyPanel
+                      basePrice={gb.basePrice}
+                      currentPrice={current ? current.price : gb.basePrice}
+                      totalQty={totalQty}
+                      tiers={tiers}
+                      nextTierQty={next ? next.qty : null}
+                      nextTierPrice={next ? next.price : null}
+                      endsAt={gb.endsAt ?? ""}
+                      minQty={gb.minQty}
+                      onFailMode={gb.failMode}
+                      lastJoinedAgo={null}
+                      shipFeeKrw={gbShipFee}
+                      scheduleLabel={gbSchedule}
+                      onReserve={act.onPreorder ?? (() => {})}
+                      onInvite={act.onShare ?? (() => {})}
+                    />
+                  );
+                })()
+              ) : (
               <div
                 className="flex items-center justify-between rounded-2xl px-4 py-3"
                 style={{ backgroundColor: `${accent}0D` }}
@@ -601,6 +646,7 @@ export function CardModelBody({
                   )}
                 </span>
               </div>
+              )}
 
               {/* 거울 수렴 S0 — 드로피 적립 라인(수신 전용). 락 §드로피: 항상 "준비 중", 숫자 절대
                   미노출(dropyReady 불리언만 게이트 — 금액 필드 자체 없음). variant==="receiver" 게이트로
