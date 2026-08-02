@@ -581,6 +581,70 @@ const STEP_PLAN: Record<StudioMode, PlanStep[]> = {
   ],
 };
 
+// UI-5-T7-T5-W1 — "링고에게 제작시키기" 멘트 정본(Duke 확정 · CC 재량 작문 금지 — 수정은 이
+//   상수만). 화법 3규칙: 정중 존댓말 / 요청+용도 설명 세트 / 정의 용어만. 이모지·감탄사 0.
+const DIRECTOR_MENTS = {
+  start:
+    "링고AI가 카드를 제작하고 있어요 — 화면을 보면서 잠시만 기다려 주세요! 초안 문구는 ✦ 표시로 제안해 드리며, 확인 후 수정하실 수 있습니다.",
+  photo: "상품 사진을 한 장 올려주세요. 카드에 바로 반영해 드리겠습니다.",
+  name: "상품 이름을 알려주세요. 카드 제목으로 사용됩니다.",
+  type: "어떤 상품인가요? 신선식품은 수확일 기준 예약 판매로, 가공·공산품은 재고 판매로 준비해 드립니다.",
+  // T5-W1a(v4) — 신규 멘트 정본(Duke 확정 · 재량 작문 금지).
+  category: "품목 분류를 확인해 주세요. 시세와 제철 정보 연동에 사용됩니다.",
+  origin: "원산지를 알려주세요. 상품 정보 고시에 필수로 표시됩니다.",
+  unit: "판매 단위를 선택해 주세요. 낱개, 박스·묶음, 무게 단위 중 고르시면 됩니다.",
+  price: "판매 가격을 알려주세요. 입력하신 금액 그대로 카드에 표시됩니다.",
+  shipmethod: "배송 방식을 선택해 주세요. 택배 또는 직접 전달 중 고르시면 됩니다.",
+  shipfee: "배송비는 어떻게 하시겠어요? 무료배송은 사장님 부담, 별도는 구매자 부담으로 카드에 안내됩니다.",
+  droppy: "공유 보상을 정해주세요. 카드를 전달한 분께 판매 성사 시 분배되는 몫입니다. 추천값을 제안해 드리니 확정만 해주세요.",
+  qty: "준비하실 수량을 알려주세요. 수량만큼만 주문을 받습니다.",
+  period: "판매 기간을 정해주세요. 기간이 지나면 주문이 자동으로 마감됩니다.",
+  // T5-W1a(D3) — 단일일 → 기간 교체분(정본). "순차 발송" 표기는 기존 정본 사슬(:1186
+  //   date_range_label → CardModelBody 칩)이 담당 — 멘트도 발송 어휘로 일치.
+  harvest: "수확(출하) 기간을 알려주세요. 이 기간 동안 순차 발송된다고 카드에 안내됩니다.",
+  shipnote: "발송까지 걸리는 기간을 알려주세요. 주문 화면에 안내됩니다.",
+  catalogFallback:
+    "문구 초안 작성이 지금은 어렵습니다. 입력하신 정보로 기본 카드는 준비되었으니, 한마디는 직접 적어주세요.",
+  // T5-W1a — 완성 멘트에 폼 세부 조정 1문 편입(Duke 확정 — 할인 시뮬레이션·이익 계산은 대화 제외).
+  done: "카드가 준비되었습니다. 내용을 확인하신 후 발행해 주세요. 세부 조정은 상품 등록 폼에서 하실 수 있습니다.",
+} as const;
+// T5-W1a(v4) — 지휘 스텝: 사진→이름→유형(3분기)→분류→원산지→단위→가격→배송방식→배송비→보상→수량→기간
+//   →(신선=출하기간 / 가공·공산품=발송안내)→프리체크→done. 전부 기존 폼 상태 setter 직결(신규 쓰기 경로 0).
+type DirectorStep =
+  | "photo"
+  | "name"
+  | "type"
+  | "category"
+  | "origin"
+  | "unit"
+  | "price"
+  | "shipmethod"
+  | "shipfee"
+  | "droppy"
+  | "qty"
+  | "period"
+  | "harvest"
+  | "shipnote"
+  | "done";
+// T5-W1a — 공유 보상 추천 기본값(rate %). 판단: 정본 미지정 — 폼 슬라이더 0~30% 범위 중앙 하단
+//   보수값 10 제안(확정은 사장님 · 숫자 입력 그대로). Duke 판정으로 교체 가능(이 상수만 수정).
+const DIRECTOR_DROPPY_RATE_DEFAULT = 10;
+// 체크리스트 칩(라벨 = STEP 정의 용어) — steps = 칩이 덮는 스텝(배송 = 방식+배송비 2스텝 · 분기 칩은 렌더에서 라벨 분기).
+const DIRECTOR_CHECK: { key: string; steps: DirectorStep[]; label: string }[] = [
+  { key: "photo", steps: ["photo"], label: "상품 사진" },
+  { key: "name", steps: ["name"], label: "상품 이름" },
+  { key: "type", steps: ["type"], label: "상품 유형" },
+  { key: "category", steps: ["category"], label: "품목 분류" },
+  { key: "origin", steps: ["origin"], label: "원산지" },
+  { key: "unit", steps: ["unit"], label: "판매 단위" },
+  { key: "price", steps: ["price"], label: "판매 가격" },
+  { key: "ship", steps: ["shipmethod", "shipfee"], label: "배송" },
+  { key: "droppy", steps: ["droppy"], label: "공유 보상" },
+  { key: "qty", steps: ["qty"], label: "준비 수량" },
+  { key: "period", steps: ["period"], label: "판매 기간" },
+  { key: "branch", steps: ["harvest", "shipnote"], label: "출하·발송" },
+];
+
 // UI-5-T7-F5-5-S3 — 판매유형 유래 source 캡션(데모 "내 농장 · 산지직송" 고정 폐기 후 실유형 배선).
 //   ⚠️ 수신(fromDropDetail)의 source 셀은 "YouTube" 폴백 — 수신 반영은 거울 접촉이라 별도 판정 대기.
 const COMMERCE_SOURCE_CAPTION: Record<"fresh" | "processed" | "goods", string> = {
@@ -936,6 +1000,382 @@ export function CardStudioPage({
     setCatOverwriteAsk(false);
     setStepToast("카탈로그 초안을 반영했어요 — 자유롭게 고치세요");
   }
+  // ── UI-5-T7-T5-W1 — "링고에게 제작시키기" 지휘자 (C안 보이는 조립·상품판매 패키지 v3) ──
+  //   상단 = 기존 실시간 미리보기(:4166 CardModelBody — 신규 렌더 경로 0·미충족 슬롯은 F5-5
+  //   정본 폴백이 회색 라벨 담당) / 하단 = 고정 독 대화(스튜디오 B안 상하 2분할 정합).
+  //   대답 1 = 기존 상태 setter 즉시 반영(lingo setField 사슬과 동일 종단 — LLM 왕복 0·대본 고정).
+  //   숫자(가격·수량·기간·수확일) = 입력 그대로(NUMBER_CRITICAL) · 자동 발행 0(거울 시트 수동).
+  const [directorOn, setDirectorOn] = useState(false);
+  const [dStep, setDStep] = useState<DirectorStep>("photo");
+  const [dLog, setDLog] = useState<{ role: "lingo" | "user"; text: string }[]>([]);
+  const [dText, setDText] = useState("");
+  const [dStart, setDStart] = useState("");
+  const [dEnd, setDEnd] = useState("");
+  const dCatalogHandledRef = useRef(false);
+  // T5-W1a(v4) — 스텝 내 2상 로컬: 분류 직접 찾기 / 무게 단위 g 입력 / 배송비 금액 입력.
+  const [dCatSearch, setDCatSearch] = useState(false);
+  const [dUnitGrams, setDUnitGrams] = useState(false);
+  const [dFeePaid, setDFeePaid] = useState(false);
+  // T5-W1a — KAMIS 품목 목록(폼 :312-315 동형 1회 로드 — 분류 후보·category_code 역참조 재료).
+  const [dKamisList, setDKamisList] = useState<{ item_code: string; item_name: string; category_code: string }[]>([]);
+  // T5-W1a — 가격 스텝 KAMIS 참고 1줄(생산자=신선 한정 · §0 락: 파트너 화면 전용 참고 — payload 무유출).
+  const [dBandLine, setDBandLine] = useState<string | null>(null);
+  // 링고 발화 = 로그 + 낭독(F5-4 FIFO — 순차 1줄 원칙이라 큐 상한 무접촉).
+  const dSay = (text: string) => {
+    setDLog((l) => [...l, { role: "lingo", text }]);
+    speak(text);
+  };
+  const dEcho = (text: string) => setDLog((l) => [...l, { role: "user", text }]);
+  const dGo = (next: DirectorStep) => {
+    setDStep(next);
+    if (next !== "done") dSay(DIRECTOR_MENTS[next]);
+  };
+  // 시작 — 게이트: 연락처(F6-3 문구 재사용 — 발행 게이트 선제) · 로그인은 _user 셸 보장.
+  //   시작 1회 고지(start 멘트)가 초안(✦) 자동 반영의 명시 제스처(Duke 계약 갱신 승인분).
+  function startDirector() {
+    if (!initialStore?.contact_phone?.trim()) {
+      setSaveError("손님이 연락드릴 전화번호가 필요해요 — 파트너 정보에서 전화번호를 등록해 주세요.");
+      return;
+    }
+    setDirectorOn(true);
+    setDLog([]);
+    setDText("");
+    setDStart("");
+    setDEnd("");
+    setDCatSearch(false);
+    setDUnitGrams(false);
+    setDFeePaid(false);
+    setDBandLine(null);
+    dCatalogHandledRef.current = false;
+    dSay(DIRECTOR_MENTS.start);
+    dGo("photo");
+  }
+  // 사진 수신 → startCatalog 백그라운드 + 다음 스텝(effect — 업로드 파이프는 기존 핸들러 재사용).
+  useEffect(() => {
+    if (!directorOn || dStep !== "photo" || !productImageUrl) return;
+    void startCatalog();
+    dGo("name");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorOn, dStep, productImageUrl]);
+  // catalog 완료/실패 소비 — done = ✦ 자동 반영(명시 제스처 = 시작 고지 승인분) / error·quota = 폴백 멘트.
+  useEffect(() => {
+    if (!directorOn || dCatalogHandledRef.current) return;
+    if (catStatus === "done" && catDraft) {
+      dCatalogHandledRef.current = true;
+      applyCatalogDraft(); // touch(product) 내장 = ✦ 표시.
+    } else if (catStatus === "error" || catStatus === "quota") {
+      dCatalogHandledRef.current = true;
+      dSay(DIRECTOR_MENTS.catalogFallback);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorOn, catStatus, catDraft]);
+  // T5-W1a — KAMIS 품목 1회 로드(폼 :312-315 동형 쿼리 — 분류 스텝 진입·신선 한정 · graceful).
+  useEffect(() => {
+    if (!directorOn || dStep !== "category" || cfgProduct.type !== "fresh" || dKamisList.length > 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await getSupabase()
+          .from("kamis_items" as never)
+          .select("item_code, item_name, category_code")
+          .order("sort_order");
+        if (!cancelled) setDKamisList((data as unknown as typeof dKamisList | null) ?? []);
+      } catch {
+        // graceful — 품목 연동은 선택 사항(폼 동일). 후보 0 = 직접 입력 폴백이 담당.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorOn, dStep]);
+  // T5-W1a — 가격 스텝 KAMIS 참고 1줄(생산자=신선 + 품목 확정 시에만 · 폼 :398-410 동형 invoke ·
+  //   구성 파라미터 미전달 = 기본 kg축). 실패·no_data = 미표시(참고 정보 — 무언 실패 허용 45 관례).
+  useEffect(() => {
+    if (!directorOn || dStep !== "price") return;
+    const code = cfgProduct.kamisItemCode;
+    const catCode = code ? (dKamisList.find((it) => it.item_code === code)?.category_code ?? null) : null;
+    if (cfgProduct.type !== "fresh" || !code || !catCode) {
+      setDBandLine(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = await getSupabase().functions.invoke("get-price-band", {
+          body: { item_code: code, category_code: catCode },
+        });
+        if (cancelled || error || !data) return;
+        const band = data as { status?: string; item_name?: string | null; wholesale?: { avg: number; median?: number } | null };
+        const rep = band.status === "ok" ? (band.wholesale?.median ?? band.wholesale?.avg ?? null) : null;
+        if (rep != null && rep > 0) {
+          // 백원 반올림 + "약" 접두(단위 헌법 표기 — PriceBandAdvisor :111 동형). 참고 1줄뿐, 값 제안·자동입력 0.
+          const won = (Math.round(rep / 100) * 100).toLocaleString("ko-KR");
+          setDBandLine(`KAMIS 참고 — ${band.item_name ?? cfgProduct.itemCategory} 도매 약 ${won}원/kg`);
+        }
+      } catch {
+        // 참고 정보 — 조용히 생략.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorOn, dStep]);
+  // ── T5-W1b(D2) — 떠다니는 링고(연출 층 전용 · 지휘 로직 무수정 — 상태 구독만) ──
+  //   위치 = 스텝별 슬롯 실측(읽기 전용 DOM 측정 — 카드 렌더 무접촉): photo/name 은 미리보기
+  //   (hero 앵커 :4550 + 내부 img) 랜드마크, 그 외(원산지 등 비표시 필드)는 독 상단 정위치 폴백.
+  //   이동 = CSS transform transition(JS 애니메이션 라이브러리 0) · prefers-reduced-motion = 이동
+  //   정지(폴백 정위치 고정)+스파클 정지 · 스파클 = 답 반영(user echo) 시 직전 슬롯 1회(스텝당 상한 1).
+  const dDockRef = useRef<HTMLDivElement>(null);
+  const [dOrbPos, setDOrbPos] = useState<{ x: number; y: number } | null>(null);
+  const [dSpark, setDSpark] = useState<{ x: number; y: number; key: number } | null>(null);
+  const dSparkedRef = useRef<Set<string>>(new Set());
+  const dPrevStepRef = useRef<DirectorStep>("photo");
+  const dLogLenRef = useRef(0);
+  // 스파클 — dLog 구독(핸들러 무수정): 새 user 항목 = 답 반영 신호. 위치 = 이동 전(직전 렌더) 오브 좌표.
+  useEffect(() => {
+    const grew = dLog.length > dLogLenRef.current;
+    dLogLenRef.current = dLog.length;
+    if (!directorOn || !grew) return;
+    const last = dLog[dLog.length - 1];
+    if (!last || last.role !== "user") return;
+    const answered = dPrevStepRef.current; // 답한 스텝(이 커밋에서 dStep 은 이미 다음 스텝).
+    if (dSparkedRef.current.has(answered)) return; // 과연출 금지 — 스텝당 1회 상한(프리체크 복귀 재답 포함).
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!dOrbPos) return;
+    dSparkedRef.current.add(answered);
+    setDSpark((s) => ({ x: dOrbPos.x, y: dOrbPos.y, key: (s?.key ?? 0) + 1 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dLog]);
+  // 직전 스텝 추적(스파클 귀속용) — 스파클 effect 뒤 선언 = 같은 커밋에서 스파클이 이전 값을 본다.
+  useEffect(() => {
+    dPrevStepRef.current = dStep;
+  }, [dStep]);
+  // 슬롯 실측 → 오브 좌표(스텝 진입·스크롤·리사이즈 시 재측정 — 전부 읽기 전용).
+  useEffect(() => {
+    if (!directorOn) {
+      setDOrbPos(null);
+      setDSpark(null);
+      dSparkedRef.current = new Set();
+      return;
+    }
+    const ORB = 40;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const measure = () => {
+      // 폴백 = 독 상단 정위치(우측 — 체크리스트 헤더 비가림).
+      const dock = dDockRef.current?.getBoundingClientRect() ?? null;
+      const fb = dock
+        ? { x: Math.max(8, dock.right - ORB - 16), y: Math.max(8, dock.top - ORB - 8) }
+        : { x: window.innerWidth - ORB - 16, y: Math.max(8, window.innerHeight - 320) };
+      if (reduced) {
+        setDOrbPos(fb); // 이동 정지 — 정위치 고정 표시.
+        return;
+      }
+      let pos = fb;
+      const host = document.querySelector('[data-assemble-anchor="hero"]');
+      const hostRect = host?.getBoundingClientRect() ?? null;
+      const hostVisible = !!hostRect && hostRect.bottom > 72 && hostRect.top < window.innerHeight - 200 && hostRect.width > 0;
+      if (hostVisible && hostRect) {
+        if (dStep === "photo") {
+          // 사진 슬롯 = 히어로 상단(이미지 영역 우상단).
+          pos = { x: Math.max(8, hostRect.right - ORB - 8), y: Math.max(8, hostRect.top + 8) };
+        } else if (dStep === "name") {
+          // 이름 슬롯 = 히어로 이미지 하단(제목대) — img 실측, 없으면 히어로 좌상 폴백.
+          const img = host?.querySelector("img");
+          const r = img?.getBoundingClientRect() ?? null;
+          pos = r && r.width > 0
+            ? { x: Math.max(8, r.left - 6), y: Math.max(8, r.bottom - ORB / 2) }
+            : { x: Math.max(8, hostRect.left + 8), y: Math.max(8, hostRect.top + 8) };
+        }
+      }
+      setDOrbPos(pos);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorOn, dStep]);
+  // T5-W1a — 보상 스텝 진입 헬퍼: 추천값 프리필(제안 → 사장님 확정 — 숫자 입력 그대로).
+  function goDroppy() {
+    setDText(String(DIRECTOR_DROPPY_RATE_DEFAULT));
+    dGo("droppy");
+  }
+  // T5-W1a(D1) — 프리체크: done 선언 전 발행 게이트 판정 체인(:3906 publishGate 동일 순서) 자체 점검.
+  //   미충족 = 해당 스텝 복귀(복귀 질문 = 그 스텝 멘트 정본 재제시 — 재량 작문 0).
+  function finishDirector() {
+    const priceNum = Number(cfgProductPrice.replace(/[^0-9]/g, "")) || 0;
+    const back: DirectorStep | null = !productImageUrl
+      ? "photo"
+      : !cfgProductName.trim()
+        ? "name"
+        : priceNum <= 0
+          ? "price"
+          : !(applied["seasonal"] && saleStartIso && saleEndIso)
+            ? "period"
+            : null;
+    if (back) {
+      dGo(back);
+      return;
+    }
+    setDStep("done");
+    dSay(DIRECTOR_MENTS.done);
+  }
+  // 텍스트/숫자 답 제출 — 스텝별 기존 setter 직결(신규 쓰기 경로 0 · NUMBER_CRITICAL: digits 그대로).
+  function submitDirectorText() {
+    const v = dText.trim();
+    if (!v) return;
+    if (dStep === "name") {
+      setCfgProductName(v);
+      // T5-W1a(D1) — 제목 자동 승계: 비어 있을 때만(사장님 기입분 보존 — 발행 게이트 hasTitleForPublish 정합).
+      if (!cfgTitle.trim()) setCfgTitle(v);
+      dEcho(v);
+      setDText("");
+      dGo("type");
+    } else if (dStep === "origin") {
+      setCfgProduct((p) => ({ ...p, origin: v }));
+      dEcho(v);
+      setDText("");
+      dGo("unit");
+    } else if (dStep === "price") {
+      const digits = v.replace(/[^0-9]/g, "");
+      if (!digits) return;
+      setCfgProductPrice(digits);
+      confirmHelper("product"); // 가격 직접 입력 = 도우미 완료(기존 관례 :4899 동형).
+      dEcho(v);
+      setDText("");
+      setDBandLine(null);
+      dGo("shipmethod");
+    } else if (dStep === "droppy") {
+      const digits = v.replace(/[^0-9]/g, "");
+      if (!digits) return;
+      const n = Number(digits);
+      if (n > 30) return; // 폼 슬라이더 정본 범위(0~30%) — 초과는 확정 불가(변형 금지 = 클램프 없음).
+      setCfgProduct((p) => ({ ...p, droppyMode: "rate", droppyRate: n }));
+      dEcho(`${n}%`);
+      setDText("");
+      dGo("qty");
+    } else if (dStep === "qty") {
+      const digits = v.replace(/[^0-9]/g, "");
+      if (!digits) return;
+      setCfgProduct((p) => ({ ...p, quantity: digits }));
+      dEcho(v);
+      setDText("");
+      // [T5-W5 훅 자리 — 모일수록 할인 분기(성장설계 §2): 수량 확정 직후 단계표 제안 삽입 지점.
+      //   이번(W1)은 미노출 — 예약 W5 에서 이 지점에 분기 UI 배선.]
+      dGo("period");
+    }
+  }
+  // T5-W1a — 유형 3분기(실폼 TYPE_OPTIONS 정합: 신선식품/가공식품/공산품·잡화) + productKind 동기
+  //   (kindRanges·제철 캘린더 정합 — goods=manufactured 매핑).
+  function pickDirectorType(t: ProductForm["type"], label: string) {
+    setCfgProduct((p) => ({ ...p, type: t }));
+    setProductKind(t === "goods" ? "manufactured" : t);
+    dEcho(label);
+    dGo("category");
+  }
+  // T5-W1a — 품목 분류 확정: 후보 1탭 = itemCategory+kamisItemCode 동시 기록(폼 :684 동형).
+  function pickDirectorCategory(it: { item_code: string; item_name: string }) {
+    setCfgProduct((p) => ({ ...p, itemCategory: it.item_name, kamisItemCode: it.item_code }));
+    dEcho(it.item_name);
+    setDText("");
+    setDCatSearch(false);
+    dGo("origin");
+  }
+  // T5-W1a — 품목 분류 자유 입력(가공·공산품 상시 / 신선 폴백 — 코드 미확정 = 시세 연동 없음, 폼 허용 동형).
+  function submitDirectorCategoryText() {
+    const v = dText.trim();
+    if (!v) return;
+    setCfgProduct((p) => ({ ...p, itemCategory: v, kamisItemCode: "" }));
+    dEcho(v);
+    setDText("");
+    setDCatSearch(false);
+    dGo("origin");
+  }
+  // T5-W1a — 판매 단위(UNIT_OPTIONS 정본 3형). 무게 = 1개당 g 후속 입력(폼 총중량 kg 필드로 정확 환산 저장).
+  function pickDirectorUnit(u: ProductForm["saleUnit"], label: string) {
+    setCfgProduct((p) => ({ ...p, saleUnit: u }));
+    dEcho(label);
+    if (u === "weight") {
+      setDUnitGrams(true);
+      return; // g 입력 후 진행(박스 입수 등 세부는 폼 소관 — done 멘트 안내 커버).
+    }
+    dGo("price");
+  }
+  function submitDirectorUnitGrams() {
+    const digits = dText.replace(/[^0-9]/g, "");
+    if (!digits || Number(digits) <= 0) return;
+    // 폼 weight 모드 정본 필드 = totalWeight(kg) — g 입력의 정확 환산(가공·반올림 0: 500g → "0.5").
+    setCfgProduct((p) => ({ ...p, totalWeight: String(Number(digits) / 1000), weightUnknown: false }));
+    dEcho(`1개당 ${digits}g`);
+    setDText("");
+    setDUnitGrams(false);
+    dGo("price");
+  }
+  // 기간 확정(시작·끝) — seasonal 장착 + 정본 setter(NUMBER_CRITICAL: 값 그대로). 확정 후
+  //   date 입력 상태는 분기(출하 기간) 재사용 위해 초기화.
+  function submitDirectorPeriod() {
+    if (!dStart || !dEnd || dEnd < dStart) return;
+    setSaleStartIso(dStart);
+    setSaleEndIso(dEnd);
+    setApplied((p) => ({ ...p, seasonal: true }));
+    dEcho(`${dStart} ~ ${dEnd}`);
+    setDStart("");
+    setDEnd("");
+    if (cfgProduct.type === "fresh") dGo("harvest");
+    else dGo("shipnote");
+  }
+  // T5-W1a(D3) — 수확(출하) 기간: 시작~끝(하루 = 시작=끝, E5g2 범위 특수형). 폼 정본
+  //   harvestDate/harvestDateEnd + kindRanges.fresh(제철 캘린더 표시분) 동시 정합 — "M/D~M/D 순차 발송"
+  //   표기는 기존 payload 사슬(:1186 date_range_label)이 생성(신규 표기 경로 0).
+  function submitDirectorHarvestRange() {
+    if (!dStart || !dEnd || dEnd < dStart) return;
+    setCfgProduct((p) => ({ ...p, harvestDate: dStart, harvestDateEnd: dEnd }));
+    setKindRanges((prev) => ({ ...prev, fresh: { ...prev.fresh, harvestStart: dStart, harvestEnd: dEnd } }));
+    dEcho(`${dStart} ~ ${dEnd}`);
+    setDStart("");
+    setDEnd("");
+    finishDirector(); // D1 프리체크 경유 done.
+  }
+  // 발송 안내(가공·공산품) — F5-8 cfgShipEta 단일 소스. 이후 프리체크 경유 done.
+  function pickDirectorShipEta(v: string) {
+    setCfgShipEta(v);
+    dEcho(v);
+    finishDirector();
+  }
+  // 배송 방식 — F6-4 게이트 연동(직접 전달 = COURIERS 정본값 → E5b ship_method 편입이 서버 판정 재료).
+  //   직접 전달 = 픽업형: 배송비 스텝 생략(freeShip 기본 유지 — 판단 보고), 택배 = 배송비 스텝 진행.
+  function pickDirectorShipMethod(m: "택배" | "직접 전달") {
+    setApplied((p) => ({ ...p, delivery: true }));
+    dEcho(m);
+    if (m === "직접 전달") {
+      setCfgCourier("직접 전달");
+      goDroppy();
+      return;
+    }
+    dGo("shipfee");
+  }
+  // T5-W1a — 배송비 부담: 무료 = freeShip true(내 부담) / 구매자 부담 = 금액 입력(digits 그대로).
+  function pickDirectorFeeFree() {
+    setCfgProduct((p) => ({ ...p, freeShip: true, shipFee: "" }));
+    dEcho("무료배송");
+    setDFeePaid(false);
+    goDroppy();
+  }
+  function submitDirectorFeeAmount() {
+    const digits = dText.replace(/[^0-9]/g, "");
+    if (!digits || Number(digits) <= 0) return;
+    setCfgProduct((p) => ({ ...p, freeShip: false, shipFee: digits }));
+    dEcho(`배송비 ${digits}원`);
+    setDText("");
+    setDFeePaid(false);
+    goDroppy();
+  }
+
   // UI-5-T2-E5a — 상품 사진 업로드(45 handleHeroImageChange :2132 파이프 계승). 갤러리·촬영 공용.
   //   BUG-5 방어: 오직 input change(사용자 제스처)에서만 실행 · effect 동기화 없음 · objectURL revoke ·
   //   조건 없는 setState 렌더 루프 없음(setApplied/confirmHelper 는 성공 1회). 크기/형식 = resizeToJpegBlob 가드.
@@ -1056,6 +1496,9 @@ export function CardStudioPage({
       // F5-8 — 발송 안내 편입(free_ship 선례 동형 additive 키). 수신 adapters.ts ship_note 소비
       //   기배선(S4-5) → [배송정보] 표기 — 폼 안내 문구("받는 분께 보여요")의 근거.
       ...(cfgShipEta.trim() ? { ship_note: cfgShipEta.trim() } : {}),
+      // T5-W1 — 배송 방식 편입(F6-4 서버 게이트 v7.12 의 판정 재료 = block_data.ship_method ·
+      //   수신 adapters ship_method 소비 기배선). "직접 전달" = 픽업형(배송지 게이트 면제).
+      ...(cfgCourier ? { ship_method: cfgCourier } : {}),
     };
     setProductSaving(true);
     setProductSaveError(null);
@@ -4126,6 +4569,17 @@ export function CardStudioPage({
           })}
         </div>
 
+        {/* UI-5-T7-T5-W1 — 제작시키기 입구(커머스 한정·비사업자 잠금 제외·지휘 중 미표시). */}
+        {mode === "commerce" && !businessLocked && !directorOn && (
+          <button
+            type="button"
+            onClick={startDirector}
+            className="mt-2 flex w-full min-h-[48px] items-center justify-center rounded-2xl bg-[#1D4ED8] text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+          >
+            ✦ 링고에게 제작시키기
+          </button>
+        )}
+
         {/* F5-3 — 잠금 탭 인라인 유도(Radix 금지 · 조건부 렌더). [퍼블릭으로 계속]=닫기(현 모드 유지). */}
         {businessLocked && bizGateOpen && (
           <div className="mt-2 space-y-3 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
@@ -6337,6 +6791,407 @@ export function CardStudioPage({
         </div>
       )}
 
+      {/* UI-5-T7-T5-W1 — 지휘자 하단 독(스튜디오 B안 상하 2분할 정합): 위 = 기존 실시간 미리보기
+          그대로 노출 · 아래 = 대화 레일. 체크리스트 = 오버레이 ✓/⟳/○ 문법 차용(인라인 — runAssembly
+          타이머 연출은 인터뷰형과 충돌이라 미사용·판단 보고). 종료·탈출 시 입력분 보존(상태 직결). */}
+      {/* T5-W1b(D2) — 떠다니는 링고 오브(z-56: 독 55 위·거울 60 아래 — 스튜디오 오버레이 층, 카드 렌더
+          무접촉). 이동 = transform transition(CSS 전용) · motion-reduce 시 transition 정지(정위치 고정). */}
+      {directorOn && dOrbPos && (
+        <div
+          className="pointer-events-none fixed left-0 top-0 z-[56] motion-reduce:transition-none"
+          style={{ transform: `translate(${dOrbPos.x}px, ${dOrbPos.y}px)`, transition: "transform 600ms cubic-bezier(0.3,1.2,0.4,1)" }}
+          aria-hidden="true"
+        >
+          <LingoGenie size={40} variant="avatar" talking={speaking} className="rounded-full ring-2 ring-white" />
+        </div>
+      )}
+      {/* T5-W1b — 답 반영 스파클(스텝당 1회 one-shot · fill both 종료 후 투명 · reduced-motion 정지). */}
+      {directorOn && dSpark && (
+        <div
+          key={dSpark.key}
+          className="pointer-events-none fixed left-0 top-0 z-[57]"
+          style={{ transform: `translate(${dSpark.x + 26}px, ${dSpark.y - 4}px)` }}
+          aria-hidden="true"
+        >
+          <style>{`@keyframes d-spark-pop{0%{transform:scale(0) rotate(0deg);opacity:1}55%{transform:scale(1.4) rotate(120deg);opacity:1}100%{transform:scale(.3) rotate(200deg);opacity:0}}.d-spark-pop{display:inline-block;animation:d-spark-pop .7s ease-out both}@media (prefers-reduced-motion: reduce){.d-spark-pop{animation:none;opacity:0}}`}</style>
+          <span className="d-spark-pop">
+            <svg viewBox="0 0 24 24" width={18} height={18} aria-hidden="true">
+              <path d="M12 0C13.4 8.6 15.4 10.6 24 12C15.4 13.4 13.4 15.4 12 24C10.6 15.4 8.6 13.4 0 12C8.6 10.6 10.6 8.6 12 0Z" fill="#60A5FA" />
+            </svg>
+          </span>
+        </div>
+      )}
+      {directorOn && (
+        <div ref={dDockRef} className="fixed inset-x-0 bottom-0 z-[55] rounded-t-2xl border-t border-[#E8E8EC] bg-white [box-shadow:0_-12px_40px_-12px_rgba(15,23,42,0.25)]">
+          <div className="mx-auto max-w-md px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">
+            {/* 헤더 — 체크리스트 + 탈출구·닫기 */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 flex-1 flex-wrap gap-x-2.5 gap-y-1">
+                {(() => {
+                  // T5-W1a(v4) — 유효 순서(분기 반영 · shipfee 는 직접 전달 시 통과 스킵이라 지나가면 ✓).
+                  const isFreshType = cfgProduct.type === "fresh";
+                  const branchStep: DirectorStep = isFreshType ? "harvest" : "shipnote";
+                  const order: DirectorStep[] = ["photo", "name", "type", "category", "origin", "unit", "price", "shipmethod", "shipfee", "droppy", "qty", "period", branchStep, "done"];
+                  const cur = order.indexOf(dStep);
+                  return DIRECTOR_CHECK.map((c) => {
+                    const label = c.key === "branch" ? (isFreshType ? "출하 기간" : "발송 안내") : c.label;
+                    const idxs = c.steps.map((s) => order.indexOf(s)).filter((i) => i >= 0);
+                    const doing = idxs.includes(cur);
+                    const st = doing ? "doing" : idxs.every((i) => i < cur) ? "done" : "todo";
+                    return (
+                      <span
+                        key={c.key}
+                        className="flex items-center gap-1 text-[10.5px] font-semibold"
+                        style={{ color: st === "done" ? "#16161D" : st === "doing" ? "#1D4ED8" : "#B4B4BC" }}
+                      >
+                        <span className="w-3 text-center">{st === "done" ? "✓" : st === "doing" ? "⟳" : "○"}</span>
+                        {label}
+                      </span>
+                    );
+                  });
+                })()}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDirectorOn(false);
+                    jumpToBlock("product"); // 탈출구 — 동일 상태 수렴(경량 폼 = 기존 상품 폼).
+                  }}
+                  className="flex min-h-[32px] items-center rounded-lg border border-[#E8E8EC] bg-white px-2 text-[11px] font-semibold text-[#525252]"
+                >
+                  한 번에 입력하기
+                </button>
+                <button
+                  type="button"
+                  aria-label="제작시키기 닫기"
+                  onClick={() => setDirectorOn(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-[#8A8A8A] active:bg-[#F5F5F5]"
+                >
+                  <X className="h-4 w-4" strokeWidth={2.25} />
+                </button>
+              </div>
+            </div>
+
+            {/* 대화 로그 — 링고 좌 / 대표님 우(스파클 1회 = 즉시 반영 확인은 미리보기 burst 소관). */}
+            <div className="mt-2 max-h-[24vh] space-y-1.5 overflow-y-auto">
+              {dLog.map((m, i) => (
+                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <p
+                    className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[12.5px] font-medium leading-relaxed [word-break:keep-all] ${
+                      m.role === "user"
+                        ? "rounded-br-md bg-[#1D4ED8] text-white"
+                        : "rounded-bl-md bg-[#F4F4F5] text-[#404040]"
+                    }`}
+                  >
+                    {m.text}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* 입력 존 — 스텝별(대답 1 = setter 즉시 반영). */}
+            <div className="mt-2">
+              {dStep === "photo" && (
+                <label className="flex min-h-[48px] w-full cursor-pointer items-center justify-center rounded-2xl bg-[#0A0A0A] text-[14px] font-bold text-white active:scale-[0.98]">
+                  사진 올리기
+                  <input type="file" accept="image/*" className="hidden" onChange={handleProductImageChange} />
+                </label>
+              )}
+              {(dStep === "name" || dStep === "origin" || dStep === "price" || dStep === "qty" || dStep === "droppy") && (
+                <div className="space-y-1.5">
+                  {/* T5-W1a — KAMIS 참고 1줄(신선+품목 확정 시에만 · 파트너 화면 전용 참고 — §0 락). */}
+                  {dStep === "price" && dBandLine && (
+                    <p className="text-[11px] font-semibold text-[#8A8A8A]">{dBandLine}</p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={dText}
+                      onChange={(e) => setDText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                          e.preventDefault();
+                          submitDirectorText();
+                        }
+                      }}
+                      inputMode={dStep === "name" || dStep === "origin" ? "text" : "numeric"}
+                      placeholder={
+                        dStep === "name"
+                          ? "상품 이름"
+                          : dStep === "origin"
+                            ? "원산지"
+                            : dStep === "price"
+                              ? "판매 가격 (원)"
+                              : dStep === "droppy"
+                                ? "공유 보상 (%)"
+                                : "준비 수량 (개)"
+                      }
+                      className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={submitDirectorText}
+                      className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+                    >
+                      {dStep === "droppy" ? "확정" : "입력"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/* T5-W1a — 품목 분류: 신선 = 상품명 기반 후보 1탭 확정 + [직접 찾기] 폴백 / 가공·공산품 = 자유 입력. */}
+              {dStep === "category" &&
+                (() => {
+                  const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+                  const isFreshType = cfgProduct.type === "fresh";
+                  const nameCands =
+                    isFreshType && !dCatSearch
+                      ? dKamisList.filter((it) => norm(cfgProductName).includes(norm(it.item_name))).slice(0, 6)
+                      : [];
+                  const typedCands =
+                    isFreshType && dCatSearch && dText.trim()
+                      ? dKamisList.filter((it) => norm(it.item_name).includes(norm(dText))).slice(0, 6)
+                      : [];
+                  const showChips = isFreshType && !dCatSearch && nameCands.length > 0;
+                  return showChips ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {nameCands.map((it) => (
+                          <button
+                            key={it.item_code}
+                            type="button"
+                            onClick={() => pickDirectorCategory(it)}
+                            className="flex min-h-[44px] items-center rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+                          >
+                            {it.item_name}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setDCatSearch(true)}
+                          className="flex min-h-[44px] items-center rounded-xl border border-[#E5E5E5] bg-white px-4 text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
+                        >
+                          직접 찾기
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {typedCands.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {typedCands.map((it) => (
+                            <button
+                              key={it.item_code}
+                              type="button"
+                              onClick={() => pickDirectorCategory(it)}
+                              className="flex min-h-[44px] items-center rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+                            >
+                              {it.item_name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={dText}
+                          onChange={(e) => setDText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                              e.preventDefault();
+                              submitDirectorCategoryText();
+                            }
+                          }}
+                          placeholder="품목 분류"
+                          className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                          style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={submitDirectorCategoryText}
+                          className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+                        >
+                          입력
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              {/* T5-W1a — 판매 단위(UNIT_OPTIONS 정본 3형) · 무게 선택 시 1개당 g 후속 입력. */}
+              {dStep === "unit" &&
+                (dUnitGrams ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={dText}
+                      onChange={(e) => setDText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                          e.preventDefault();
+                          submitDirectorUnitGrams();
+                        }
+                      }}
+                      inputMode="numeric"
+                      placeholder="1개당 무게 (g)"
+                      className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={submitDirectorUnitGrams}
+                      className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+                    >
+                      확정
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => pickDirectorUnit("unit", "낱개로")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white active:scale-[0.98]">
+                      낱개로
+                    </button>
+                    <button type="button" onClick={() => pickDirectorUnit("box", "박스·묶음으로")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
+                      박스·묶음으로
+                    </button>
+                    <button type="button" onClick={() => pickDirectorUnit("weight", "무게 단위로")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
+                      무게 단위로
+                    </button>
+                  </div>
+                ))}
+              {/* T5-W1a — 배송비 부담: 무료(내 부담) / 구매자 부담(금액 입력 — digits 그대로). */}
+              {dStep === "shipfee" &&
+                (dFeePaid ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={dText}
+                      onChange={(e) => setDText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                          e.preventDefault();
+                          submitDirectorFeeAmount();
+                        }
+                      }}
+                      inputMode="numeric"
+                      placeholder="배송비 (원)"
+                      className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={submitDirectorFeeAmount}
+                      className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+                    >
+                      확정
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button type="button" onClick={pickDirectorFeeFree} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white active:scale-[0.98]">
+                      무료배송 (내 부담)
+                    </button>
+                    <button type="button" onClick={() => setDFeePaid(true)} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
+                      구매자 부담
+                    </button>
+                  </div>
+                ))}
+              {/* T5-W1a — 유형 3분기(실폼 TYPE_OPTIONS 정본 라벨 정합). */}
+              {dStep === "type" && (
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => pickDirectorType("fresh", "신선식품")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white active:scale-[0.98]">
+                    신선식품
+                  </button>
+                  <button type="button" onClick={() => pickDirectorType("processed", "가공식품")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
+                    가공식품
+                  </button>
+                  <button type="button" onClick={() => pickDirectorType("goods", "공산품·잡화")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
+                    공산품·잡화
+                  </button>
+                </div>
+              )}
+              {dStep === "period" && (
+                <div className="flex items-center gap-2">
+                  <input type="date" value={dStart} onChange={(e) => setDStart(e.target.value)} className="h-11 min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-2 text-[12px] font-semibold text-[#0A0A0A]" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }} />
+                  <span className="shrink-0 text-[11px] font-semibold text-[#8A8A8A]">~</span>
+                  <input type="date" value={dEnd} min={dStart || undefined} onChange={(e) => setDEnd(e.target.value)} className="h-11 min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-2 text-[12px] font-semibold text-[#0A0A0A]" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }} />
+                  <button type="button" onClick={submitDirectorPeriod} disabled={!dStart || !dEnd || dEnd < dStart} className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-3 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]">
+                    확정
+                  </button>
+                </div>
+              )}
+              {/* T5-W1a(D3) — 수확(출하) 기간: 시작~끝(하루 = 시작=끝 허용). "순차 발송" 표기는 정본 사슬 소관. */}
+              {dStep === "harvest" && (
+                <div className="flex items-center gap-2">
+                  <input type="date" value={dStart} onChange={(e) => setDStart(e.target.value)} className="h-11 min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-2 text-[12px] font-semibold text-[#0A0A0A]" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }} />
+                  <span className="shrink-0 text-[11px] font-semibold text-[#8A8A8A]">~</span>
+                  <input type="date" value={dEnd} min={dStart || undefined} onChange={(e) => setDEnd(e.target.value)} className="h-11 min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-2 text-[12px] font-semibold text-[#0A0A0A]" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }} />
+                  <button
+                    type="button"
+                    onClick={submitDirectorHarvestRange}
+                    disabled={!dStart || !dEnd || dEnd < dStart}
+                    className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-3 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                  >
+                    확정
+                  </button>
+                </div>
+              )}
+              {dStep === "shipnote" && (
+                <div className="space-y-2">
+                  <div className="flex gap-1.5">
+                    {["당일 발송", "1~2일", "3~5일"].map((p) => (
+                      <button key={p} type="button" onClick={() => pickDirectorShipEta(p)} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[12.5px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input value={dText} onChange={(e) => setDText(e.target.value)} placeholder="예: 주문 후 2~3일" className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }} />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!dText.trim()) return;
+                        pickDirectorShipEta(dText.trim());
+                        setDText("");
+                      }}
+                      className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+                    >
+                      입력
+                    </button>
+                  </div>
+                </div>
+              )}
+              {dStep === "shipmethod" && (
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => pickDirectorShipMethod("택배")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white active:scale-[0.98]">
+                    택배
+                  </button>
+                  <button type="button" onClick={() => pickDirectorShipMethod("직접 전달")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]">
+                    직접 전달
+                  </button>
+                </div>
+              )}
+              {dStep === "done" && (
+                <div className="flex gap-2">
+                  {/* T5-W1a(D1) — 프리체크 통과 상태에서만 렌더(발행 게이트 canPublish 동일 판정 재사용). */}
+                  {canPublish && (
+                    <button
+                      type="button"
+                      onClick={() => setMirrorOpen(true)}
+                      className="flex min-h-[48px] flex-1 items-center justify-center rounded-2xl bg-[#1D4ED8] text-[14px] font-bold text-white active:scale-[0.98]"
+                    >
+                      카드 확인하기
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setDirectorOn(false)}
+                    className="flex min-h-[48px] flex-1 items-center justify-center rounded-2xl border border-[#E8E8EC] bg-white text-[14px] font-bold text-[#525252] active:bg-[#F5F5F7]"
+                  >
+                    닫기
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* UI-5-T7-F5-11 — 나가기 확인(중앙 오버레이 — 발행 완료 오버레이 문법 동형 · Radix 0).
           작성분(hasWork) 유무 = 앰버 경고줄만 분기. 임시저장 암시 문구 금지(미구현 정직 —
           초안 임시저장은 post-pilot 파킹). */}
@@ -6426,7 +7281,10 @@ export function CardStudioPage({
       )}
 
       {/* ───────── 링고AI 플로팅 어시스턴트 (스튜디오 어디서나 따라다녀요) ───────── */}
-      {!dropped && (
+      {/* T5-W1b(D2) — 단일 무대: 지휘(directorOn) 중 여타 대화 표면 전부 숨김(이 프래그먼트가 전수:
+          기록실 시트·FAB 오브·응원/재소환 말풍선·막힘 제안 칩·음성 고스트). 종료(X·done 닫기) 시
+          directorOn=false 로 자동 복귀. 거울 시트(z-60)는 별도 층 — 기존 z 정합 그대로 위 허용. */}
+      {!dropped && !directorOn && (
         <>
           {/* UI-5-T3-L2 — 기록실 시트(구 플로팅 패널·백드롭·이동 핸들 폐지 · 비모달 — 판단 근거는
               LingoRecordSheet49 헤더 주석). 소환 = 오브 길게 탭(L1 타이머). 이관: 웰컴·제안 칩·로그·
