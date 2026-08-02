@@ -23,7 +23,7 @@ function clampRange(raw: unknown): RangeDays {
 }
 
 export const Route = createFileRoute("/_partner/partner/results")({
-  head: () => ({ meta: [{ title: "매출관리 — LinkDrop" }] }),
+  head: () => ({ meta: [{ title: "매장 진단 — LinkDrop" }] }),
   validateSearch: (search: Record<string, unknown>): Search => ({
     range: clampRange(search.range),
   }),

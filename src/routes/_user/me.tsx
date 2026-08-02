@@ -736,9 +736,9 @@ function MePage() {
           </div>
         </section>
 
-        {/* v0-44 정본 L815~823 구조: 비즈=[내 매장 + 판매관리] 2-col / 비즈아님=[내 주문].
+        {/* v0-44 정본 L815~823 구조: 비즈=[내 매장 + 내 상점] 2-col / 비즈아님=[내 주문].
             ★ 진입 카드만(대상 페이지 무접촉). 내매장=/partner (트랙2 store-hub 정식, 6d72fa7).
-            판매관리=/partner/products (판매관리 3탭 정식, 6d72fa7). */}
+            내 상점=/partner/products (3탭 정식, 6d72fa7 — F7-4a 명칭 정정). */}
         <div className={`grid gap-3 ${data.isBusiness ? "grid-cols-2" : "grid-cols-1"}`}>
           {data.isBusiness ? (
             <>
@@ -750,7 +750,7 @@ function MePage() {
               />
               <NavCard
                 icon={Package}
-                title="판매관리"
+                title="내 상점"
                 subtitle="상품·주문 관리"
                 onClick={() => navigate({ to: "/partner/products" })}
               />

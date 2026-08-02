@@ -196,7 +196,7 @@ export function PartnerResultsPage({
           />
         </section>
 
-        {/* ④ 매출 정산 (준비중) — billing 스텁을 매출관리로 편입. */}
+        {/* ④ 매출 정산 (준비중) — billing 스텁을 매장 진단으로 편입. */}
         <ComingSoonCard title="매출 정산" desc="정산 내역·청구" />
 
         {/* ⑤ 상품별 전환 (준비중) — D1 보류, placeholder(실제 쿼리 없음). */}
@@ -219,7 +219,7 @@ function Header({ partnerName }: { partnerName: string }) {
         <ArrowLeft className="size-3" strokeWidth={2} />
         매장 홈
       </Link>
-      <h1 className="mt-1 text-lg font-bold tracking-ko text-[#0A0A0A]">매출관리</h1>
+      <h1 className="mt-1 text-lg font-bold tracking-ko text-[#0A0A0A]">매장 진단</h1>
       {partnerName ? (
         <p className="mt-0.5 text-xs font-medium tracking-ko text-[#737373]">{partnerName}</p>
       ) : null}

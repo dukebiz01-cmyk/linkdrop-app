@@ -231,7 +231,7 @@ function OrderCard({
 
 function ProductsIndexPage() {
   const navigate = useNavigate();
-  // 판매관리 3탭(#418: 인라인 탭). 상품(현행)/주문(preorders 흡수)/배송(준비중).
+  // 내 상점 3탭(#418: 인라인 탭 — F7-4a 명칭 정정). 상품(현행)/주문(preorders 흡수)/배송(준비중).
   const [tab, setTab] = useState<"product" | "order" | "shipping">("product");
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -447,7 +447,7 @@ function ProductsIndexPage() {
   return (
     <main className="min-h-screen bg-[#FAFAFA] tracking-ko pb-12">
       {/* ★ 갇힘 해결 — v0 TopBar 뒤로가기(→/me). _partner BottomNav 유지. */}
-      <TopBar title="판매관리" onBack={() => navigate({ to: "/me" })} />
+      <TopBar title="내 상점" onBack={() => navigate({ to: "/me" })} />
 
       {/* 하위 3탭(v0 SalesManagementPage) — 상품관리 / 주문관리 / 배송관리 */}
       <div className="sticky top-14 z-20 flex border-b border-[#EDEDED] bg-white px-5">

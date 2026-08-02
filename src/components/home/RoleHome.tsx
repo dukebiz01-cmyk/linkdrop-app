@@ -168,8 +168,8 @@ function DropyEventScreen({ onClose }: { onClose: () => void }) {
   );
 }
 
-// 링고 매장 진단 — 매출관리 자동진단(캐시 = guide_history 최신 1행)에서 가장 급한 1개 + 액션.
-//   재계산 없음(추가 RPC 0). 진단 없으면 "매출관리에서 진단 받기" 포인터.
+// 링고 매장 진단 — 매장 진단(F7-4b 명칭 정정) 자동진단(캐시 = guide_history 최신 1행)에서 가장 급한 1개 + 액션.
+//   재계산 없음(추가 RPC 0). 진단 없으면 "매장 진단에서 진단 받기" 포인터.
 function TodayAiCard({ guide, onGoResults }: { guide: HomeGuide; onGoResults: () => void }) {
   const topDiag =
     guide && guide.diagnosis.length > 0
@@ -207,7 +207,7 @@ function TodayAiCard({ guide, onGoResults }: { guide: HomeGuide; onGoResults: ()
               onClick={onGoResults}
               className="mt-3 inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-[#0A0A0A] px-4 text-sm font-semibold tracking-ko text-white transition-colors hover:bg-[#171717]"
             >
-              매출관리에서 보기
+              매장 진단에서 보기
               <ArrowRight className="size-4" strokeWidth={2} />
             </button>
           </div>
@@ -215,14 +215,14 @@ function TodayAiCard({ guide, onGoResults }: { guide: HomeGuide; onGoResults: ()
       ) : (
         <div className="rounded-2xl border border-[#E5E5E5] bg-white p-5">
           <p className="text-sm font-medium leading-relaxed tracking-ko text-[#737373]">
-            아직 진단이 없어요. 매출관리에서 진단을 받아볼 여지가 있어요.
+            아직 진단이 없어요. 매장 진단에서 받아볼 여지가 있어요.
           </p>
           <button
             type="button"
             onClick={onGoResults}
             className="mt-3 inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-[#0A0A0A] px-4 text-sm font-semibold tracking-ko text-white transition-colors hover:bg-[#171717]"
           >
-            매출관리에서 진단 받기
+            매장 진단 받기
             <ChevronRight className="size-4" strokeWidth={2} />
           </button>
         </div>

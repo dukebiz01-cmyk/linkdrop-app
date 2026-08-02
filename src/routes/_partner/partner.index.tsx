@@ -14,7 +14,6 @@ import {
   Share2,
   Inbox,
   Unlink,
-  Package,
   Store,
   Link2,
   Ticket,
@@ -686,6 +685,79 @@ function PartnerHome() {
           </section>
         ) : null}
 
+        {/* 매장 관리 — v0 store-hub 2-col 타일 그리드. 4그룹 실 라우트 배선 유지(상점/진단/프로모션/예약).
+            coupons/redeem/calendar 딥링크는 각 그룹 페이지 내부에서 도달(허브 직접 링크 안 함). */}
+        <div>
+          <div className="mb-2.5 flex items-center gap-1.5">
+            <Store className="size-4 text-[#525252]" strokeWidth={2.25} />
+            <h3 className="text-[14px] font-bold text-[#0A0A0A]">매장 관리</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {/* 예약관리 → /partner/reservations (pending 배지 유지) */}
+            <Link
+              to="/partner/reservations"
+              className="group flex flex-col items-start rounded-2xl border border-[#ECECEC] bg-white p-4 text-left transition-all hover:border-[#D4D4D4] active:scale-[0.98]"
+            >
+              <span className="flex size-11 items-center justify-center rounded-xl bg-[#EEF3FE] text-[#2563EB]">
+                <Calendar className="size-[22px]" strokeWidth={2} />
+              </span>
+              <span className="mt-3 flex w-full items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[15px] font-bold text-[#0A0A0A]">예약관리</span>
+                  {/* 미확인(pending) 예약 배지 — 0 이면 숨김. */}
+                  {data.pendingReservationCount > 0 ? (
+                    <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[#0A0A0A] px-1 text-[10px] font-bold text-white">
+                      {data.pendingReservationCount}
+                    </span>
+                  ) : null}
+                </span>
+                <ChevronRight
+                  className="size-4 text-[#C4C4C4] transition-transform group-hover:translate-x-0.5"
+                  strokeWidth={2}
+                />
+              </span>
+              <span className="mt-0.5 text-[12px] text-[#8A8A8A]">예약·캘린더</span>
+            </Link>
+
+            {/* 프로모션관리 → /partner/promotion */}
+            <Link
+              to="/partner/promotion"
+              className="group flex flex-col items-start rounded-2xl border border-[#ECECEC] bg-white p-4 text-left transition-all hover:border-[#D4D4D4] active:scale-[0.98]"
+            >
+              <span className="flex size-11 items-center justify-center rounded-xl bg-[#EEF3FE] text-[#2563EB]">
+                <Sparkles className="size-[22px]" strokeWidth={2} />
+              </span>
+              <span className="mt-3 flex w-full items-center justify-between">
+                <span className="text-[15px] font-bold text-[#0A0A0A]">프로모션관리</span>
+                <ChevronRight
+                  className="size-4 text-[#C4C4C4] transition-transform group-hover:translate-x-0.5"
+                  strokeWidth={2}
+                />
+              </span>
+              <span className="mt-0.5 text-[12px] text-[#8A8A8A]">쿠폰 만들기·처리</span>
+            </Link>
+
+            {/* 매장 진단 → /partner/results?range=30 */}
+            <Link
+              to="/partner/results"
+              search={{ range: 30 } as never}
+              className="group flex flex-col items-start rounded-2xl border border-[#ECECEC] bg-white p-4 text-left transition-all hover:border-[#D4D4D4] active:scale-[0.98]"
+            >
+              <span className="flex size-11 items-center justify-center rounded-xl bg-[#EEF3FE] text-[#2563EB]">
+                <BarChart3 className="size-[22px]" strokeWidth={2} />
+              </span>
+              <span className="mt-3 flex w-full items-center justify-between">
+                <span className="text-[15px] font-bold text-[#0A0A0A]">매장 진단</span>
+                <ChevronRight
+                  className="size-4 text-[#C4C4C4] transition-transform group-hover:translate-x-0.5"
+                  strokeWidth={2}
+                />
+              </span>
+              <span className="mt-0.5 text-[12px] text-[#8A8A8A]">조회·전환·개선 가이드</span>
+            </Link>
+          </div>
+        </div>
+
         {/* 진행 중 혜택(v0) — 실데이터 activeCoupons(get_active_store_coupons). mock DEMO_BENEFITS 금지. */}
         {data.partnerId ? (
           <div>
@@ -850,97 +922,6 @@ function PartnerHome() {
             </ul>
           </div>
         ) : null}
-
-        {/* 매장 관리 — v0 store-hub 2-col 타일 그리드. 4그룹 실 라우트 배선 유지(판매/매출/프로모션/예약).
-            coupons/redeem/calendar 딥링크는 각 그룹 페이지 내부에서 도달(허브 직접 링크 안 함). */}
-        <div>
-          <div className="mb-2.5 flex items-center gap-1.5">
-            <Store className="size-4 text-[#525252]" strokeWidth={2.25} />
-            <h3 className="text-[14px] font-bold text-[#0A0A0A]">매장 관리</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {/* 판매관리 → /partner/products */}
-            <Link
-              to="/partner/products"
-              className="group flex flex-col items-start rounded-2xl border border-[#ECECEC] bg-white p-4 text-left transition-all hover:border-[#D4D4D4] active:scale-[0.98]"
-            >
-              <span className="flex size-11 items-center justify-center rounded-xl bg-[#EEF3FE] text-[#2563EB]">
-                <Package className="size-[22px]" strokeWidth={2} />
-              </span>
-              <span className="mt-3 flex w-full items-center justify-between">
-                <span className="text-[15px] font-bold text-[#0A0A0A]">판매관리</span>
-                <ChevronRight
-                  className="size-4 text-[#C4C4C4] transition-transform group-hover:translate-x-0.5"
-                  strokeWidth={2}
-                />
-              </span>
-              <span className="mt-0.5 text-[12px] text-[#8A8A8A]">상품·주문 관리</span>
-            </Link>
-
-            {/* 매출관리 → /partner/results?range=30 */}
-            <Link
-              to="/partner/results"
-              search={{ range: 30 } as never}
-              className="group flex flex-col items-start rounded-2xl border border-[#ECECEC] bg-white p-4 text-left transition-all hover:border-[#D4D4D4] active:scale-[0.98]"
-            >
-              <span className="flex size-11 items-center justify-center rounded-xl bg-[#EEF3FE] text-[#2563EB]">
-                <BarChart3 className="size-[22px]" strokeWidth={2} />
-              </span>
-              <span className="mt-3 flex w-full items-center justify-between">
-                <span className="text-[15px] font-bold text-[#0A0A0A]">매출관리</span>
-                <ChevronRight
-                  className="size-4 text-[#C4C4C4] transition-transform group-hover:translate-x-0.5"
-                  strokeWidth={2}
-                />
-              </span>
-              <span className="mt-0.5 text-[12px] text-[#8A8A8A]">매장 지표·정산</span>
-            </Link>
-
-            {/* 프로모션관리 → /partner/promotion */}
-            <Link
-              to="/partner/promotion"
-              className="group flex flex-col items-start rounded-2xl border border-[#ECECEC] bg-white p-4 text-left transition-all hover:border-[#D4D4D4] active:scale-[0.98]"
-            >
-              <span className="flex size-11 items-center justify-center rounded-xl bg-[#EEF3FE] text-[#2563EB]">
-                <Sparkles className="size-[22px]" strokeWidth={2} />
-              </span>
-              <span className="mt-3 flex w-full items-center justify-between">
-                <span className="text-[15px] font-bold text-[#0A0A0A]">프로모션관리</span>
-                <ChevronRight
-                  className="size-4 text-[#C4C4C4] transition-transform group-hover:translate-x-0.5"
-                  strokeWidth={2}
-                />
-              </span>
-              <span className="mt-0.5 text-[12px] text-[#8A8A8A]">쿠폰 만들기·처리</span>
-            </Link>
-
-            {/* 예약관리 → /partner/reservations (pending 배지 유지) */}
-            <Link
-              to="/partner/reservations"
-              className="group flex flex-col items-start rounded-2xl border border-[#ECECEC] bg-white p-4 text-left transition-all hover:border-[#D4D4D4] active:scale-[0.98]"
-            >
-              <span className="flex size-11 items-center justify-center rounded-xl bg-[#EEF3FE] text-[#2563EB]">
-                <Calendar className="size-[22px]" strokeWidth={2} />
-              </span>
-              <span className="mt-3 flex w-full items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <span className="text-[15px] font-bold text-[#0A0A0A]">예약관리</span>
-                  {/* 미확인(pending) 예약 배지 — 0 이면 숨김. */}
-                  {data.pendingReservationCount > 0 ? (
-                    <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-[#0A0A0A] px-1 text-[10px] font-bold text-white">
-                      {data.pendingReservationCount}
-                    </span>
-                  ) : null}
-                </span>
-                <ChevronRight
-                  className="size-4 text-[#C4C4C4] transition-transform group-hover:translate-x-0.5"
-                  strokeWidth={2}
-                />
-              </span>
-              <span className="mt-0.5 text-[12px] text-[#8A8A8A]">예약·캘린더</span>
-            </Link>
-          </div>
-        </div>
       </div>
 
       <Toaster richColors position="top-center" />

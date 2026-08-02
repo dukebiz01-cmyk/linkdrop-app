@@ -207,7 +207,7 @@ function PartnerPreordersPage() {
           className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-strong"
         >
           <ArrowLeft className="size-3" strokeWidth={2} />
-          판매관리
+          내 상점
         </Link>
         <h1 className="mt-1 text-lg font-bold text-text-strong">주문예약 관리</h1>
         <p className="mt-0.5 text-xs text-text-muted">들어온 주문예약을 확인하고 처리해요</p>
