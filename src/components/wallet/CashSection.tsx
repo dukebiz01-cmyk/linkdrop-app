@@ -94,6 +94,9 @@ export function CashSection() {
   const [cancelStatus, setCancelStatus] = useState("");
   // 이용내역 아코디언 — 기본 접힘(첫 진입 시 화면 늘어짐 방지). SSR 안전 로컬 토글.
   const [ledgerOpen, setLedgerOpen] = useState(false);
+  // F7-1 — 충전 섹션 아코디언(기본 접힘). 개폐는 CSS(grid-rows 0fr↔1fr)뿐 — unmount 없음이라
+  //   선택 금액·결제 수단·동의 체크 상태는 접었다 펴도 그대로 보존.
+  const [chargeOpen, setChargeOpen] = useState(false);
 
   // 잔액 조회(본인 SELECT). 총 잔액 반환(충전 폴링 델타 판정) + 실패는 표시만(버튼 잠금과 분리).
   const refreshBalance = useCallback(async (): Promise<number | null> => {
@@ -244,10 +247,16 @@ export function CashSection() {
         ) : null}
       </div>
 
-      {/* (b) 충전 = 단건 결제(v0 카드 룩). 정적 헤더(Plus)+프리셋 그리드+약관+결제. 로직·게이트 그대로.
-          ※ 충전 콜랩스는 새 state 필요 → 미도입(항상 노출). 이용내역은 기존 ledgerOpen 재사용. */}
+      {/* (b) 충전 = 단건 결제(v0 카드 룩). 프리셋 그리드+약관+결제 로직·게이트 그대로.
+          F7-1 — 헤더 행 전폭 = 토글(기본 접힘 · 이용내역 ledgerOpen 아코디언 문법 동형 — Radix 0 #418).
+          부제는 접힘 상태에도 유지(눌러볼 이유 문구). */}
       <div className="overflow-hidden rounded-2xl border border-[#EAEEF3] bg-white">
-        <div className="flex items-center gap-2.5 px-4 py-3.5">
+        <button
+          type="button"
+          onClick={() => setChargeOpen((v) => !v)}
+          aria-expanded={chargeOpen}
+          className="flex w-full items-center gap-2.5 px-4 py-3.5 text-left transition-colors hover:bg-[#F8FAFC]"
+        >
           <span className="flex size-8 items-center justify-center rounded-lg bg-[#EEF3FE]">
             <Plus className="size-[18px] text-[#2563EB]" strokeWidth={2.5} />
           </span>
@@ -257,219 +266,231 @@ export function CashSection() {
               금액을 골라 바로 충전하세요
             </span>
           </span>
-        </div>
+          <ChevronDown
+            className="size-5 flex-shrink-0 text-[#94A3B8] transition-transform duration-200"
+            strokeWidth={2.25}
+            style={{ transform: chargeOpen ? "rotate(180deg)" : "none" }}
+          />
+        </button>
 
-        <div className="flex flex-col gap-3 border-t border-[#F1F5F9] p-4">
-          {/* 프리셋 2열 그리드 — 라이브 CHARGE_PRODUCTS 값 유지, v0 활성 스타일(파란 border/bg/ring). */}
-          <div className="grid grid-cols-2 gap-2">
-            {CHARGE_PRODUCTS.map((p) => {
-              const selected = selectedSku === p.sku;
-              return (
+        <div
+          className="grid transition-all duration-300 ease-out"
+          style={{ gridTemplateRows: chargeOpen ? "1fr" : "0fr" }}
+        >
+          <div className="overflow-hidden">
+            <div className="flex flex-col gap-3 border-t border-[#F1F5F9] p-4">
+              {/* 프리셋 2열 그리드 — 라이브 CHARGE_PRODUCTS 값 유지, v0 활성 스타일(파란 border/bg/ring). */}
+              <div className="grid grid-cols-2 gap-2">
+                {CHARGE_PRODUCTS.map((p) => {
+                  const selected = selectedSku === p.sku;
+                  return (
+                    <button
+                      key={p.sku}
+                      type="button"
+                      onClick={() => setSelectedSku(p.sku)}
+                      aria-pressed={selected}
+                      className={`flex flex-col items-center rounded-xl border py-3 text-center transition-all active:scale-[0.98] ${
+                        selected
+                          ? "border-[#2563EB] bg-[#EEF3FE] ring-1 ring-inset ring-[#2563EB]"
+                          : "border-[#E8EDF3] bg-white hover:border-[#CBD5E1]"
+                      }`}
+                    >
+                      <span className="text-[17px] font-bold tabular-nums text-[#0F172A]">
+                        {fmtWon(p.amount)}원
+                      </span>
+                      <span
+                        className={`mt-1 text-[10.5px] font-semibold ${selected ? "text-[#2563EB]" : "text-[#94A3B8]"}`}
+                      >
+                        {p.name}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {/* 직접입력 카드 */}
                 <button
-                  key={p.sku}
                   type="button"
-                  onClick={() => setSelectedSku(p.sku)}
-                  aria-pressed={selected}
+                  onClick={() => setSelectedSku("custom")}
+                  aria-pressed={selectedSku === "custom"}
                   className={`flex flex-col items-center rounded-xl border py-3 text-center transition-all active:scale-[0.98] ${
-                    selected
+                    selectedSku === "custom"
                       ? "border-[#2563EB] bg-[#EEF3FE] ring-1 ring-inset ring-[#2563EB]"
                       : "border-[#E8EDF3] bg-white hover:border-[#CBD5E1]"
                   }`}
                 >
-                  <span className="text-[17px] font-bold tabular-nums text-[#0F172A]">
-                    {fmtWon(p.amount)}원
+                  <span className="text-[17px] font-bold text-[#0F172A]">
+                    {selectedSku === "custom" && amountValid ? `${fmtWon(amount)}원` : "직접입력"}
                   </span>
                   <span
-                    className={`mt-1 text-[10.5px] font-semibold ${selected ? "text-[#2563EB]" : "text-[#94A3B8]"}`}
+                    className={`mt-1 text-[10.5px] font-semibold ${selectedSku === "custom" ? "text-[#2563EB]" : "text-[#94A3B8]"}`}
                   >
-                    {p.name}
+                    {PROVIDE_PERIOD}
                   </span>
                 </button>
-              );
-            })}
+              </div>
 
-            {/* 직접입력 카드 */}
-            <button
-              type="button"
-              onClick={() => setSelectedSku("custom")}
-              aria-pressed={selectedSku === "custom"}
-              className={`flex flex-col items-center rounded-xl border py-3 text-center transition-all active:scale-[0.98] ${
-                selectedSku === "custom"
-                  ? "border-[#2563EB] bg-[#EEF3FE] ring-1 ring-inset ring-[#2563EB]"
-                  : "border-[#E8EDF3] bg-white hover:border-[#CBD5E1]"
-              }`}
-            >
-              <span className="text-[17px] font-bold text-[#0F172A]">
-                {selectedSku === "custom" && amountValid ? `${fmtWon(amount)}원` : "직접입력"}
-              </span>
-              <span
-                className={`mt-1 text-[10.5px] font-semibold ${selectedSku === "custom" ? "text-[#2563EB]" : "text-[#94A3B8]"}`}
-              >
-                {PROVIDE_PERIOD}
-              </span>
-            </button>
-          </div>
+              {/* 직접입력 금액 필드 — 그리드 아래 전폭. */}
+              {selectedSku === "custom" ? (
+                <label className="flex flex-col gap-1 text-xs font-semibold tracking-ko text-[#64748B]">
+                  충전 금액 (원)
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={customAmount}
+                    onChange={(e) => setCustomAmount(e.target.value)}
+                    min={1}
+                    placeholder="예: 20000"
+                    className="min-h-[44px] rounded-lg border border-[#E8EDF3] bg-white px-3 text-sm font-medium tracking-ko text-[#0F172A] placeholder:text-[#94A3B8]"
+                  />
+                </label>
+              ) : null}
 
-          {/* 직접입력 금액 필드 — 그리드 아래 전폭. */}
-          {selectedSku === "custom" ? (
-            <label className="flex flex-col gap-1 text-xs font-semibold tracking-ko text-[#64748B]">
-              충전 금액 (원)
-              <input
-                type="number"
-                inputMode="numeric"
-                value={customAmount}
-                onChange={(e) => setCustomAmount(e.target.value)}
-                min={1}
-                placeholder="예: 20000"
-                className="min-h-[44px] rounded-lg border border-[#E8EDF3] bg-white px-3 text-sm font-medium tracking-ko text-[#0F172A] placeholder:text-[#94A3B8]"
-              />
-            </label>
-          ) : null}
+              {/* CC-HECTO-mobile — 결제 수단 선택 [카드 | 휴대폰결제]. payMethod state → order body 로만 전달.
+                  v0 프리셋 카드와 동일 룩(파란 활성). 결제 파이프·약관 게이트 무변경. */}
+              <div className="flex flex-col gap-1.5">
+                <span className="px-0.5 text-[11.5px] font-semibold tracking-ko text-[#64748B]">
+                  결제 수단
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      { key: "card", label: "카드", Icon: CreditCard },
+                      { key: "mobile", label: "휴대폰결제", Icon: Smartphone },
+                    ] as const
+                  ).map((m) => {
+                    const active = payMethod === m.key;
+                    const MIcon = m.Icon;
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => setPayMethod(m.key)}
+                        aria-pressed={active}
+                        className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border text-[13px] font-semibold tracking-ko transition-all active:scale-[0.98] ${
+                          active
+                            ? "border-[#2563EB] bg-[#EEF3FE] text-[#2563EB] ring-1 ring-inset ring-[#2563EB]"
+                            : "border-[#E8EDF3] bg-white text-[#64748B] hover:border-[#CBD5E1]"
+                        }`}
+                      >
+                        <MIcon className="size-4" strokeWidth={2.25} />
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-          {/* CC-HECTO-mobile — 결제 수단 선택 [카드 | 휴대폰결제]. payMethod state → order body 로만 전달.
-              v0 프리셋 카드와 동일 룩(파란 활성). 결제 파이프·약관 게이트 무변경. */}
-          <div className="flex flex-col gap-1.5">
-            <span className="px-0.5 text-[11.5px] font-semibold tracking-ko text-[#64748B]">
-              결제 수단
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              {(
-                [
-                  { key: "card", label: "카드", Icon: CreditCard },
-                  { key: "mobile", label: "휴대폰결제", Icon: Smartphone },
-                ] as const
-              ).map((m) => {
-                const active = payMethod === m.key;
-                const MIcon = m.Icon;
-                return (
-                  <button
-                    key={m.key}
-                    type="button"
-                    onClick={() => setPayMethod(m.key)}
-                    aria-pressed={active}
-                    className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border text-[13px] font-semibold tracking-ko transition-all active:scale-[0.98] ${
-                      active
-                        ? "border-[#2563EB] bg-[#EEF3FE] text-[#2563EB] ring-1 ring-inset ring-[#2563EB]"
-                        : "border-[#E8EDF3] bg-white text-[#64748B] hover:border-[#CBD5E1]"
+              {/* 약관 동의(v0 룩) — 전체동의 + 필수 3. 게이트(allAgreed) 그대로. [＞] 전문 인라인 펼침 보존(PG 심사 요건). */}
+              <div className="rounded-xl bg-[#F8FAFC] p-3">
+                {/* 전체 동의 — 하위 3개 일괄 토글(기존 setAgreedKeys 로직 유지). */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAgreedKeys(Object.fromEntries(AGREE_TERMS.map((t) => [t.key, !allAgreed])))
+                  }
+                  className="flex w-full items-center gap-2.5 text-left"
+                >
+                  <span
+                    className={`flex size-5 shrink-0 items-center justify-center rounded-md transition-colors ${
+                      allAgreed ? "bg-[#2563EB]" : "border-2 border-[#CBD5E1] bg-white"
                     }`}
                   >
-                    <MIcon className="size-4" strokeWidth={2.25} />
-                    {m.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                    {allAgreed ? <Check className="size-3.5 text-white" strokeWidth={3} /> : null}
+                  </span>
+                  <span className="text-[13px] font-bold text-[#0F172A]">전체 동의</span>
+                </button>
 
-          {/* 약관 동의(v0 룩) — 전체동의 + 필수 3. 게이트(allAgreed) 그대로. [＞] 전문 인라인 펼침 보존(PG 심사 요건). */}
-          <div className="rounded-xl bg-[#F8FAFC] p-3">
-            {/* 전체 동의 — 하위 3개 일괄 토글(기존 setAgreedKeys 로직 유지). */}
-            <button
-              type="button"
-              onClick={() =>
-                setAgreedKeys(Object.fromEntries(AGREE_TERMS.map((t) => [t.key, !allAgreed])))
-              }
-              className="flex w-full items-center gap-2.5 text-left"
-            >
-              <span
-                className={`flex size-5 shrink-0 items-center justify-center rounded-md transition-colors ${
-                  allAgreed ? "bg-[#2563EB]" : "border-2 border-[#CBD5E1] bg-white"
+                <div className="mt-2.5 flex flex-col gap-2 border-t border-[#EAEEF3] pt-2.5">
+                  {AGREE_TERMS.map((t) => {
+                    const checked = !!agreedKeys[t.key];
+                    const open = !!expandedTerm[t.key];
+                    return (
+                      <div key={t.key}>
+                        <div className="flex items-center gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setAgreedKeys((p) => ({ ...p, [t.key]: !p[t.key] }))}
+                            className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                          >
+                            <span
+                              className={`flex size-4 shrink-0 items-center justify-center rounded transition-colors ${checked ? "text-[#2563EB]" : "text-[#CBD5E1]"}`}
+                            >
+                              <Check className="size-4" strokeWidth={3} />
+                            </span>
+                            <span className="truncate text-[12px] font-medium text-[#475569]">
+                              <span className="font-bold text-[#DC2626]">[필수]</span> {t.label}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedTerm((p) => ({ ...p, [t.key]: !p[t.key] }))}
+                            aria-expanded={open}
+                            aria-label={`${t.label} 전문 보기`}
+                            className="flex size-7 shrink-0 items-center justify-center text-[#94A3B8]"
+                          >
+                            <ChevronRight
+                              className={`size-4 transition-transform ${open ? "rotate-90" : ""}`}
+                              strokeWidth={2}
+                            />
+                          </button>
+                        </div>
+                        {open ? (
+                          <p className="mt-1.5 rounded-lg bg-white px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-[#64748B]">
+                            {t.body}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 결제 버튼 — onCharge/canCharge/chargeBusy 그대로, v0 스타일. */}
+              <button
+                type="button"
+                onClick={onCharge}
+                disabled={!canCharge}
+                className={`flex w-full items-center justify-center gap-1.5 rounded-xl py-3.5 text-[14.5px] font-bold transition-all ${
+                  canCharge
+                    ? "bg-[#2563EB] text-white shadow-[0_8px_20px_-6px_rgba(37,99,235,0.5)] active:scale-[0.99]"
+                    : "cursor-not-allowed bg-[#E2E8F0] text-[#94A3B8]"
                 }`}
               >
-                {allAgreed ? <Check className="size-3.5 text-white" strokeWidth={3} /> : null}
-              </span>
-              <span className="text-[13px] font-bold text-[#0F172A]">전체 동의</span>
-            </button>
+                {chargeBusy
+                  ? "처리 중…"
+                  : amountValid
+                    ? `${fmtWon(amount)}원 결제하고 충전`
+                    : "충전 금액을 선택하세요"}
+              </button>
+              {chargeStatus ? (
+                <p className="rounded-lg bg-[#F1F5F9] px-3 py-2 text-xs font-medium tracking-ko text-[#0F172A]">
+                  {chargeStatus}
+                </p>
+              ) : null}
+              {/* CC-CASH-c2.2 — 30초 미반영 폴백 새로고침. 탭 시 즉시 잔액 재조회 + 내역 갱신. */}
+              {showManualRefresh ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      await manualRefresh();
+                      await loadLedger();
+                    })();
+                  }}
+                  className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#E8EDF3] bg-white text-[13px] font-bold tracking-ko text-[#2563EB] transition-colors hover:bg-[#F8FAFC] active:scale-[0.99]"
+                >
+                  <RotateCcw className="size-4" strokeWidth={2.25} />
+                  새로고침
+                </button>
+              ) : null}
 
-            <div className="mt-2.5 flex flex-col gap-2 border-t border-[#EAEEF3] pt-2.5">
-              {AGREE_TERMS.map((t) => {
-                const checked = !!agreedKeys[t.key];
-                const open = !!expandedTerm[t.key];
-                return (
-                  <div key={t.key}>
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setAgreedKeys((p) => ({ ...p, [t.key]: !p[t.key] }))}
-                        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                      >
-                        <span
-                          className={`flex size-4 shrink-0 items-center justify-center rounded transition-colors ${checked ? "text-[#2563EB]" : "text-[#CBD5E1]"}`}
-                        >
-                          <Check className="size-4" strokeWidth={3} />
-                        </span>
-                        <span className="truncate text-[12px] font-medium text-[#475569]">
-                          <span className="font-bold text-[#DC2626]">[필수]</span> {t.label}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedTerm((p) => ({ ...p, [t.key]: !p[t.key] }))}
-                        aria-expanded={open}
-                        aria-label={`${t.label} 전문 보기`}
-                        className="flex size-7 shrink-0 items-center justify-center text-[#94A3B8]"
-                      >
-                        <ChevronRight
-                          className={`size-4 transition-transform ${open ? "rotate-90" : ""}`}
-                          strokeWidth={2}
-                        />
-                      </button>
-                    </div>
-                    {open ? (
-                      <p className="mt-1.5 rounded-lg bg-white px-3 py-2 text-[11px] font-medium leading-relaxed tracking-ko text-[#64748B]">
-                        {t.body}
-                      </p>
-                    ) : null}
-                  </div>
-                );
-              })}
+              {/* (d) 국문 상시 고지 — v0: 충전 블록 내 배치. */}
+              <p className="px-0.5 text-[11px] leading-relaxed tracking-ko text-[#94A3B8]">
+                본 캐시는 링크드롭 콘텐츠 이용 전용이며 현금 환급되지 않습니다. 결제 취소 시에만 해당 금액이
+                차감·취소됩니다.
+              </p>
             </div>
           </div>
-
-          {/* 결제 버튼 — onCharge/canCharge/chargeBusy 그대로, v0 스타일. */}
-          <button
-            type="button"
-            onClick={onCharge}
-            disabled={!canCharge}
-            className={`flex w-full items-center justify-center gap-1.5 rounded-xl py-3.5 text-[14.5px] font-bold transition-all ${
-              canCharge
-                ? "bg-[#2563EB] text-white shadow-[0_8px_20px_-6px_rgba(37,99,235,0.5)] active:scale-[0.99]"
-                : "cursor-not-allowed bg-[#E2E8F0] text-[#94A3B8]"
-            }`}
-          >
-            {chargeBusy
-              ? "처리 중…"
-              : amountValid
-                ? `${fmtWon(amount)}원 결제하고 충전`
-                : "충전 금액을 선택하세요"}
-          </button>
-          {chargeStatus ? (
-            <p className="rounded-lg bg-[#F1F5F9] px-3 py-2 text-xs font-medium tracking-ko text-[#0F172A]">
-              {chargeStatus}
-            </p>
-          ) : null}
-          {/* CC-CASH-c2.2 — 30초 미반영 폴백 새로고침. 탭 시 즉시 잔액 재조회 + 내역 갱신. */}
-          {showManualRefresh ? (
-            <button
-              type="button"
-              onClick={() => {
-                void (async () => {
-                  await manualRefresh();
-                  await loadLedger();
-                })();
-              }}
-              className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#E8EDF3] bg-white text-[13px] font-bold tracking-ko text-[#2563EB] transition-colors hover:bg-[#F8FAFC] active:scale-[0.99]"
-            >
-              <RotateCcw className="size-4" strokeWidth={2.25} />
-              새로고침
-            </button>
-          ) : null}
-
-          {/* (d) 국문 상시 고지 — v0: 충전 블록 내 배치. */}
-          <p className="px-0.5 text-[11px] leading-relaxed tracking-ko text-[#94A3B8]">
-            본 캐시는 링크드롭 콘텐츠 이용 전용이며 현금 환급되지 않습니다. 결제 취소 시에만 해당 금액이
-            차감·취소됩니다.
-          </p>
         </div>
       </div>
 
