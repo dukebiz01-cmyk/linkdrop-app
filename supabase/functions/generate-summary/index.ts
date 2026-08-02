@@ -46,7 +46,7 @@ function costKrw(inTok: number, outTok: number): number {
 
 // v2 — 손님(수신자) 관점 + 영상·매장·시기 맥락 반영. 옛 v1 캐시는
 //      PROMPT_VERSION 매치 미스로 자연 만료(30 일). backfill 별도.
-const PROMPT_VERSION = "v3";
+const PROMPT_VERSION = "v4"; // FIX-5-T7b — 금칙 정본 3줄 즉시 전면 적용(v3 캐시 매치 미스 = 재생성).
 
 const SYSTEM_PROMPT = `너는 LinkDrop의 영상 요약 AI야.
 이 요약은 카카오톡으로 링크를 받은 손님(수신자)이 읽어.
