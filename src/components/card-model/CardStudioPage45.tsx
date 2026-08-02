@@ -199,6 +199,7 @@ const STUDIO_BLOCKS: StudioBlock[] = [
   { id: "delivery", label: "배송 안내", desc: "택배사 · 배송 진행 추적", detail: "택배사를 고르고 배송이 어디까지 갔는지(준비·배송중·완료) 카드에 바로 보여줘요. 송장번호·배송비·도착 예정일까지 한눈에 확인돼요.", icon: Truck, category: "purpose", power: 14 },
   { id: "brand", label: "브랜드 소개", desc: "우리 가게 한 줄 스토리", detail: "우리 브랜드의 짧은 이야기를 카드에 담아요. 왜 특별한지 한 줄로 전해 기억에 남는 카드를 만들어요.", icon: Store, category: "content", power: 12 },
   { id: "bgcolor", label: "카드 배경색", desc: "내 카드 분위기 고르기", detail: "브랜드 톤에 맞는 배경색을 골라 카드 분위기를 완성해요. 작은 차이가 신뢰감을 만들어요.", icon: Palette, category: "content", power: 6 },
+  // T5-W0 — 강화 3종(top·boost·marketing)은 49에서 제거됨 — 45는 보존분(롤백 보존 파일 · 활성 표면 아님).
   { id: "top", label: "상위노출", desc: "피드 상단에 먼저 보이기", detail: "완성도 75점을 넘기면 열려요. 피드 상단에 먼저 노출돼 더 많은 사람이 카드를 봐요.", icon: TrendingUp, category: "enhance", power: 0, isPaid: true },
   { id: "boost", label: "부스트", desc: "더 많은 친구에게 도달", detail: "이미 잘 만든 카드를 더 많은 친구에게 실어줘요. 완성된 카드일 때만 효과가 커요.", icon: Rocket, category: "enhance", power: 0, isPaid: true },
   { id: "marketing", label: "마케팅 강화", desc: "광고 슬롯으로 확장", detail: "외부 광고 슬롯까지 확장해 도달을 넓혀요. 전환 설계가 끝난 뒤 마지막으로 더하는 단계예요.", icon: Megaphone, category: "enhance", power: 0, isPaid: true },

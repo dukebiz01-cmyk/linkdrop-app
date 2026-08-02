@@ -31,10 +31,8 @@ import {
   Image as ImageIcon,
   Link as LinkIcon,
   Ticket,
-  Rocket,
   Search,
   TrendingUp,
-  Megaphone,
   Sparkles,
   Star,
   Check,
@@ -97,7 +95,8 @@ import { resizeToJpegBlob } from "@/lib/image-upload"; // UI-5-T2-E5a — 45 업
 // 블록은 데이터 배열 → 추가 시 UI/완성도/링고AI/덱이 자동 반영.
 // =============================================================================
 
-type BlockCategory = "content" | "purpose" | "enhance";
+// T5-W0 — "enhance" 카테고리·isPaid 소멸(강화 3종 제거 — 미구현 노출 정리 · DB 0건 확인분).
+type BlockCategory = "content" | "purpose";
 
 interface StudioBlock {
   id: string;
@@ -107,10 +106,9 @@ interface StudioBlock {
   detail: string;
   icon: typeof Calendar;
   category: BlockCategory;
-  /** 전환 레버 점수 = 완성도(전환력) 기여도. 강화 블록은 0(도달만 늘림). */
+  /** 전환 레버 점수 = 완성도(전환력) 기여도. */
   power: number;
   isMain?: boolean;
-  isPaid?: boolean;
 }
 
 const STUDIO_BLOCKS: StudioBlock[] = [
@@ -244,39 +242,8 @@ const STUDIO_BLOCKS: StudioBlock[] = [
     category: "content",
     power: 12,
   },
-  {
-    id: "top",
-    label: "상위노출",
-    desc: "피드 상단에 먼저 보이기",
-    detail: "완성도 75점을 넘기면 열려요. 피드 상단에 먼저 노출돼 더 많은 사람이 카드를 봐요.",
-    icon: TrendingUp,
-    category: "enhance",
-    power: 0,
-    isPaid: true,
-  },
-  {
-    id: "boost",
-    label: "부스트",
-    desc: "더 많은 친구에게 도달",
-    detail: "이미 잘 만든 카드를 더 많은 친구에게 실어줘요. 완성된 카드일 때만 효과가 커요.",
-    icon: Rocket,
-    category: "enhance",
-    power: 0,
-    isPaid: true,
-  },
-  {
-    id: "marketing",
-    label: "마케팅 강화",
-    desc: "광고 슬롯으로 확장",
-    detail: "외부 광고 슬롯까지 확장해 도달을 넓혀요. 전환 설계가 끝난 뒤 마지막으로 더하는 단계예요.",
-    icon: Megaphone,
-    category: "enhance",
-    power: 0,
-    isPaid: true,
-  },
 ];
 
-const ENHANCE_UNLOCK = 75;
   const POINT = "#1D4ED8"; // 예약·쿠폰(reserve) 모드 포인트 컬러
 const INK = "#0A0A0A";
 
@@ -446,7 +413,8 @@ const CONFIGURABLE = [
 ];
 
 function getStage(score: number) {
-  if (score >= ENHANCE_UNLOCK) return { stars: 3, label: "완성", tone: "전환 준비 완료" };
+  // T5-W0 — 3성 기준 75점 = 구 ENHANCE_UNLOCK 값 계승(게이지 등급 무변 · 강화 잠금 용도만 소멸).
+  if (score >= 75) return { stars: 3, label: "완성", tone: "전환 준비 완료" };
   if (score >= 40) return { stars: 2, label: "괜찮음", tone: "조금만 더" };
   return { stars: 1, label: "기본", tone: "아직 약해요" };
 }
@@ -455,11 +423,11 @@ function getStage(score: number) {
 //   실제 값 집합 = 이 세 리터럴. 하드코딩 유니온 제거 → 표기 불일치 원천 차단.
 type StudioMode = "general" | "reserve" | "commerce";
 
-// 모드별 덱 구성 (주 제작 → 일반 레버 → 강화)
+// 모드별 덱 구성 (주 제작 → 일반 레버) — T5-W0: 강화 3종(top·boost·marketing) 제거.
 const DECK_IDS: Record<StudioMode, string[]> = {
-  general: ["content", "dock", "top", "boost", "marketing"],
-  reserve: ["calendar", "party", "content", "review", "coupon", "brand", "dock", "image", "link", "top", "boost", "marketing"],
-  commerce: ["product", "productimage", "aivideo", "seasonal", "review", "delivery", "coupon", "brand", "dock", "link", "top", "boost", "marketing"],
+  general: ["content", "dock"],
+  reserve: ["calendar", "party", "content", "review", "coupon", "brand", "dock", "image", "link"],
+  commerce: ["product", "productimage", "aivideo", "seasonal", "review", "delivery", "coupon", "brand", "dock", "link"],
 };
 
 // UI-5-T1h — AI 액션 모드 권한 가드(§0 역할 경계). 허용 블록 = 그 모드의 덱 구성(DECK_IDS) 자체(임의 창작 아님).
@@ -710,7 +678,7 @@ const HELPER_COPY: Record<string, string> = {
 
 // UI-5-T7-F4-13 — 퍼블릭(general) 도우미 문구 오버라이드: 매장 어휘 오염 제거(video "가게 이름·
 //   메뉴" → 개인 공유 어휘). 키 없으면 공통(HELPER_COPY) 그대로 — reserve·commerce 문구 무변.
-//   general 덱(content·dock·top·boost·marketing) 중 매장 어휘 보유 키는 video(첫 스텝 합성 경유)뿐.
+//   general 덱(content·dock) 중 매장 어휘 보유 키는 video(첫 스텝 합성 경유)뿐.
 const HELPER_COPY_GENERAL: Record<string, string> = {
   video: "좋아하는 영상 제목이나 채널 이름으로 검색해도 되고, 유튜브·인스타 링크를 붙여넣어도 돼요.",
 };
@@ -753,13 +721,13 @@ const EXTRA_LABELS: Record<string, string> = {
   aivideo: "AI 영상",
 };
 
-// 해당 모드에서 STEP_PLAN에 없는, 붙일 수 있는 잔여 블록(강화/유료 제외 · 생활어 라벨 보유).
+// 해당 모드에서 STEP_PLAN에 없는, 붙일 수 있는 잔여 블록(생활어 라벨 보유).
 function extraBlocksFor(m: StudioMode): string[] {
   const planBlocks = new Set(STEP_PLAN[m].map((s) => s.block).filter(Boolean) as string[]);
   return DECK_IDS[m].filter((id) => {
     if (planBlocks.has(id)) return false;
     const b = blockById(id);
-    if (!b || b.isPaid || b.category === "enhance") return false;
+    if (!b) return false;
     return !!EXTRA_LABELS[id];
   });
 }
@@ -2345,12 +2313,12 @@ export function CardStudioPage({
   );
 
   const stage = getStage(score);
-  const appliedCount = STUDIO_BLOCKS.filter((b) => applied[b.id] && !b.isPaid).length;
+  const appliedCount = STUDIO_BLOCKS.filter((b) => applied[b.id]).length;
 
   const lingo = useMemo(() => {
     const deckBlocks = DECK_IDS[mode].map(blockById);
     const nextLever = deckBlocks
-      .filter((b) => !b.isPaid && !applied[b.id])
+      .filter((b) => !applied[b.id])
       .sort((a, b) => b.power - a.power)[0];
 
     // 모드별 핵심 블록 안내 (덱에 없는 블록은 건너뜀)
@@ -2369,22 +2337,16 @@ export function CardStudioPage({
     if (deckBlocks.some((b) => b.id === "coupon") && !applied["coupon"]) {
       return { text: "왜 지금 행동해야 하나요? 쿠폰 한 장이면 '누를 이유'가 생겨요.", action: "coupon" };
     }
-    if (score < ENHANCE_UNLOCK) {
-      return {
-        text: nextLever
-          ? `${nextLever.label}까지 더하면 전환력이 확 올라가요.`
-          : "거의 다 됐어요. 마무리만 하면 완성!",
-        action: nextLever?.id ?? null,
-      };
-    }
+    // T5-W0 — 강화 홍보 분기 제거(미구현 노출 정리): 잔여 레버 안내 단일화(기존 문구 재사용 — 신규 작문 0).
     return {
-      text: "전환 레버가 충분해요. 이제 강화(부스트)를 켜면 도달이 늘어요. 지금이 쓸 타이밍.",
-      action: null,
+      text: nextLever
+        ? `${nextLever.label}까지 더하면 전환력이 확 올라가요.`
+        : "거의 다 됐어요. 마무리만 하면 완성!",
+      action: nextLever?.id ?? null,
     };
-  }, [applied, score, mode]);
+  }, [applied, mode]);
 
   function equip(block: StudioBlock) {
-    if (block.isPaid && score < ENHANCE_UNLOCK) return;
     untouch([block.id]); // UI-5-T1j — 직접 장착/해제 = 손길 소멸(AI 경로는 applyOneLingoAction 이 직후 재기록).
     confirmHelper(block.id); // UI-5-T1k — 도우미 대상 블록 직접 조작 = 확정(guide→done). 비대상이면 no-op.
     setApplied((p) => ({ ...p, [block.id]: !p[block.id] }));
@@ -2735,7 +2697,7 @@ export function CardStudioPage({
         attemptSwitchMode(a.mode);
       } else if (a.type === "equip" && a.blockId) {
         const b = STUDIO_BLOCKS.find((x) => x.id === a.blockId);
-        if (b && !(b.isPaid && score < ENHANCE_UNLOCK)) {
+        if (b) {
           if (!applied[b.id]) equip(b); // 이미 장착(예: 영상 관문 선행)이면 요약·손길만 기록.
           jumpToBlock(b.id);
           appliedActionsRef.current.push(a); // T1j·T1m — 적용 로그(요약) — 선(先)장착 블록도 포함.
@@ -3579,7 +3541,7 @@ export function CardStudioPage({
       id: b.id,
       label: b.label,
       applied: !!applied[b.id],
-      locked: !!b.isPaid && score < ENHANCE_UNLOCK,
+      locked: false, // T5-W0 — 강화 3종 소멸로 스튜디오 잠금 블록 없음(링고 컨텍스트 계약 키만 유지).
     }));
     const fields: Record<string, string> = {
       title: cfgTitle,
@@ -4169,7 +4131,7 @@ export function CardStudioPage({
 
   const activeBlock = DECK[deckIndex];
   const activeApplied = !!applied[activeBlock.id];
-  const activeLocked = !!activeBlock.isPaid && score < ENHANCE_UNLOCK;
+  // T5-W0 — activeLocked(강화 점수 잠금) 소멸: 강화 3종 제거로 잠금 대상 블록 없음.
 
   // UI-5-T2-E4·E5f — 발행 게이트: 비커머스 = 영상+제목 / 커머스 = 사진·상품명·가격·판매기간(45 판정 계승).
   //   미충족 사유 1줄 — 게이트 해제(E5f): "준비 중" 문구 폐지.
@@ -4669,9 +4631,7 @@ export function CardStudioPage({
               }}
             />
           </div>
-          <p className="mt-2 text-[11px] text-[#8A8A8A]">
-            레버 {appliedCount}개 장착 · 강화는 {ENHANCE_UNLOCK}점부터 열려요
-          </p>
+          <p className="mt-2 text-[11px] text-[#8A8A8A]">레버 {appliedCount}개 장착</p>
         </section>
 
         {/* ───────── 링고AI 코칭 (탭하면 어시스턴트 열림) ───────── */}
@@ -4720,7 +4680,6 @@ export function CardStudioPage({
             if (abs > 2) return null;
             const Icon = block.icon;
             const isOn = !!applied[block.id];
-            const locked = !!block.isPaid && score < ENHANCE_UNLOCK;
             const isCenter = offset === 0;
             return (
               <button
@@ -4765,30 +4724,22 @@ export function CardStudioPage({
                   {isOn && lingoTouched.has(block.id) && (
                     <LingoTouchBadge needsConfirm={NUMBER_CRITICAL_BLOCKS.has(block.id)} />
                   )}
-                  {/* 상단: 파워 + 카테고리 */}
+                  {/* 상단: 파워 + 카테고리 — T5-W0: 강화(isPaid) 분기·"도달↑" 표기 소멸. */}
                   <div className="flex items-center justify-between">
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                        block.isPaid
-                          ? "bg-[#F5F5F5] text-[#737373]"
-                          : isMainBlock(block.id)
-                          ? "text-white"
-                          : "bg-[#F5F5F5] text-[#525252]"
+                        isMainBlock(block.id) ? "text-white" : "bg-[#F5F5F5] text-[#525252]"
                       }`}
-                      style={isMainBlock(block.id) && !block.isPaid ? { backgroundColor: accent } : undefined}
+                      style={isMainBlock(block.id) ? { backgroundColor: accent } : undefined}
                     >
-                      {block.isPaid ? "강화" : isMainBlock(block.id) ? "핵심" : "레버"}
+                      {isMainBlock(block.id) ? "핵심" : "레버"}
                     </span>
-                    {block.power > 0 ? (
-                      <span
-                        className="flex items-center gap-0.5 text-[15px] font-bold tabular-nums"
-                        style={{ color: accent }}
-                      >
-                        <Zap className="h-4 w-4" strokeWidth={2.5} fill={accent} />+{block.power}
-                      </span>
-                    ) : (
-                      <span className="text-[12px] font-bold text-[#A3A3A3]">도달↑</span>
-                    )}
+                    <span
+                      className="flex items-center gap-0.5 text-[15px] font-bold tabular-nums"
+                      style={{ color: accent }}
+                    >
+                      <Zap className="h-4 w-4" strokeWidth={2.5} fill={accent} />+{block.power}
+                    </span>
                   </div>
 
                   {/* 아이콘 */}
@@ -4796,9 +4747,7 @@ export function CardStudioPage({
                     <div
                       className="flex h-[76px] w-[76px] items-center justify-center rounded-2xl transition-colors"
                       style={
-                        locked
-                          ? { backgroundColor: "#F5F5F5", color: "#C4C4C4" }
-                          : isOn
+                        isOn
                           ? { backgroundColor: `${accent}16`, color: accent }
                           : { backgroundColor: "rgba(10,10,10,0.05)", color: "#0A0A0A" }
                       }
@@ -4813,13 +4762,8 @@ export function CardStudioPage({
                     <p className="mt-1 text-[12px] leading-[1.45] text-[#5C5C5C]">{block.desc}</p>
                   </div>
 
-                  {/* 잠금 / 장착 상태 */}
-                  {locked && (
-                    <div className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-[#F0F0F0]">
-                      <Lock className="h-3 w-3 text-[#A3A3A3]" strokeWidth={2.25} />
-                    </div>
-                  )}
-                  {isOn && !locked && (
+                  {/* 장착 상태 — T5-W0: 강화 점수 잠금 오버레이 소멸. */}
+                  {isOn && (
                     <div
                       className="chip-pop absolute -right-1.5 -top-1.5 flex h-7 w-7 items-center justify-center rounded-full text-white"
                       style={{ backgroundColor: accent, boxShadow: "0 1px 3px rgba(15,23,42,0.2), 0 0 0 2px #fff" }}
@@ -6419,33 +6363,22 @@ export function CardStudioPage({
             </div>
           )}
 
+          {/* T5-W0 — 강화 점수 잠금(activeLocked) 분기 소멸: 잠금 대상 블록 없음(다른 잠금 로직 무접촉). */}
           <button
             onClick={() => equip(activeBlock)}
-            disabled={activeLocked}
             className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-bold tracking-[-0.01em] transition-all duration-200 active:scale-[0.98] ${
-              activeLocked
-                ? "cursor-not-allowed bg-white text-[#C4C4C4] [box-shadow:0_0_0_1px_#E8E8EC]"
-                : activeApplied
-                ? "bg-white"
-                : "text-white"
+              activeApplied ? "bg-white" : "text-white"
             }`}
             style={
-              !activeLocked && !activeApplied
-                ? {
+              activeApplied
+                ? { color: accent, boxShadow: `inset 0 0 0 1.5px ${accent}`, backgroundColor: `${accent}0A` }
+                : {
                     backgroundColor: accent,
                     boxShadow: `0 6px 18px -8px ${accent}80`,
                   }
-                : activeApplied
-                ? { color: accent, boxShadow: `inset 0 0 0 1.5px ${accent}`, backgroundColor: `${accent}0A` }
-                : undefined
             }
           >
-            {activeLocked ? (
-              <>
-                <Lock className="h-4 w-4" strokeWidth={2.25} />
-                완성 {ENHANCE_UNLOCK}점부터 열려요
-              </>
-            ) : activeApplied ? (
+            {activeApplied ? (
               <>
                 <Check className="h-4 w-4" strokeWidth={2.5} />
                 장착됨 · 탭하면 해제

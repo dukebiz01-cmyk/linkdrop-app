@@ -15,12 +15,10 @@ import {
   Info,
   Lock,
   MapPin,
-  Megaphone,
   MessageCircle,
   PartyPopper,
   Phone,
   Play,
-  Rocket,
   Scissors,
   Share2,
   Sparkles,
@@ -266,38 +264,7 @@ export function CardModelBody({
             </span>
           </div>
 
-          {/* 도달 강화 리본 */}
-          {(applied["top"] || applied["boost"] || applied["marketing"]) && (
-            <div className="cm-slide-up mt-3 flex flex-wrap gap-1.5">
-              {applied["top"] && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
-                  style={{ backgroundColor: `${accent}14`, color: accent }}
-                >
-                  <TrendingUp className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  상위노출
-                </span>
-              )}
-              {applied["boost"] && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
-                  style={{ backgroundColor: `${accent}14`, color: accent }}
-                >
-                  <Rocket className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  부스트
-                </span>
-              )}
-              {applied["marketing"] && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
-                  style={{ backgroundColor: `${accent}14`, color: accent }}
-                >
-                  <Megaphone className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  마케팅
-                </span>
-              )}
-            </div>
-          )}
+          {/* T5-W0 — 도달 강화 리본 제거(거울 예외 5호 — 미구현 top·boost·marketing 노출 정리 · DB 0건). */}
 
           {/* 히어로 미디어 — heroImageUrl 있으면 실이미지, 없으면 정본 placeholder */}
           {/* 거울 수렴 S1 — videoEmbed 주입 시 인플레이스 재생(공용 YouTubeLiteEmbed 재사용, 신규
