@@ -57,6 +57,8 @@ type LoaderData = {
   businessTypeLabel: string | null; // 업종 한글 (business_categories depth=1 재사용)
   partnerKind: string | null; // 보조
   address: string | null;
+  /** HOTFIX-P0 — 커머스 발행 게이트(F6-3) 해소 동선: 명함 편집 연락처 칸의 표시·시드 재료. */
+  contactPhone: string | null;
   subscriberCount: number; // maker_follows active count
   activeCoupons: AllianceActiveCoupon[];
   // 예약관리 메뉴 배지 — 미확인(pending) 예약 개수.
@@ -79,6 +81,7 @@ export const Route = createFileRoute("/_partner/partner/")({
       businessTypeLabel: null,
       partnerKind: null,
       address: null,
+      contactPhone: null,
       subscriberCount: 0,
       activeCoupons: [],
       pendingReservationCount: 0,
@@ -97,7 +100,7 @@ export const Route = createFileRoute("/_partner/partner/")({
     const { data: partner } = await supabase
       .from("partners")
       .select(
-        "id, display_name, slug, business_type, partner_kind, address, lat, lng, verification_status",
+        "id, display_name, slug, business_type, partner_kind, address, lat, lng, verification_status, contact_phone",
       )
       .eq("owner_user_id", ownerUserId)
       .maybeSingle();
@@ -234,6 +237,7 @@ export const Route = createFileRoute("/_partner/partner/")({
       businessTypeLabel,
       partnerKind: partner.partner_kind ?? null,
       address: partner.address ?? null,
+      contactPhone: (partner as { contact_phone?: string | null }).contact_phone ?? null,
       subscriberCount: subscriberCount ?? 0,
       activeCoupons: (activeCouponsRaw as AllianceActiveCoupon[] | null) ?? [],
       pendingReservationCount,
@@ -338,6 +342,7 @@ function PartnerHome() {
     businessType: "",
     subCategories: [] as string[],
     address: "",
+    contactPhone: "", // HOTFIX-P0 — 게이트 필드(partners.contact_phone) 입력 경로.
   });
   const [subOptions, setSubOptions] = useState<{ code: string; label: string }[]>([]);
   // metadata 병합용 원본 — sub_categories 외 키(예: description) 보존(덮어쓰기 유실 방지).
@@ -366,6 +371,7 @@ function PartnerHome() {
       businessType: (row as { business_type?: string | null } | null)?.business_type ?? "",
       subCategories: subs,
       address: data.address ?? "",
+      contactPhone: data.contactPhone ?? "",
     });
     setEditingCard(true);
   }
@@ -411,6 +417,13 @@ function PartnerHome() {
   //   slug·verification_status·owner_user_id·lat/lng 미포함(편집 잠금). §0 가짜 성공 금지: error 시 토스트만.
   async function handleCardSave() {
     if (!data.partnerId || !cardCanSave) return;
+    // HOTFIX-P0 — 연락처 검증 = 등록 폼 기존 식 재사용(digits 9~11 · 문구 재사용). 빈 값 = null 저장 허용
+    //   (미등록 유지 — 발행 게이트 해소는 값을 채웠을 때).
+    const phoneDigits = cardForm.contactPhone.replace(/[^0-9]/g, "");
+    if (phoneDigits.length > 0 && (phoneDigits.length < 9 || phoneDigits.length > 11)) {
+      toast.error("연락처를 정확히 입력해 주세요.");
+      return;
+    }
     setSavingCard(true);
     try {
       const nextMeta: Record<string, unknown> = { ...origMetadata };
@@ -423,6 +436,7 @@ function PartnerHome() {
           display_name: cardForm.displayName.trim(),
           business_type: cardForm.businessType || null,
           address: cardForm.address.trim() || null,
+          contact_phone: cardForm.contactPhone.replace(/[^0-9]/g, "") || null, // HOTFIX-P0 — 게이트 필드 1키 확장.
           metadata: nextMeta,
         })
         .eq("id", data.partnerId);
@@ -664,6 +678,19 @@ function PartnerHome() {
                     className="min-h-[44px] rounded-lg border border-[#E8EDF3] bg-white px-3 text-sm font-medium text-[#0F172A] placeholder:text-[#94A3B8]"
                   />
                 </label>
+                {/* HOTFIX-P0 — 연락처 입력(라벨·placeholder = 등록 폼 rg-phone 문구 재사용):
+                    커머스 발행 게이트(F6-3 "파트너 정보에서 전화번호를 등록해 주세요")의 실동선. */}
+                <label className="flex flex-col gap-1">
+                  <span className="text-[12px] font-semibold text-[#525252]">연락처</span>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={cardForm.contactPhone}
+                    onChange={(e) => setCardForm((f) => ({ ...f, contactPhone: e.target.value }))}
+                    placeholder="예: 010-1234-5678"
+                    className="min-h-[44px] rounded-lg border border-[#E8EDF3] bg-white px-3 text-sm font-medium text-[#0F172A] placeholder:text-[#94A3B8]"
+                  />
+                </label>
                 <p className="text-[11px] text-[#94A3B8]">
                   가게 링크(drop.how/{data.partnerSlug ?? "…"})·인증(BIZ)은 여기서 변경할 수 없어요.
                 </p>
@@ -672,6 +699,8 @@ function PartnerHome() {
               <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[#F0F0F0] pt-4">
                 <InfoRow label="업종" value={data.businessTypeLabel ?? "미등록"} />
                 <InfoRow label="구독" value={`${data.subscriberCount.toLocaleString()}명`} />
+                {/* HOTFIX-P0 — 등록된 연락처 표시(기존 InfoRow 관례 · 미등록 = 행 미표시). */}
+                {data.contactPhone?.trim() ? <InfoRow label="연락처" value={data.contactPhone} /> : null}
                 <div className="col-span-2">
                   <InfoRow label="지역" value={data.address?.trim() || "위치 미등록"} />
                 </div>
