@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 // UI-5-T7-F5-3 — 비사업자 모드 게이트 인라인 유도의 [파트너 등록하기] 이동용.
 import { Link } from "@tanstack/react-router";
 import { ProductRegisterForm, EMPTY_PRODUCT, type ProductForm } from "@/components/card-studio/ProductRegisterForm49";
+// T5-W5e — 통합 판매 일정 달력(폼과 동일 공유 부품 — 지휘 gb 경로 period 스텝 소비).
+import { GbScheduleCalendar } from "@/components/card-studio/GbScheduleCalendar";
 // F3-10b — FIX-62 실슬롯 이식(45 동형): 집계 순수 모듈(수신 fromDropDetail 공유 — 거울 자동·무수정 소비)
 //   + 검증된 실슬롯 편집기(upsert/delete RPC·router.invalidate 내장 — 무수술 재사용).
 import {
@@ -1431,11 +1433,13 @@ export function CardStudioPage({
         ? "photo"
         : !cfgProductName.trim()
           ? "name"
-          : priceNum <= 0
-            ? "price"
-            : !(applied["seasonal"] && saleStartIso && saleEndIso)
-              ? "period"
-              : null;
+          : !cfgProduct.origin.trim()
+            ? "origin" // W5e-③ — 원산지 프리체크(상품정보제공고시 — 미충족 = 정본 멘트 재질문 복귀).
+            : priceNum <= 0
+              ? "price"
+              : !(applied["seasonal"] && saleStartIso && saleEndIso)
+                ? "period"
+                : null;
       // T5-W5a — gb 프리체크(열기 확정 시에만 · 소스 = cfgProduct.gb* — W5a+ 이관): 단계표 존재·유효성
       //   (양수·오름/내림·천장)·실패 모드 존재. gb_min_qty 는 payload 에서 tiers[0].qty 파생이라 정합
       //   자동 보장. 미충족 = 해당 스텝 복귀(정본 재질문).
@@ -7593,6 +7597,33 @@ export function CardStudioPage({
                           </div>
                         );
                       })}
+                      {/* W5e-④ — [행 추가] 폼 산식 재사용(자동 채움 · 천장 비활성 · 6행 상한 · 신규 문구 0).
+                          위반 사유 표시 = 기존 행별 빨간 링 관례(기구현) — [이대로] 비활성과 병행. */}
+                      {dGbDraft.length < 6 &&
+                        (() => {
+                          const last = rows[rows.length - 1];
+                          const next = last ? ([3, 10, 20, 30, 50, 100].find((q) => q > last.qty) ?? last.qty * 2) : null;
+                          const addBlocked = !!last && next != null && next > stockN;
+                          return (
+                            <button
+                              type="button"
+                              aria-label="행 추가"
+                              disabled={addBlocked}
+                              onClick={() => {
+                                if (rows.length === 0) {
+                                  setDGbDraft(buildGbProposal().slice(0, 1));
+                                  return;
+                                }
+                                if (next == null || next > stockN) return;
+                                const price = Math.max(100, Math.floor((last!.price * 0.93) / 100) * 100);
+                                setDGbDraft((d) => [...d, { qty: String(next), price: String(price) }]);
+                              }}
+                              className="flex min-h-[36px] w-full items-center justify-center gap-1 rounded-xl border border-dashed border-[#D4D4D4] text-[11.5px] font-bold text-[#8A8A8A] disabled:opacity-40 active:bg-[#F5F5F5]"
+                            >
+                              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />행 추가
+                            </button>
+                          );
+                        })()}
                       <button
                         type="button"
                         onClick={confirmGbTiers}
@@ -7614,7 +7645,44 @@ export function CardStudioPage({
                   </button>
                 </div>
               )}
-              {dStep === "period" && (
+              {/* W5e-② — gb 경로 period = 통합 달력(폼과 동일 공유 부품 · 멘트 = period 정본 그대로).
+                  마감 = 기존 확정 경로(sale_end · sale_start 규칙 유지) · 범위 = 기존 harvest 기록 경로
+                  → 신선은 harvest 스텝 건너뜀 / 가공·공산은 발송 안내(shipnote — ship_note 별개 키 존치 판단).
+                  비-gb(안 열래요) = 기존 date 2개 현행 완전 무변. */}
+              {dStep === "period" &&
+                (cfgProduct.gbEnabled === true ? (
+                  <div className="space-y-2">
+                    <GbScheduleCalendar
+                      isFresh={cfgProduct.type === "fresh"}
+                      productName={cfgProductName}
+                      deadline={applied["seasonal"] && saleEndIso ? saleEndIso : null}
+                      shipStart={cfgProduct.harvestDate || null}
+                      shipEnd={cfgProduct.harvestDateEnd || null}
+                      onSetDeadline={(iso) => {
+                        setSaleEndIso(iso);
+                        setApplied((p) => ({ ...p, seasonal: true }));
+                        dPresetRef.current.delete("seasonal"); // P1 — 실값 승격(이탈 정리 비대상).
+                      }}
+                      onSetShipRange={(start, end) => {
+                        setCfgProduct((p) => ({ ...p, harvestDate: start, harvestDateEnd: end }));
+                        if (cfgProduct.type === "fresh") {
+                          setKindRanges((prev) => ({ ...prev, fresh: { ...prev.fresh, harvestStart: start, harvestEnd: end } }));
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (cfgProduct.type === "fresh") finishDirector();
+                        else dGo("shipnote");
+                      }}
+                      disabled={!(applied["seasonal"] && saleEndIso && cfgProduct.harvestDate && cfgProduct.harvestDateEnd)}
+                      className="flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-[#1D4ED8] text-[14px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                    >
+                      확정
+                    </button>
+                  </div>
+                ) : (
                 <div className="flex items-center gap-2">
                   <input type="date" value={dStart} onChange={(e) => setDStart(e.target.value)} className="h-11 min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-2 text-[12px] font-semibold text-[#0A0A0A]" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }} />
                   <span className="shrink-0 text-[11px] font-semibold text-[#8A8A8A]">~</span>
@@ -7623,21 +7691,29 @@ export function CardStudioPage({
                     확정
                   </button>
                 </div>
-              )}
-              {/* T5-W1a(D3) — 수확(출하) 기간: 시작~끝(하루 = 시작=끝 허용). "순차 발송" 표기는 정본 사슬 소관. */}
+                ))}
+              {/* T5-W1a(D3) — 수확(출하) 기간: 시작~끝(하루 = 시작=끝 허용). "순차 발송" 표기는 정본 사슬 소관.
+                  W5e-① — 비-gb 경로 순서 경고(차단 없음 · 폼 경고 문구 그대로 재사용 — 지시 문면). */}
               {dStep === "harvest" && (
-                <div className="flex items-center gap-2">
-                  <input type="date" value={dStart} onChange={(e) => setDStart(e.target.value)} className="h-11 min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-2 text-[12px] font-semibold text-[#0A0A0A]" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }} />
-                  <span className="shrink-0 text-[11px] font-semibold text-[#8A8A8A]">~</span>
-                  <input type="date" value={dEnd} min={dStart || undefined} onChange={(e) => setDEnd(e.target.value)} className="h-11 min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-2 text-[12px] font-semibold text-[#0A0A0A]" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }} />
-                  <button
-                    type="button"
-                    onClick={submitDirectorHarvestRange}
-                    disabled={!dStart || !dEnd || dEnd < dStart}
-                    className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-3 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
-                  >
-                    확정
-                  </button>
+                <div className="space-y-2">
+                  {dStart && applied["seasonal"] && saleEndIso && dStart < saleEndIso && (
+                    <p className="rounded-lg bg-[#FEF2F2] px-3 py-2 text-[11.5px] font-semibold text-[#DC2626] [word-break:keep-all]">
+                      발송 시작이 모집 마감보다 빨라요. 공동구매는 마감 후 일괄 발송이 원칙이에요
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input type="date" value={dStart} onChange={(e) => setDStart(e.target.value)} className="h-11 min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-2 text-[12px] font-semibold text-[#0A0A0A]" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }} />
+                    <span className="shrink-0 text-[11px] font-semibold text-[#8A8A8A]">~</span>
+                    <input type="date" value={dEnd} min={dStart || undefined} onChange={(e) => setDEnd(e.target.value)} className="h-11 min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-2 text-[12px] font-semibold text-[#0A0A0A]" style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }} />
+                    <button
+                      type="button"
+                      onClick={submitDirectorHarvestRange}
+                      disabled={!dStart || !dEnd || dEnd < dStart}
+                      className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-3 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                    >
+                      확정
+                    </button>
+                  </div>
                 </div>
               )}
               {dStep === "shipnote" && (
