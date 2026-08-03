@@ -44,6 +44,8 @@ import {
 import { TimerBadge } from "@/components/home/ShareCardTile";
 // T5-W5b — 모일수록 패널(거울 예외 6호): model.groupBuy 존재 시에만 판매가 행 대체 — 미주입 = 무변.
 import { GroupBuyPanel } from "@/components/groupbuy/GroupBuyPanel";
+// W5c-2 — gb 실집계 1회 조회 전용(dropId 주입 카드 한정 · 실패 = 0 폴백 — 순수 렌더 원칙의 유일 예외).
+import { getSupabase } from "@/lib/supabase";
 
 /**
  * CardModelBody — CardModel 거울 2.0 렌더러. 정본: docs/ref/v0-45-card-body.tsx (868줄).
@@ -157,6 +159,40 @@ export function CardModelBody({
 
   // receiver 실동작 — 미주입 콜백은 undefined 그대로(시각 stub, onClick 없음).
   const act = variant === "receiver" ? (actions ?? {}) : {};
+  // W5c-2 — gb 실집계 1회 조회(dropId 주입 시 — 수신 한정 · 스튜디오/미러 = 미주입 = 0 유지).
+  //   RPC 미적용·실패·null = 0 폴백(현행 표시 동일 — 에러 화면 금지·콘솔 경고만) · 폴링 금지(파킹).
+  const gbDropId = model.groupBuyPanel?.dropId ?? null;
+  const [gbLive, setGbLive] = useState<{ qty: number; finalized: boolean } | null>(null);
+  useEffect(() => {
+    if (!gbDropId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = (await getSupabase().rpc(
+          "get_groupbuy_status" as never,
+          { p_drop_id: gbDropId } as never,
+        )) as {
+          data: { current_qty?: number; finalized?: boolean }[] | null;
+          error: { message?: string } | null;
+        };
+        if (cancelled) return;
+        const row = Array.isArray(data) ? data[0] : null;
+        if (error || !row) {
+          if (error) console.warn("[card-model] get_groupbuy_status 실패 — 0 폴백:", error.message);
+          return;
+        }
+        setGbLive({
+          qty: Math.max(0, Math.floor(Number(row.current_qty) || 0)),
+          finalized: row.finalized === true,
+        });
+      } catch (e) {
+        if (!cancelled) console.warn("[card-model] get_groupbuy_status 예외 — 0 폴백:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [gbDropId]);
 
   // 행동 버튼 조립 — S3-4 §2: calendar(예약하기)·link(매장정보)는 그리드 버튼존으로 이동.
   //   여기엔 commerce 계열(구매·인원)만 잔존(상품판매 미리보기 무회귀 — S4 몫).
@@ -562,7 +598,7 @@ export function CardModelBody({
               {model.groupBuyPanel ? (
                 (() => {
                   const gb = model.groupBuyPanel!;
-                  const totalQty = 0; // TODO(W5c) — get_groupbuy_status 실집계 배선.
+                  const totalQty = gbLive?.qty ?? 0; // W5c-2 — 실집계(get_groupbuy_status) · 미조회 = 0 폴백.
                   const tiers = gb.tiers.map((t) => ({ ...t, reached: totalQty >= t.qty }));
                   const next = tiers.find((t) => !t.reached) ?? null;
                   const current = tiers.filter((t) => t.reached).pop() ?? null;
@@ -589,7 +625,7 @@ export function CardModelBody({
                       tiers={tiers}
                       nextTierQty={next ? next.qty : null}
                       nextTierPrice={next ? next.price : null}
-                      endsAt={gb.endsAt ?? ""}
+                      endsAt={gbLive?.finalized ? new Date(0) : (gb.endsAt ?? "")} /* W5c-2 — finalized = 기존 마감 처리 재사용(신규 UI 0). */
                       minQty={gb.minQty}
                       onFailMode={gb.failMode}
                       lastJoinedAgo={null}

@@ -96,6 +96,8 @@ export type CardModel = {
     endsAt: string | null;
     /** W5b-F2 — 시간표 재료(수확 시작 대표일 · fresh 한정 공급 — 부재 = 시간표 미표시). */
     harvestStart?: string | null;
+    /** W5c-2 — 실집계 조회 키(수신 한정 주입 — 스튜디오/미러 = 미주입 = totalQty 0 유지). */
+    dropId?: string | null;
   };
   productType?: string;
   productOrigin?: string;

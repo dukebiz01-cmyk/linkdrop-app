@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -129,10 +129,116 @@ function formatMonthDay(iso: string): string {
   return `${d.getMonth() + 1}.${d.getDate()}`;
 }
 
+// W5c-2 — 모임판(gb) 배너 행: 내 gb 드롭 + 실집계(get_groupbuy_status · RPC 미적용 = block_data 표식 폴백).
+type GbBannerRow = {
+  dropId: string;
+  name: string;
+  qty: number;
+  finalized: boolean;
+  finalPrice: number | null;
+};
+
 function PartnerPreordersPage() {
   const data = Route.useLoaderData();
   const router = useRouter();
   const [actingId, setActingId] = useState<string | null>(null);
+  // W5c-2 — [모임판 마감] 상태: 배너 목록 · 인라인 확인 1단계(Radix 0) · 처리 중.
+  const [gbBanners, setGbBanners] = useState<GbBannerRow[]>([]);
+  const [gbConfirming, setGbConfirming] = useState<string | null>(null);
+  const [gbClosing, setGbClosing] = useState(false);
+  // 결과 요약(RPC 반환 jsonb 그대로 보관 — updated_count 병기 재료).
+  const [gbResults, setGbResults] = useState<Record<string, { final_price?: number; updated_count?: number }>>({});
+
+  // 내 gb 드롭 조회(파트너 드롭 조회 관례 = products.index :261 동형) + 드롭별 실집계.
+  async function loadGbBanners() {
+    try {
+      const supabase = getSupabase();
+      const { data: sess } = await supabase.auth.getSession();
+      const uid = sess.session?.user.id;
+      if (!uid) return;
+      const { data: rows } = await supabase
+        .from("info_drops")
+        .select(`id, blocks:component_blocks ( block_kind, block_data )`)
+        .eq("owner_user_id", uid)
+        .eq("purpose", "구매");
+      const list: GbBannerRow[] = [];
+      for (const r of (rows ?? []) as unknown as {
+        id: string;
+        blocks: { block_kind: string; block_data: Record<string, unknown> | null }[] | null;
+      }[]) {
+        const bd = (r.blocks ?? []).find(
+          (b) => b.block_kind === "product" && !(b.block_data ?? {}).ref_drop_id,
+        )?.block_data as Record<string, unknown> | undefined;
+        if (!bd || bd.gb_enabled !== true) continue;
+        // 표식 폴백(RPC 미적용 공백 구간): block_data 의 gb_finalized_at/gb_final_price.
+        let qty = 0;
+        let finalized = typeof bd.gb_finalized_at === "string" && !!bd.gb_finalized_at;
+        let finalPrice = typeof bd.gb_final_price === "number" ? bd.gb_final_price : null;
+        try {
+          const { data: st, error } = (await supabase.rpc(
+            "get_groupbuy_status" as never,
+            { p_drop_id: r.id } as never,
+          )) as {
+            data: { current_qty?: number; finalized?: boolean; final_price?: number | null }[] | null;
+            error: { message?: string } | null;
+          };
+          const row0 = Array.isArray(st) ? st[0] : null;
+          if (!error && row0) {
+            qty = Math.max(0, Math.floor(Number(row0.current_qty) || 0));
+            finalized = row0.finalized === true;
+            finalPrice = typeof row0.final_price === "number" ? row0.final_price : finalPrice;
+          } else if (error) {
+            console.warn("[partner.preorders] get_groupbuy_status 실패 — 표식 폴백:", error.message);
+          }
+        } catch (e) {
+          console.warn("[partner.preorders] get_groupbuy_status 예외 — 표식 폴백:", e);
+        }
+        list.push({
+          dropId: r.id,
+          name: typeof bd.name === "string" ? bd.name : "",
+          qty,
+          finalized,
+          finalPrice,
+        });
+      }
+      setGbBanners(list);
+    } catch (e) {
+      console.warn("[partner.preorders] gb 배너 로드 실패:", e);
+    }
+  }
+  useEffect(() => {
+    void loadGbBanners();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 마감 확정 — finalize_groupbuy(실패·RPC 부재 = 기존 토스트 관례 · 가짜 성공 0).
+  async function handleFinalizeGb(dropId: string) {
+    if (gbClosing) return;
+    setGbClosing(true);
+    try {
+      const { data: res, error } = (await getSupabase().rpc(
+        "finalize_groupbuy" as never,
+        { p_drop_id: dropId } as never,
+      )) as {
+        data: { final_price?: number; updated_count?: number; mode?: string } | null;
+        error: { message?: string } | null;
+      };
+      if (error || !res) {
+        console.error("[partner.preorders] finalize_groupbuy failed:", error);
+        toast.error("처리 중 문제가 생겼어요."); // 기존 문구 재사용(신규 작문 0).
+        return;
+      }
+      setGbConfirming(null);
+      setGbResults((prev) => ({ ...prev, [dropId]: res })); // RPC 반환 그대로 보관.
+      await loadGbBanners(); // 배너 "마감됨 · 확정가" 전환.
+      await router.invalidate(); // cancel 모드 시 주문 목록 상태 반영.
+    } catch (err) {
+      console.error("[partner.preorders] finalize_groupbuy unexpected:", err);
+      toast.error("처리 중 문제가 생겼어요.");
+    } finally {
+      setGbClosing(false);
+    }
+  }
   // 처리 끝남 목록 접기/펼치기 — 기본 5건만, 더보기로 전체.
   const [othersExpanded, setOthersExpanded] = useState(false);
 
@@ -214,6 +320,64 @@ function PartnerPreordersPage() {
       </header>
 
       <div className="space-y-4 px-5 pt-4">
+        {/* W5c-2 — 모임판(gb) 드롭 배너: 미마감 = 현재 모임 + [모임판 마감](인라인 확인 1단계 · Radix 0)
+            / 마감 = "마감됨 · 확정가"(버튼 미노출). RPC 미적용 공백 = 표식 폴백·조용한 0. */}
+        {gbBanners.map((b) => (
+          <div key={b.dropId} className="rounded-2xl border border-border bg-bg p-4">
+            {b.finalized ? (
+              <p className="text-sm font-bold text-text-strong tabular-nums [word-break:keep-all]">
+                마감됨 · 확정가 {(b.finalPrice ?? 0).toLocaleString("ko-KR")}원
+                {gbResults[b.dropId]?.updated_count != null && (
+                  <span className="ml-1 text-xs font-semibold text-text-muted">
+                    ({gbResults[b.dropId]!.updated_count!.toLocaleString("ko-KR")}건)
+                  </span>
+                )}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 flex-1 truncate text-sm font-bold text-text-strong tabular-nums">
+                    {b.name} 모일수록 판매 · 현재 {b.qty.toLocaleString("ko-KR")}개 모임
+                  </p>
+                  {gbConfirming !== b.dropId && (
+                    <button
+                      type="button"
+                      onClick={() => setGbConfirming(b.dropId)}
+                      className="shrink-0 rounded-lg bg-text-strong px-3 py-2 text-xs font-bold text-bg transition-transform active:scale-95"
+                    >
+                      모임판 마감
+                    </button>
+                  )}
+                </div>
+                {gbConfirming === b.dropId && (
+                  <div className="space-y-2 rounded-xl bg-surface p-3">
+                    <p className="text-xs font-semibold leading-relaxed text-text-strong [word-break:keep-all]">
+                      마감하면 최저 도달가로 전원 확정됩니다. 되돌릴 수 없어요.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleFinalizeGb(b.dropId)}
+                        disabled={gbClosing}
+                        className="flex-1 rounded-lg bg-text-strong py-2 text-xs font-bold text-bg disabled:opacity-50"
+                      >
+                        마감 확정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGbConfirming(null)}
+                        disabled={gbClosing}
+                        className="flex-1 rounded-lg border border-border bg-bg py-2 text-xs font-bold text-text-muted"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
         {/* 신규 선주문 (pending) — 미처리 개수 배지(모노크롬). 0이면 배지 없음 + 빈 상태. */}
         <section>
           <div className="mb-2 flex items-center gap-2 px-1">

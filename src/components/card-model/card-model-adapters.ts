@@ -160,6 +160,8 @@ export type DropDetailInput = {
     gbTiers?: { qty: number; price: number }[];
     gbMinQty?: number;
     gbFailMode?: "base" | "cancel";
+    /** W5c-2 — 실집계 조회 키(수신 한정). */
+    gbDropId?: string;
   };
   /** ← InfoDropPageProps.remainingStock (get_drop_detail v8.1 파생 재고). */
   remainingStock?: number | null;
@@ -378,6 +380,7 @@ export function fromDropDetail(input: DropDetailInput): CardModel {
             basePrice: input.commerce.priceKrw,
             endsAt: input.commerce.saleEndIso ?? null,
             harvestStart: input.commerce.harvestDate ?? null, // W5b-F2 — 시간표 재료(fresh 대표일).
+            dropId: input.commerce.gbDropId ?? null, // W5c-2 — 실집계 조회 키(수신 한정).
           },
         }
       : {}),

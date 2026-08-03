@@ -629,6 +629,7 @@ export function toDropDetailInput(props: InfoDropPageProps): DropDetailInput {
             gbTiers: (c as { gbTiers?: { qty: number; price: number }[] }).gbTiers,
             gbMinQty: (c as { gbMinQty?: number }).gbMinQty,
             gbFailMode: (c as { gbFailMode?: "base" | "cancel" }).gbFailMode,
+            gbDropId: props.dropId, // W5c-2 — 실집계 조회 키(수신 경로 한정 운반).
             // S4-6 — 배송정보 셀 재료 관통(buildShippingView 입력).
             shipMethod: c.shipMethod,
             freeShip: c.freeShip,
