@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Phone, Minus, Plus, CheckCircle2, Truck, Coins } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -74,6 +74,18 @@ export function PreorderSheet({
     }
   }, [open]);
 
+  // 시트 자신이 스크롤 컨테이너(max-h + overflowY) → 열릴 때 항상 맨 위부터 보이도록 고정.
+  //   Radix 가 open 직후 첫 tabbable 로 포커스를 옮기면서 브라우저가 스크롤을 맞출 여지가 있어,
+  //   그 이후 프레임(rAF)에서 scrollTop 을 0 으로 되돌린다. 닫힘(open=false)은 무동작.
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const raf = requestAnimationFrame(() => {
+      if (sheetRef.current) sheetRef.current.scrollTop = 0;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open]);
+
   const maxQty = stockLimit && stockLimit > 0 ? stockLimit : null;
   const total = unitPriceKrw * qty;
 
@@ -136,7 +148,16 @@ export function PreorderSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-2xl px-6 pb-8 pt-6 tracking-ko">
+      <SheetContent
+        ref={sheetRef}
+        side="bottom"
+        className="rounded-t-2xl px-6 pb-8 pt-6 tracking-ko max-h-[85vh]"
+        style={{
+          maxHeight: "85svh",
+          overflowY: "auto",
+          paddingBottom: "max(2rem, env(safe-area-inset-bottom))",
+        }}
+      >
         {step === "form" ? (
           <div className="space-y-4">
             <header>
