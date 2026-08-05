@@ -6,9 +6,31 @@
 // when the current error count exceeds the recorded baseline (.claude/hooks/tsc-baseline.json).
 // That still catches any NEW type error introduced before finishing, which is the point.
 
-import { readFileSync } from "node:fs";
+import {
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
+
+// Build output / vendor dirs only. Anything not listed here is fingerprinted, so an
+// unlisted dir can only cause an EXTRA tsc run — never a skipped one.
+const FINGERPRINT_SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "dist-ssr",
+  ".output",
+  ".vinxi",
+  ".tanstack",
+  ".nitro",
+  ".wrangler",
+  "coverage",
+]);
 
 let raw = "";
 process.stdin.setEncoding("utf8");
@@ -26,6 +48,13 @@ process.stdin.on("end", () => {
 
   const cwd = process.cwd();
 
+  // Run gate — skip tsc when no .ts/.tsx file changed since the last run that reached a verdict.
+  // Same inputs to tsc mean the same verdict, so skipping is sound: this changes only WHEN the
+  // check runs, never WHAT it checks. Fingerprint failure (null) falls through and runs tsc.
+  const cachePath = path.join(cwd, "node_modules", ".cache", "ld-tsc-guard.json");
+  const fingerprint = collectTsFingerprint(cwd);
+  if (fingerprint && fingerprint === readCachedFingerprint(cachePath)) process.exit(0);
+
   // Pick the typecheck command: `bun run typecheck` if the script exists, else `bunx tsc --noEmit`.
   let hasTypecheckScript = false;
   try {
@@ -40,7 +69,10 @@ process.stdin.on("end", () => {
   const out = `${res.stdout || ""}${res.stderr || ""}`;
 
   // tsc passed cleanly → nothing to gate.
-  if (res.status === 0) process.exit(0);
+  if (res.status === 0) {
+    saveFingerprint(cachePath, fingerprint);
+    process.exit(0);
+  }
 
   const currentCount = (out.match(/error TS\d+/g) || []).length;
 
@@ -57,6 +89,7 @@ process.stdin.on("end", () => {
 
   if (baseline === null) {
     // No baseline to compare against — do not block on pre-existing debt.
+    saveFingerprint(cachePath, fingerprint);
     process.exit(0);
   }
 
@@ -69,5 +102,57 @@ process.stdin.on("end", () => {
   }
 
   // At or below baseline → pre-existing errors only, allow finishing.
+  saveFingerprint(cachePath, fingerprint);
   process.exit(0);
 });
+
+// Hash of every .ts/.tsx path + size + mtime under cwd. Returns null if nothing was found,
+// which keeps the gate open (tsc runs) rather than silently skipping the check.
+function collectTsFingerprint(root) {
+  const parts = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (FINGERPRINT_SKIP_DIRS.has(entry.name)) continue;
+        walk(full);
+      } else if (entry.isFile() && /\.tsx?$/i.test(entry.name)) {
+        try {
+          const st = statSync(full);
+          parts.push(`${path.relative(root, full)}:${st.size}:${st.mtimeMs}`);
+        } catch {
+          /* unreadable file → ignore */
+        }
+      }
+    }
+  };
+  walk(root);
+  if (parts.length === 0) return null;
+  parts.sort();
+  return createHash("sha1").update(parts.join("\n")).digest("hex");
+}
+
+function readCachedFingerprint(file) {
+  try {
+    const cached = JSON.parse(readFileSync(file, "utf8"));
+    return typeof cached.fingerprint === "string" ? cached.fingerprint : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveFingerprint(file, fingerprint) {
+  if (!fingerprint) return;
+  try {
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({ fingerprint }), "utf8");
+  } catch {
+    /* cache is an optimization only — a write failure just means the next run re-checks */
+  }
+}
