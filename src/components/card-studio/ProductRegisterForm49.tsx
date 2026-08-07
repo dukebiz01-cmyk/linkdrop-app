@@ -1308,18 +1308,18 @@ export function ProductRegisterForm({
               {/* 채워지는 부분 */}
               <div
                 className="absolute left-0 top-1/2 h-2 -translate-y-1/2 rounded-full transition-[width] duration-100"
-                style={{ width: `${(value.droppyRate / 30) * 100}%`, backgroundColor: accent }}
+                style={{ width: `${(value.droppyRate / 20) * 100}%`, backgroundColor: accent }}
               />
               {/* 썸 */}
               <div
                 className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-white transition-[left] duration-100"
-                style={{ left: `${(value.droppyRate / 30) * 100}%`, borderColor: accent, boxShadow: `0 2px 6px -1px ${accent}66` }}
+                style={{ left: `${(value.droppyRate / 20) * 100}%`, borderColor: accent, boxShadow: `0 2px 6px -1px ${accent}66` }}
               />
               {/* 상호작용용 투명 range */}
               <input
                 type="range"
                 min={0}
-                max={30}
+                max={20}
                 step={1}
                 value={value.droppyRate}
                 onChange={(e) => set("droppyRate", Number(e.target.value))}
@@ -1330,7 +1330,7 @@ export function ProductRegisterForm({
 
             <div className="mt-1.5 flex justify-between text-[10px] font-medium text-[#A3A3A3] tabular-nums">
               <span>0%</span>
-              <span>30%</span>
+              <span>20%</span>
             </div>
           </div>
         ) : (

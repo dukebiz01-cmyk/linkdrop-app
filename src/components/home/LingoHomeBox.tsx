@@ -169,9 +169,15 @@ export function LingoHomeBox({
   //   낭독 완료 후에만 마이크 오픈. 자동전송(600ms)·재탭 종료 기존 무변경.
   const HOME_MIC_PROMPT = "여기에 대고 말씀하세요";
   const [micPromptOn, setMicPromptOn] = useState(false);
+  // 문구 해제 — 기준은 "청취가 서 있지 않다" 하나. 구 조건의 !voice.speaking 항이 오판원이었다:
+  //   speaking 은 실제 오디오 재생(u.onstart)에서야 true 가 되므로 낭독 대기 창에서는 false 라,
+  //   문구를 켠 직후 이 effect 가 곧바로 되꺼버렸다(순서 역전의 나머지 절반).
+  //   순서 교정 후 문구는 proceed 안에서만 켜지고 같은 동기 블록의 startMic 이 listening 을
+  //   함께 올리므로(동일 커밋), 이 조건은 청취 중에 오작동하지 않는다. speaking 의존 제거 =
+  //   낭독 타이밍과 문구가 더는 얽히지 않음.
   useEffect(() => {
-    if (micPromptOn && !voice.listening && !voice.speaking) setMicPromptOn(false);
-  }, [micPromptOn, voice.listening, voice.speaking]);
+    if (micPromptOn && !voice.listening) setMicPromptOn(false);
+  }, [micPromptOn, voice.listening]);
   // F6-10 S2 — 안내 낭독은 세션 첫 탭 1회만(TTS 세션 키 관례 — sessionStorage).
   const MIC_PROMPT_ONCE_KEY = "ld-home-mic-prompt-done";
   const startMicSequence = () => {
@@ -201,12 +207,15 @@ export function LingoHomeBox({
     } catch {
       /* 저장 실패 — 다음 탭 재안내 허용 */
     }
-    setMicPromptOn(true);
     speakThenProceed({
       speak: voice.speak,
       stopSpeaking: voice.stopSpeaking,
       text: HOME_MIC_PROMPT,
+      // 순서 락 — 낭독 완료(onDone=onend · 가드 절단 포함) → 문구 → 띵 → 마이크.
+      //   구 배치(speakThenProceed 호출 앞 setMicPromptOn(true))는 문구를 낭독보다 먼저 띄워
+      //   사장님 발화와 링고 목소리가 겹치던 순서 역전의 진원이었다.
       proceed: () => {
+        setMicPromptOn(true);
         playListenStart();
         startMic();
       },

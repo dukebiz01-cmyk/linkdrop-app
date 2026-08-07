@@ -622,7 +622,7 @@ type DirectorStep =
   | "reserveAsk"
   | "calendar"
   | "done";
-// T5-W1a — 공유 보상 추천 기본값(rate %). 판단: 정본 미지정 — 폼 슬라이더 0~30% 범위 중앙 하단
+// T5-W1a — 공유 보상 추천 기본값(rate %). 판단: 정본 미지정 — 폼 슬라이더 0~20% 범위 중앙
 //   보수값 10 제안(확정은 사장님 · 숫자 입력 그대로). Duke 판정으로 교체 가능(이 상수만 수정).
 const DIRECTOR_DROPPY_RATE_DEFAULT = 10;
 // 체크리스트 칩(라벨 = STEP 정의 용어) — steps = 칩이 덮는 스텝(배송 = 방식+배송비 2스텝 · 분기 칩은 렌더에서 라벨 분기).
@@ -1518,7 +1518,7 @@ export function CardStudioPage({
       const digits = v.replace(/[^0-9]/g, "");
       if (!digits) return;
       const n = Number(digits);
-      if (n > 30) return; // 폼 슬라이더 정본 범위(0~30%) — 초과는 확정 불가(변형 금지 = 클램프 없음).
+      if (n > 20) return; // 폼 슬라이더 정본 범위(0~20%) — 초과는 확정 불가(변형 금지 = 클램프 없음).
       setCfgProduct((p) => ({ ...p, droppyMode: "rate", droppyRate: n }));
       dEcho(`${n}%`);
       setDText("");
@@ -1728,6 +1728,14 @@ export function CardStudioPage({
     const dateRangeLabel = dateVal && dateEndVal ? `${md(dateVal)}~${md(dateEndVal)} 순차 발송` : null; // 45 :955.
     const points = p.sellingPoints.map((s) => s.trim()).filter(Boolean).slice(0, 5);
     const qty = p.quantity && Number(digits(p.quantity)) > 0 ? Math.floor(Number(digits(p.quantity))) : null;
+    // 고정 Droppy 가드 — 정본(commerce/ProductRegisterForm.tsx :350-355) 그대로: 숫자 1~9자리 AND
+    //   >0 AND ≤판매가 통과분만. 무효 = null(키 미기록 · 차단 아님).
+    const dropyFixedValid = (() => {
+      const t = p.droppyFixed.trim();
+      if (!/^\d{1,9}$/.test(t)) return null;
+      const n = Number(t);
+      return n > 0 && n <= priceNum ? n : null;
+    })();
     // block_data — 45 :958-1036 키 정합(49 폼 보유 필드만 · 미보유 키는 미주입=미렌더).
     const blockData: Record<string, unknown> = {
       name: cfgProductName.trim(),
@@ -1756,6 +1764,14 @@ export function CardStudioPage({
       ...(p.type === "goods" ? { made_in: p.origin.trim() } : {}),
       ...(p.type === "goods" && p.brand.trim() ? { brand: p.brand.trim() } : {}),
       ...(p.type === "goods" && p.spec.trim() ? { spec: p.spec.trim() } : {}),
+      // 공유 보상(Droppy) — 정본(commerce/ProductRegisterForm.tsx :674-682) 동일 규칙 이식:
+      //   %모드 = dropy_rate(0~0.20 = 슬라이더 % ÷ 100) 만 / 고정모드 = dropy_fixed(가드 통과분) 만.
+      //   배타 저장(두 키 동시 기록 없음). 소스 = cfgProduct.droppy*(폼 슬라이더·지휘자 droppy 스텝 공용).
+      ...(p.droppyMode === "rate"
+        ? { dropy_rate: p.droppyRate / 100 }
+        : dropyFixedValid != null
+          ? { dropy_fixed: dropyFixedValid }
+          : {}),
       free_ship: p.freeShip,
       ...(!p.freeShip && p.shipFee ? { ship_fee_krw: Math.floor(Number(digits(p.shipFee))) } : {}),
       // F5-8 — 발송 안내 편입(free_ship 선례 동형 additive 키). 수신 adapters.ts ship_note 소비
