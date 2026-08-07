@@ -507,7 +507,10 @@ const CLIP_BLOCKS = new Set(["content"]); // 구간 선택 필요 블록(선택�
 const IMAGE_BLOCKS = new Set(["image", "productimage"]); // 사진 선택 필요 블록.
 // 링고 자동 설정 금지 필드: 구간(clip)·영상 링크·사진 = 콘텐츠 대리 선택 금지(장착·안내만).
 // E5d — coupon 편입: 실쿠폰(UUID) 전환으로 쿠폰 선택 = 대표님 탭만(AI 대리 선택 차단 — Edge 개정 목록 대상).
-const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "image", "imageUrl", "photo", "coupon"]);
+// NUMBER_CRITICAL — productPrice·stockQty 편입(E5d coupon 전례): 가격·수량은 실제 현금 거래 직결 —
+//   구 방어는 값 반영 후 needsConfirm 배지(사후 표시)뿐이라 "AI 숫자 무확인 반영 금지" 절대 규칙의
+//   실차단이 부재했다. 숫자 확정 경로 = 대표님 직접 입력만(폼 칸 · 지휘자 스텝 — 둘 다 무영향).
+const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "image", "imageUrl", "photo", "coupon", "productPrice", "stockQty"]);
 // UI-5-T4-E4e-2(재) — 준비 중 블록 = AI 경유(equip·setField·조립) 차단 2차 방어층(L4 대본이 1차).
 //   등재 근거(전수 조사): aivideo = 생성 엔진 부재(aivStatus 타이머 목업 :757-760) / image = reserve 매장
 //   사진 업로드 미배선(E5a 범위 밖 목업 :4883) / dock = DOCK_OPTIONS 하드코딩 목업(:280 — 실 카드 연결 부재).
@@ -1313,9 +1316,11 @@ export function CardStudioPage({
     if (target) jumpToBlock(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directorOn, dStep]);
-  // T5-W1a — 보상 스텝 진입 헬퍼: 추천값 프리필(제안 → 사장님 확정 — 숫자 입력 그대로).
+  // T5-W1a — 보상 스텝 진입 헬퍼. NUMBER_CRITICAL — 추천값 프리필 폐지(빈칸 진입): 보상률은 실제
+  //   현금 분배 직결이라 [확정] 한 번으로 통과되는 기성값을 두지 않는다(사장님이 스스로 기입).
+  //   DIRECTOR_DROPPY_RATE_DEFAULT 상수는 존치 — 멘트상 "추천값" 근거·향후 안내 표기용.
   function goDroppy() {
-    setDText(String(DIRECTOR_DROPPY_RATE_DEFAULT));
+    setDText("");
     dGo("droppy");
   }
   // T5-W5a — 단계표 제안 산식([결정적 — AI 생성 숫자 아님]): 임계 후보 [3,10,20,30,50,100] 중
@@ -3099,11 +3104,11 @@ export function CardStudioPage({
           //   default 무적용·무기록이 2차 방어).
           // E5d — "coupon" 케이스 제거: 실쿠폰 UUID 는 AI 대리 선택 금지(AI_BLOCKED_FIELDS 가 1차 차단,
           //   여기 도달 시 default 무적용·무기록이 2차 방어).
+          // NUMBER_CRITICAL — "productPrice"/"stockQty" 케이스 제거(E5d coupon 전례): 가격·수량은 실제
+          //   현금 거래 직결 — AI 대리 기입 금지(AI_BLOCKED_FIELDS 가 1차 차단, 여기 도달 시
+          //   default 무적용·무기록이 2차 방어). 확정 = 대표님 직접 입력만(폼 칸·지휘자 스텝).
           case "productName":
             setCfgProductName(v);
-            break;
-          case "productPrice":
-            setCfgProductPrice(v.replace(/[^0-9,]/g, ""));
             break;
           case "dock":
             setCfgDock(v);
@@ -3118,12 +3123,10 @@ export function CardStudioPage({
           case "headline":
             setCfgProduct((p) => ({ ...p, headline: v }));
             break;
-          // F2③ — Edge 방출 필드(FIX-48+50) 실배선: 원산지·수량 → 상품등록 폼 값(적용 사실화).
+          // F2③ — Edge 방출 필드(FIX-48+50) 실배선: 원산지 → 상품등록 폼 값(적용 사실화).
+          //   수량(stockQty)은 NUMBER_CRITICAL 차단으로 케이스 제거(위 주석 참조 — 텍스트 필드만 잔존).
           case "origin":
             setCfgProduct((p) => ({ ...p, origin: v }));
-            break;
-          case "stockQty":
-            setCfgProduct((p) => ({ ...p, quantity: v.replace(/[^0-9]/g, "") }));
             break;
           default:
             return; // F2③ — 미배선 필드(gbTarget* 등) = 무적용·무기록(요약 "채워진 척" 금지).
@@ -3973,12 +3976,27 @@ export function CardStudioPage({
           )
           .find((blk: unknown) => typeof blk === "string" && AI_PENDING_BLOCKS.has(blk as string)) ??
         null;
+      // NUMBER_CRITICAL — 가격·수량 차단 전용 안내(신설 분기 · 기존 3갈래 무변경).
+      //   교정 대상: 두 필드의 FIELD_TO_BLOCK 환산이 "product"(= AI_PENDING 밖)라 기존 폴백인
+      //   모드 안내("퍼블릭 카드엔 적용하지 않았어요")가 나가던 것 — 커머스에서 물은 대표님에게
+      //   커머스로 가라는 오답이었다. 가격은 최다 요청 항목이라 노출 빈도가 높다.
+      //   판정 = AI_BLOCKED_FIELDS ∩ NUMBER_FIELDS(오늘 = productPrice·stockQty 정확히 2개).
+      //   date/time 은 필드가 아니라 블록(calendar ∈ AI_PENDING)으로 막혀 이 교집합에 안 들어옴 —
+      //   기존 캘린더 문구는 아래 분기가 그대로 담당(무접촉).
+      const blockedNumberField = (rawActions ?? []).some(
+        (a: any) =>
+          a?.type === "setField" &&
+          typeof a.field === "string" &&
+          AI_BLOCKED_FIELDS.has(a.field) &&
+          NUMBER_FIELDS.has(a.field),
+      );
       setMessages((mm) => [
         ...mm,
         {
           role: "assistant",
-          text:
-            pendingBlk === "calendar"
+          text: blockedNumberField
+            ? "가격과 수량은 대표님이 직접 정하시는 값이라 제가 넣지 않았어요. 아래 폼에서 정해 주세요."
+            : pendingBlk === "calendar"
               ? "예약 날짜는 매장 캘린더에서 대표님이 직접 정하는 영역이에요."
               : pendingBlk
                 ? "이 부분은 준비 중이에요 — 열리면 제가 먼저 알려드릴게요."
@@ -7314,10 +7332,17 @@ export function CardStudioPage({
                       className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
                       style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
                     />
+                    {/* NUMBER_CRITICAL — 빈칸 비활성(gbTiers [이대로] 선례 disabled={anyInvalid} 동형 — disabled+opacity-40).
+                        구 동작: 빈칸 탭 = submitDirectorText 의 `if (!v) return` 로 무언 실패(버튼 고장처럼 보임).
+                        droppy 프리필 폐지로 빈칸이 첫 화면이 되면서 노출됐다. 판정은 trim() 유무뿐 —
+                        "0" 은 truthy 라 활성 유지(보상 0% = 대표님의 정당한 선택 · 막지 않는다).
+                        5개 스텝(name·origin·price·qty·droppy) 공용 버튼이나 전 스텝이 빈값을 거부하므로
+                        (submitDirectorText :1497-1499 동일 가드) 좁힐 필요 없음 — 동작 동일, 표시만 정직해짐. */}
                     <button
                       type="button"
                       onClick={submitDirectorText}
-                      className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+                      disabled={!dText.trim()}
+                      className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
                     >
                       {dStep === "droppy" ? "확정" : "입력"}
                     </button>
