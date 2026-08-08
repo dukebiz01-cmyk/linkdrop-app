@@ -139,7 +139,7 @@ export function LandingHero() {
       {/* UI-5-T7-F6-11 — "카드" 첫 정의 풀어쓰기(정본): 뱃지·헤드라인은 whitespace-nowrap 구조라
           레이아웃 접촉 없이 확장 불가(STOP 보고) — 유연 컨테이너인 이 서브 카피가 정의 지점. */}
       <p className="mx-auto mt-3 max-w-[290px] text-pretty text-[14px] leading-relaxed text-[#64748B]">
-        예약·쿠폰·판매까지, 카톡으로 보낼 수 있는 우리 가게 카드를 자동으로
+        예약·쿠폰·판매까지, 카톡으로 공유할 수 있는 우리 가게 카드를 자동으로
       </p>
 
       {/* 폰 목업 — 원본 입력 → 링고AI 변환 → 완성 카드 */}

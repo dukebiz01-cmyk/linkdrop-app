@@ -105,7 +105,7 @@ export function HomeMarketingBanner() {
     <section className="mb-5">
       {/* 태그라인 — §0 프레임(공유 → 전환 보상). */}
       <h2 className="mb-2.5 px-0.5 text-[15px] font-bold leading-snug tracking-[-0.01em] text-[#0F172A] text-balance">
-        내가 만든 링크카드를 공유하여 수많은 혜택과 보너스를
+        내가 만든 공유카드를 친구에게 보내 수많은 혜택과 보너스를
       </h2>
 
       {/* 소스 → 완성 상태 표시 — 가볍게 떠 있는 한 줄 */}
@@ -131,7 +131,7 @@ export function HomeMarketingBanner() {
           ) : (
             <Sparkles className="h-3 w-3" strokeWidth={2.5} />
           )}
-          {built ? "카드 완성" : "변환 중"}
+          {built ? "공유카드 완성" : "변환 중"}
         </span>
       </div>
 

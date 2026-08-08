@@ -86,8 +86,8 @@ const OPTIONS = [
   {
     choice: "creator" as const,
     icon: Video,
-    title: "영상·콘텐츠로 카드를 만들래요",
-    subtitle: "영상 링크 한 줄로 카드 완성",
+    title: "영상·콘텐츠로 공유카드를 만들래요",
+    subtitle: "영상 링크 한 줄로 공유카드 완성",
   },
   {
     choice: "owner" as const,
@@ -106,11 +106,11 @@ const OPTIONS = [
     choice: "browse" as const,
     icon: Compass,
     title: "먼저 둘러볼래요",
-    subtitle: "다른 사람들의 카드 구경하기",
+    subtitle: "다른 사람들의 공유카드 구경하기",
   },
 ];
 
-const GREETING = "링크 하나가, 손님을 부르는 카드로.";
+const GREETING = "링크 하나가, 손님을 부르는 공유카드로.";
 
 export default function StartIntro({ onSelect }: StartIntroProps) {
   // phase: 0 = thinking, 1 = typing greeting, 2 = options revealed
@@ -172,7 +172,7 @@ export default function StartIntro({ onSelect }: StartIntroProps) {
           <span className="text-[13px] font-semibold leading-tight" style={{ color: INK }}>링고AI</span>
           <span className="flex items-center gap-1 text-[11px] font-medium" style={{ color: POINT }}>
             <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: POINT }} />
-            지금 카드를 만드는 중
+            지금 공유카드를 만드는 중
           </span>
         </div>
       </div>
@@ -186,7 +186,7 @@ export default function StartIntro({ onSelect }: StartIntroProps) {
           </span>
           <ArrowRight className="h-3.5 w-3.5 text-[#CBD5E1]" strokeWidth={2} />
           <span className="text-[12px] font-semibold" style={{ color: built ? POINT : "#CBD5E1" }}>
-            {built ? "카드 완성" : "변환 중…"}
+            {built ? "공유카드 완성" : "변환 중…"}
           </span>
         </div>
 

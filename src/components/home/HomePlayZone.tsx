@@ -175,8 +175,8 @@ type Mission = {
 };
 
 const INITIAL_MISSIONS: Mission[] = [
-  { id: "share", icon: Share2, label: "카드 1개 공유하기", reward: 20, goal: 1, progress: 0 },
-  { id: "browse", icon: Eye, label: "카드 3개 구경하기", reward: 10, goal: 3, progress: 0 },
+  { id: "share", icon: Share2, label: "공유카드 1개 보내기", reward: 20, goal: 1, progress: 0 },
+  { id: "browse", icon: Eye, label: "공유카드 3개 구경하기", reward: 10, goal: 3, progress: 0 },
   { id: "coupon", icon: Ticket, label: "쿠폰 사용하기", reward: 30, goal: 1, progress: 0 },
 ];
 

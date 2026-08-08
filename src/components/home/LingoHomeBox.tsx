@@ -226,7 +226,7 @@ export function LingoHomeBox({
   const askPerformance = () => {
     setOpen(true);
     setPerfOpen(true);
-    if (chat.messages.length === 0) void chat.send("내 카드 성과 어때?", "text", { performance: true }, "home");
+    if (chat.messages.length === 0) void chat.send("내 공유카드 성과 어때?", "text", { performance: true }, "home");
   };
 
   // LINGO-UI-2b-2 — 예시 카드 열람 흐름(전부 클라 템플릿 — LLM 호출 0 · 2계층 발화 원칙):
@@ -236,7 +236,7 @@ export function LingoHomeBox({
     // UI-5-T7-F6-11 — 홈 표면 "카드" 첫 정의(Duke STOP ① (b) 판정): 칩(한 글자 락)은 유지,
     //   칩 탭 후 첫 발화에 정본 풀어쓰기 삽입(퍼블릭 일반회원 = "나만의 카드").
     const line =
-      "카톡으로 보낼 수 있는 나만의 카드 — 직접 보시는 게 빨라요. 실제 카드를 새 창으로 열어드릴게요. 구경하고 돌아오세요!";
+      "카톡으로 공유할 수 있는 나만의 카드 — 직접 보시는 게 빨라요. 실제 공유카드를 새 창으로 열어드릴게요. 구경하고 돌아오세요!";
     chat.notify(line);
     voice.speak(line); // ttsOn 게이트는 speak 내부 담당(호출부 검사 불요).
     window.open(DEMO_CARD_URL, "_blank", "noopener,noreferrer");
@@ -254,7 +254,7 @@ export function LingoHomeBox({
         ]
       : greet === "share"
         ? [
-            { key: "how-share", label: "친구에게 보내는 법", primary: true, onTap: () => void sendChat("만든 카드를 카톡으로 공유하는 방법을 알려주세요") },
+            { key: "how-share", label: "친구에게 보내는 법", primary: true, onTap: () => void sendChat("만든 공유카드를 카톡으로 보내는 방법을 알려주세요") },
             { key: "new", label: "새로 만들어 볼래요", primary: false, onTap: () => onGoStudio() },
           ]
         : [

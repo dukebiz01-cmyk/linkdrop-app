@@ -3922,7 +3922,7 @@ export function CardStudioPage({
   function stepPlanIntro(m: StudioMode): string {
     // UI-5-T7-F6-11 — 스튜디오 첫 발화 = "카드" 첫 등장: 정본 풀어쓰기(퍼블릭=나만의 / 사업자=우리 가게).
     //   모드 맥락은 introLead(m)가 담당 · 이후 등장(새 카드 시작 등)은 "카드" 유지(두 번째 규칙).
-    return `카톡으로 보낼 수 있는 ${m === "general" ? "나만의" : "우리 가게"} 카드를 만들어요. ${introLead(m)}`;
+    return `카톡으로 공유할 수 있는 ${m === "general" ? "나만의" : "우리 가게"} 카드를 만들어요. ${introLead(m)}`;
   }
 
   // UI-5-T2-E2 — 49 컨텍스트 → LingoContext(45 페이로드 형태 계승: studio_state + studio{deck,fields}).

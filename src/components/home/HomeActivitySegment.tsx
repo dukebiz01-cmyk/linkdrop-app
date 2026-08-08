@@ -98,9 +98,9 @@ export function HomeActivitySegment({
   // v0(home-v5) 3토글 — 공유한 | 구독한 | 내가만든. 세 탭 모두 동일 HScrollRow + ShareCardTile(일관).
   const drops = tab === "sent" ? sentDrops : tab === "subscribed" ? followedDrops : myCreatedDrops;
   const EMPTY: Record<ActivityTab, { title: string; subtitle: string }> = {
-    sent: { title: "아직 공유한 카드가 없어요", subtitle: "마음에 드는 카드를 친구에게 공유해보세요." },
+    sent: { title: "아직 보낸 공유카드가 없어요", subtitle: "마음에 드는 공유카드를 친구에게 보내보세요." },
     subscribed: { title: "구독한 메이커가 없어요", subtitle: "탐색에서 마음에 드는 메이커를 찾아보세요." },
-    made: { title: "아직 만든 카드가 없어요", subtitle: "첫 카드를 만들어 손님을 불러보세요." },
+    made: { title: "아직 만든 공유카드가 없어요", subtitle: "첫 공유카드를 만들어 손님을 불러보세요." },
   };
 
   const TABS = [
@@ -166,7 +166,7 @@ export function HomeActivitySegment({
                         imageUrl: drop.videoThumbnailUrl,
                         purpose: drop.intent,
                       })
-                    : toast.info("아직 게시 전 카드예요. 게시하면 공유할 수 있어요.")
+                    : toast.info("아직 게시 전 공유카드예요. 게시하면 공유할 수 있어요.")
                 }
               />
               {/* 내가만든 3기능 — made 탭에만 액션 행(성과보기/수정/재생). 열람(카드 탭→/d)·공유는 기존 그대로.

@@ -72,7 +72,7 @@ export function HomePerformanceFacts() {
         </span>
         <p className="mt-2.5 text-[13px] font-bold text-[#0A0A0A]">아직 성과가 쌓이기 전이에요</p>
         <p className="mt-1 text-[12px] font-medium leading-relaxed text-[#9A9A9A] [word-break:keep-all]">
-          카드를 공유하면 여기에 실제 숫자(발송·클릭·전환)가 모여요.
+          공유카드를 보내면 여기에 실제 숫자가 모여요.
         </p>
       </div>
     );

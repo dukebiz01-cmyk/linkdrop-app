@@ -57,7 +57,7 @@ export function LandingPageV6() {
             <GoogleButton size="lg" onClick={goLogin} />
           </div>
           <p className="mt-3 text-center text-[12.5px] text-[#94A3B8]">
-            가입 3초 · 카드 제작은 무료예요
+            가입 3초 · 공유카드 제작은 무료예요
           </p>
         </section>
 

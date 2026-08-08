@@ -123,7 +123,7 @@ function LiveMorphHero() {
     <section className="mb-5">
       {/* 태그라인 — §0 프레임(공유 → 전환 보상). */}
       <h2 className="mb-2.5 px-0.5 text-[15px] font-bold leading-snug tracking-[-0.01em] text-[#0F172A] text-balance">
-        내가 만든 링크카드를 공유하여 수많은 혜택과 보너스를
+        내가 만든 공유카드를 친구에게 보내 수많은 혜택과 보너스를
       </h2>
 
       {/* 소스 → 완성 상태 표시 — 가볍게 떠 있는 한 줄 */}
@@ -149,7 +149,7 @@ function LiveMorphHero() {
           ) : (
             <Sparkles className="h-3 w-3" strokeWidth={2.5} />
           )}
-          {built ? "카드 완성" : "변환 중"}
+          {built ? "공유카드 완성" : "변환 중"}
         </span>
       </div>
 
@@ -268,13 +268,13 @@ const STARTER_ITEMS: StarterItem[] = [
   {
     key: "video",
     icon: Video,
-    title: "영상·콘텐츠로 카드를 만들래요",
-    sub: "영상 링크 한 줄로 카드 완성",
+    title: "영상·콘텐츠로 공유카드를 만들래요",
+    sub: "영상 링크 한 줄로 공유카드 완성",
     kind: "purpose",
     purpose: "정보",
     badgeFor: "user",
     blurb:
-      "유튜브·인스타 링크만 붙이면 핵심을 카드로 정리해드려요. 공개하면 탐색에서 사람들이 보고 공유해요.",
+      "유튜브·인스타 링크만 붙이면 핵심을 공유카드로 정리해드려요. 공개하면 탐색에서 사람들이 보고 공유해요.",
     cta: "이 목적으로 시작하기",
   },
   {
@@ -312,9 +312,9 @@ const STARTER_ITEMS: StarterItem[] = [
     key: "browse",
     icon: Compass,
     title: "먼저 둘러볼래요",
-    sub: "다른 사람들의 카드 구경",
+    sub: "다른 사람들의 공유카드 구경",
     kind: "explore",
-    blurb: "다른 사람 카드를 구경하고 공유해요. 친구가 쓰면 나도 드로피를 받아요.",
+    blurb: "다른 사람 공유카드를 구경하고 공유해요. 친구가 쓰면 나도 드로피를 받아요.",
     cta: "둘러보기",
   },
 ];
@@ -499,7 +499,7 @@ function StarterList({
                 className="mt-0.5 block text-[12.5px] font-medium"
                 style={{ color: "rgba(255,255,255,0.64)" }}
               >
-                링고 AI와 같이 카드를 만들어 보세요
+                링고 AI와 같이 공유카드를 만들어 보세요
               </span>
             </span>
           </button>
