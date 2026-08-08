@@ -19,6 +19,7 @@ import {
   DROPY_PCT_MAX,
 } from "@/lib/studio-contract";
 import {
+  DECK_IDS,
   DIRECTOR_DROPPY_RATE_DEFAULT,
   isAiActionAllowed,
 } from "@/components/card-model/CardStudioPage49";
@@ -436,10 +437,28 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
   // ── 2막: 조립 ─────────────────────────────────────────────────────────────
   const mode50 = modeOf(purpose); // StudioMode 3값과 동형(49 무확장 락).
 
+  // 덱 블록별 장착 판정 — 50 의 실데이터만 본다(가짜 장착 금지).
+  //   content = 영상 있음 / productimage = 사진 있음 / product = 상품명·가격·수량 중 하나라도 있음.
+  //   그 외(seasonal·delivery·coupon·calendar·brand·dock·link·party·review·aivideo·image) = false.
+  function isBlockApplied(id: string): boolean {
+    if (id === "content") return videoUrl.trim().length > 0;
+    if (id === "productimage") return !!photoName;
+    if (id === "product") {
+      return productName.trim().length > 0 || (priceKrw ?? 0) > 0 || (qtyNum ?? 0) > 0;
+    }
+    return false;
+  }
+
   // §3 — 요청 context. 타입은 기존 계약(LingoContext) 그대로 — 신규 키 0.
   function buildAssembleContext(): LingoContext {
     const m = mode50 ?? "general";
     const lead = videoAiRef.current;
+    // 실 덱 스냅샷 — DECK_IDS(49 P0 export분) 기반으로 49 계약과 동일 구성.
+    //   label: 49 덱 라벨 원천(STUDIO_BLOCKS)이 비export 이고 49 는 무접촉 락이라 id 문자열 그대로
+    //   둔다(라벨 신규 작문 금지). locked: 50 엔 잠금 블록 개념이 없어 전부 false(49 :3943 동형).
+    const deckIds = DECK_IDS[m];
+    const deck = deckIds.map((id) => ({ id, label: id, applied: isBlockApplied(id), locked: false }));
+    const appliedBlocks = deckIds.filter(isBlockApplied);
     // 1막 name 스텝(sell 전용) 수집값. host·tell 경로는 빈 값 → 조건부 스프레드로 키 생략
     //   (없는 재료를 지어내지 않는다 — 그 경로의 제목은 video_summary 기반으로 짓는다).
     const nameForAi = productName.trim();
@@ -453,13 +472,13 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
     return {
       studio_state: {
         mode: m,
-        applied_blocks: [],
+        applied_blocks: appliedBlocks, // deck 스냅샷과 동일 판정(단일 소스 — 두 키 불일치 금지).
         score: 0,
         card_title: nameForAi,
         ...(nameForAi ? { product_name: nameForAi } : {}),
         ...((priceKrw ?? 0) > 0 ? { product_price: priceKrw as number } : {}),
       },
-      studio: { mode: m, deck: [], fields },
+      studio: { mode: m, deck, fields },
       ...(lead?.summary
         ? { video_summary: lead.summary }
         : lead?.title
