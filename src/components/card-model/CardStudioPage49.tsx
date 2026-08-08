@@ -427,7 +427,7 @@ function getStage(score: number) {
 type StudioMode = "general" | "reserve" | "commerce";
 
 // 모드별 덱 구성 (주 제작 → 일반 레버) — T5-W0: 강화 3종(top·boost·marketing) 제거.
-const DECK_IDS: Record<StudioMode, string[]> = {
+export const DECK_IDS: Record<StudioMode, string[]> = {
   general: ["content", "dock"],
   reserve: ["calendar", "party", "content", "review", "coupon", "brand", "dock", "image", "link"],
   commerce: ["product", "productimage", "aivideo", "seasonal", "review", "delivery", "coupon", "brand", "dock", "link"],
@@ -499,26 +499,26 @@ const FIELD_LABEL: Record<string, string> = {
   phone: "전화",
   map: "지도",
 };
-const NUMBER_FIELDS = new Set(["productPrice", "date", "time", "stockQty"]); // 가격·기간·수량 → 항상 확인(숫자 불가침). F2③ — stockQty 편입.
-const NUMBER_CRITICAL_BLOCKS = new Set(["product", "seasonal", "calendar", "party"]); // 가격·수량·기간·인원.
+export const NUMBER_FIELDS = new Set(["productPrice", "date", "time", "stockQty"]); // 가격·기간·수량 → 항상 확인(숫자 불가침). F2③ — stockQty 편입.
+export const NUMBER_CRITICAL_BLOCKS = new Set(["product", "seasonal", "calendar", "party"]); // 가격·수량·기간·인원.
 // UI-5-T1k(D) — 핵심구간(clip): "장착은 링고, 선택은 대표님". content = 선택 필요(needsConfirm 동급).
 //   구간 값(clip) setField 는 AI 화이트리스트에서 제외 → 링고가 시도해도 가드에 걸림(T-2 실배선 방어).
-const CLIP_BLOCKS = new Set(["content"]); // 구간 선택 필요 블록(선택은 대표님).
+export const CLIP_BLOCKS = new Set(["content"]); // 구간 선택 필요 블록(선택은 대표님).
 // UI-5-T1m — 영상=조립 관문(content=영상·핵심구간 블록, hasVideo=applied.content). 이미지=선택 필요.
-const IMAGE_BLOCKS = new Set(["image", "productimage"]); // 사진 선택 필요 블록.
+export const IMAGE_BLOCKS = new Set(["image", "productimage"]); // 사진 선택 필요 블록.
 // 링고 자동 설정 금지 필드: 구간(clip)·영상 링크·사진 = 콘텐츠 대리 선택 금지(장착·안내만).
 // E5d — coupon 편입: 실쿠폰(UUID) 전환으로 쿠폰 선택 = 대표님 탭만(AI 대리 선택 차단 — Edge 개정 목록 대상).
 // NUMBER_CRITICAL — productPrice·stockQty 편입(E5d coupon 전례): 가격·수량은 실제 현금 거래 직결 —
 //   구 방어는 값 반영 후 needsConfirm 배지(사후 표시)뿐이라 "AI 숫자 무확인 반영 금지" 절대 규칙의
 //   실차단이 부재했다. 숫자 확정 경로 = 대표님 직접 입력만(폼 칸 · 지휘자 스텝 — 둘 다 무영향).
-const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "image", "imageUrl", "photo", "coupon", "productPrice", "stockQty"]);
+export const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "image", "imageUrl", "photo", "coupon", "productPrice", "stockQty"]);
 // UI-5-T4-E4e-2(재) — 준비 중 블록 = AI 경유(equip·setField·조립) 차단 2차 방어층(L4 대본이 1차).
 //   등재 근거(전수 조사): aivideo = 생성 엔진 부재(aivStatus 타이머 목업 :757-760) / image = reserve 매장
 //   사진 업로드 미배선(E5a 범위 밖 목업 :4883) / dock = DOCK_OPTIONS 하드코딩 목업(:280 — 실 카드 연결 부재).
 //   F3-10a(E5x 감사 1순위) — calendar 편입: FIX-62 폐기분(구 미영속 프리뷰 cfgDates/Times/Slots)이
 //   49에 잔존 — 실슬롯 이식(F3-10 본대) 전까지 AI 경로 폐쇄(유일 차단 밖 목업 해소).
 //   수동 편집(덱 탭·칸 조작)은 무영향 — 차단은 AI 액션 경로 한정.
-const AI_PENDING_BLOCKS = new Set(["aivideo", "image", "dock", "calendar"]);
+export const AI_PENDING_BLOCKS = new Set(["aivideo", "image", "dock", "calendar"]);
 // UI-5-T6a — 인앱 안내 1줄(45 V6_INAPP_NOTICE :424 동형 — 한 글자 락·탭 문법).
 const V6_INAPP_NOTICE = "카카오톡에서는 누르면 크롬에서 이어져요.";
 // UI-5-T1m — 미확정 릴레이 큐 정렬 우선순위: 영상 → 이미지 → 숫자(product/party/…) → 구간(content) → 기타.
@@ -532,7 +532,7 @@ function confirmRank(id: string): number {
 
 // UI-5-T2-E2a — 모드별 제작 순서 플랜(생활어 라벨 · 개발용어 화면 금지). 마지막 = 확인(훑어보기 · 발행 별개 수동).
 type PlanStep = { key: string; label: string; block?: string };
-const STEP_PLAN: Record<StudioMode, PlanStep[]> = {
+export const STEP_PLAN: Record<StudioMode, PlanStep[]> = {
   general: [
     { key: "video", label: "영상 담기", block: "content" },
     { key: "title", label: "제목·한마디", block: "content" },
@@ -557,7 +557,7 @@ const STEP_PLAN: Record<StudioMode, PlanStep[]> = {
 
 // UI-5-T7-T5-W1 — "링고에게 제작시키기" 멘트 정본(Duke 확정 · CC 재량 작문 금지 — 수정은 이
 //   상수만). 화법 3규칙: 정중 존댓말 / 요청+용도 설명 세트 / 정의 용어만. 이모지·감탄사 0.
-const DIRECTOR_MENTS = {
+export const DIRECTOR_MENTS = {
   // UI-5-T7-F6-11 — 개방 멘트 = 독 표면 "카드" 첫 등장: 정본 풀어쓰기 분기(사업자=우리 가게 /
   //   퍼블릭 일반회원=나만의 — W3a done 분기 선례 동형). 이후 done 등 재등장은 "카드" 유지.
   start:
@@ -600,7 +600,7 @@ const DIRECTOR_MENTS = {
 } as const;
 // T5-W1a(v4) — 지휘 스텝: 사진→이름→유형(3분기)→분류→원산지→단위→가격→배송방식→배송비→보상→수량→기간
 //   →(신선=출하기간 / 가공·공산품=발송안내)→프리체크→done. 전부 기존 폼 상태 setter 직결(신규 쓰기 경로 0).
-type DirectorStep =
+export type DirectorStep =
   | "photo"
   | "name"
   | "type"
@@ -628,9 +628,9 @@ type DirectorStep =
   | "done";
 // T5-W1a — 공유 보상 추천 기본값(rate %). 판단: 정본 미지정 — 폼 슬라이더 0~20% 범위 중앙
 //   보수값 10 제안(확정은 사장님 · 숫자 입력 그대로). Duke 판정으로 교체 가능(이 상수만 수정).
-const DIRECTOR_DROPPY_RATE_DEFAULT = 10;
+export const DIRECTOR_DROPPY_RATE_DEFAULT = 10;
 // 체크리스트 칩(라벨 = STEP 정의 용어) — steps = 칩이 덮는 스텝(배송 = 방식+배송비 2스텝 · 분기 칩은 렌더에서 라벨 분기).
-const DIRECTOR_CHECK: { key: string; steps: DirectorStep[]; label: string }[] = [
+export const DIRECTOR_CHECK: { key: string; steps: DirectorStep[]; label: string }[] = [
   { key: "photo", steps: ["photo"], label: "상품 사진" },
   { key: "name", steps: ["name"], label: "상품 이름" },
   { key: "type", steps: ["type"], label: "상품 유형" },
@@ -645,11 +645,11 @@ const DIRECTOR_CHECK: { key: string; steps: DirectorStep[]; label: string }[] = 
   { key: "branch", steps: ["harvest", "shipnote"], label: "출하·발송" },
 ];
 // T5-W2 — 퍼블릭 체크리스트(링크 1개 조립).
-const DIRECTOR_CHECK_GENERAL: { key: string; steps: DirectorStep[]; label: string }[] = [
+export const DIRECTOR_CHECK_GENERAL: { key: string; steps: DirectorStep[]; label: string }[] = [
   { key: "link", steps: ["link"], label: "영상 링크" },
 ];
 // T5-W3 — 예약·쿠폰 체크리스트(쿠폰 핵심 · 예약 분기).
-const DIRECTOR_CHECK_RESERVE: { key: string; steps: DirectorStep[]; label: string }[] = [
+export const DIRECTOR_CHECK_RESERVE: { key: string; steps: DirectorStep[]; label: string }[] = [
   { key: "link", steps: ["link"], label: "영상 링크" },
   { key: "coupon", steps: ["coupon"], label: "쿠폰" },
   { key: "reserve", steps: ["reserveAsk", "calendar"], label: "예약" },
@@ -657,7 +657,7 @@ const DIRECTOR_CHECK_RESERVE: { key: string; steps: DirectorStep[]; label: strin
 // T5-W1c(P2) — 스텝 → 소속 블록(화면 동행: 스텝 진입 = jumpToBlock 스크롤 + 슬롯 하이라이트 좌표원).
 //   비표시 필드(분류·원산지·단위·보상 등 카드 미노출 항목) = 소속 블록(상품정보)으로 스크롤.
 //   reserveAsk(분기 질문)·done 은 이동 없음(미등록 = 현 위치 유지).
-const DIRECTOR_STEP_BLOCK: Partial<Record<DirectorStep, string>> = {
+export const DIRECTOR_STEP_BLOCK: Partial<Record<DirectorStep, string>> = {
   photo: "productimage",
   name: "product",
   type: "product",
@@ -768,7 +768,7 @@ function LingoTouchBadge({ needsConfirm }: { needsConfirm: boolean }) {
 }
 // 모드별 "핵심" 블록 — 이 목록의 블록은 덱에서 핵심 배지로 강조됨
 // 예약·쿠폰(reserve)은 예약 캘린더와 쿠폰 두 가지가 핵심
-const MODE_MAIN_IDS: Record<StudioMode, string[]> = {
+export const MODE_MAIN_IDS: Record<StudioMode, string[]> = {
   general: [],
   reserve: ["calendar", "coupon"],
   commerce: ["product", "productimage", "seasonal"],
