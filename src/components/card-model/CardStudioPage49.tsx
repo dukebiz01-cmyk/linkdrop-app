@@ -45,6 +45,7 @@ import {
   PenLine,
   Lock,
   ChevronRight,
+  ChevronLeft,
   Store,
   X,
   Zap,
@@ -868,6 +869,13 @@ export function CardStudioPage({
   businessLocked?: boolean;
 } = {}) {
   const [mode, setMode] = useState<StudioMode>("general");
+  // PURPOSE-GATE — 스튜디오 입구 목적 선택 게이트. 화면은 4택이지만 내부는 기존 3모드로 접힌다
+  //   (StudioMode 무확장 락 — DECK_IDS·STEP_PLAN·MODE_MAIN_IDS·MODE_NAME 전부 무접촉).
+  //   "pick" = 1차(무엇을 하고 싶으세요) · "sellHow" = 2차(어떻게 파실 건가요 — 상품 팔기 전용) ·
+  //   "done" = 게이트 통과(기존 탭·제작시키기·덱 노출). 초기값 = "pick"(미선택).
+  //   모드 전환은 전량 attemptSwitchMode 경유 — setMode 직접 호출 0(확인 게이트·resetForMode 승계).
+  const [purposeGate, setPurposeGate] = useState<"pick" | "sellHow" | "done">("pick");
+  const purposeChosen = purposeGate === "done";
   // F5-3 — 잠금 탭 탭 시 인라인 유도 패널(강제 이송 0 · Radix 금지 — 조건부 렌더).
   const [bizGateOpen, setBizGateOpen] = useState(false);
   // UI-5-T7-F5-11 — 나가기 확인 오버레이(헤더 X). 발행 완료(dropped)는 미경유 즉시 홈.
@@ -1536,7 +1544,11 @@ export function CardStudioPage({
       setDText("");
       // T5-W5a — W5 훅 배선(성장설계 §2): 수량 확정 직후 모일수록 분기 제안. qty 스텝 자체가
       //   커머스 지휘 전용 사슬이라 타 목적(퍼블릭·예약쿠폰) 무접촉.
-      dGo("gbAsk");
+      // PURPOSE-GATE — 판매 방식은 입구 2차 화면에서 이미 확정됨(지휘자 진입 자체가 게이트 통과
+      //   이후라 커머스 = 선택 완료 보장) → gbAsk 재질문은 같은 질문 2회가 되므로 건너뛴다.
+      //   모일수록(gbEnabled true) = 단계표부터 / 혼자 팔기(undefined) = gb 3스텝 전량 통과.
+      //   DIRECTOR_MENTS 무접촉 — 목적지만 바꾼다(스텝 스킵).
+      dGo(cfgProduct.gbEnabled === true ? "gbTiers" : "period");
     }
   }
   // T5-W1a — 유형 3분기(실폼 TYPE_OPTIONS 정합: 신선식품/가공식품/공산품·잡화) + productKind 동기
@@ -2494,6 +2506,10 @@ export function CardStudioPage({
   function resetForMode(next: StudioMode) {
     // ── 카드 상태(스냅샷 키 + 나머지 전 필드) ───────────────────────
     setMode(next);
+    // PURPOSE-GATE — 게이트도 초기화 대상: 넣지 않으면 모드는 바뀌었는데 화면엔 옛 목적이 남는
+    //   유령 상태가 된다. ⚠️ 게이트 핸들러는 attemptSwitchMode(→ 이 함수) 를 부른 "뒤에"
+    //   setPurposeGate 를 부르므로(같은 배치의 나중 쓰기가 승리) 여기 "pick" 이 이후 값을 덮지 않는다.
+    setPurposeGate("pick");
     setApplied({});
     setDropped(false);
     setSaving(false); // E4 — 발행 상태도 새 카드로 초기화.
@@ -2583,6 +2599,11 @@ export function CardStudioPage({
     // L4(B5) — 막힘 감지 리셋(새 카드 = 스텝 예산 재무장).
     setStuckChip(null);
     stuckShownRef.current = new Set();
+    // T5-W1c(P1-3) — 지휘 종료(모드 전환 = 새 카드 · 이전 목적 지휘가 살아남는 유령 상태 차단).
+    //   closeDirector 정리 항목과 동형: directorOn off + dPresetRef 비움. 프리셋 스켈레톤 해제는
+    //   위 setApplied({}) 가 이미 전량 담당(closeDirector 의 선별 해제보다 강한 리셋).
+    setDirectorOn(false);
+    dPresetRef.current = new Set();
     // D3 — 온보딩 진행 종료(새 카드 = 평시 흐름 · 제안은 1회 정책이라 미재노출).
     setOnboardingActive(false);
     setOnboardCheer(null);
@@ -4889,7 +4910,136 @@ export function CardStudioPage({
       )}
 
       <div className="mx-auto max-w-md px-5">
-        {/* ───────── 모드 전환 (퍼블릭 / 예약·쿠폰 / 상품판매) ───────── */}
+        {/* ───────── PURPOSE-GATE 1차 — 목적 4택(화면만 4개 · 내부는 기존 3모드) ───────── */}
+        {purposeGate === "pick" && (
+          <div className="mt-5 space-y-4">
+            <div className="space-y-1">
+              <p className="text-[19px] font-extrabold leading-snug tracking-ko text-[#16161D] [word-break:keep-all]">
+                무엇을 하고 싶으세요
+              </p>
+              <p className="text-[13px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                골라주시면 링고가 알아서 만들어 드려요
+              </p>
+            </div>
+            <div className="space-y-2">
+              {(
+                [
+                  { key: "sell", title: "상품 팔기", desc: "농산물·가공품을 주문받아요", to: "commerce" },
+                  { key: "book", title: "예약 받기", desc: "날짜를 정해 손님을 받아요", to: "reserve" },
+                  { key: "coupon", title: "쿠폰 주기", desc: "할인 혜택으로 오게 만들어요", to: "reserve" },
+                  { key: "tell", title: "그냥 알리기", desc: "우리 가게를 소개해요", to: "general" },
+                ] as { key: string; title: string; desc: string; to: StudioMode }[]
+              ).map((o) => {
+                // F5-3 정합 — 잠금 판정·처리 전부 기존 모드 탭(:4901·:4906-4909)과 동일:
+                //   businessLocked 이면 general 외 전부 잠금 · 탭 시 setBizGateOpen(true) 만(전환 0).
+                const locked = businessLocked && o.to !== "general";
+                return (
+                  <button
+                    key={o.key}
+                    type="button"
+                    onClick={() => {
+                      if (locked) {
+                        setBizGateOpen(true);
+                        return;
+                      }
+                      // 전환은 반드시 기존 사슬(attemptSwitchMode → hasWork 확인 게이트 → resetForMode).
+                      //   resetForMode 가 purposeGate 를 "pick" 으로 되돌리므로 게이트 전진은 그 "뒤에".
+                      attemptSwitchMode(o.to);
+                      setPurposeGate(o.to === "commerce" ? "sellHow" : "done");
+                    }}
+                    aria-disabled={locked || undefined}
+                    className="flex w-full min-h-[44px] items-center gap-3 rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99]"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block text-[15px] font-bold ${locked ? "text-[#A3A3A3]" : "text-[#0A0A0A]"}`}
+                      >
+                        {o.title}
+                      </span>
+                      <span className="mt-0.5 block text-[12.5px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                        {o.desc}
+                      </span>
+                    </span>
+                    {locked ? (
+                      <Lock className="h-4 w-4 shrink-0 text-[#A3A3A3]" strokeWidth={2.25} />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ───────── PURPOSE-GATE 2차 — 판매 방식(상품 팔기 전용) ───────── */}
+        {purposeGate === "sellHow" && (
+          <div className="mt-5 space-y-4">
+            <div className="space-y-1">
+              <p className="text-[19px] font-extrabold leading-snug tracking-ko text-[#16161D] [word-break:keep-all]">
+                어떻게 파실 건가요
+              </p>
+              <p className="text-[13px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                나중에 바꾸실 수 있어요
+              </p>
+            </div>
+            <div className="space-y-2">
+              {/* 혼자 팔기 = 폼 [단일 판매](ProductRegisterForm49 :1039) 와 완전 동일 세팅:
+                  gb 3필드 undefined(= payload 키 미기록). 저장 키 신설 0. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCfgProduct((p) => ({
+                    ...p,
+                    gbEnabled: undefined,
+                    gbTiers: undefined,
+                    gbFailMode: undefined,
+                  }));
+                  setPurposeGate("done");
+                }}
+                className="flex w-full min-h-[44px] items-center gap-3 rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99]"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-bold text-[#0A0A0A]">혼자 팔기</span>
+                  <span className="mt-0.5 block text-[12.5px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                    내가 정한 가격 그대로 팔아요
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} />
+              </button>
+              {/* 모일수록 싸게 = 폼 [모일수록 할인](ProductRegisterForm49 :1056) 와 완전 동일 세팅:
+                  gbEnabled=true 만(단계표·실패모드는 폼/지휘자에서 확정 — 기존 사슬 그대로). */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCfgProduct((p) => ({ ...p, gbEnabled: true }));
+                  setPurposeGate("done");
+                }}
+                className="flex w-full min-h-[44px] items-center gap-3 rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99]"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-bold text-[#0A0A0A]">모일수록 싸게</span>
+                  <span className="mt-0.5 block text-[12.5px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                    많이 모이면 가격이 내려가요
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-[#A3A3A3]" strokeWidth={2.5} />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPurposeGate("pick")}
+              className="flex min-h-[44px] items-center gap-1 px-1 text-[13px] font-semibold text-[#8A8A8A] transition-opacity active:opacity-70"
+            >
+              <ChevronLeft className="h-4 w-4" strokeWidth={2.5} />
+              뒤로
+            </button>
+          </div>
+        )}
+
+        {/* ───────── 모드 전환 (퍼블릭 / 예약·쿠폰 / 상품판매) — 게이트 통과 후에만 ─────────
+            PURPOSE-GATE — 지휘 중 미표시(제작시키기 버튼 :5085 선례 동형 — 지휘 중 목적 재선택 차단). */}
+        {purposeChosen && !directorOn && (
         <div className="mt-5 flex rounded-2xl bg-white p-1 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
           {[
             { key: "general", label: "퍼블릭", Icon: Globe },
@@ -4933,10 +5083,12 @@ export function CardStudioPage({
             );
           })}
         </div>
+        )}
 
         {/* UI-5-T7-T5-W1 — 제작시키기 입구(지휘 중 미표시). T5-W2 — 퍼블릭 개방(일반회원 — F5-3 정합).
-            T5-W3 — 예약쿠폰 개방(사업자 전용 — 기존 모드 게이트 businessLocked 그대로). */}
-        {(mode === "general" || !businessLocked) && !directorOn && (
+            T5-W3 — 예약쿠폰 개방(사업자 전용 — 기존 모드 게이트 businessLocked 그대로).
+            PURPOSE-GATE — 게이트 통과 전 미표시(목적 선택이 먼저). */}
+        {purposeChosen && (mode === "general" || !businessLocked) && !directorOn && (
           <button
             type="button"
             onClick={startDirector}
@@ -4973,6 +5125,10 @@ export function CardStudioPage({
         {/* UI-5-T1f(1b·1c) — 상단 AI 빌더 섹션 제거: AI 진입은 우하단 FAB→링고 패널 단일화.
             역할별 예시 문구(heroExamples)는 패널 첫 진입 화면으로 이동. 헤더 아래 = 바로 미리보기. */}
 
+        {/* PURPOSE-GATE — 미리보기·히어로·코칭도 게이트 통과 후에만(빈 카드 미리보기가 목적 선택
+            화면 아래 붙는 것을 방지 — "고르기 전에는 보여주지 않는다" 원칙). */}
+        {purposeChosen && (
+        <>
         {/* ───────── 라이브 프리뷰 라벨 (WYSIWYG 캔버스 안내) ───────── */}
         <div className="mt-5 flex items-center justify-between px-0.5">
           <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-[#525252]">
@@ -5061,10 +5217,14 @@ export function CardStudioPage({
             <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
           </span>
         </button>
+        </>
+        )}
       </div>
 
       {/* ───────── 강화 카드 덱 (스와이프 → 탭 장착) ───────── */}
       {/* UI-5-T1c — 조립 포인터 앵커(deck): 쿠폰·판매기간 스텝 지목 대상. */}
+      {/* PURPOSE-GATE — 덱도 게이트 통과 후에만. */}
+      {purposeChosen && (
       <section ref={deckRef} data-assemble-anchor="deck" className="mt-6">
         <div className="mx-auto flex max-w-md items-center justify-between px-5">
           <p className="text-[12px] font-bold uppercase tracking-wider text-[#737373]">강화 카드 덱</p>
@@ -6831,8 +6991,11 @@ export function CardStudioPage({
           )}
         </div>
       </section>
+      )}
 
-      {/* ───────── 공개 범위 · 미리보기 (일반 흐름) ───────── */}
+      {/* ───────── 공개 범위 · 미리보기 (일반 흐름) ─────────
+          PURPOSE-GATE — 게이트 통과 후에만(목적 선택 화면 위 겹침 차단 — 렌더 조건만 추가). */}
+      {purposeChosen && (
       <div className="mx-auto mt-3 flex max-w-md flex-col gap-3 px-5">
         {/* 공개 범위 레버 (세그먼트 토글) — 손가락으로 좌우로 밀어서 전환 */}
         {(() => {
@@ -6896,9 +7059,13 @@ export function CardStudioPage({
           <ChevronRight className="h-4 w-4 flex-none text-[#C4C4C4] transition-transform group-active:translate-x-0.5" strokeWidth={2.5} />
         </button>
       </div>
+      )}
 
       {/* ───────── 카드 드롭하기 (기본 CTA만 고정) ───────── */}
       {/* UI-5-T1f(4) — 연출 중 개별 숨김 제거: 딤(오버레이 z-70)이 하단 CTA를 덮어 무대화 대체. */}
+      {/* PURPOSE-GATE — 게이트 통과 후에만. 발행 로직·canPublish·publishGate 전부 무접촉(렌더 조건만).
+          FAB 클램프는 ref 부재 시 barH=0 폴백이 이미 담당(:2799). */}
+      {purposeChosen && (
       <div
         ref={publishBarRef} /* F3-5(2) — FAB 클램프용 실측 지점(레이아웃·층·동작 무변). */
         className="fixed inset-x-0 bottom-0 z-50 border-t border-[#E8E8EC] pb-[env(safe-area-inset-bottom)]"
@@ -6942,6 +7109,7 @@ export function CardStudioPage({
           </div>
         </div>
       </div>
+      )}
 
       {/* ───────── 수신자 거울 시트 (보이는 그대로 = 받는 그대로) ───────── */}
       {mirrorOpen && (
@@ -8160,8 +8328,9 @@ export function CardStudioPage({
               내부 전용인데 패널 기본 닫힘(초기 false·E4c 양보) → 미노출. 패널 열림 여부와 무관하게 FAB 옆 노출.
               상태 = greetingChipsOpen 단일 공유(패널 내부 인사·칩 그대로 — 이중 관리 금지).
               소멸 = 칩 탭·대화 시작(sendToLingo)·스텝 진입(enterStep) 3조건 계승. 재소환 말풍선과 상호 배타. */}
-          {/* UI-5-T4-D3(1) — 온보딩 제안이 인사 고스트를 1회 대체(done 부재 시). 기존 조건 전부 승계. */}
-          {!lingoOpen && greetingChipsOpen && !yieldBubble && !assembling && !assembleSummary && !listening && !voiceGhost && !onboardCheer && (
+          {/* UI-5-T4-D3(1) — 온보딩 제안이 인사 고스트를 1회 대체(done 부재 시). 기존 조건 전부 승계.
+              PURPOSE-GATE — 게이트 통과 전 미표시(목적 선택 화면 위 겹침 차단 — 내용·동작 무접촉). */}
+          {purposeChosen && !lingoOpen && greetingChipsOpen && !yieldBubble && !assembling && !assembleSummary && !listening && !voiceGhost && !onboardCheer && (
             <div className="fixed bottom-[262px] right-5 z-40 w-[min(78vw,280px)] animate-fade-in rounded-2xl bg-white p-3 [box-shadow:0_16px_36px_-14px_rgba(15,23,42,0.4),0_0_0_1px_#E8E8EC]">
               <p className="flex items-start gap-1.5">
                 <span className="mt-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-1.5 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
