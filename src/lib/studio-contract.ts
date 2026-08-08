@@ -115,13 +115,14 @@ export function parseKrwInput(
  * 정본: commerce/ProductRegisterForm.tsx:350-355(고정 가드) · :674-682(배타 저장)
  *       및 CardStudioPage49.tsx:1750-1755 · :1787-1791.
  *
- * rate 모드: 정수 AND 1 <= ratePct <= DROPY_PCT_MAX → { dropy_rate: ratePct / 100 }, 아니면 {}
+ * rate 모드: 정수 AND 0 <= ratePct <= DROPY_PCT_MAX → { dropy_rate: ratePct / 100 }, 아니면 {}
  * fixed 모드: /^\d{1,9}$/ AND n > 0 AND n <= priceNum → { dropy_fixed: n }, 아니면 {}
  *
- * ⚠️ 정본 대비 1점 강화: 49:1787 은 rate 모드에서 검증 없이 항상 `dropy_rate: ratePct/100` 을
- *   기록해 ratePct=0 이면 `dropy_rate: 0` 이 저장된다(adapters.ts:213 이 `> 0` 을 요구하므로
- *   수신은 미렌더 — 의미 없는 키). 여기서는 하한 1 을 두어 0 은 키 자체를 기록하지 않는다.
- *   상한 20 은 양쪽 동일. 배선 시 이 차이를 Duke 판정 대상으로 올릴 것.
+ * 정본 일치(0 허용) + 음수 가드: 49:1787 은 rate 모드에서 검증 없이 항상 `dropy_rate: ratePct/100`
+ *   을 기록하므로 ratePct=0 이면 `dropy_rate: 0` 이 저장된다 — 여기도 하한 0 으로 맞춰 그 동작을
+ *   그대로 승계한다(보상 0% = 대표님의 정당한 선택 · S0 원칙 동형). 수신 렌더는 adapters.ts:213
+ *   이 `> 0` 을 요구해 0 은 미렌더 — 저장은 되되 표시만 안 되는 정본 그대로의 상태다.
+ *   음수·소수만 차단(정본에 없던 유일한 방어 — 키 자체를 기록하지 않는다). 상한 20 은 양쪽 동일.
  */
 export function buildDropyPayload(
   mode: "rate" | "fixed",
@@ -130,7 +131,7 @@ export function buildDropyPayload(
   priceNum: number,
 ): { dropy_rate: number } | { dropy_fixed: number } | Record<string, never> {
   if (mode === "rate") {
-    if (Number.isInteger(ratePct) && ratePct >= 1 && ratePct <= DROPY_PCT_MAX) {
+    if (Number.isInteger(ratePct) && ratePct >= 0 && ratePct <= DROPY_PCT_MAX) {
       return { dropy_rate: ratePct / 100 };
     }
     return {};
