@@ -277,6 +277,14 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
     go(purpose === "sell" ? "name" : "summary");
   }
 
+  // 영상 건너뛰기(sell 전용) — 사진이 본체가 되는 경로. host·tell 은 영상 필수라 칩 자체가 없다.
+  //   videoUrl 미설정 + 선행 체인 미실행 → 조립 컨텍스트에서 video_summary·key_points 키가
+  //   조건부 스프레드로 자동 생략된다(없는 재료를 지어내지 않는다).
+  function skipVideo(label: string) {
+    echo(label);
+    go("name");
+  }
+
   // ── 상품명(sell 전용) ─────────────────────────────────────────────────────
   function submitName() {
     const v = textInput.trim();
@@ -805,30 +813,43 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
             ))}
 
           {step === "video" && (
-            <div className="flex items-center gap-2">
-              <input
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    submitVideo();
-                  }
-                }}
-                inputMode="url"
-                placeholder="영상 링크 붙여넣기"
-                className="min-w-0 flex-1 rounded-xl bg-white px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
-                style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-              />
-              <button
-                type="button"
-                onClick={submitVideo}
-                disabled={!textInput.trim()}
-                className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
-              >
-                입력
-              </button>
-            </div>
+            <>
+              <div className="flex items-center gap-2">
+                <input
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      submitVideo();
+                    }
+                  }}
+                  inputMode="url"
+                  placeholder="영상 링크 붙여넣기"
+                  className="min-w-0 flex-1 rounded-xl bg-white px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+                  style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                />
+                <button
+                  type="button"
+                  onClick={submitVideo}
+                  disabled={!textInput.trim()}
+                  className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                >
+                  입력
+                </button>
+              </div>
+              {/* 팔기 경로 전용 건너뛰기 — 사진이 본체가 되는 커머스 계약(49 발행 게이트: 커머스는
+                  사진·상품명·가격·판매기간이 필수, 영상은 비필수)과 정합. host·tell 은 영상 필수라 미노출. */}
+              {purpose === "sell" && (
+                <button
+                  type="button"
+                  onClick={() => skipVideo("📷 영상 없이 사진으로 할게요")}
+                  className="flex w-full min-h-[44px] items-center rounded-2xl bg-white p-4 text-left text-[14px] font-bold tracking-ko text-[#0A0A0A] [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99] [word-break:keep-all]"
+                >
+                  📷 영상 없이 사진으로 할게요
+                </button>
+              )}
+            </>
           )}
 
           {step === "name" && (
