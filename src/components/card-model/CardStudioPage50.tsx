@@ -4,11 +4,13 @@
 // DIRECTOR_MENTS_50 — Duke 확정(54창) · CC 재량 작문 금지 · 용어 락: 카드 단독 금지,
 //   공유카드/공유할 수 있는 카드
 //
-// P1 범위: 1막(purpose → … → summary)까지. 2막(조립)·3막(검수)·4막(발행)은 다음 업데이트.
-//   발행·저장·AI 호출 0건 · registerProduct 호출 0건 · Radix(Sheet/Dialog/Drawer) import 0(#418 SSR).
-//   49 에서 가져오는 것은 DIRECTOR_DROPPY_RATE_DEFAULT 1개뿐 — 49 의 DIRECTOR_MENTS 는 쓰지 않는다.
+// P2 범위: 1막(재료 받기) + 2막(조립 — AI 1콜·타임아웃·연출). 3막(검수)·4막(발행)은 다음 업데이트.
+//   저장·발행 0건 · registerProduct 호출 0건 · Radix(Sheet/Dialog/Drawer) import 0(#418 SSR).
+//   AI 호출 = /api/lingo/chat 1콜뿐(Edge·라우트 무수정 — 기존 계약 소비만).
+//   49 에서 가져오는 것은 DIRECTOR_DROPPY_RATE_DEFAULT · isAiActionAllowed 2개뿐 —
+//   49 의 DIRECTOR_MENTS 는 쓰지 않는다(50 대화는 DIRECTOR_MENTS_50 단일 소스).
 // ════════════════════════════════════════════════════════════════════════════
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   parseKrwInput,
@@ -16,7 +18,12 @@ import {
   gbRowsInvalid,
   DROPY_PCT_MAX,
 } from "@/lib/studio-contract";
-import { DIRECTOR_DROPPY_RATE_DEFAULT } from "@/components/card-model/CardStudioPage49";
+import {
+  DIRECTOR_DROPPY_RATE_DEFAULT,
+  isAiActionAllowed,
+} from "@/components/card-model/CardStudioPage49";
+// P2 §51 — 요청 context 는 기존 계약 타입에 맞춘다(타입만 import · 훅 미사용).
+import type { LingoContext } from "@/components/card-model/useLingoChat";
 
 // ── 멘트 정본 ───────────────────────────────────────────────────────────────
 // Duke 확정 문구 — 한 글자도 재량 작문 금지.
@@ -27,6 +34,7 @@ export const DIRECTOR_MENTS_50 = {
   hostHow: "손님이 오게 만들어 볼게요. 어떤 걸로 할까요?",
   reserveCouponNote: "예약에는 쿠폰이 같이 붙어요 — 오신 손님께 드릴 혜택이에요.",
   video: "영상 하나만 주세요. 보고 제가 공유카드를 짜요.",
+  name: "무엇을 파는지 이름을 알려주세요 — 예: 찰옥수수 10개입. 공유카드의 재료가 돼요.",
   photo: "사진 한 장 주세요. 공유카드의 얼굴이 돼요.",
   price: "한 개(한 박스)에 얼마로 할까요?",
   qty: "몇 개까지 파실 건가요?",
@@ -37,6 +45,7 @@ export const DIRECTOR_MENTS_50 = {
   numMixed: "숫자로만 적어 주세요 — \"3만원\"이 아니라 30000처럼요.",
   droppyRange: "0부터 20 사이로 적어 주세요 — 예: 10",
   assembleReady: "재료 다 받았어요. 이제 제가 만들게요 — 만드는 동안은 아무것도 안 물어봐요.",
+  assembleOrder: "지금까지 받은 재료와 영상 요약으로 공유카드의 제목과 한마디, 상품 한마디를 지어 주세요. 영상과 입력값에 없는 사실은 쓰지 마세요. 가격·수량은 건드리지 마세요.",
   assembleTimeout: "지금 좀 느리네요. 잠시 뒤 다시 하거나, 직접 만드실 수도 있어요.",
   reviewReady: "다 됐어요. 고칠 곳이 있으면 말로 하시거나 눌러서 바꿔 주세요.",
   reviewNumberGuard: "가격·수량은 사장님만 바꿀 수 있어요 — 칸에 직접 적어 주세요.",
@@ -55,15 +64,17 @@ function modeOf(p: Purpose): "commerce" | "reserve" | "general" | null {
 }
 
 // 1막 시퀀스(50 자체 — 49 DirectorStep 재사용 아님):
-//   purpose → (sellHow | hostHow) → video → photo → price → qty → droppy
-//     → [gb 분기: gbPropose → gbFail] → summary(P1 종점)
+//   purpose → (sellHow | hostHow) → video → name → photo → price → qty → droppy
+//     → [gb 분기: gbPropose → gbFail] → summary
 //   tell 경로: purpose → video → summary
-//   host 경로: purpose → hostHow → video → summary  (예약 상세·쿠폰 상세는 P2)
+//   host 경로: purpose → hostHow → video → summary  (예약 상세·쿠폰 상세는 P3+)
+//   ※ name 은 sell 전용(host·tell 경로 무영향) — 2막 조립의 product_name 재료.
 type Step50 =
   | "purpose"
   | "sellHow"
   | "hostHow"
   | "video"
+  | "name"
   | "photo"
   | "price"
   | "qty"
@@ -78,6 +89,7 @@ const STEP_MENT: Record<Step50, string> = {
   sellHow: DIRECTOR_MENTS_50.sellHow,
   hostHow: DIRECTOR_MENTS_50.hostHow,
   video: DIRECTOR_MENTS_50.video,
+  name: DIRECTOR_MENTS_50.name,
   photo: DIRECTOR_MENTS_50.photo,
   price: DIRECTOR_MENTS_50.price,
   qty: DIRECTOR_MENTS_50.qty,
@@ -112,6 +124,37 @@ const GBFAIL_CHIPS: { key: "base" | "cancel"; label: string }[] = [
   { key: "cancel", label: "자동 취소" },
 ];
 
+// ── SSE 파서·경량 재가드 ────────────────────────────────────────────────────
+// P2 §58 — 49 :818-837 구조 승계(49 쪽이 비export 모듈 함수라 복제 — 49 무접촉 락 준수).
+const LINGO_ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField", "goToBlock"]);
+function safeJson(raw: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+function parseSseBlock(block: string): { event: string; data: string } | null {
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const raw of block.split("\n")) {
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+  }
+  if (dataLines.length === 0 && event === "message") return null;
+  return { event, data: dataLines.join("\n") };
+}
+
+// 2막 타임아웃(§3·§5) — 조립 1콜 15s / 영상 선행 체인 8s.
+const ASSEMBLE_TIMEOUT_MS = 15_000;
+const VIDEO_LEAD_TIMEOUT_MS = 8_000;
+// 연출 시차(§6) — 제목 → 한마디 → 포인트 예고, 각 300ms.
+const REVEAL_STEP_MS = 300;
+// 재시도 상한(§5) — 2회까지 [다시 시도], 3회째 실패면 [직접 할게요]만.
+const ASSEMBLE_MAX_RETRY = 2;
+
 export type CardStudioPage50Store = {
   id: string;
   display_name: string;
@@ -121,7 +164,7 @@ export type CardStudioPage50Store = {
 export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | null }) {
   const navigate = useNavigate();
 
-  const [act] = useState<Act>(1); // P1은 1막 고정.
+  const [act, setAct] = useState<Act>(1); // P2 = 1막·2막. 3막·4막은 다음 업데이트.
   const [step, setStep] = useState<Step50>("purpose");
   const [log, setLog] = useState<Bubble[]>(() => [
     { role: "lingo", text: DIRECTOR_MENTS_50.start },
@@ -133,6 +176,7 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
 
   // 받은 재료
   const [videoUrl, setVideoUrl] = useState("");
+  const [productName, setProductName] = useState(""); // sell 전용 — 2막 product_name 재료.
   const [photoName, setPhotoName] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [priceKrw, setPriceKrw] = useState<number | null>(null);
@@ -146,6 +190,36 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
   const [textInput, setTextInput] = useState("");
   const [inlineErr, setInlineErr] = useState<string | null>(null);
   const photoUrlRef = useRef<string | null>(null);
+
+  // ── 2막 상태 ──────────────────────────────────────────────────────────────
+  // §1 — 영상 선행 체인 결과(state 아님 — 리렌더 불필요 · 실패 시 null 유지).
+  const videoAiRef = useRef<{ title: string; summary: string; keyPoints: string[] } | null>(null);
+  const videoLeadRef = useRef<string | null>(null); // 영상 교체 레이스 가드(49 :3594 관례).
+  const sessionRef = useRef<string | null>(null); // SSE meta 의 session_id(P3 이어가기용 보관).
+  const revealTimersRef = useRef<number[]>([]);
+  const [assembling, setAssembling] = useState(false);
+  const [assembleFailed, setAssembleFailed] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  // AI 조립 결과 — 배선 3필드만(§60). 숫자·쿠폰·이미지는 case 자체를 만들지 않는다.
+  const [aiTitle, setAiTitle] = useState("");
+  const [aiSubtitle, setAiSubtitle] = useState("");
+  const [aiHeadline, setAiHeadline] = useState("");
+  // §7 — 셀링포인트 후보는 보관만(칩 UI 는 P3 검수 범위 — 이번엔 렌더 안 함).
+  const [keyPoints, setKeyPoints] = useState<string[]>([]);
+  // 연출 단계: 0=빈 프레임 / 1=제목 / 2=한마디 / 3=포인트 예고(종료).
+  const [revealStep, setRevealStep] = useState(0);
+
+  const clearRevealTimers = useCallback(() => {
+    for (const t of revealTimersRef.current) clearTimeout(t);
+    revealTimersRef.current = [];
+  }, []);
+  // 언마운트 정리 — 타이머 누수·사진 objectURL 회수.
+  useEffect(() => {
+    return () => {
+      for (const t of revealTimersRef.current) clearTimeout(t);
+      if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
+    };
+  }, []);
 
   const say = useCallback((text: string) => {
     setLog((l) => [...l, { role: "lingo", text }]);
@@ -197,8 +271,57 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
     if (!v) return; // 빈칸은 버튼 disabled 로 이미 차단(표시 정직).
     setVideoUrl(v);
     echo(v);
-    // tell·host 는 P1 종점이 summary(예약 상세·쿠폰 상세는 P2). sell 만 재료 수집 계속.
-    go(purpose === "sell" ? "photo" : "summary");
+    void loadVideoLead(v); // §1 — 백그라운드 선행 체인(대화는 기다리지 않는다).
+    // tell·host 는 요약으로 직행(예약 상세·쿠폰 상세는 P3+). sell 만 재료 수집 계속.
+    go(purpose === "sell" ? "name" : "summary");
+  }
+
+  // ── 상품명(sell 전용) ─────────────────────────────────────────────────────
+  function submitName() {
+    const v = textInput.trim();
+    if (!v) return; // 빈칸은 버튼 disabled 로 이미 차단(표시 정직).
+    setProductName(v);
+    echo(v);
+    go("photo");
+  }
+
+  // §1 — oembed → generate-summary 선행 체인(49 :3595-3619 실배선 복제).
+  //   AbortSignal.timeout(8s) + 실패 시 무음(대화 계속 · ref 는 null 유지 = 조립이 폴백 처리).
+  async function loadVideoLead(url: string) {
+    videoLeadRef.current = url;
+    videoAiRef.current = null;
+    try {
+      const oembedRes = await fetch("/api/oembed?url=" + encodeURIComponent(url), {
+        signal: AbortSignal.timeout(VIDEO_LEAD_TIMEOUT_MS),
+      });
+      const oembedJson = (await oembedRes.json()) as { source_id?: string; title?: string | null };
+      const sourceId = oembedJson?.source_id;
+      if (!oembedRes.ok || !sourceId || videoLeadRef.current !== url) return;
+      const title = typeof oembedJson.title === "string" ? oembedJson.title.trim() : "";
+      // 제목만이라도 확보(요약 실패 시 video_summary 폴백 재료 — §44-45).
+      videoAiRef.current = { title, summary: "", keyPoints: [] };
+      const sumRes = await fetch("/api/generate-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_id: sourceId }),
+        signal: AbortSignal.timeout(VIDEO_LEAD_TIMEOUT_MS),
+      });
+      const sumJson = (await sumRes.json()) as { ai_summary?: unknown; ai_key_points?: unknown };
+      if (!sumRes.ok || videoLeadRef.current !== url) return;
+      const points = Array.isArray(sumJson?.ai_key_points)
+        ? (sumJson.ai_key_points as unknown[]).filter(
+            (s): s is string => typeof s === "string" && s.trim().length > 0,
+          )
+        : [];
+      const summary =
+        typeof sumJson.ai_summary === "string" && sumJson.ai_summary.trim()
+          ? sumJson.ai_summary.trim()
+          : "";
+      videoAiRef.current = { title, summary, keyPoints: points };
+      setKeyPoints(points); // §7 — 보관만(P3 검수에서 칩으로 소비).
+    } catch {
+      /* 선행 체인 실패는 무음 — 조립은 videoUrl·입력값만으로 진행(빈 껍데기·가짜 안내 금지). */
+    }
   }
 
   // ── 사진(로컬 미리보기만 — 업로드·저장 0건) ────────────────────────────────
@@ -290,6 +413,7 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
       });
     }
     if (videoUrl) rows.push({ label: "영상 링크", value: videoUrl });
+    if (productName.trim()) rows.push({ label: "상품 이름", value: productName.trim() });
     if (photoName) rows.push({ label: "상품 사진", value: photoName });
     if (priceKrw != null) rows.push({ label: "판매 가격", value: `${priceKrw.toLocaleString("ko-KR")}원` });
     if (qtyNum != null) rows.push({ label: "준비 수량", value: `${qtyNum.toLocaleString("ko-KR")}개` });
@@ -307,7 +431,191 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
       });
     }
     return rows;
-  }, [purpose, sellHow, hostHow, videoUrl, photoName, priceKrw, qtyNum, droppyPct, gbRows, gbFailMode]);
+  }, [purpose, sellHow, hostHow, videoUrl, productName, photoName, priceKrw, qtyNum, droppyPct, gbRows, gbFailMode]);
+
+  // ── 2막: 조립 ─────────────────────────────────────────────────────────────
+  const mode50 = modeOf(purpose); // StudioMode 3값과 동형(49 무확장 락).
+
+  // §3 — 요청 context. 타입은 기존 계약(LingoContext) 그대로 — 신규 키 0.
+  function buildAssembleContext(): LingoContext {
+    const m = mode50 ?? "general";
+    const lead = videoAiRef.current;
+    // 1막 name 스텝(sell 전용) 수집값. host·tell 경로는 빈 값 → 조건부 스프레드로 키 생략
+    //   (없는 재료를 지어내지 않는다 — 그 경로의 제목은 video_summary 기반으로 짓는다).
+    const nameForAi = productName.trim();
+    const fields: Record<string, string> = {};
+    // 1막 수집값만. 가격·수량은 넣지 않는다 — assembleOrder 가 "건드리지 마세요"를 명시하고
+    //   클라 게이트(AI_BLOCKED_FIELDS)도 숫자 setField 를 차단한다(이중 정합).
+    if (nameForAi) {
+      fields.title = nameForAi; // 제목 후보 = 상품명(모델이 고쳐 쓸 출발점).
+      fields.productName = nameForAi;
+    }
+    return {
+      studio_state: {
+        mode: m,
+        applied_blocks: [],
+        score: 0,
+        card_title: nameForAi,
+        ...(nameForAi ? { product_name: nameForAi } : {}),
+        ...((priceKrw ?? 0) > 0 ? { product_price: priceKrw as number } : {}),
+      },
+      studio: { mode: m, deck: [], fields },
+      ...(lead?.summary
+        ? { video_summary: lead.summary }
+        : lead?.title
+          ? { video_summary: lead.title }
+          : {}),
+      ...(lead?.keyPoints?.length ? { key_points: lead.keyPoints } : {}),
+    };
+  }
+
+  // §4 — 게이트 통과분만 50 로컬 state 로. 배선 3필드(title·subtitle·headline) 외 default return.
+  //   숫자·쿠폰·이미지 case 는 만들지 않는다(49 이중 방어 승계 — 도달해도 무적용·무기록).
+  function applyActions50(actions: unknown[]): boolean {
+    const m = mode50 ?? "general";
+    let applied = false;
+    for (const raw of actions) {
+      if (!isAiActionAllowed(m, raw)) continue;
+      const a = raw as { type?: string; field?: string; value?: string };
+      if (a.type !== "setField" || !a.field) continue;
+      const v = a.value ?? "";
+      switch (a.field) {
+        case "title":
+          setAiTitle(v);
+          applied = true;
+          break;
+        case "subtitle":
+          setAiSubtitle(v);
+          applied = true;
+          break;
+        case "headline":
+          setAiHeadline(v);
+          applied = true;
+          break;
+        default:
+          continue; // 미배선 필드 = 무적용·무기록("채워진 척" 금지).
+      }
+    }
+    return applied;
+  }
+
+  // §6 — 슬롯 시차 공개(제목 → 한마디 → 포인트 예고, 300ms). [건너뛰기]는 즉시 종료.
+  function startReveal() {
+    clearRevealTimers();
+    setRevealStep(0);
+    for (let i = 1; i <= 3; i++) {
+      const t = window.setTimeout(() => setRevealStep(i), REVEAL_STEP_MS * i);
+      revealTimersRef.current.push(t);
+    }
+  }
+  function skipReveal() {
+    clearRevealTimers();
+    setRevealStep(3); // 결과 즉시 반영 — AI 결과는 동일(연출만 종료).
+  }
+
+  function failAssemble() {
+    setAssembling(false);
+    setAssembleFailed(true);
+    setRetryCount((c) => c + 1);
+    say(DIRECTOR_MENTS_50.assembleTimeout);
+  }
+
+  // §3·§4·§5 — AI 조립 1콜.
+  async function runAssemble() {
+    if (assembling) return;
+    setAct(2);
+    setAssembling(true);
+    setAssembleFailed(false);
+    clearRevealTimers();
+    setRevealStep(0);
+    // 스트리밍 자리 말풍선 1개(delta 가 여기에 누적 — §61).
+    setLog((l) => [...l, { role: "lingo", text: "" }]);
+    const appendBot = (t: string) =>
+      setLog((prev) => {
+        const next = [...prev];
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i].role === "lingo") {
+            next[i] = { ...next[i], text: next[i].text + t };
+            break;
+          }
+        }
+        return next;
+      });
+    let acc = "";
+    let proposalActions: unknown[] = [];
+    try {
+      const res = await fetch("/api/lingo/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(ASSEMBLE_TIMEOUT_MS),
+        body: JSON.stringify({
+          message: DIRECTOR_MENTS_50.assembleOrder,
+          surface: "studio",
+          input_channel: "text",
+          context: buildAssembleContext(),
+        }),
+      });
+      const ct = res.headers.get("content-type") ?? "";
+      if (!ct.includes("text/event-stream")) {
+        failAssemble();
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) {
+        failAssemble();
+        return;
+      }
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let sep: number;
+        while ((sep = buf.indexOf("\n\n")) >= 0) {
+          const ev = parseSseBlock(buf.slice(0, sep));
+          buf = buf.slice(sep + 2);
+          if (!ev) continue;
+          if (ev.event === "meta") {
+            const d = safeJson(ev.data);
+            if (typeof d?.session_id === "string") sessionRef.current = d.session_id;
+          } else if (ev.event === "delta") {
+            const d = safeJson(ev.data);
+            if (typeof d?.text === "string" && d.text) {
+              acc += d.text;
+              appendBot(d.text);
+            }
+          } else if (ev.event === "actions") {
+            const d = safeJson(ev.data);
+            const raw = Array.isArray(d?.actions) ? (d!.actions as unknown[]) : [];
+            const acts: unknown[] = [];
+            for (const r of raw) {
+              if (acts.length >= 8) break;
+              if (!r || typeof r !== "object") continue;
+              const a = r as { type?: unknown };
+              if (typeof a.type !== "string" || !LINGO_ACTION_TYPES.has(a.type)) continue;
+              acts.push(r);
+            }
+            proposalActions = acts;
+          } else if (ev.event === "error") {
+            const d = safeJson(ev.data);
+            if (typeof d?.friendly === "string" && d.friendly && !acc) appendBot(d.friendly);
+          }
+          // intent/done — 무시(done = reader 종료로 처리).
+        }
+      }
+    } catch {
+      // 타임아웃(AbortSignal)·네트워크 — 무언 실패 금지.
+      failAssemble();
+      return;
+    }
+    // §5 — 빈 actions 로 done: 말풍선 결과만 두고 진행은 허용(제목 비면 3막에서 직접 입력 — P3).
+    applyActions50(proposalActions);
+    setAssembling(false);
+    setAssembleFailed(false);
+    startReveal();
+    say(DIRECTOR_MENTS_50.reviewReady);
+  }
 
   const isNumberStep = step === "price" || step === "qty" || step === "droppy";
   const numPlaceholder =
@@ -326,6 +634,95 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
           </span>
         </div>
 
+        {/* ── 2막 무대(§6) — 대화 영역 위. 진입 = 빈 공유카드 프레임, 슬롯이 시차로 채워진다.
+            깜빡임 금지·가짜 로딩(프로그레스/퍼센트) 금지 — 대기 표시는 오브 펄스 하나뿐. */}
+        {act === 2 && (
+          <div className="mt-4">
+            <div className="rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
+              {/* 제목 슬롯 */}
+              <div className="min-h-[24px]">
+                {revealStep >= 1 && aiTitle ? (
+                  <p className="text-[16px] font-extrabold leading-snug tracking-ko text-[#0A0A0A] [word-break:keep-all]">
+                    {aiTitle}
+                  </p>
+                ) : (
+                  <div className="h-6 w-2/3 rounded-lg border border-dashed border-[#E0E0E4]" />
+                )}
+              </div>
+              {/* 한마디 슬롯 */}
+              <div className="mt-2 min-h-[20px]">
+                {revealStep >= 2 && aiSubtitle ? (
+                  <p className="text-[13px] font-semibold leading-relaxed tracking-ko text-[#525252] [word-break:keep-all]">
+                    {aiSubtitle}
+                  </p>
+                ) : (
+                  <div className="h-5 w-full rounded-lg border border-dashed border-[#E0E0E4]" />
+                )}
+              </div>
+              {/* 상품 한마디(있을 때만 — 빈 껍데기 금지) */}
+              {revealStep >= 2 && aiHeadline && (
+                <p className="mt-2 text-[12.5px] font-semibold leading-relaxed tracking-ko text-[#1D4ED8] [word-break:keep-all]">
+                  {aiHeadline}
+                </p>
+              )}
+              {/* 사진 — 1막에서 받은 실물(가짜 플레이스홀더 아님) */}
+              {photoPreview && (
+                <img
+                  src={photoPreview}
+                  alt="상품 사진 미리보기"
+                  className="mt-3 h-32 w-full rounded-xl object-cover"
+                />
+              )}
+              {/* 포인트 도착 예고 칩 — 키포인트가 실제로 있을 때만(칩 UI 본체는 P3). */}
+              {revealStep >= 3 && keyPoints.length > 0 && (
+                <span className="mt-3 inline-flex items-center rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                  포인트 {keyPoints.length}개 도착
+                </span>
+              )}
+            </div>
+
+            {/* 건너뛰기 — 연출 중 상시(§72). 결과는 동일, 연출만 즉시 종료. */}
+            {revealStep < 3 && !assembleFailed && (
+              <button
+                type="button"
+                onClick={skipReveal}
+                className="mt-2 flex min-h-[36px] w-full items-center justify-center text-[12px] font-semibold text-[#8A8A8A] active:text-[#525252]"
+              >
+                건너뛰기
+              </button>
+            )}
+
+            {/* 실패(§5) — 타임아웃·네트워크·error 이벤트 공통. 3회째부터 [다시 시도] 제거. */}
+            {assembleFailed && (
+              <div className="mt-2 flex gap-2">
+                {retryCount <= ASSEMBLE_MAX_RETRY && (
+                  <button
+                    type="button"
+                    onClick={() => void runAssemble()}
+                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#1D4ED8] text-[13px] font-bold text-white active:scale-[0.98]"
+                  >
+                    다시 시도
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void navigate({ to: "/studio-build" })}
+                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-bold text-[#525252] [box-shadow:0_0_0_1px_#E8E8EC] active:scale-[0.98]"
+                >
+                  직접 할게요
+                </button>
+              </div>
+            )}
+
+            {/* P2 종점 — 3막 자리 표시(버튼 없음). */}
+            {!assembling && !assembleFailed && revealStep >= 3 && (
+              <p className="mt-3 text-center text-[11px] font-semibold text-[#8A8A8A]">
+                3막 검수는 다음 업데이트
+              </p>
+            )}
+          </div>
+        )}
+
         {/* 대화 스크롤 — 링고 좌 / 사장님 우. */}
         <div className="mt-4 space-y-2">
           {log.map((b, i) => (
@@ -343,8 +740,9 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
           ))}
         </div>
 
-        {/* 칩·입력 — 링고 말풍선 아래(화면당 최대 4개). */}
-        <div className="mt-4 space-y-2">
+        {/* 칩·입력 — 링고 말풍선 아래(화면당 최대 4개). 2막 진입 시 1막 입력면은 닫는다
+            ("만드는 동안은 아무것도 안 물어봐요" — assembleReady 계약). */}
+        <div className={`mt-4 space-y-2 ${act === 1 ? "" : "hidden"}`}>
           {step === "purpose" &&
             PURPOSE_CHIPS.map((c) => (
               <button
@@ -406,6 +804,33 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
               <button
                 type="button"
                 onClick={submitVideo}
+                disabled={!textInput.trim()}
+                className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+              >
+                입력
+              </button>
+            </div>
+          )}
+
+          {step === "name" && (
+            <div className="flex items-center gap-2">
+              <input
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    submitName();
+                  }
+                }}
+                inputMode="text"
+                placeholder="찰옥수수 10개입"
+                className="min-w-0 flex-1 rounded-xl bg-white px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
+                style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+              />
+              <button
+                type="button"
+                onClick={submitName}
                 disabled={!textInput.trim()}
                 className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
               >
@@ -577,24 +1002,24 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
               </div>
               <button
                 type="button"
-                disabled
-                className="flex min-h-[48px] w-full cursor-not-allowed items-center justify-center rounded-2xl bg-[#F0F0F0] text-[14px] font-bold text-[#9A9A9A]"
+                onClick={() => void runAssemble()}
+                className="flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-[#1D4ED8] text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
               >
                 ✦ 만들어 주세요
               </button>
-              <p className="text-center text-[11px] font-semibold text-[#8A8A8A]">
-                2막은 다음 업데이트
-              </p>
             </div>
           )}
         </div>
       </div>
 
       {/* 오브 — 컨테이너 하단 중앙 absolute(fixed 금지 · 드래그·추적 없음).
-          연출 자산 통합은 P2 — 지금은 단순 그라데이션 원. */}
+          §6 — 2막에는 프레임 하단(위쪽)으로 이동하고, 대기 중에는 opacity 펄스만 준다.
+          프로그레스 바·퍼센트 금지 — 진행 표시는 이 펄스 하나뿐. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute bottom-8 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full"
+        className={`pointer-events-none absolute left-1/2 h-16 w-16 -translate-x-1/2 rounded-full transition-all duration-500 ${
+          act === 2 ? "top-[168px] h-10 w-10" : "bottom-8"
+        } ${assembling ? "animate-pulse" : ""}`}
         style={{
           background: "radial-gradient(circle at 32% 28%, #93C5FD 0%, #2563EB 58%, #1D4ED8 100%)",
           boxShadow: "0 12px 28px -10px rgba(29,78,216,0.55)",

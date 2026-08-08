@@ -456,7 +456,7 @@ const FIELD_TO_BLOCK: Record<string, string> = {
 // F2③ — 카드 공통 카피 필드: 제목·한마디는 전 모드 실필드(커머스 titleText·부제 폴백 포함).
 //   FIELD_TO_BLOCK 환산(content)이 commerce 덱에 없어 카피 요청이 통째로 차단되던 결함 해소.
 const COPY_FIELDS = new Set(["title", "subtitle"]);
-function isAiActionAllowed(mode: StudioMode, a: any): boolean {
+export function isAiActionAllowed(mode: StudioMode, a: any): boolean {
   if (!a || typeof a.type !== "string") return false;
   const allowed = DECK_IDS[mode];
   // UI-5-T7-F5-10 — switchMode 허용(구: 무조건 차단 = SAY-DO 불일치 · 실행부 유령화).
