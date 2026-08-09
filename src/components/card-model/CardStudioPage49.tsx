@@ -520,7 +520,7 @@ export const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLin
 //   수동 편집(덱 탭·칸 조작)은 무영향 — 차단은 AI 액션 경로 한정.
 export const AI_PENDING_BLOCKS = new Set(["aivideo", "image", "dock", "calendar"]);
 // UI-5-T6a — 인앱 안내 1줄(45 V6_INAPP_NOTICE :424 동형 — 한 글자 락·탭 문법).
-const V6_INAPP_NOTICE = "카카오톡에서는 누르면 크롬에서 이어져요.";
+export const V6_INAPP_NOTICE = "카카오톡에서는 누르면 크롬에서 이어져요.";
 // UI-5-T1m — 미확정 릴레이 큐 정렬 우선순위: 영상 → 이미지 → 숫자(product/party/…) → 구간(content) → 기타.
 function confirmRank(id: string): number {
   if (id === "__video") return 0;

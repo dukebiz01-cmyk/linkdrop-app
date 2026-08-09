@@ -33,6 +33,7 @@ import {
   DECK_IDS,
   DIRECTOR_DROPPY_RATE_DEFAULT,
   isAiActionAllowed,
+  V6_INAPP_NOTICE,
 } from "@/components/card-model/CardStudioPage49";
 import type { LingoContext } from "@/components/card-model/useLingoChat";
 // P2.7 — 음성은 공용 훅 재사용(신규 STT/TTS 구현 0). 반환 계약:
@@ -42,6 +43,8 @@ import { useLingoVoice } from "@/components/card-model/useLingoChat";
 // 음성 공용 가드 — 탭 시점 재판정·미지원 안내(한 글자 락)·인앱 WebView 판정.
 import { canUseSpeechRecognition, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
+// 인앱 [음성으로 만들기] — 크롬 핸드오프 공용 헬퍼(49 :3035 동형 · WebView 우회 아님).
+import { startVoiceHandoff } from "@/lib/voice-handoff";
 // §0 실측 — 링고 지니 정본(brand/lingo-mascot v0(51) 심볼 + L6b 연출 래퍼). 신규 아이콘 제작 0.
 import { LingoGenie } from "@/components/lingo/LingoGenie";
 // §C 상주 거울 카드 — 어댑터·렌더러 모두 거울 파일(읽기·import만 · 무수정).
@@ -812,9 +815,22 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
     "flex min-h-[44px] shrink-0 items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]";
   const CARD_CLS =
     "rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]";
-  // 마이크 버튼 — 49 입력줄(:8285-8296) className 실측 복제. 미지원·인앱이면 렌더 자체를 안 한다.
+  // 마이크 버튼 — 49 입력줄 실측 복제(2분기).
+  //   인앱(:8274-8283) = [음성으로 만들기] 크롬 핸드오프 — WebView 안에서 마이크를 켜지 않는다(영구 락).
+  //   정상(:8285-8296) = 원형 마이크. 미지원(인앱 아님 + SR 부재)이면 렌더 자체를 안 한다(가짜 버튼 0).
   const MicButton = () =>
-    showMic ? (
+    inAppNoMic ? (
+      <button
+        type="button"
+        onClick={() => void startVoiceHandoff("/studio-lab", say)}
+        aria-label="음성으로 만들기 — 크롬에서 이어져요"
+        className="flex h-9 shrink-0 items-center justify-center gap-1 rounded-full px-3 text-[12px] font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
+        style={{ backgroundColor: LINGO_BLUE }}
+      >
+        <Mic className="h-[14px] w-[14px]" strokeWidth={2.5} />
+        음성으로 만들기
+      </button>
+    ) : showMic ? (
       <button
         type="button"
         onClick={onMicTap}
@@ -1076,6 +1092,19 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
 
           {/* 인식 중 미리보기 — 입력줄 위. */}
           {interim && <div className="mt-2">{InterimGhost()}</div>}
+
+          {/* 인앱 안내 1줄 — 49 :8311-8320 동형. 인앱 전용 안내가 구 미지원 문구를 대체(이중 안내 방지). */}
+          {inAppNoMic ? (
+            <p className="mt-1.5 text-center text-[10px] font-medium text-[#B4B4B4] [word-break:keep-all]">
+              {V6_INAPP_NOTICE}
+            </p>
+          ) : (
+            !micUsable && (
+              <p className="mt-1.5 text-center text-[10px] font-medium text-[#B4B4B4]">
+                음성은 크롬에서 쓸 수 있어요. 지금은 입력으로 편집해요.
+              </p>
+            )
+          )}
 
           <div className="mt-2.5 space-y-2">
             {/* 목적 4택 */}
