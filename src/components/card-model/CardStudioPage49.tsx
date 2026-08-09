@@ -2370,9 +2370,15 @@ export function CardStudioPage({
   useEffect(() => {
     const done = isStepDone(currentStep);
     const prev = prevStepDoneRef.current;
+    // M1-h — 매직 경로에서는 스텝 플랜 완료 에지를 발화하지 않는다. 매직은 자체 시퀀스(magic →
+    //   magicConfirm → …)를 쓰는데, 사진 업로드가 STEP_PLAN photo 완료 에지를 건드려 완료 칩
+    //   ("상품 이름")과 여정 낭독(COMMERCE_JOURNEY_LINES.title)이 magic 멘트와 겹쳤다.
+    //   ⚠️ 발화만 게이트 — 업로드·setProductImageUrl·setApplied·미리보기 반영은 무접촉.
+    //   prevStepDoneRef 는 아래에서 그대로 갱신되므로 매직 종료 후 스텝 플랜은 정상 재개.
     if (
       prev && prev.idx === currentStep && !prev.done && done &&
-      stepPlanState[currentStep]?.key !== "review"
+      stepPlanState[currentStep]?.key !== "review" &&
+      !magicRef.current
     ) {
       if (assembling || assembleSummary) {
         pendingDoneChipRef.current = currentStep; // F4-10ⓑ — 침묵 구간 = 유실 대신 보류.
