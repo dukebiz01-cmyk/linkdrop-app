@@ -1603,8 +1603,10 @@ export function CardStudioPage({
     magicAdvance();
   }
 
-  function submitDirectorText() {
-    const v = dText.trim();
+  // M2 — raw 선택 인자: 음성 최종 텍스트를 setDText 반영 전에 그대로 태우기 위한 것(기존 본문 재사용).
+  //   onClick={submitDirectorText} 는 이벤트 객체를 넘기므로 문자열일 때만 채택(기존 호출부 무변경).
+  function submitDirectorText(raw?: unknown) {
+    const v = (typeof raw === "string" ? raw : dText).trim();
     if (!v) return;
     // M1 — 마법 현관: 결정적 파서만(AI 0). 결과는 보관만 하고 확인 스텝으로(자물쇠).
     if (dStep === "magic") {
@@ -2596,6 +2598,10 @@ export function CardStudioPage({
   // UI-5-T2-E3c — 음성 effect는 마운트 1회([] deps)라 onresult가 첫 렌더 sendToLingo(mode="general")를
   //   고정 캡처 → 상품판매에서도 퍼블릭으로 요청·가드되는 버그의 근원. 최신 sendToLingo를 ref로 릴레이.
   const sendToLingoRef = useRef<(t: string) => void>(() => {});
+  // M2 — 매직 한 문장 음성 수신부. rec.onresult 는 마운트 1회 클로저라 directorOn·dStep·dText 가
+  //   stale 로 갇힌다 → sendToLingoRef(:4363) 동일 패턴으로 매 렌더 최신 함수를 심는다.
+  //   반환 true = 매직이 처리(기존 sendToLingo 경로 미진입).
+  const magicVoiceRef = useRef<(t: string) => boolean>(() => false);
   const lingoLogRef = useRef<HTMLDivElement>(null);
   // 링고AI 플로팅 버튼 — 손가락으로 옮기기
   const FAB_SIZE = 56;
@@ -3100,6 +3106,9 @@ export function CardStudioPage({
       setInterim(live);
       if (final) {
         setInterim("");
+        // M2 — 매직 한 문장은 지휘자 입력과 동일 경로로 즉시 제출(49 대화 동형).
+        //   자물쇠 = magicConfirm [맞아요] 1탭 — 음성이어도 확인 없이는 확정 0.
+        if (magicVoiceRef.current(final.trim())) return;
         lingoChannelRef.current = "voice"; // L3 — 음성 유래 채널 마킹(45 :3469 동형).
         sendToLingoRef.current(final.trim()); // E3c — 최신 sendToLingo(현재 실모드) 경유. stale 캡처 회피.
       }
@@ -4359,6 +4368,14 @@ export function CardStudioPage({
 
   // E3c — 매 렌더 최신 sendToLingo를 ref에 게시(음성 onresult가 이 최신본을 호출).
   sendToLingoRef.current = sendToLingo;
+  // M2 — 매직 스텝 음성 = 한 문장 입력과 동일 경로(parseOneLiner → magicConfirm). 자물쇠는
+  //   기존 magicConfirm [맞아요] 1탭 그대로 — 음성이어도 확인 없이 확정 0.
+  magicVoiceRef.current = (t: string) => {
+    if (!directorOn || dStep !== "magic") return false;
+    setDText(t); // 입력칸에도 남긴다(사장님이 눈으로 확인·수정 가능).
+    submitDirectorText(t); // state 반영을 기다리지 않도록 값 직접 전달.
+    return true;
+  };
 
   // UI-5-T2-E5f — 내 파트너 id 1회 조회(45 loader store?.id 대응 — 비커머스 body partner_id 격차 해소).
   async function fetchMyPartnerId(): Promise<string | null> {
@@ -7643,12 +7660,49 @@ export function CardStudioPage({
               )}
               {/* M1 — 마법 현관: 사진(기존 실업로드 핸들러 그대로) + 한 문장(아래 공용 입력줄 재사용).
                   M1-e — 버튼 스타일·라벨 전부 photo 스텝(:7558-7562) 원문 복제(신규 문구 0). */}
-              {dStep === "magic" && (
-                <label className="flex min-h-[48px] w-full cursor-pointer items-center justify-center rounded-2xl bg-[#0A0A0A] text-[14px] font-bold text-white active:scale-[0.98]">
-                  사진 올리기
-                  <input type="file" accept="image/*" className="hidden" onChange={handleProductImageChange} />
-                </label>
-              )}
+              {dStep === "magic" &&
+                (() => {
+                  // M1-i — 3상태 버튼. 신호는 기존 핸들러(:1664)가 이미 세우는 3개를 그대로 읽는다
+                  //   (imageUploading / imageUploadError / productImageUrl·Preview) — 핸들러 무수정·
+                  //   신규 에러 로직 0. 발화 추가 0(한 목소리 유지 — 버튼 라벨만 바뀐다).
+                  const uploading = imageUploading;
+                  const failed = !uploading && !!imageUploadError && !productImageUrl;
+                  const doneUp = !uploading && !!productImageUrl;
+                  const label = uploading
+                    ? "올리는 중…"
+                    : failed
+                      ? "사진을 못 올렸어요 — 다시 시도"
+                      : doneUp
+                        ? "사진 올렸어요 — 다시 고르기"
+                        : "사진 올리기";
+                  // 완료 = 보조 톤(gbAsk 둘째 칩 문법) · 그 외 = 현행 검정 버튼.
+                  const tone = doneUp
+                    ? "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                    : "bg-[#0A0A0A] text-white active:scale-[0.98]";
+                  return (
+                    <label
+                      className={`flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 rounded-2xl text-[14px] font-bold ${tone} ${
+                        uploading ? "pointer-events-none opacity-60" : ""
+                      }`}
+                    >
+                      {doneUp && productImagePreview && (
+                        <img
+                          src={productImagePreview}
+                          alt=""
+                          className="h-6 w-6 shrink-0 rounded-lg object-cover"
+                        />
+                      )}
+                      {label}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploading}
+                        onChange={handleProductImageChange}
+                      />
+                    </label>
+                  );
+                })()}
               {/* M1 — 숫자 확인 자물쇠: 읽힌 것만 표시 + 2택. 반영은 [맞아요] 탭에서만.
                   M1-e — 내부 간격 space-y-1.5(기존 스텝 상수) · 칩 행은 gbAsk/gbFail 문법(flex gap-2) 동일. */}
               {dStep === "magicConfirm" && (
@@ -7696,6 +7750,13 @@ export function CardStudioPage({
               )}
               {(dStep === "magic" || dStep === "name" || dStep === "origin" || dStep === "price" || dStep === "qty" || dStep === "droppy") && (
                 <div className="space-y-1.5">
+                  {/* M2 — 듣는 중 회색 미리보기: 컴포저 고스트(:8706)는 z-40 이라 지휘자 독(z-[55]) 아래로
+                      가린다 → 매직 입력줄 위에 동일 문법(italic·#A3A3A3)으로 표시(:8228 근방 복제). */}
+                  {dStep === "magic" && listening && interim && (
+                    <p className="text-[12.5px] font-medium italic leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
+                      {interim}
+                    </p>
+                  )}
                   {/* T5-W1a — KAMIS 참고 1줄(신선+품목 확정 시에만 · 파트너 화면 전용 참고 — §0 락). */}
                   {dStep === "price" && dBandLine && (
                     <p className="text-[11px] font-semibold text-[#8A8A8A]">{dBandLine}</p>
@@ -7727,12 +7788,48 @@ export function CardStudioPage({
                       className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
                       style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
                     />
+                    {/* M2 — 매직 입력줄 마이크: 49 컴포저(:8271-8307) 3분기 그대로.
+                        인앱 = [음성으로 만들기] 핸드오프(마이크 시도 0 — 영구 락) / 정상·빈칸 = 원형 마이크
+                        (청취 중 #DC2626 + ping) / 글자 있음 = 아래 기존 [입력] 버튼 유지.
+                        배선은 기존 handleOrbTap·startVoiceHandoff·voiceSupported·inAppNoMic 재사용(신규 훅 0).
+                        매직 스텝 한정 — name·price 등 다른 스텝은 기존 동작 그대로. */}
+                    {dStep === "magic" && dText.trim() === "" && inAppNoMic && (
+                      <button
+                        type="button"
+                        onClick={handleOrbTap}
+                        disabled={thinking}
+                        aria-label="음성으로 만들기 — 크롬에서 이어져요"
+                        className="flex h-9 shrink-0 items-center justify-center gap-1 rounded-full px-3 text-[12px] font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
+                        style={{ backgroundColor: LINGO }}
+                      >
+                        <Mic className="h-[14px] w-[14px]" strokeWidth={2.5} />
+                        음성으로 만들기
+                      </button>
+                    )}
+                    {dStep === "magic" && dText.trim() === "" && !inAppNoMic && voiceSupported && (
+                      <button
+                        type="button"
+                        onClick={handleOrbTap}
+                        disabled={thinking}
+                        aria-label={listening ? "음성 입력 종료" : "음성으로 말하기"}
+                        className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-90 disabled:opacity-50"
+                        style={{ backgroundColor: listening ? "#DC2626" : LINGO }}
+                      >
+                        {listening && (
+                          <span className="absolute inset-0 animate-ping rounded-full" style={{ backgroundColor: "rgba(220,38,38,0.4)" }} />
+                        )}
+                        <Mic className="relative h-[18px] w-[18px]" strokeWidth={2.25} />
+                      </button>
+                    )}
                     {/* NUMBER_CRITICAL — 빈칸 비활성(gbTiers [이대로] 선례 disabled={anyInvalid} 동형 — disabled+opacity-40).
                         구 동작: 빈칸 탭 = submitDirectorText 의 `if (!v) return` 로 무언 실패(버튼 고장처럼 보임).
                         droppy 프리필 폐지로 빈칸이 첫 화면이 되면서 노출됐다. 판정은 trim() 유무뿐 —
                         "0" 은 truthy 라 활성 유지(보상 0% = 대표님의 정당한 선택 · 막지 않는다).
                         5개 스텝(name·origin·price·qty·droppy) 공용 버튼이나 전 스텝이 빈값을 거부하므로
                         (submitDirectorText :1497-1499 동일 가드) 좁힐 필요 없음 — 동작 동일, 표시만 정직해짐. */}
+                    {/* M2 — 매직 빈칸에서는 위 마이크가 이 자리를 대신한다(49 컴포저 자리 공유 문법).
+                        다른 스텝은 조건이 항상 참이라 기존과 동일하게 항상 노출. */}
+                    {!(dStep === "magic" && dText.trim() === "" && (inAppNoMic || voiceSupported)) && (
                     <button
                       type="button"
                       onClick={submitDirectorText}
@@ -7741,6 +7838,7 @@ export function CardStudioPage({
                     >
                       {dStep === "droppy" ? "확정" : "입력"}
                     </button>
+                    )}
                   </div>
                 </div>
               )}
