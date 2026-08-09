@@ -11,7 +11,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Globe, Calendar, Store } from "lucide-react";
+import { Globe, Calendar, Store, CalendarCheck, Megaphone, PenLine } from "lucide-react";
 import {
   parseKrwInput,
   parseOneLiner,
@@ -35,6 +35,11 @@ import {
   type Studio49VideoSlot,
 } from "@/components/card-studio/studio49-to-card";
 import { CARD_CATEGORY_LABELS } from "@/components/card-model/card-model-adapters";
+// P2.6 §1 — 조립 연출은 49 정본 오버레이를 그대로 쓴다(자작 안무 폐기 · 49 :5152 사용 방식 복제).
+import {
+  LingoAssembleOverlay,
+  type AssembleStep,
+} from "@/components/card-studio/LingoAssembleOverlay49";
 
 // ── 멘트 정본 ───────────────────────────────────────────────────────────────
 // Duke 확정 문구 — 한 글자도 재량 작문 금지.
@@ -129,12 +134,16 @@ const STEP_MENT: Record<Step50, string> = {
 
 type GbRow = { qty: string; price: string };
 
-// 1차 칩 4개 — 지시서 원문 그대로(라벨 락).
-const PURPOSE_CHIPS: { key: "sell" | "host" | "tell" | "form"; label: string }[] = [
-  { key: "sell", label: "🌾 팔기 — 우리 것을 팔아 택배로 보내요" },
-  { key: "host", label: "🏕 손님 받기 — 예약·쿠폰으로 손님이 찾아와요" },
-  { key: "tell", label: "📣 알리기 — 소식만 전해요, 영상 하나면 돼요" },
-  { key: "form", label: "🛠 직접 할게요 — 링고 없이 폼으로 만들어요" },
+// 1차 칩 4개 — Duke 확정 문구·아이콘(P2.6 §2). 이모지 폐기 · lucide 아이콘 전환.
+const PURPOSE_CHIPS: {
+  key: "sell" | "host" | "tell" | "form";
+  Icon: typeof Store;
+  label: string;
+}[] = [
+  { key: "sell", Icon: Store, label: "상품판매 — 농산물·가공품을 주문받아요" },
+  { key: "host", Icon: CalendarCheck, label: "예약·쿠폰 — 손님이 찾아오게 해요" },
+  { key: "tell", Icon: Megaphone, label: "소식 알리기 — 우리 가게를 소개해요" },
+  { key: "form", Icon: PenLine, label: "직접 만들기 — 링고 없이 폼으로 만들어요" },
 ];
 // 하위 칩 라벨 = 기존 확정분 재사용(신규 작문 0): 49 S1 목적 게이트(:4998·:5016·:4928·:4929).
 const SELLHOW_CHIPS: { key: "solo" | "gb"; label: string; desc: string }[] = [
@@ -184,16 +193,25 @@ const ASSEMBLE_MAX_RETRY = 2;
 const M = {
   swallowMs: 1200, // [G] lg-breathe(2.4s ease-in-out)의 반주기 = scale 1.28 도달 시점
   swallowScale: 1.28, // [F] "오브 scale 1.28" (= lg-breathe 50% 값과 동일)
-  brushMs: 1000, // [Duke 확정 비트표] 붓질 0.4~1.4s
+  brushMs: 1000, // [Duke 확정 비트표] 붓질 0.4~1.4s — P2.6: 자작 sweep 폐기, 오버레이 전 대기 비트로 존속
   stampStaggerMs: 250, // [F] "250ms stagger"
   stampRingMs: 150, // [F] "블루 링 0.15s"
-  finishRingMs: 900, // [G] lg-ring(.9s ease-out) 재사용
   easeOut: "ease-out", // [G]
-  easeInOut: "ease-in-out", // [G]
 } as const;
 // §F 도장 4연타 대상 — 이름·가격수량·몫·단계표.
 const STAMP_KEYS = ["name", "priceQty", "droppy", "tiers"] as const;
 type StampKey = (typeof STAMP_KEYS)[number];
+// 오버레이 스텝 라벨 = 49 DIRECTOR_CHECK 기존 확정 라벨 재사용(신규 작문 0).
+//   note 는 빈 문자열 — 오버레이가 `{cur?.note && …}` 로 생략 처리(실측 :296).
+//   anchor — 49 실측 복제: 49 는 전 스텝에 anchor 를 준다(:4061 planAnchor). 규칙(:3893-3897)은
+//   review=gauge / block==="content"=hero / 그 외=deck. 50 의 도장 4대상은 전부 카드 본체에 박히는
+//   값이므로 49 규칙의 hero 갈래에 해당 — 50 에 실재하는 앵커도 hero 하나(:773).
+const ASSEMBLE_STEPS: AssembleStep[] = [
+  { label: "상품 이름", note: "", anchor: "hero" },
+  { label: "판매 가격 · 준비 수량", note: "", anchor: "hero" },
+  { label: "공유 보상", note: "", anchor: "hero" },
+  { label: "모임 단계", note: "", anchor: "hero" },
+];
 
 // 영상 ID 파싱 — 결정 규칙 3패턴(watch?v= | youtu.be/ | /shorts/). 실패 = null(추측 금지).
 function parseVideoId(url: string): string | null {
@@ -259,9 +277,10 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
   const [keyPoints, setKeyPoints] = useState<string[]>([]);
   // 실슬롯 — 4필드(videoId·thumbnailUrl·title·isShorts)가 전부 확보될 때만 구성(하나라도 없으면 null).
   const [videoSlot, setVideoSlot] = useState<Studio49VideoSlot | null>(null);
-  // §F 연출 위상
-  const [phase, setPhase] = useState<"idle" | "swallow" | "brush" | "stamp" | "beam" | "finish">("idle");
+  // §F 연출 — 오브 삼키기만 50 소유(카드 무대는 49 오버레이가 담당).
+  const [swallow, setSwallow] = useState(false);
   const [stamped, setStamped] = useState<StampKey[]>([]);
+  const [overlayStep, setOverlayStep] = useState(0); // 49 오버레이 step 인덱스(호출부 타이머 구동 — 49 :3251 동형).
   // §E 확인 1탭
   const [confirmed, setConfirmed] = useState(false);
   const [editField, setEditField] = useState<null | "price" | "qty" | "droppy">(null);
@@ -488,8 +507,9 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
       brand: "",
       party: 0,
       couponLabel: null,
-      productName: productName.trim(),
-      productPrice: priceKrw != null ? String(priceKrw) : "",
+      // 연출 중에는 재료를 감춘다("삼키기") → 오버레이 종료 시 파서값+AI값이 함께 등장(일괄 반영).
+      productName: assembling ? "" : productName.trim(),
+      productPrice: !assembling && priceKrw != null ? String(priceKrw) : "",
       productHeadline: aiHeadline,
       productPoints: [],
       ...(keyPoints.length > 0 ? { keyPoints } : {}),
@@ -511,7 +531,7 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
       pageBg: PAGE_BG,
     };
     return studio49ToCardModel(input);
-  }, [mode50, videoUrl, videoSlot, photoPreview, productName, priceKrw, qtyNum, aiTitle, aiSubtitle, aiHeadline, keyPoints, store]);
+  }, [mode50, videoUrl, videoSlot, photoPreview, productName, priceKrw, qtyNum, aiTitle, aiSubtitle, aiHeadline, keyPoints, store, assembling]);
 
   // ── 휘리릭(§F) + AI 1콜(§3 계약 승계) ──────────────────────────────────────
   function buildAssembleContext(): LingoContext {
@@ -573,35 +593,38 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
     }
   }
 
-  // §F 비트: 삼키기 → 붓질 → 도장 4연타(250ms stagger) → 제목 빛줄(AI 실도착 동기) → 완성 숨.
+  // §F 비트: 삼키기(오브) → 대기 → 도장 4연타(250ms stagger = 오버레이 step + 값 반영 동시 구동).
+  //   카드 무대(딤·스포트라이트·말풍선)는 49 오버레이 소관 — 자작 sweep/빛줄/링 폐기.
   function startWhooshChoreography() {
     clearTimers();
     setStamped([]);
-    setPhase("swallow");
+    setOverlayStep(0);
+    setSwallow(true);
     const push = (fn: () => void, ms: number) => {
       timersRef.current.push(window.setTimeout(fn, ms));
     };
-    push(() => setPhase("brush"), M.swallowMs);
+    push(() => setSwallow(false), M.swallowMs);
     const stampStart = M.swallowMs + M.brushMs;
-    push(() => setPhase("stamp"), stampStart);
     STAMP_KEYS.forEach((k, i) => {
-      push(() => setStamped((s) => (s.includes(k) ? s : [...s, k])), stampStart + M.stampStaggerMs * (i + 1));
+      push(() => {
+        setStamped((s) => (s.includes(k) ? s : [...s, k]));
+        setOverlayStep(i);
+      }, stampStart + M.stampStaggerMs * (i + 1));
     });
-    // 도장이 끝나면 제목 빛줄 — 여기서부터는 AI 실도착이 종료 조건(가짜 로딩 금지).
-    push(() => setPhase("beam"), stampStart + M.stampStaggerMs * (STAMP_KEYS.length + 1));
   }
-  // 건너뛰기 — 타이머 전소거 + 즉시 최종 상태(결과 동일).
+  // 건너뛰기 — 타이머 전소거 + 즉시 최종 상태(결과 동일). 오버레이 onSkip 도 이 함수.
   function skipWhoosh() {
     clearTimers();
+    setSwallow(false);
     setStamped([...STAMP_KEYS]);
-    setPhase(assembling ? "beam" : "finish");
+    setOverlayStep(ASSEMBLE_STEPS.length - 1);
   }
 
   function failWhoosh() {
     clearTimers();
+    setSwallow(false);
     setAssembling(false);
     setAssembleFailed(true);
-    setPhase("finish");
     setRetryCount((c) => c + 1);
     say(DIRECTOR_MENTS_50.assembleTimeout);
   }
@@ -674,11 +697,12 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
       return failWhoosh();
     }
     // 빈 actions 로 done — 결과만 두고 확인으로 진행(중단 없음).
+    // 오버레이 종료 후 카드에 일괄 반영(파서값 + AI값) — 연출 중에는 감춰 두었다가 여기서 등장.
     applyActions50(proposalActions);
     clearTimers();
+    setSwallow(false);
     setStamped([...STAMP_KEYS]);
-    setAssembling(false);
-    setPhase("finish");
+    setAssembling(false); // active=false → 오버레이 종료(스크롤 잠금 원복은 오버레이 소관).
     setAct(3);
     go("confirm");
   }
@@ -709,6 +733,8 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
     step === "askName" || step === "askPrice" || step === "askQty" || step === "askDroppy";
   const isStepInput = step === "name" || step === "price" || step === "qty" || step === "droppy";
   const showSlotOverlay = !aiTitle && !aiSubtitle;
+  // 히어로 빈 상태 = CardModelBody 가 자체 플레이스홀더를 그리는 조건(applied content/image/productimage 전무).
+  const heroEmpty = !photoPreview && !videoSlot && videoUrl.trim().length === 0;
   const gbTiers = sellHow === "gb" ? buildGbProposal(priceKrw ?? 0, qtyNum ?? 0) : [];
 
   // 입력칸/주버튼 — DESIGN-LOCK v2 §3 패턴 원문 복제.
@@ -725,19 +751,14 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
   return (
     <div className="min-h-screen pb-[240px]" style={{ backgroundColor: PAGE_BG }}>
       {/* §F 연출 keyframes — transform/opacity 전용 · 깜빡임 0 · reduced-motion 페이드만. */}
+      {/* 도장 칩 등장·링만 50 소유(카드 무대 연출은 49 오버레이). transform/opacity 전용. */}
       <style>{`
-        @keyframes w-brush{0%{transform:translateY(-110%);opacity:0}18%{opacity:.85}100%{transform:translateY(110%);opacity:0}}
-        .w-brush{animation:w-brush ${M.brushMs}ms ${M.easeOut} both}
         @keyframes w-ring{0%{transform:scale(.86);opacity:.9}100%{transform:scale(1.06);opacity:0}}
         .w-ring{animation:w-ring ${M.stampRingMs}ms ${M.easeOut} both}
-        @keyframes w-beam{0%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
-        .w-beam{animation:w-beam 1.1s ${M.easeInOut} infinite}
-        @keyframes w-finish{0%{transform:scale(.985);opacity:.75}100%{transform:scale(1);opacity:0}}
-        .w-finish{animation:w-finish ${M.finishRingMs}ms ${M.easeOut} both}
         @keyframes w-in{0%{transform:translateY(4px);opacity:0}100%{transform:translateY(0);opacity:1}}
         .w-in{animation:w-in ${M.stampStaggerMs}ms ${M.easeOut} both}
         @media (prefers-reduced-motion: reduce){
-          .w-brush,.w-ring,.w-beam,.w-finish,.w-in{animation:none!important;opacity:1!important;transform:none!important}
+          .w-ring,.w-in{animation:none!important;opacity:1!important;transform:none!important}
         }
       `}</style>
 
@@ -750,44 +771,33 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
           </span>
         </div>
 
-        {/* ── §C 상주 거울 카드 — 화면 상단 고정. 슬롯은 최종 값과 같은 높이 선점(시프트 0). ── */}
-        <div className="relative mt-4">
+        {/* ── §C 상주 거울 카드 — 화면 상단 고정. 슬롯은 최종 값과 같은 높이 선점(시프트 0).
+            연출 = 49 정본 오버레이(딤·스포트라이트·말풍선·체크리스트) — 49 :5150-5164 배치 복제. ── */}
+        <div className="relative mt-4" data-assemble-anchor="hero">
           <CardModelBody model={cardModel} variant="studio" showShareFooter={false} />
 
-          {/* 제목·한마디 미도착 = 점선 슬롯 오버레이(CardModelBody 는 폴백이 없다 — 실측 계약). */}
+          {/* 제목·한마디 미도착 = 점선 슬롯 오버레이(CardModelBody 는 폴백이 없다 — 실측 계약).
+              히어로가 빈 상태면 CardModelBody 자체 플레이스홀더("덱에서 콘텐츠를 장착하세요")와
+              겹치므로, 그때는 히어로 영역 밖(카드 하단 본문 슬롯 자리)으로 한정한다. */}
           {showSlotOverlay && (
-            <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center pt-[46%]">
+            <div
+              className={`pointer-events-none absolute inset-x-0 flex justify-center ${
+                heroEmpty ? "bottom-5" : "top-0 pt-[46%]"
+              }`}
+            >
               <span className="rounded-full border-[1.5px] border-dashed px-3 py-1 text-[11px] font-bold" style={{ borderColor: LINGO_BLUE, color: LINGO_BLUE, backgroundColor: "#EEF3FE" }}>
                 제목·한마디 — 링고가 채워요
               </span>
             </div>
           )}
 
-          {/* 붓질 — 블루 빛띠 위→아래 1회 */}
-          {phase === "brush" && (
-            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
-              <div
-                className="w-brush absolute inset-x-0 h-1/3"
-                style={{ background: `linear-gradient(180deg, transparent, ${LINGO_BLUE}33, transparent)` }}
-              />
-            </div>
-          )}
-          {/* 완성 숨 — 카드 링 1회 */}
-          {phase === "finish" && (
-            <div
-              className="w-finish pointer-events-none absolute inset-0 rounded-2xl"
-              style={{ boxShadow: `0 0 0 2px ${LINGO_BLUE}` }}
-            />
-          )}
-          {/* 제목 빛줄 — AI 실도착 동기(도착 전 지속 = 쓰는 중 표현 · 가짜 퍼센트 0) */}
-          {phase === "beam" && assembling && (
-            <div className="pointer-events-none absolute inset-x-4 top-[46%] h-5 overflow-hidden rounded-full">
-              <div
-                className="w-beam h-full w-1/2"
-                style={{ background: `linear-gradient(90deg, transparent, ${LINGO_BLUE}2E, transparent)` }}
-              />
-            </div>
-          )}
+          <LingoAssembleOverlay
+            active={assembling}
+            steps={ASSEMBLE_STEPS}
+            step={overlayStep}
+            accent={LINGO_BLUE}
+            onSkip={skipWhoosh}
+          />
         </div>
 
         {/* ── 도장 4연타 결과 — 재료 칩(값이 실제로 있을 때만) ── */}
@@ -876,7 +886,16 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
             )}
 
             <div className="mt-3 flex gap-2">
-              <button type="button" onClick={() => setConfirmed(true)} className={`${PRIMARY_CLS} flex-1`}>
+              <button
+                type="button"
+                onClick={() => {
+                  // §3 — 재료 확정(로컬 상태만). 저장·발행 호출 0(P3 범위) · 기존 멘트로 응답.
+                  setConfirmed(true);
+                  setEditField(null);
+                  say(DIRECTOR_MENTS_50.reviewReady);
+                }}
+                className={`${PRIMARY_CLS} flex-1`}
+              >
                 맞아요 — 다음
               </button>
               <button
@@ -906,11 +925,18 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
           </div>
         )}
 
-        {/* P2.5 종점 — 확정 후. 저장·발행 0(P3 범위). */}
+        {/* §3 — 확정 상태 표시(죽은 버튼 해소). 저장·발행 호출 0(P3 범위). */}
         {confirmed && (
-          <p className="mt-4 text-center text-[11px] font-semibold text-[#8A8A8A]">
-            3막 검수·발행은 다음 업데이트
-          </p>
+          <div className="mt-4 rounded-2xl border border-[#C7D7FB] bg-[#EEF3FE] p-4">
+            <p className="text-[12px] font-bold text-[#1D4ED8]">재료 확정 ✓</p>
+            <p className="mt-1.5 text-[12.5px] font-semibold tabular-nums text-[#0A0A0A] [word-break:keep-all]">
+              가격 {priceKrw != null ? priceKrw.toLocaleString("ko-KR") : "—"}원 · 수량{" "}
+              {qtyNum != null ? qtyNum.toLocaleString("ko-KR") : "—"}개 · 몫 {droppyPct ?? "—"}%
+            </p>
+            <p className="mt-2 text-[11px] font-semibold text-[#8A8A8A]">
+              3막 검수·발행은 다음 업데이트
+            </p>
+          </div>
         )}
       </div>
 
@@ -924,7 +950,7 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
             {/* §0 실측 지니 — 직접 그린 원 제거. 조립 중 talking. */}
             <span
               className="shrink-0 transition-transform duration-500"
-              style={{ transform: phase === "swallow" ? `scale(${M.swallowScale})` : "scale(1)" }}
+              style={{ transform: swallow ? `scale(${M.swallowScale})` : "scale(1)" }}
             >
               <LingoGenie size={40} variant="avatar" talking={assembling} />
             </span>
@@ -937,7 +963,8 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
             {/* 목적 4택 */}
             {step === "purpose" &&
               PURPOSE_CHIPS.map((c) => (
-                <button key={c.key} type="button" onClick={() => pickPurpose(c.key)} className={CHIP_CLS}>
+                <button key={c.key} type="button" onClick={() => pickPurpose(c.key)} className={`${CHIP_CLS} gap-2.5`}>
+                  <c.Icon className="h-[18px] w-[18px] shrink-0 text-[#525252]" strokeWidth={2.25} />
                   {c.label}
                 </button>
               ))}
@@ -1062,12 +1089,8 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
               </div>
             )}
 
-            {/* 연출 중 — 건너뛰기 상시(§F). */}
-            {assembling && (
-              <button type="button" onClick={skipWhoosh} className="flex min-h-[36px] w-full items-center justify-center text-[12px] font-semibold text-[#8A8A8A] active:text-[#525252]">
-                건너뛰기
-              </button>
-            )}
+            {/* 연출 중 건너뛰기는 오버레이 내부 버튼으로 단일화(P2.6) — 하단 중복 버튼 제거.
+                딤(z-76) 아래라 실제로 눌리지도 않던 유령 버튼이었다. */}
 
             {/* 실패 — 재시도 2회까지. */}
             {assembleFailed && (
