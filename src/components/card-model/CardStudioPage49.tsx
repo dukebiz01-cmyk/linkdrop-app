@@ -599,10 +599,11 @@ export const DIRECTOR_MENTS = {
   // T5-W3a — done 분기: "세부 조정은 상품 등록 폼…" 1문(W1a Duke 확정)은 커머스 한정 —
   //   비커머스(퍼블릭·예약쿠폰)는 기존 done 정본 문장만 낭독(신규 작문 0 · 두 문장 모두 기존 정본 분해).
   // M1 — 마법 현관(사진+한 문장) 2키. Duke 확정 원문 — 한 글자 불변.
-  magic:
-    "사진 한 장 주세요. 그리고 뭘 얼마에 몇 개 파실지 한 줄로 적어 주세요 — 예: 찰옥수수 25000원 50박스, 나눔 10%",
+  magic: "사진 한 장 주세요. 그리고 아래 칸만 채워 주세요 — 말로 하셔도 제가 받아 적어요.",
+  // M1-k — 미사용(4칸 시트가 흡수). 유니온 멤버·렌더 블록과 함께 존치(경로에서 dGo 0).
   magicConfirm:
     "사장님 문장에서 그대로 읽었어요 — 맞는지 확인해 주세요. 원산지랑 판매 기간만 더 여쭐게요.",
+  magicPhotoDone: "사진 잘 받았어요. 이제 아래 칸만 채워 주세요.",
   done: "카드가 준비되었습니다. 내용을 확인하신 후 발행해 주세요.",
   doneCommerce: "카드가 준비되었습니다. 내용을 확인하신 후 발행해 주세요. 세부 조정은 상품 등록 폼에서 하실 수 있습니다.",
 } as const;
@@ -1094,6 +1095,18 @@ export function CardStudioPage({
   const magicDraftRef = useRef<ReturnType<typeof parseOneLiner> | null>(null);
   const magicQueueRef = useRef<DirectorStep[]>([]);
   const magicFiredRef = useRef(false);
+  // M1-j — 매직 사진 확정 발화 1회 가드. 값 = 발화를 마친 productImageUrl(업로드마다 1회 ·
+  //   재선택으로 URL 이 바뀌면 다시 1회). 같은 URL 재렌더에는 중복 발화 0.
+  const magicPhotoSaidRef = useRef<string | null>(null);
+  // M1-k — 매직 4칸 시트 초안. 칸에 보이는 값이 곧 확인이므로 확정은 [✦ 만들기] 1탭에서만
+  //   (NUMBER_CRITICAL 자물쇠 유지 — 칸 입력만으로 cfg* 에 쓰지 않는다).
+  const [dMagName, setDMagName] = useState("");
+  const [dMagPrice, setDMagPrice] = useState("");
+  const [dMagQty, setDMagQty] = useState("");
+  const [dMagDroppy, setDMagDroppy] = useState("");
+  // M3 — 매직 착지 상태. 매직 자동 조립 발화 시점에 true → 쉬운 고치기 전면·세부 편집 표면 숨김.
+  //   [자세히 고치기]·지휘자 재시작·모드 전환에서 false(기존 전체 UI 원래 순서 복귀 — 삭제 0).
+  const [magicLanding, setMagicLanding] = useState(false);
   // M1-c — S1 게이트 경유 자동 시작 1회 가드. S1 선택 핸들러가 세우고, 아래 effect 가 소비한다.
   //   ⚠️ 핸들러 안에서 직접 startDirector() 를 부르면 attemptSwitchMode→resetForMode 의 setMode 가
   //   아직 반영 전이라 stale mode(=구 모드)로 첫 스텝이 갈린다. 반드시 mode 반영 후 effect 에서 1회.
@@ -1161,6 +1174,12 @@ export function CardStudioPage({
     magicDraftRef.current = null;
     magicQueueRef.current = [];
     magicFiredRef.current = false;
+    magicPhotoSaidRef.current = null; // M1-j — 새 지휘 = 사진 발화 가드 초기화.
+    setMagicLanding(false); // M3 — 지휘 재시작 = 착지 해제.
+    setDMagName(""); // M1-k — 4칸 초안 초기화.
+    setDMagPrice("");
+    setDMagQty("");
+    setDMagDroppy("");
     dGo(mode === "commerce" ? "magic" : "link");
   }
   // T5-W1c(P1-3) — 지휘 종료 단일 출구: 실값 입력분만 보존, 빈 스켈레톤 블록은 해제(미완성 껍데기
@@ -1196,10 +1215,21 @@ export function CardStudioPage({
     if (dStep !== "done" || !magicRef.current || magicFiredRef.current) return;
     magicFiredRef.current = true;
     magicRef.current = false;
+    setMagicLanding(true); // M3 — 착지 진입(쉬운 고치기 전면).
     void sendToLingo(MAGIC_ASSEMBLE_ORDER);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dStep]);
 
+  // M1-j — 매직 사진 확정 발화(effect — photo 스텝 전례 :1275-1281 동형 · 업로드 파이프 무수정).
+  //   M1-h 의 fireDoneChip 게이트는 그대로라 이 발화가 매직 사진 구간의 유일한 목소리다.
+  //   스텝 이동 0 — magic 에 머문 채 한 문장 입력을 기다린다.
+  useEffect(() => {
+    if (!directorOn || !magicRef.current || dStep !== "magic" || !productImageUrl) return;
+    if (magicPhotoSaidRef.current === productImageUrl) return; // 같은 업로드 중복 발화 금지.
+    magicPhotoSaidRef.current = productImageUrl;
+    dSay(DIRECTOR_MENTS.magicPhotoDone);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorOn, dStep, productImageUrl]);
   // 사진 수신 → startCatalog 백그라운드 + 다음 스텝(effect — 업로드 파이프는 기존 핸들러 재사용).
   useEffect(() => {
     if (!directorOn || dStep !== "photo" || !productImageUrl) return;
@@ -1222,7 +1252,7 @@ export function CardStudioPage({
   // T5-W1a — KAMIS 품목 1회 로드(폼 :312-315 동형 쿼리 — 분류 스텝 진입·신선 한정 · graceful).
   useEffect(() => {
     // M1-f — 시세 참고 옵트인도 같은 목록을 쓴다(로드 게이트만 확장 · 쿼리·상태 무변경).
-    const onCatStep = dStep === "category" || (dStep === "magicConfirm" && dCatOptIn);
+    const onCatStep = dStep === "category" || (dStep === "magic" && dCatOptIn);
     if (!directorOn || !onCatStep || cfgProduct.type !== "fresh" || dKamisList.length > 0) return;
     let cancelled = false;
     void (async () => {
@@ -1248,7 +1278,8 @@ export function CardStudioPage({
   useEffect(() => {
     const onBandStep =
       dStep === "price" ||
-      (dStep === "magicConfirm" && magicDraftRef.current?.priceKrw != null);
+      // M1-k — 시세는 매직 4칸 시트로 이사: 가격 칸에 유효 정수가 있을 때만.
+      (dStep === "magic" && /^\d+$/.test(dMagPrice.trim()) && Number(dMagPrice.trim()) > 0);
     if (!directorOn || !onBandStep) return;
     const code = cfgProduct.kamisItemCode;
     const catCode = code ? (dKamisList.find((it) => it.item_code === code)?.category_code ?? null) : null;
@@ -1582,6 +1613,37 @@ export function CardStudioPage({
     if (!droppyOk) q.push("droppy");
     return q;
   }
+  // M1-k — 4칸 유효성(활성 조건). 이름 비어있지 않음 · 가격/수량 정수>0 · 나눔 정수 0~20.
+  //   신규 오류 문구 0 — 미충족은 버튼 잠김으로만 알린다.
+  const magInt = (s: string) => (/^\d+$/.test(s.trim()) ? Number(s.trim()) : null);
+  const magPriceN = magInt(dMagPrice);
+  const magQtyN = magInt(dMagQty);
+  const magDroppyN = magInt(dMagDroppy);
+  const magSheetReady =
+    dMagName.trim().length > 0 &&
+    magPriceN != null && magPriceN > 0 &&
+    magQtyN != null && magQtyN > 0 &&
+    magDroppyN != null && magDroppyN >= 0 && magDroppyN <= 20;
+
+  // M1-k — [✦ 만들기] = 확인 1탭. applyMagicDraft 와 동일한 일괄 반영(setter 4종 + 제목 승계)
+  //   · ⚠️ confirmHelper·touch 미호출(배지 폭주 차단) — 그대로 유지. 이후 origin 직행.
+  function submitMagicSheet() {
+    if (!magSheetReady) return;
+    const name = dMagName.trim();
+    setCfgProductName(name);
+    if (!cfgTitle.trim()) setCfgTitle(name); // :1512 동일 — 제목 자동 승계.
+    setCfgProductPrice(String(magPriceN));
+    setCfgProduct((p) => ({
+      ...p,
+      quantity: String(magQtyN),
+      droppyMode: "rate",
+      droppyRate: magDroppyN as number,
+    }));
+    dEcho(`${name} · ${(magPriceN as number).toLocaleString("ko-KR")}원 · ${magQtyN}개 · 나눔 ${magDroppyN}%`);
+    dGo("origin");
+  }
+
+  // M1-k — 미사용(4칸 시트가 흡수). magicConfirm 경로 폐지로 호출부 0 — 존치(우회).
   // M1 — [맞아요] 일괄 반영. READ setter 표 그대로 · ⚠️ confirmHelper·touch 미호출(배지 폭주 차단).
   function applyMagicDraft() {
     const d = magicDraftRef.current;
@@ -1608,6 +1670,8 @@ export function CardStudioPage({
   function submitDirectorText(raw?: unknown) {
     const v = (typeof raw === "string" ? raw : dText).trim();
     if (!v) return;
+    // M1-k — 미사용(4칸 시트가 흡수): magic 스텝은 이 공용 입력줄을 더는 쓰지 않아 도달 0.
+    //   판독 0건 스킵·magicQueue 사슬과 함께 존치(우회 — 삭제 금지).
     // M1 — 마법 현관: 결정적 파서만(AI 0). 결과는 보관만 하고 확인 스텝으로(자물쇠).
     if (dStep === "magic") {
       const r = parseOneLiner(v);
@@ -1689,8 +1753,8 @@ export function CardStudioPage({
     dEcho(it.item_name);
     setDText("");
     setDCatSearch(false);
-    // M1-f — 시세 참고 옵트인: 확인 화면에 머문다(이동 0). 밴드 effect 는 dBandKey 로 재발화.
-    if (dStep === "magicConfirm") {
+    // M1-f — 시세 참고 옵트인: 매직 시트에 머문다(이동 0). 밴드 effect 는 dBandKey 로 재발화.
+    if (dStep === "magic") {
       setDCatOptIn(false);
       setDBandKey((k) => k + 1);
       return;
@@ -1705,8 +1769,8 @@ export function CardStudioPage({
     dEcho(v);
     setDText("");
     setDCatSearch(false);
-    // M1-f — 옵트인 경로에서는 확인 화면 유지(직접 입력 = 코드 없음 → 밴드는 현행처럼 미표시).
-    if (dStep === "magicConfirm") {
+    // M1-f — 옵트인 경로에서는 매직 시트 유지(직접 입력 = 코드 없음 → 밴드는 현행처럼 미표시).
+    if (dStep === "magic") {
       setDCatOptIn(false);
       return;
     }
@@ -2751,6 +2815,7 @@ export function CardStudioPage({
     //   위 setApplied({}) 가 이미 전량 담당(closeDirector 의 선별 해제보다 강한 리셋).
     setDirectorOn(false);
     dPresetRef.current = new Set();
+    setMagicLanding(false); // M3 — 모드 전환 = 착지 해제(새 카드 = 기존 전체 UI 원래 순서).
     // D3 — 온보딩 진행 종료(새 카드 = 평시 흐름 · 제안은 1회 정책이라 미재노출).
     setOnboardingActive(false);
     setOnboardCheer(null);
@@ -4370,10 +4435,17 @@ export function CardStudioPage({
   sendToLingoRef.current = sendToLingo;
   // M2 — 매직 스텝 음성 = 한 문장 입력과 동일 경로(parseOneLiner → magicConfirm). 자물쇠는
   //   기존 magicConfirm [맞아요] 1탭 그대로 — 음성이어도 확인 없이 확정 0.
+  // M1-k — 음성 = 받아 적기. 읽힌 조각만 해당 칸에 채우고 제출하지 않는다([만들기]가 확인 1탭).
+  //   못 읽은 칸은 그대로 두어 사장님이 마저 채운다. 채운 뒤 링고 발화 0(칸이 보이는 게 확인).
   magicVoiceRef.current = (t: string) => {
     if (!directorOn || dStep !== "magic") return false;
-    setDText(t); // 입력칸에도 남긴다(사장님이 눈으로 확인·수정 가능).
-    submitDirectorText(t); // state 반영을 기다리지 않도록 값 직접 전달.
+    const r = parseOneLiner(t);
+    if (r.name) setDMagName(r.name);
+    if (r.priceKrw != null) setDMagPrice(String(r.priceKrw));
+    if (r.qty != null) setDMagQty(String(r.qty));
+    if (r.droppyPct != null && Number.isInteger(r.droppyPct) && r.droppyPct >= 0 && r.droppyPct <= 20) {
+      setDMagDroppy(String(r.droppyPct));
+    }
     return true;
   };
 
@@ -5338,9 +5410,42 @@ export function CardStudioPage({
           </div>
         </section>
 
+        {/* ───────── M3 착지층 — 쉬운 고치기 전면(세부 편집은 [자세히 고치기] 뒤로) ─────────
+            칩 문법 = gbAsk 재사용(주 = bg-[#0A0A0A] 흰글자 / 보조 = border-[#E5E5E5] bg-white).
+            [색 고르기]는 49에 카드 색 UI 부재(CARD_COLORS 0건 — 45 죽은 파일에만·스위치 OFF)라 미렌더.
+            제거 아님 — 순서 반전. [자세히 고치기]로 기존 전체 UI가 원래 순서 그대로 복귀. */}
+        {magicLanding && (
+          <div className="mt-4 space-y-2">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setLingoOpen(true)}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white active:scale-[0.98]"
+              >
+                말로 고치기
+              </button>
+              <button
+                type="button"
+                onClick={() => onEditField("product")}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
+              >
+                눌러서 고치기
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMagicLanding(false)}
+              className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#525252] active:bg-[#F5F5F5]"
+            >
+              자세히 고치기
+            </button>
+          </div>
+        )}
+
         {/* ───────── 전환력 게이지 ───────── */}
         {/* UI-5-T1c — 조립 포인터 앵커(gauge): 완성도 스텝 지목 대상. */}
-        <section data-assemble-anchor="gauge" className="mt-5 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
+        {/* M3 — 착지 중 숨김(별점 헤더 = 세부 편집 표면). 조건부 렌더 · 삭제 0. */}
+        <section data-assemble-anchor="gauge" className={`mt-5 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] ${magicLanding ? "hidden" : ""}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F4F4F5] text-[#525252]">
@@ -5398,7 +5503,8 @@ export function CardStudioPage({
       {/* ───────── 강화 카드 덱 (스와이프 → 탭 장착) ───────── */}
       {/* UI-5-T1c — 조립 포인터 앵커(deck): 쿠폰·판매기간 스텝 지목 대상. */}
       {/* PURPOSE-GATE — 덱도 게이트 통과 후에만. */}
-      {purposeChosen && (
+      {/* M3 — 착지 중 숨김(덱 그리드 = 세부 편집 표면). 조건부 렌더 · 삭제 0. */}
+      {purposeChosen && !magicLanding && (
       <section ref={deckRef} data-assemble-anchor="deck" className="mt-6">
         <div className="mx-auto flex max-w-md items-center justify-between px-5">
           <p className="text-[12px] font-bold uppercase tracking-wider text-[#737373]">강화 카드 덱</p>
@@ -7143,7 +7249,8 @@ export function CardStudioPage({
 
           {/* UI-5-T2-E2b(A1·B2) — 완료/다음 코스 칩(설정 영역 하단 — 부유물 금지 원칙 준수).
               도우미 done 말풍선이 열려 있으면 그쪽에 합류(위)·여기선 숨김. 탭 = 사용자 의사(자동 점프·자동 발행 없음). */}
-          {stepChip && !assembling && !assembleSummary && !(helperTarget === activeBlock.id && helperPhase !== "guide") && (
+          {/* M3 — 착지 중 숨김(스텝 칩 = 세부 편집 전진 표면). 조건부 렌더 · 삭제 0. */}
+          {stepChip && !magicLanding && !assembling && !assembleSummary && !(helperTarget === activeBlock.id && helperPhase !== "guide") && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-2xl bg-[#F4F4F5] p-3">
               <span className="mr-1 text-[12px] font-bold text-[#16161D] [word-break:keep-all]">
                 {stepChip.kind === "done"
@@ -7673,7 +7780,7 @@ export function CardStudioPage({
                     : failed
                       ? "사진을 못 올렸어요 — 다시 시도"
                       : doneUp
-                        ? "사진 올렸어요 — 다시 고르기"
+                        ? "✓ 사진 올렸어요 — 다시 고르기"
                         : "사진 올리기";
                   // 완료 = 보조 톤(gbAsk 둘째 칩 문법) · 그 외 = 현행 검정 버튼.
                   const tone = doneUp
@@ -7703,8 +7810,117 @@ export function CardStudioPage({
                     </label>
                   );
                 })()}
+              {/* M1-k — 매직 4칸 시트(한 줄 작문 폐지 → 빈칸 채우기). 칸 문법 = 기존 입력칸 원문 복제.
+                  칸에 보이는 값이 곧 확인 → [✦ 만들기] 1탭이 NUMBER_CRITICAL 자물쇠. 설명문 0. */}
+              {dStep === "magic" && (
+                <div className="space-y-1.5">
+                  {/* 듣는 중 회색 미리보기(:8228 문법) — 컴포저 고스트는 독 아래로 가리므로 여기 표시. */}
+                  {listening && interim && (
+                    <p className="text-[12.5px] font-medium italic leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
+                      {interim}
+                    </p>
+                  )}
+                  <input
+                    value={dMagName}
+                    onChange={(e) => setDMagName(e.target.value)}
+                    inputMode="text"
+                    placeholder="뭘 파세요"
+                    className="w-full rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                    style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                  />
+                  <div className="flex gap-2">
+                    <div className="relative min-w-0 flex-1">
+                      <input
+                        value={dMagPrice}
+                        onChange={(e) => setDMagPrice(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="한 개 가격"
+                        className="w-full rounded-xl bg-[#F4F4F5] py-3 pl-3 pr-7 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                        style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">원</span>
+                    </div>
+                    <div className="relative min-w-0 flex-1">
+                      <input
+                        value={dMagQty}
+                        onChange={(e) => setDMagQty(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="몇 개까지"
+                        className="w-full rounded-xl bg-[#F4F4F5] py-3 pl-3 pr-7 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                        style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">개</span>
+                    </div>
+                  </div>
+                  {/* M1-k §5 — 시세 참고(옵트인 칩·품목 UI·밴드 라인)는 가격 칸 아래. 품목 UI 본체는
+                      아래 category 블록이 조건 확장으로 그대로 담당(신규 목록 UI 0). */}
+                  {dBandLine && (
+                    <p className="text-[11px] font-semibold text-[#8A8A8A]">{dBandLine}</p>
+                  )}
+                  {magPriceN != null && magPriceN > 0 && !dCatOptIn && !dBandLine && (
+                    <button
+                      type="button"
+                      onClick={() => setDCatOptIn(true)}
+                      className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#525252] active:bg-[#F5F5F5]"
+                    >
+                      시세 참고하기
+                    </button>
+                  )}
+                  <div className="flex gap-2">
+                    <div className="relative min-w-0 flex-1">
+                      <input
+                        value={dMagDroppy}
+                        onChange={(e) => setDMagDroppy(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="나눔"
+                        className="w-full rounded-xl bg-[#F4F4F5] py-3 pl-3 pr-7 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                        style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">%</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={submitMagicSheet}
+                      disabled={!magSheetReady}
+                      className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#1D4ED8] text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                    >
+                      ✦ 만들기
+                    </button>
+                  </div>
+                  {/* 마이크 줄 — 49 컴포저(:8271-8307) 3분기 그대로(인앱 핸드오프 / 원형 마이크). */}
+                  {inAppNoMic ? (
+                    <button
+                      type="button"
+                      onClick={handleOrbTap}
+                      disabled={thinking}
+                      aria-label="음성으로 만들기 — 크롬에서 이어져요"
+                      className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-xl text-[13px] font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
+                      style={{ backgroundColor: LINGO }}
+                    >
+                      <Mic className="h-[14px] w-[14px]" strokeWidth={2.5} />
+                      음성으로 만들기
+                    </button>
+                  ) : voiceSupported ? (
+                    <button
+                      type="button"
+                      onClick={handleOrbTap}
+                      disabled={thinking}
+                      aria-label={listening ? "음성 입력 종료" : "음성으로 말하기"}
+                      className="relative flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
+                      style={{ backgroundColor: listening ? "#DC2626" : LINGO }}
+                    >
+                      {listening && (
+                        <span className="absolute inset-0 animate-ping rounded-xl" style={{ backgroundColor: "rgba(220,38,38,0.4)" }} />
+                      )}
+                      <Mic className="relative h-[16px] w-[16px]" strokeWidth={2.5} />
+                      <span className="relative">{listening ? "듣고 있어요" : "말로 하기"}</span>
+                    </button>
+                  ) : null}
+                </div>
+              )}
               {/* M1 — 숫자 확인 자물쇠: 읽힌 것만 표시 + 2택. 반영은 [맞아요] 탭에서만.
-                  M1-e — 내부 간격 space-y-1.5(기존 스텝 상수) · 칩 행은 gbAsk/gbFail 문법(flex gap-2) 동일. */}
+                  M1-e — 내부 간격 space-y-1.5(기존 스텝 상수) · 칩 행은 gbAsk/gbFail 문법(flex gap-2) 동일.
+                  M1-k — 미사용(4칸 시트가 흡수): 경로에서 dGo("magicConfirm") 0 — 블록 존치(우회). */}
               {dStep === "magicConfirm" && (
                 <div className="space-y-1.5">
                   <div className="rounded-xl bg-[#F4F4F5] px-3 py-2.5">
@@ -7748,15 +7964,9 @@ export function CardStudioPage({
                   </div>
                 </div>
               )}
-              {(dStep === "magic" || dStep === "name" || dStep === "origin" || dStep === "price" || dStep === "qty" || dStep === "droppy") && (
+              {/* M1-k — magic 은 위 4칸 시트로 이사(이 공용 입력줄에서 제외 · 다른 스텝 무변경). */}
+              {(dStep === "name" || dStep === "origin" || dStep === "price" || dStep === "qty" || dStep === "droppy") && (
                 <div className="space-y-1.5">
-                  {/* M2 — 듣는 중 회색 미리보기: 컴포저 고스트(:8706)는 z-40 이라 지휘자 독(z-[55]) 아래로
-                      가린다 → 매직 입력줄 위에 동일 문법(italic·#A3A3A3)으로 표시(:8228 근방 복제). */}
-                  {dStep === "magic" && listening && interim && (
-                    <p className="text-[12.5px] font-medium italic leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
-                      {interim}
-                    </p>
-                  )}
                   {/* T5-W1a — KAMIS 참고 1줄(신선+품목 확정 시에만 · 파트너 화면 전용 참고 — §0 락). */}
                   {dStep === "price" && dBandLine && (
                     <p className="text-[11px] font-semibold text-[#8A8A8A]">{dBandLine}</p>
@@ -7771,65 +7981,30 @@ export function CardStudioPage({
                           submitDirectorText();
                         }
                       }}
-                      inputMode={dStep === "magic" || dStep === "name" || dStep === "origin" ? "text" : "numeric"}
+                      // M1-k — magic 분기 제거(4칸 시트로 이사 — 이 줄에 magic 은 오지 않는다).
+                      inputMode={dStep === "name" || dStep === "origin" ? "text" : "numeric"}
                       placeholder={
-                        dStep === "magic"
-                          ? "찰옥수수 25000원 50박스, 나눔 10%"
-                          : dStep === "name"
-                            ? "상품 이름"
-                            : dStep === "origin"
-                              ? "원산지"
-                              : dStep === "price"
-                                ? "판매 가격 (원)"
-                                : dStep === "droppy"
-                                  ? "공유 보상 (%)"
-                                  : "준비 수량 (개)"
+                        dStep === "name"
+                          ? "상품 이름"
+                          : dStep === "origin"
+                            ? "원산지"
+                            : dStep === "price"
+                              ? "판매 가격 (원)"
+                              : dStep === "droppy"
+                                ? "공유 보상 (%)"
+                                : "준비 수량 (개)"
                       }
                       className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
                       style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
                     />
-                    {/* M2 — 매직 입력줄 마이크: 49 컴포저(:8271-8307) 3분기 그대로.
-                        인앱 = [음성으로 만들기] 핸드오프(마이크 시도 0 — 영구 락) / 정상·빈칸 = 원형 마이크
-                        (청취 중 #DC2626 + ping) / 글자 있음 = 아래 기존 [입력] 버튼 유지.
-                        배선은 기존 handleOrbTap·startVoiceHandoff·voiceSupported·inAppNoMic 재사용(신규 훅 0).
-                        매직 스텝 한정 — name·price 등 다른 스텝은 기존 동작 그대로. */}
-                    {dStep === "magic" && dText.trim() === "" && inAppNoMic && (
-                      <button
-                        type="button"
-                        onClick={handleOrbTap}
-                        disabled={thinking}
-                        aria-label="음성으로 만들기 — 크롬에서 이어져요"
-                        className="flex h-9 shrink-0 items-center justify-center gap-1 rounded-full px-3 text-[12px] font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
-                        style={{ backgroundColor: LINGO }}
-                      >
-                        <Mic className="h-[14px] w-[14px]" strokeWidth={2.5} />
-                        음성으로 만들기
-                      </button>
-                    )}
-                    {dStep === "magic" && dText.trim() === "" && !inAppNoMic && voiceSupported && (
-                      <button
-                        type="button"
-                        onClick={handleOrbTap}
-                        disabled={thinking}
-                        aria-label={listening ? "음성 입력 종료" : "음성으로 말하기"}
-                        className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-90 disabled:opacity-50"
-                        style={{ backgroundColor: listening ? "#DC2626" : LINGO }}
-                      >
-                        {listening && (
-                          <span className="absolute inset-0 animate-ping rounded-full" style={{ backgroundColor: "rgba(220,38,38,0.4)" }} />
-                        )}
-                        <Mic className="relative h-[18px] w-[18px]" strokeWidth={2.25} />
-                      </button>
-                    )}
+                    {/* M1-k — M2 의 매직 전용 마이크 분기는 4칸 시트 마이크 줄로 이사(여기선 제거 —
+                        magic 이 이 공용 줄에 더는 오지 않아 도달 불가 코드였다). 다른 스텝 무변경. */}
                     {/* NUMBER_CRITICAL — 빈칸 비활성(gbTiers [이대로] 선례 disabled={anyInvalid} 동형 — disabled+opacity-40).
                         구 동작: 빈칸 탭 = submitDirectorText 의 `if (!v) return` 로 무언 실패(버튼 고장처럼 보임).
                         droppy 프리필 폐지로 빈칸이 첫 화면이 되면서 노출됐다. 판정은 trim() 유무뿐 —
                         "0" 은 truthy 라 활성 유지(보상 0% = 대표님의 정당한 선택 · 막지 않는다).
                         5개 스텝(name·origin·price·qty·droppy) 공용 버튼이나 전 스텝이 빈값을 거부하므로
                         (submitDirectorText :1497-1499 동일 가드) 좁힐 필요 없음 — 동작 동일, 표시만 정직해짐. */}
-                    {/* M2 — 매직 빈칸에서는 위 마이크가 이 자리를 대신한다(49 컴포저 자리 공유 문법).
-                        다른 스텝은 조건이 항상 참이라 기존과 동일하게 항상 노출. */}
-                    {!(dStep === "magic" && dText.trim() === "" && (inAppNoMic || voiceSupported)) && (
                     <button
                       type="button"
                       onClick={submitDirectorText}
@@ -7838,7 +8013,6 @@ export function CardStudioPage({
                     >
                       {dStep === "droppy" ? "확정" : "입력"}
                     </button>
-                    )}
                   </div>
                 </div>
               )}
@@ -7921,13 +8095,13 @@ export function CardStudioPage({
               )}
               {/* T5-W1a — 품목 분류: 신선 = 상품명 기반 후보 1탭 확정 + [직접 찾기] 폴백 / 가공·공산품 = 자유 입력. */}
               {/* M1-f — 시세 참고 옵트인도 이 블록을 그대로 쓴다(조건만 확장 · 신규 목록 UI 0). */}
-              {(dStep === "category" || (dStep === "magicConfirm" && dCatOptIn)) &&
+              {(dStep === "category" || (dStep === "magic" && dCatOptIn)) &&
                 (() => {
                   const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
                   const isFreshType = cfgProduct.type === "fresh";
                   // 옵트인 시점엔 아직 [맞아요] 전이라 cfgProductName 이 비어 있다 → 파서가 읽은 이름으로 매칭.
                   const matchName =
-                    dStep === "magicConfirm" ? (magicDraftRef.current?.name ?? "") : cfgProductName;
+                    dStep === "magic" ? dMagName : cfgProductName;
                   const nameCands =
                     isFreshType && !dCatSearch
                       ? dKamisList.filter((it) => norm(matchName).includes(norm(it.item_name))).slice(0, 6)
