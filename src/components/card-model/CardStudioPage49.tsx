@@ -1072,6 +1072,11 @@ export function CardStudioPage({
   const dCatalogHandledRef = useRef(false);
   // T5-W1a(v4) — 스텝 내 2상 로컬: 분류 직접 찾기 / 무게 단위 g 입력 / 배송비 금액 입력.
   const [dCatSearch, setDCatSearch] = useState(false);
+  // M1-f — 시세 참고 옵트인(magicConfirm 한정). 탭하면 기존 category 품목 선택 UI를 그대로 펼친다.
+  const [dCatOptIn, setDCatOptIn] = useState(false);
+  // M1-f — 밴드 재조회 신호. 옵트인 품목 1탭은 같은 스텝(magicConfirm)에 머무르므로 dStep 이 안 바뀐다.
+  //   cfgProduct 를 dep 로 쓰면 선언 순서(TDZ)에 걸려, 명시 키를 올려 재발화시킨다.
+  const [dBandKey, setDBandKey] = useState(0);
   const [dUnitGrams, setDUnitGrams] = useState(false);
   const [dFeePaid, setDFeePaid] = useState(false);
   // T5-W2 — 링크 스텝 로컬: oembed 조회 중 / 실패 안내(기존 문구 재사용 — 링고 발화 아님·캡션 표기).
@@ -1125,6 +1130,7 @@ export function CardStudioPage({
     setDStart("");
     setDEnd("");
     setDCatSearch(false);
+    setDCatOptIn(false); // M1-f — 새 지휘 = 옵트인 초기화.
     setDUnitGrams(false);
     setDFeePaid(false);
     setDBandLine(null);
@@ -1215,7 +1221,9 @@ export function CardStudioPage({
   }, [directorOn, catStatus, catDraft]);
   // T5-W1a — KAMIS 품목 1회 로드(폼 :312-315 동형 쿼리 — 분류 스텝 진입·신선 한정 · graceful).
   useEffect(() => {
-    if (!directorOn || dStep !== "category" || cfgProduct.type !== "fresh" || dKamisList.length > 0) return;
+    // M1-f — 시세 참고 옵트인도 같은 목록을 쓴다(로드 게이트만 확장 · 쿼리·상태 무변경).
+    const onCatStep = dStep === "category" || (dStep === "magicConfirm" && dCatOptIn);
+    if (!directorOn || !onCatStep || cfgProduct.type !== "fresh" || dKamisList.length > 0) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -1232,11 +1240,16 @@ export function CardStudioPage({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directorOn, dStep]);
+  }, [directorOn, dStep, dCatOptIn]);
   // T5-W1a — 가격 스텝 KAMIS 참고 1줄(생산자=신선 + 품목 확정 시에만 · 폼 :398-410 동형 invoke ·
   //   구성 파라미터 미전달 = 기본 kg축). 실패·no_data = 미표시(참고 정보 — 무언 실패 허용 45 관례).
+  // M1-f — 매직 확인 화면에도 같은 밴드를 붙인다. 트리거·소스·문구 전부 이 effect 단일 소스 재사용
+  //   (조회 조건 3종 = 신선 + kamisItemCode + category_code 그대로 · 복제 0). 가격이 읽힌 경우만.
   useEffect(() => {
-    if (!directorOn || dStep !== "price") return;
+    const onBandStep =
+      dStep === "price" ||
+      (dStep === "magicConfirm" && magicDraftRef.current?.priceKrw != null);
+    if (!directorOn || !onBandStep) return;
     const code = cfgProduct.kamisItemCode;
     const catCode = code ? (dKamisList.find((it) => it.item_code === code)?.category_code ?? null) : null;
     if (cfgProduct.type !== "fresh" || !code || !catCode) {
@@ -1264,8 +1277,10 @@ export function CardStudioPage({
     return () => {
       cancelled = true;
     };
+    // M1-f — dBandKey: 옵트인 품목 1탭 후 같은 스텝(magicConfirm)에 머문 채 밴드가 재조회돼야 한다.
+    //   price 스텝은 진입 전 이미 확정된 값이라 키가 안 올라 동작 무변경.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directorOn, dStep]);
+  }, [directorOn, dStep, dBandKey]);
   // ── T5-W1b(D2) — 떠다니는 링고(연출 층 전용 · 지휘 로직 무수정 — 상태 구독만) ──
   //   위치 = 스텝별 슬롯 실측(읽기 전용 DOM 측정 — 카드 렌더 무접촉): photo/name 은 미리보기
   //   (hero 앵커 :4550 + 내부 img) 랜드마크, 그 외(원산지 등 비표시 필드)는 독 상단 정위치 폴백.
@@ -1556,6 +1571,17 @@ export function CardStudioPage({
     const next = magicQueueRef.current.shift();
     dGo(next ?? "origin");
   }
+  // M1-f — 못 읽은 조각 → 기존 스텝 대기열. 확인 경로·판독 0건 경로가 같은 판정을 쓰도록 단일화.
+  function magicQueueFrom(d: ReturnType<typeof parseOneLiner>): DirectorStep[] {
+    const droppyOk =
+      d.droppyPct != null && Number.isInteger(d.droppyPct) && d.droppyPct >= 0 && d.droppyPct <= 20;
+    const q: DirectorStep[] = [];
+    if (!d.name) q.push("name");
+    if (d.priceKrw == null) q.push("price");
+    if (d.qty == null) q.push("qty");
+    if (!droppyOk) q.push("droppy");
+    return q;
+  }
   // M1 — [맞아요] 일괄 반영. READ setter 표 그대로 · ⚠️ confirmHelper·touch 미호출(배지 폭주 차단).
   function applyMagicDraft() {
     const d = magicDraftRef.current;
@@ -1573,12 +1599,7 @@ export function CardStudioPage({
     }
     dEcho("맞아요 — 다음");
     // 못 읽은 조각만 기존 스텝으로 순차 이동(각 스텝의 기존 setter·멘트 그대로).
-    const q: DirectorStep[] = [];
-    if (!d.name) q.push("name");
-    if (d.priceKrw == null) q.push("price");
-    if (d.qty == null) q.push("qty");
-    if (!droppyOk) q.push("droppy");
-    magicQueueRef.current = q;
+    magicQueueRef.current = magicQueueFrom(d);
     magicAdvance();
   }
 
@@ -1587,9 +1608,18 @@ export function CardStudioPage({
     if (!v) return;
     // M1 — 마법 현관: 결정적 파서만(AI 0). 결과는 보관만 하고 확인 스텝으로(자물쇠).
     if (dStep === "magic") {
-      magicDraftRef.current = parseOneLiner(v);
+      const r = parseOneLiner(v);
+      magicDraftRef.current = r;
       dEcho(v);
       setDText("");
+      // M1-f — 판독 0건(4조각 전부 실패) = 확인 화면이 빈 껍데기 → 건너뛰고 기존 name 스텝 직행.
+      //   되물음은 name 멘트 정본이 담당(신규 문구 0). 확인 화면은 1개 이상 읽혔을 때만.
+      const q = magicQueueFrom(r);
+      if (q.length === 4) {
+        magicQueueRef.current = q;
+        magicAdvance();
+        return;
+      }
       dGo("magicConfirm");
       return;
     }
@@ -1657,6 +1687,12 @@ export function CardStudioPage({
     dEcho(it.item_name);
     setDText("");
     setDCatSearch(false);
+    // M1-f — 시세 참고 옵트인: 확인 화면에 머문다(이동 0). 밴드 effect 는 dBandKey 로 재발화.
+    if (dStep === "magicConfirm") {
+      setDCatOptIn(false);
+      setDBandKey((k) => k + 1);
+      return;
+    }
     dGo("origin");
   }
   // T5-W1a — 품목 분류 자유 입력(가공·공산품 상시 / 신선 폴백 — 코드 미확정 = 시세 연동 없음, 폼 허용 동형).
@@ -1667,6 +1703,11 @@ export function CardStudioPage({
     dEcho(v);
     setDText("");
     setDCatSearch(false);
+    // M1-f — 옵트인 경로에서는 확인 화면 유지(직접 입력 = 코드 없음 → 밴드는 현행처럼 미표시).
+    if (dStep === "magicConfirm") {
+      setDCatOptIn(false);
+      return;
+    }
     dGo("origin");
   }
   // T5-W1a — 판매 단위(UNIT_OPTIONS 정본 3형). 무게 = 1개당 g 후속 입력(폼 총중량 kg 필드로 정확 환산 저장).
@@ -7621,6 +7662,22 @@ export function CardStudioPage({
                       );
                     })()}
                   </div>
+                  {/* M1-f — KAMIS 참고 1줄: price 스텝(:7637) 렌더 원문 복제(스타일·문구 동일).
+                      생산자 화면 전용 참고 — 손님 카드 무접촉(§0 락). 데이터 없으면 미표시. */}
+                  {dBandLine && (
+                    <p className="text-[11px] font-semibold text-[#8A8A8A]">{dBandLine}</p>
+                  )}
+                  {/* M1-f — 시세 참고 옵트인(보조 칩). 가격이 읽힌 경우만 · 아래 category 품목 UI를 펼친다.
+                      매직은 분류 스텝을 안 태워 kamisItemCode 가 비어 있으므로, 여기서 1탭으로 확정한다. */}
+                  {magicDraftRef.current?.priceKrw != null && !dCatOptIn && !dBandLine && (
+                    <button
+                      type="button"
+                      onClick={() => setDCatOptIn(true)}
+                      className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#525252] active:bg-[#F5F5F5]"
+                    >
+                      시세 참고하기
+                    </button>
+                  )}
                   <div className="flex gap-2">
                     <button type="button" onClick={applyMagicDraft} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white active:scale-[0.98]">
                       맞아요 — 다음
@@ -7759,13 +7816,17 @@ export function CardStudioPage({
                 </div>
               )}
               {/* T5-W1a — 품목 분류: 신선 = 상품명 기반 후보 1탭 확정 + [직접 찾기] 폴백 / 가공·공산품 = 자유 입력. */}
-              {dStep === "category" &&
+              {/* M1-f — 시세 참고 옵트인도 이 블록을 그대로 쓴다(조건만 확장 · 신규 목록 UI 0). */}
+              {(dStep === "category" || (dStep === "magicConfirm" && dCatOptIn)) &&
                 (() => {
                   const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
                   const isFreshType = cfgProduct.type === "fresh";
+                  // 옵트인 시점엔 아직 [맞아요] 전이라 cfgProductName 이 비어 있다 → 파서가 읽은 이름으로 매칭.
+                  const matchName =
+                    dStep === "magicConfirm" ? (magicDraftRef.current?.name ?? "") : cfgProductName;
                   const nameCands =
                     isFreshType && !dCatSearch
-                      ? dKamisList.filter((it) => norm(cfgProductName).includes(norm(it.item_name))).slice(0, 6)
+                      ? dKamisList.filter((it) => norm(matchName).includes(norm(it.item_name))).slice(0, 6)
                       : [];
                   const typedCands =
                     isFreshType && dCatSearch && dText.trim()
