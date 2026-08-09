@@ -1,19 +1,20 @@
 // ════════════════════════════════════════════════════════════════════════════
-// CardStudioPage50 — 50 트랙 골격 + 1막(재료 받기) 대화.
+// CardStudioPage50 — C-매직 전환(한 문장 + 상주 카드 + 휘리릭).
 //
 // DIRECTOR_MENTS_50 — Duke 확정(54창) · CC 재량 작문 금지 · 용어 락: 카드 단독 금지,
 //   공유카드/공유할 수 있는 카드
 //
-// P2 범위: 1막(재료 받기) + 2막(조립 — AI 1콜·타임아웃·연출). 3막(검수)·4막(발행)은 다음 업데이트.
-//   저장·발행 0건 · registerProduct 호출 0건 · Radix(Sheet/Dialog/Drawer) import 0(#418 SSR).
-//   AI 호출 = /api/lingo/chat 1콜뿐(Edge·라우트 무수정 — 기존 계약 소비만).
-//   49 에서 가져오는 것은 DIRECTOR_DROPPY_RATE_DEFAULT · isAiActionAllowed 2개뿐 —
-//   49 의 DIRECTOR_MENTS 는 쓰지 않는다(50 대화는 DIRECTOR_MENTS_50 단일 소스).
+// P2.5 범위: 1막(경로별 차등 재료 받기) + 휘리릭(AI 1콜 · 타임아웃 15s) + 확인 1탭.
+//   저장·발행 0건 · registerProduct 0 · Radix 0(#418 SSR) · Edge·라우트·49·거울 파일 무수정.
+//   디자인 = LINKDROP-DESIGN-LOCK-v2 토큰만(패턴 5종 그대로 복제 · 토큰 밖 발명 0).
+//   지니 = brand/lingo-mascot 정본 위 LingoGenie 래퍼 재사용(신규 아이콘 제작 0 · §0 실측분).
 // ════════════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Globe, Calendar, Store } from "lucide-react";
 import {
   parseKrwInput,
+  parseOneLiner,
   buildGbProposal,
   gbRowsInvalid,
   DROPY_PCT_MAX,
@@ -23,12 +24,21 @@ import {
   DIRECTOR_DROPPY_RATE_DEFAULT,
   isAiActionAllowed,
 } from "@/components/card-model/CardStudioPage49";
-// P2 §51 — 요청 context 는 기존 계약 타입에 맞춘다(타입만 import · 훅 미사용).
 import type { LingoContext } from "@/components/card-model/useLingoChat";
+// §0 실측 — 링고 지니 정본(brand/lingo-mascot v0(51) 심볼 + L6b 연출 래퍼). 신규 아이콘 제작 0.
+import { LingoGenie } from "@/components/lingo/LingoGenie";
+// §C 상주 거울 카드 — 어댑터·렌더러 모두 거울 파일(읽기·import만 · 무수정).
+import { CardModelBody } from "@/components/card-model/CardModelBody";
+import {
+  studio49ToCardModel,
+  type Studio49Input,
+  type Studio49VideoSlot,
+} from "@/components/card-studio/studio49-to-card";
+import { CARD_CATEGORY_LABELS } from "@/components/card-model/card-model-adapters";
 
 // ── 멘트 정본 ───────────────────────────────────────────────────────────────
 // Duke 확정 문구 — 한 글자도 재량 작문 금지.
-//   droppyRange 만 P1 지시서 §1막 UI 규칙에서 신규 허용된 1건(범위 위반 인라인 문구).
+//   기존 19키 + droppyRange·name 유지(매직에서 안 쓰는 스텝 멘트도 "하나씩" 후퇴로가 쓴다 — 삭제 금지).
 export const DIRECTOR_MENTS_50 = {
   start: "사장님, 오셨네요. 오늘은 어떤 공유카드를 만들어 드릴까요? — 카톡으로 손님께 보내는, 공유할 수 있는 카드예요.",
   sellHow: "어떻게 파실 건가요?",
@@ -46,16 +56,25 @@ export const DIRECTOR_MENTS_50 = {
   numMixed: "숫자로만 적어 주세요 — \"3만원\"이 아니라 30000처럼요.",
   droppyRange: "0부터 20 사이로 적어 주세요 — 예: 10",
   assembleReady: "재료 다 받았어요. 이제 제가 만들게요 — 만드는 동안은 아무것도 안 물어봐요.",
-  assembleOrder: "지금까지 받은 재료와 영상 요약으로 공유카드의 제목과 한마디, 상품 한마디를 지어 주세요. 영상과 입력값에 없는 사실은 쓰지 마세요. 가격·수량은 건드리지 마세요.",
   assembleTimeout: "지금 좀 느리네요. 잠시 뒤 다시 하거나, 직접 만드실 수도 있어요.",
   reviewReady: "다 됐어요. 고칠 곳이 있으면 말로 하시거나 눌러서 바꿔 주세요.",
   reviewNumberGuard: "가격·수량은 사장님만 바꿀 수 있어요 — 칸에 직접 적어 주세요.",
   publishReady: "마음에 드시면 카톡으로 내보내 주세요. 발행은 사장님만 누를 수 있어요.",
   done: "나갔어요. 손님이 누르는 순간부터 이 공유카드가 일해요.",
+  // ── P2.5 §D 추가분 ──
+  oneLiner: "사진 받았어요. 이제 뭘 얼마에 몇 개 파실지 한 줄로 말해 주세요 — 예: 찰옥수수 25000원 50박스, 나눔 10%",
+  assembling: "받았어요 — 지금 만들게요. 촤르륵.",
+  askName: "이름을 못 읽었어요 — 뭘 파시는 건가요?",
+  askPrice: "가격을 못 읽었어요 — 얼마인가요? 예: 25000",
+  askQty: "수량을 못 읽었어요 — 몇 개까지 파실 건가요?",
+  askDroppy: "나눔 몫을 못 읽었어요 — 몇 %로 할까요? 0에서 20 사이예요.",
+  confirmNumbers: "숫자만 확인해 주세요 — 사장님 문장에서 그대로 읽었어요.",
+  gbFailInline: "안 모이면 어떻게 할까요?",
+  assembleOrder: "받은 재료로 공유카드를 완성해 주세요. 제목과 한마디, 상품 한마디를 하나로 정해 도구로 바로 반영해 주세요. 후보를 나열하며 묻지 마세요. 영상과 입력값에 없는 사실은 쓰지 마세요. 가격·수량은 건드리지 마세요.",
 } as const;
 
-// ── 상태 골격(명세 §3) ─────────────────────────────────────────────────────
-type Act = 1 | 2 | 3 | 4; // P1은 1만 사용
+// ── 상태 골격 ───────────────────────────────────────────────────────────────
+type Act = 1 | 2 | 3 | 4;
 type Purpose = "sell" | "host" | "tell" | null;
 type SellHow = "solo" | "gb" | null;
 type HostHow = "reserve" | "coupon" | null;
@@ -64,43 +83,50 @@ function modeOf(p: Purpose): "commerce" | "reserve" | "general" | null {
   return p === "sell" ? "commerce" : p === "host" ? "reserve" : p === "tell" ? "general" : null;
 }
 
-// 1막 시퀀스(50 자체 — 49 DirectorStep 재사용 아님):
-//   purpose → (sellHow | hostHow) → video → name → photo → price → qty → droppy
-//     → [gb 분기: gbPropose → gbFail] → summary
-//   tell 경로: purpose → video → summary
-//   host 경로: purpose → hostHow → video → summary  (예약 상세·쿠폰 상세는 P3+)
-//   ※ name 은 sell 전용(host·tell 경로 무영향) — 2막 조립의 product_name 재료.
+// §B — 경로별 시퀀스:
+//   팔기(매직): purpose → sellHow → photo → oneLiner → [missing 조각만 ask*] → 휘리릭 → confirm
+//   손님받기:   purpose → hostHow → video → 휘리릭 → confirm
+//   알리기:     purpose → video → 휘리릭 → confirm
+//   후퇴로("하나씩"): 기존 단계 스텝 재사용(name·price·qty·droppy·gbPropose·gbFail) — 삭제 금지.
 type Step50 =
   | "purpose"
   | "sellHow"
   | "hostHow"
   | "video"
-  | "name"
   | "photo"
+  | "oneLiner"
+  | "askName"
+  | "askPrice"
+  | "askQty"
+  | "askDroppy"
+  | "name"
   | "price"
   | "qty"
   | "droppy"
   | "gbPropose"
   | "gbFail"
-  | "summary";
+  | "confirm";
 
-// 스텝 → 멘트(진입 시 링고 말풍선). summary 진입 = assembleReady.
 const STEP_MENT: Record<Step50, string> = {
   purpose: DIRECTOR_MENTS_50.start,
   sellHow: DIRECTOR_MENTS_50.sellHow,
   hostHow: DIRECTOR_MENTS_50.hostHow,
   video: DIRECTOR_MENTS_50.video,
-  name: DIRECTOR_MENTS_50.name,
   photo: DIRECTOR_MENTS_50.photo,
+  oneLiner: DIRECTOR_MENTS_50.oneLiner,
+  askName: DIRECTOR_MENTS_50.askName,
+  askPrice: DIRECTOR_MENTS_50.askPrice,
+  askQty: DIRECTOR_MENTS_50.askQty,
+  askDroppy: DIRECTOR_MENTS_50.askDroppy,
+  name: DIRECTOR_MENTS_50.name,
   price: DIRECTOR_MENTS_50.price,
   qty: DIRECTOR_MENTS_50.qty,
   droppy: DIRECTOR_MENTS_50.droppy,
   gbPropose: DIRECTOR_MENTS_50.gbPropose,
   gbFail: DIRECTOR_MENTS_50.gbFail,
-  summary: DIRECTOR_MENTS_50.assembleReady,
+  confirm: DIRECTOR_MENTS_50.confirmNumbers,
 };
 
-type Bubble = { role: "lingo" | "owner"; text: string };
 type GbRow = { qty: string; price: string };
 
 // 1차 칩 4개 — 지시서 원문 그대로(라벨 락).
@@ -126,7 +152,7 @@ const GBFAIL_CHIPS: { key: "base" | "cancel"; label: string }[] = [
 ];
 
 // ── SSE 파서·경량 재가드 ────────────────────────────────────────────────────
-// P2 §58 — 49 :818-837 구조 승계(49 쪽이 비export 모듈 함수라 복제 — 49 무접촉 락 준수).
+// 49 :818-837 구조 승계(49 쪽이 비export 모듈 함수라 복제 — 49 무접촉 락 준수).
 const LINGO_ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField", "goToBlock"]);
 function safeJson(raw: string): Record<string, unknown> | null {
   try {
@@ -148,13 +174,41 @@ function parseSseBlock(block: string): { event: string; data: string } | null {
   return { event, data: dataLines.join("\n") };
 }
 
-// 2막 타임아웃(§3·§5) — 조립 1콜 15s / 영상 선행 체인 8s.
-const ASSEMBLE_TIMEOUT_MS = 15_000;
+// ── 타임아웃 ────────────────────────────────────────────────────────────────
+const ASSEMBLE_TIMEOUT_MS = 15_000; // §F — 제목 빛줄 상한.
 const VIDEO_LEAD_TIMEOUT_MS = 8_000;
-// 연출 시차(§6) — 제목 → 한마디 → 포인트 예고, 각 300ms.
-const REVEAL_STEP_MS = 300;
-// 재시도 상한(§5) — 2회까지 [다시 시도], 3회째 실패면 [직접 할게요]만.
 const ASSEMBLE_MAX_RETRY = 2;
+
+// ── §F 휘리릭 모션 토큰 (한 곳 집약 — whoosh-motion-demo.html 값으로 교체 시 여기만 수정) ──
+//   출처 표기: [F]=P2.5 §F 본문 명시 · [G]=LingoGenie 기존 keyframes 재사용 · [L]=DESIGN-LOCK v2 §6
+const M = {
+  swallowMs: 1200, // [G] lg-breathe(2.4s ease-in-out)의 반주기 = scale 1.28 도달 시점
+  swallowScale: 1.28, // [F] "오브 scale 1.28" (= lg-breathe 50% 값과 동일)
+  brushMs: 1000, // [Duke 확정 비트표] 붓질 0.4~1.4s
+  stampStaggerMs: 250, // [F] "250ms stagger"
+  stampRingMs: 150, // [F] "블루 링 0.15s"
+  finishRingMs: 900, // [G] lg-ring(.9s ease-out) 재사용
+  easeOut: "ease-out", // [G]
+  easeInOut: "ease-in-out", // [G]
+} as const;
+// §F 도장 4연타 대상 — 이름·가격수량·몫·단계표.
+const STAMP_KEYS = ["name", "priceQty", "droppy", "tiers"] as const;
+type StampKey = (typeof STAMP_KEYS)[number];
+
+// 영상 ID 파싱 — 결정 규칙 3패턴(watch?v= | youtu.be/ | /shorts/). 실패 = null(추측 금지).
+function parseVideoId(url: string): string | null {
+  const m =
+    url.match(/[?&]v=([A-Za-z0-9_-]{6,})/) ??
+    url.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/) ??
+    url.match(/\/shorts\/([A-Za-z0-9_-]{6,})/);
+  return m ? m[1] : null;
+}
+
+// §C — categoryIcon: 49 MODE_CONTENT 실측 복제 · 비export라 값 복제(:4640 Globe / :4655 Calendar / :4670 Store).
+const CATEGORY_ICON = { general: Globe, reserve: Calendar, commerce: Store } as const;
+// 정본 DEFAULT_PAGE_BG(card-model-adapters) 비export라 값 복제.
+const PAGE_BG = "#F8FAFC";
+const LINGO_BLUE = "#1D4ED8"; // DESIGN-LOCK v2 §1 — 링고 블루(유채 2역할 중 하나).
 
 export type CardStudioPage50Store = {
   id: string;
@@ -165,19 +219,19 @@ export type CardStudioPage50Store = {
 export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | null }) {
   const navigate = useNavigate();
 
-  const [act, setAct] = useState<Act>(1); // P2 = 1막·2막. 3막·4막은 다음 업데이트.
+  const [act, setAct] = useState<Act>(1);
   const [step, setStep] = useState<Step50>("purpose");
-  const [log, setLog] = useState<Bubble[]>(() => [
-    { role: "lingo", text: DIRECTOR_MENTS_50.start },
-  ]);
+  // §C — 대화 스크롤 제거: 하단 링고 존의 말풍선 1개만 유지.
+  const [bubble, setBubble] = useState<string>(DIRECTOR_MENTS_50.start);
 
   const [purpose, setPurpose] = useState<Purpose>(null);
   const [sellHow, setSellHow] = useState<SellHow>(null);
   const [hostHow, setHostHow] = useState<HostHow>(null);
+  const [stepwise, setStepwise] = useState(false); // 후퇴로("하나씩 물어봐 주세요") 진입 여부.
 
   // 받은 재료
   const [videoUrl, setVideoUrl] = useState("");
-  const [productName, setProductName] = useState(""); // sell 전용 — 2막 product_name 재료.
+  const [productName, setProductName] = useState("");
   const [photoName, setPhotoName] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [priceKrw, setPriceKrw] = useState<number | null>(null);
@@ -187,48 +241,43 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
   const [gbEditing, setGbEditing] = useState(false);
   const [gbFailMode, setGbFailMode] = useState<"base" | "cancel" | null>(null);
 
-  // 입력 버퍼 + 인라인 사유(무언 실패 금지 — 되물음은 말풍선, 범위 위반은 인라인).
   const [textInput, setTextInput] = useState("");
   const [inlineErr, setInlineErr] = useState<string | null>(null);
   const photoUrlRef = useRef<string | null>(null);
 
-  // ── 2막 상태 ──────────────────────────────────────────────────────────────
-  // §1 — 영상 선행 체인 결과(state 아님 — 리렌더 불필요 · 실패 시 null 유지).
+  // 2막(휘리릭)
   const videoAiRef = useRef<{ title: string; summary: string; keyPoints: string[] } | null>(null);
-  const videoLeadRef = useRef<string | null>(null); // 영상 교체 레이스 가드(49 :3594 관례).
-  const sessionRef = useRef<string | null>(null); // SSE meta 의 session_id(P3 이어가기용 보관).
-  const revealTimersRef = useRef<number[]>([]);
+  const videoLeadRef = useRef<string | null>(null);
+  const sessionRef = useRef<string | null>(null);
+  const timersRef = useRef<number[]>([]);
   const [assembling, setAssembling] = useState(false);
   const [assembleFailed, setAssembleFailed] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  // AI 조립 결과 — 배선 3필드만(§60). 숫자·쿠폰·이미지는 case 자체를 만들지 않는다.
   const [aiTitle, setAiTitle] = useState("");
   const [aiSubtitle, setAiSubtitle] = useState("");
   const [aiHeadline, setAiHeadline] = useState("");
-  // §7 — 셀링포인트 후보는 보관만(칩 UI 는 P3 검수 범위 — 이번엔 렌더 안 함).
   const [keyPoints, setKeyPoints] = useState<string[]>([]);
-  // 연출 단계: 0=빈 프레임 / 1=제목 / 2=한마디 / 3=포인트 예고(종료).
-  const [revealStep, setRevealStep] = useState(0);
+  // 실슬롯 — 4필드(videoId·thumbnailUrl·title·isShorts)가 전부 확보될 때만 구성(하나라도 없으면 null).
+  const [videoSlot, setVideoSlot] = useState<Studio49VideoSlot | null>(null);
+  // §F 연출 위상
+  const [phase, setPhase] = useState<"idle" | "swallow" | "brush" | "stamp" | "beam" | "finish">("idle");
+  const [stamped, setStamped] = useState<StampKey[]>([]);
+  // §E 확인 1탭
+  const [confirmed, setConfirmed] = useState(false);
+  const [editField, setEditField] = useState<null | "price" | "qty" | "droppy">(null);
 
-  const clearRevealTimers = useCallback(() => {
-    for (const t of revealTimersRef.current) clearTimeout(t);
-    revealTimersRef.current = [];
+  const clearTimers = useCallback(() => {
+    for (const t of timersRef.current) clearTimeout(t);
+    timersRef.current = [];
   }, []);
-  // 언마운트 정리 — 타이머 누수·사진 objectURL 회수.
   useEffect(() => {
     return () => {
-      for (const t of revealTimersRef.current) clearTimeout(t);
+      for (const t of timersRef.current) clearTimeout(t);
       if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
     };
   }, []);
 
-  const say = useCallback((text: string) => {
-    setLog((l) => [...l, { role: "lingo", text }]);
-  }, []);
-  const echo = useCallback((text: string) => {
-    setLog((l) => [...l, { role: "owner", text }]);
-  }, []);
-  // 스텝 이동 = 그 스텝 멘트 1개 발화(대화가 곧 진행 지도).
+  const say = useCallback((text: string) => setBubble(text), []);
   const go = useCallback(
     (next: Step50) => {
       setStep(next);
@@ -240,11 +289,9 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
   );
 
   // ── 1차: 목적 ─────────────────────────────────────────────────────────────
-  function pickPurpose(key: "sell" | "host" | "tell" | "form", label: string) {
-    echo(label);
+  function pickPurpose(key: "sell" | "host" | "tell" | "form") {
     if (key === "form") {
-      // 죽은 버튼 금지 — 실제 이동(P1은 폼 임베드 안 함).
-      void navigate({ to: "/studio-build" });
+      void navigate({ to: "/studio-build" }); // 죽은 버튼 금지 — 실제 이동.
       return;
     }
     setPurpose(key);
@@ -252,63 +299,51 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
     else if (key === "host") go("hostHow");
     else go("video");
   }
-
-  function pickSellHow(key: "solo" | "gb", label: string) {
+  function pickSellHow(key: "solo" | "gb") {
     setSellHow(key);
-    echo(label);
-    go("video");
+    go("photo"); // §B 매직: 사진 → 한 문장.
   }
-
-  function pickHostHow(key: "reserve" | "coupon", label: string) {
+  function pickHostHow(key: "reserve" | "coupon") {
     setHostHow(key);
-    echo(label);
-    if (key === "reserve") say(DIRECTOR_MENTS_50.reserveCouponNote);
     go("video");
+    if (key === "reserve") say(DIRECTOR_MENTS_50.reserveCouponNote);
   }
 
-  // ── 영상 링크 ─────────────────────────────────────────────────────────────
+  // ── 영상 ─────────────────────────────────────────────────────────────────
   function submitVideo() {
     const v = textInput.trim();
-    if (!v) return; // 빈칸은 버튼 disabled 로 이미 차단(표시 정직).
+    if (!v) return;
     setVideoUrl(v);
-    echo(v);
-    void loadVideoLead(v); // §1 — 백그라운드 선행 체인(대화는 기다리지 않는다).
-    // tell·host 는 요약으로 직행(예약 상세·쿠폰 상세는 P3+). sell 만 재료 수집 계속.
-    go(purpose === "sell" ? "name" : "summary");
+    void loadVideoLead(v);
+    // 팔기(사진 보조 영상)는 한 문장으로, 손님받기·알리기는 바로 휘리릭.
+    if (purpose === "sell") go("oneLiner");
+    else void runWhoosh();
   }
-
-  // 영상 건너뛰기(sell 전용) — 사진이 본체가 되는 경로. host·tell 은 영상 필수라 칩 자체가 없다.
-  //   videoUrl 미설정 + 선행 체인 미실행 → 조립 컨텍스트에서 video_summary·key_points 키가
-  //   조건부 스프레드로 자동 생략된다(없는 재료를 지어내지 않는다).
-  function skipVideo(label: string) {
-    echo(label);
-    go("name");
-  }
-
-  // ── 상품명(sell 전용) ─────────────────────────────────────────────────────
-  function submitName() {
-    const v = textInput.trim();
-    if (!v) return; // 빈칸은 버튼 disabled 로 이미 차단(표시 정직).
-    setProductName(v);
-    echo(v);
-    go("photo");
-  }
-
-  // §1 — oembed → generate-summary 선행 체인(49 :3595-3619 실배선 복제).
-  //   AbortSignal.timeout(8s) + 실패 시 무음(대화 계속 · ref 는 null 유지 = 조립이 폴백 처리).
+  // oembed → generate-summary 선행 체인(49 :3595-3619 실배선 복제 · 8s 타임아웃 · 실패 무음).
   async function loadVideoLead(url: string) {
     videoLeadRef.current = url;
     videoAiRef.current = null;
+    setVideoSlot(null);
     try {
       const oembedRes = await fetch("/api/oembed?url=" + encodeURIComponent(url), {
         signal: AbortSignal.timeout(VIDEO_LEAD_TIMEOUT_MS),
       });
-      const oembedJson = (await oembedRes.json()) as { source_id?: string; title?: string | null };
+      const oembedJson = (await oembedRes.json()) as {
+        source_id?: string;
+        title?: string | null;
+        thumbnail_url?: string | null;
+      };
       const sourceId = oembedJson?.source_id;
       if (!oembedRes.ok || !sourceId || videoLeadRef.current !== url) return;
       const title = typeof oembedJson.title === "string" ? oembedJson.title.trim() : "";
-      // 제목만이라도 확보(요약 실패 시 video_summary 폴백 재료 — §44-45).
       videoAiRef.current = { title, summary: "", keyPoints: [] };
+      // 실슬롯 구성 — 결정 규칙만 사용(추측 0). 한 조각이라도 없으면 null 유지 = 기존 폴백.
+      const videoId = parseVideoId(url);
+      const thumbnailUrl =
+        typeof oembedJson.thumbnail_url === "string" ? oembedJson.thumbnail_url.trim() : "";
+      if (videoId && thumbnailUrl && title) {
+        setVideoSlot({ videoId, thumbnailUrl, title, isShorts: url.includes("/shorts/") });
+      }
       const sumRes = await fetch("/api/generate-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -327,248 +362,258 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
           ? sumJson.ai_summary.trim()
           : "";
       videoAiRef.current = { title, summary, keyPoints: points };
-      setKeyPoints(points); // §7 — 보관만(P3 검수에서 칩으로 소비).
+      setKeyPoints(points);
     } catch {
-      /* 선행 체인 실패는 무음 — 조립은 videoUrl·입력값만으로 진행(빈 껍데기·가짜 안내 금지). */
+      /* 선행 체인 실패는 무음 — 조립은 입력값만으로 진행(가짜 안내 금지). */
     }
   }
 
-  // ── 사진(로컬 미리보기만 — 업로드·저장 0건) ────────────────────────────────
+  // ── 사진 ─────────────────────────────────────────────────────────────────
   function submitPhoto(file: File) {
     if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
     const url = URL.createObjectURL(file);
     photoUrlRef.current = url;
     setPhotoPreview(url);
     setPhotoName(file.name);
-    echo(file.name);
-    go("price");
+    go(stepwise ? "name" : "oneLiner");
   }
 
-  // ── 숫자 스텝(price·qty·droppy) — parseKrwInput 경유 ───────────────────────
-  function submitNumber() {
-    const parsed = parseKrwInput(textInput);
+  // ── §A 한 문장 ────────────────────────────────────────────────────────────
+  // 결정적 파서만 사용(AI 0). 못 읽은 조각만 ask* 로 되묻는다 — 전부 읽히면 질문 0.
+  function submitOneLiner() {
+    const v = textInput.trim();
+    if (!v) return;
+    const r = parseOneLiner(v);
+    if (r.name) setProductName(r.name);
+    if (r.priceKrw != null) setPriceKrw(r.priceKrw);
+    if (r.qty != null) setQtyNum(r.qty);
+    // 몫은 범위 밖이면 채택하지 않는다(0~DROPY_PCT_MAX 검증은 호출부 책임 — §A 계약).
+    if (r.droppyPct != null && Number.isInteger(r.droppyPct) && r.droppyPct >= 0 && r.droppyPct <= DROPY_PCT_MAX) {
+      setDroppyPct(r.droppyPct);
+    }
+    setTextInput("");
+    askNextMissing({
+      name: r.name ?? null,
+      price: r.priceKrw,
+      qty: r.qty,
+      droppy:
+        r.droppyPct != null && r.droppyPct >= 0 && r.droppyPct <= DROPY_PCT_MAX ? r.droppyPct : null,
+    });
+  }
+  // 못 읽은 조각을 순서대로 하나씩만 되묻는다(한 화면 한 질문).
+  function askNextMissing(cur: {
+    name: string | null;
+    price: number | null;
+    qty: number | null;
+    droppy: number | null;
+  }) {
+    if (!cur.name) return go("askName");
+    if (cur.price == null) return go("askPrice");
+    if (cur.qty == null) return go("askQty");
+    if (cur.droppy == null) return go("askDroppy");
+    void runWhoosh();
+  }
+  function currentMaterials() {
+    return { name: productName.trim() || null, price: priceKrw, qty: qtyNum, droppy: droppyPct };
+  }
+
+  // ask* / 단계 스텝 공용 제출 — 숫자는 전부 parseKrwInput 경유(무언 실패 금지).
+  function submitAsk() {
+    const v = textInput.trim();
+    if (!v) return;
+    if (step === "askName" || step === "name") {
+      setProductName(v);
+      setTextInput("");
+      if (stepwise) return go("price");
+      return askNextMissing({ ...currentMaterials(), name: v });
+    }
+    const parsed = parseKrwInput(v);
     if (!parsed.ok) {
-      // 되물음 말풍선 — 무언 실패 금지.
       say(parsed.reason === "empty" ? DIRECTOR_MENTS_50.numEmpty : DIRECTOR_MENTS_50.numMixed);
-      setInlineErr(null);
       setTextInput("");
       return;
     }
     const n = parsed.value;
-    if (step === "price") {
+    if (step === "askPrice" || step === "price") {
       setPriceKrw(n);
-      echo(`${n.toLocaleString("ko-KR")}원`);
-      go("qty");
-      return;
+      setTextInput("");
+      if (stepwise) return go("qty");
+      return askNextMissing({ ...currentMaterials(), price: n });
     }
-    if (step === "qty") {
+    if (step === "askQty" || step === "qty") {
       setQtyNum(n);
-      echo(`${n.toLocaleString("ko-KR")}개`);
-      go("droppy");
-      return;
+      setTextInput("");
+      if (stepwise) return go("droppy");
+      return askNextMissing({ ...currentMaterials(), qty: n });
     }
-    // droppy — 정수 0~DROPY_PCT_MAX 추가 검증(0 허용 = studio-contract buildDropyPayload 정본 일치).
-    //   위반 = 인라인 문구(말풍선 아님).
+    // droppy — 0~DROPY_PCT_MAX 정수(위반 = 인라인 문구).
     if (!Number.isInteger(n) || n < 0 || n > DROPY_PCT_MAX) {
       setInlineErr(DIRECTOR_MENTS_50.droppyRange);
       return;
     }
     setDroppyPct(n);
-    echo(`${n}%`);
-    if (sellHow === "gb") {
-      setGbRows(buildGbProposal(priceKrw ?? 0, qtyNum ?? 0));
-      setGbEditing(false);
-      go("gbPropose");
-      return;
+    setTextInput("");
+    if (stepwise) {
+      if (sellHow === "gb") {
+        setGbRows(buildGbProposal(priceKrw ?? 0, qtyNum ?? 0));
+        return go("gbPropose");
+      }
+      return void runWhoosh();
     }
-    go("summary");
+    return askNextMissing({ ...currentMaterials(), droppy: n });
   }
 
-  // ── gb 단계표 ─────────────────────────────────────────────────────────────
-  // 셀 단위 parseKrwInput(“3만” 절삭 차단) + 행 관계 검증(gbRowsInvalid) 이중.
+  // ── gb 단계표(후퇴로 전용 스텝 · 매직은 §E 확인 바에서 편입) ────────────────
   const gbCellsBad = useMemo(
     () => gbRows.some((r) => !parseKrwInput(r.qty).ok || !parseKrwInput(r.price).ok),
     [gbRows],
   );
   const gbBad = gbCellsBad || gbRowsInvalid(gbRows, qtyNum ?? 0);
 
-  function confirmGbRows() {
-    if (gbBad) return;
-    echo(gbRows.map((r) => `${r.qty}개 ${Number(r.price).toLocaleString("ko-KR")}원`).join(" · "));
-    go("gbFail");
-  }
+  // ── §C 상주 거울 카드 ─────────────────────────────────────────────────────
+  const mode50 = modeOf(purpose) ?? "general";
+  const cardModel = useMemo(() => {
+    const input: Studio49Input = {
+      mode: mode50,
+      applied: {
+        content: videoUrl.trim().length > 0,
+        productimage: !!photoPreview,
+        product: productName.trim().length > 0 || (priceKrw ?? 0) > 0 || (qtyNum ?? 0) > 0,
+      },
+      // P3에서 업로드 배선 — 지금은 로컬 objectURL(발행 payload 미편입).
+      ...(photoPreview ? { productImageUrl: photoPreview } : {}),
+      title: aiTitle,
+      subtitle: aiSubtitle,
+      clip: "",
+      brand: "",
+      party: 0,
+      couponLabel: null,
+      productName: productName.trim(),
+      productPrice: priceKrw != null ? String(priceKrw) : "",
+      productHeadline: aiHeadline,
+      productPoints: [],
+      ...(keyPoints.length > 0 ? { keyPoints } : {}),
+      productUnitLabel: "",
+      facilities: [],
+      saleStart: "",
+      saleEnd: "",
+      dates: [],
+      times: [],
+      slotsByDate: {},
+      // 실슬롯 — 결정 규칙(URL 3패턴 + oembed thumbnail_url·title)으로 4필드가 전부 확보될 때만.
+      //   하나라도 없으면 null = CardModelBody 히어로 폴백 유지(가짜 썸네일 합성 0).
+      selectedVideo: videoSlot,
+      shipping: null,
+      categoryLabel: CARD_CATEGORY_LABELS[mode50 === "commerce" ? "commerce" : mode50 === "reserve" ? "reserve" : "info"],
+      // 49 MODE_CONTENT 실측 복제 · 비export라 값 복제.
+      categoryIcon: CATEGORY_ICON[mode50],
+      storeName: store?.display_name ?? "",
+      pageBg: PAGE_BG,
+    };
+    return studio49ToCardModel(input);
+  }, [mode50, videoUrl, videoSlot, photoPreview, productName, priceKrw, qtyNum, aiTitle, aiSubtitle, aiHeadline, keyPoints, store]);
 
-  function pickGbFail(key: "base" | "cancel", label: string) {
-    setGbFailMode(key);
-    echo(label);
-    go("summary");
-  }
-
-  // ── 요약 재료(라벨 = 49 DIRECTOR_CHECK 기존 확정분 재사용) ─────────────────
-  const summaryRows = useMemo(() => {
-    const rows: { label: string; value: string }[] = [];
-    const pLabel = PURPOSE_CHIPS.find((c) => c.key === purpose)?.label;
-    if (pLabel) rows.push({ label: "목적", value: pLabel });
-    if (sellHow) {
-      rows.push({
-        label: "판매 방식",
-        value: SELLHOW_CHIPS.find((c) => c.key === sellHow)?.label ?? "",
-      });
-    }
-    if (hostHow) {
-      rows.push({
-        label: "손님 맞이",
-        value: HOSTHOW_CHIPS.find((c) => c.key === hostHow)?.label ?? "",
-      });
-    }
-    if (videoUrl) rows.push({ label: "영상 링크", value: videoUrl });
-    if (productName.trim()) rows.push({ label: "상품 이름", value: productName.trim() });
-    if (photoName) rows.push({ label: "상품 사진", value: photoName });
-    if (priceKrw != null) rows.push({ label: "판매 가격", value: `${priceKrw.toLocaleString("ko-KR")}원` });
-    if (qtyNum != null) rows.push({ label: "준비 수량", value: `${qtyNum.toLocaleString("ko-KR")}개` });
-    if (droppyPct != null) rows.push({ label: "공유 보상", value: `${droppyPct}%` });
-    if (sellHow === "gb" && gbRows.length > 0) {
-      rows.push({
-        label: "모임 단계",
-        value: gbRows.map((r) => `${r.qty}개 ${Number(r.price).toLocaleString("ko-KR")}원`).join(" · "),
-      });
-    }
-    if (gbFailMode) {
-      rows.push({
-        label: "미달 처리",
-        value: GBFAIL_CHIPS.find((c) => c.key === gbFailMode)?.label ?? "",
-      });
-    }
-    return rows;
-  }, [purpose, sellHow, hostHow, videoUrl, productName, photoName, priceKrw, qtyNum, droppyPct, gbRows, gbFailMode]);
-
-  // ── 2막: 조립 ─────────────────────────────────────────────────────────────
-  const mode50 = modeOf(purpose); // StudioMode 3값과 동형(49 무확장 락).
-
-  // 덱 블록별 장착 판정 — 50 의 실데이터만 본다(가짜 장착 금지).
-  //   content = 영상 있음 / productimage = 사진 있음 / product = 상품명·가격·수량 중 하나라도 있음.
-  //   그 외(seasonal·delivery·coupon·calendar·brand·dock·link·party·review·aivideo·image) = false.
-  function isBlockApplied(id: string): boolean {
-    if (id === "content") return videoUrl.trim().length > 0;
-    if (id === "productimage") return !!photoName;
-    if (id === "product") {
-      return productName.trim().length > 0 || (priceKrw ?? 0) > 0 || (qtyNum ?? 0) > 0;
-    }
-    return false;
-  }
-
-  // §3 — 요청 context. 타입은 기존 계약(LingoContext) 그대로 — 신규 키 0.
+  // ── 휘리릭(§F) + AI 1콜(§3 계약 승계) ──────────────────────────────────────
   function buildAssembleContext(): LingoContext {
-    const m = mode50 ?? "general";
     const lead = videoAiRef.current;
-    // 실 덱 스냅샷 — DECK_IDS(49 P0 export분) 기반으로 49 계약과 동일 구성.
-    //   label: 49 덱 라벨 원천(STUDIO_BLOCKS)이 비export 이고 49 는 무접촉 락이라 id 문자열 그대로
-    //   둔다(라벨 신규 작문 금지). locked: 50 엔 잠금 블록 개념이 없어 전부 false(49 :3943 동형).
-    const deckIds = DECK_IDS[m];
-    const deck = deckIds.map((id) => ({ id, label: id, applied: isBlockApplied(id), locked: false }));
-    const appliedBlocks = deckIds.filter(isBlockApplied);
-    // 1막 name 스텝(sell 전용) 수집값. host·tell 경로는 빈 값 → 조건부 스프레드로 키 생략
-    //   (없는 재료를 지어내지 않는다 — 그 경로의 제목은 video_summary 기반으로 짓는다).
     const nameForAi = productName.trim();
+    const deckIds = DECK_IDS[mode50];
+    const isApplied = (id: string) =>
+      id === "content"
+        ? videoUrl.trim().length > 0
+        : id === "productimage"
+          ? !!photoName
+          : id === "product"
+            ? nameForAi.length > 0 || (priceKrw ?? 0) > 0 || (qtyNum ?? 0) > 0
+            : false;
     const fields: Record<string, string> = {};
-    // 1막 수집값만. 가격·수량은 넣지 않는다 — assembleOrder 가 "건드리지 마세요"를 명시하고
-    //   클라 게이트(AI_BLOCKED_FIELDS)도 숫자 setField 를 차단한다(이중 정합).
     if (nameForAi) {
-      fields.title = nameForAi; // 제목 후보 = 상품명(모델이 고쳐 쓸 출발점).
+      fields.title = nameForAi;
       fields.productName = nameForAi;
     }
     return {
       studio_state: {
-        mode: m,
-        applied_blocks: appliedBlocks, // deck 스냅샷과 동일 판정(단일 소스 — 두 키 불일치 금지).
+        mode: mode50,
+        applied_blocks: deckIds.filter(isApplied),
         score: 0,
         card_title: nameForAi,
         ...(nameForAi ? { product_name: nameForAi } : {}),
         ...((priceKrw ?? 0) > 0 ? { product_price: priceKrw as number } : {}),
       },
-      studio: { mode: m, deck, fields },
-      ...(lead?.summary
-        ? { video_summary: lead.summary }
-        : lead?.title
-          ? { video_summary: lead.title }
-          : {}),
+      studio: {
+        mode: mode50,
+        deck: deckIds.map((id) => ({ id, label: id, applied: isApplied(id), locked: false })),
+        fields,
+      },
+      ...(lead?.summary ? { video_summary: lead.summary } : lead?.title ? { video_summary: lead.title } : {}),
       ...(lead?.keyPoints?.length ? { key_points: lead.keyPoints } : {}),
     };
   }
 
-  // §4 — 게이트 통과분만 50 로컬 state 로. 배선 3필드(title·subtitle·headline) 외 default return.
-  //   숫자·쿠폰·이미지 case 는 만들지 않는다(49 이중 방어 승계 — 도달해도 무적용·무기록).
-  function applyActions50(actions: unknown[]): boolean {
-    const m = mode50 ?? "general";
-    let applied = false;
+  // 게이트 통과분만 · 배선 3필드(title·subtitle·headline). 숫자·쿠폰·이미지 case 자체를 만들지 않는다.
+  function applyActions50(actions: unknown[]) {
     for (const raw of actions) {
-      if (!isAiActionAllowed(m, raw)) continue;
+      if (!isAiActionAllowed(mode50, raw)) continue;
       const a = raw as { type?: string; field?: string; value?: string };
       if (a.type !== "setField" || !a.field) continue;
       const v = a.value ?? "";
       switch (a.field) {
         case "title":
           setAiTitle(v);
-          applied = true;
           break;
         case "subtitle":
           setAiSubtitle(v);
-          applied = true;
           break;
         case "headline":
           setAiHeadline(v);
-          applied = true;
           break;
         default:
-          continue; // 미배선 필드 = 무적용·무기록("채워진 척" 금지).
+          continue; // 미배선 필드 = 무적용·무기록.
       }
     }
-    return applied;
   }
 
-  // §6 — 슬롯 시차 공개(제목 → 한마디 → 포인트 예고, 300ms). [건너뛰기]는 즉시 종료.
-  function startReveal() {
-    clearRevealTimers();
-    setRevealStep(0);
-    for (let i = 1; i <= 3; i++) {
-      const t = window.setTimeout(() => setRevealStep(i), REVEAL_STEP_MS * i);
-      revealTimersRef.current.push(t);
-    }
+  // §F 비트: 삼키기 → 붓질 → 도장 4연타(250ms stagger) → 제목 빛줄(AI 실도착 동기) → 완성 숨.
+  function startWhooshChoreography() {
+    clearTimers();
+    setStamped([]);
+    setPhase("swallow");
+    const push = (fn: () => void, ms: number) => {
+      timersRef.current.push(window.setTimeout(fn, ms));
+    };
+    push(() => setPhase("brush"), M.swallowMs);
+    const stampStart = M.swallowMs + M.brushMs;
+    push(() => setPhase("stamp"), stampStart);
+    STAMP_KEYS.forEach((k, i) => {
+      push(() => setStamped((s) => (s.includes(k) ? s : [...s, k])), stampStart + M.stampStaggerMs * (i + 1));
+    });
+    // 도장이 끝나면 제목 빛줄 — 여기서부터는 AI 실도착이 종료 조건(가짜 로딩 금지).
+    push(() => setPhase("beam"), stampStart + M.stampStaggerMs * (STAMP_KEYS.length + 1));
   }
-  function skipReveal() {
-    clearRevealTimers();
-    setRevealStep(3); // 결과 즉시 반영 — AI 결과는 동일(연출만 종료).
+  // 건너뛰기 — 타이머 전소거 + 즉시 최종 상태(결과 동일).
+  function skipWhoosh() {
+    clearTimers();
+    setStamped([...STAMP_KEYS]);
+    setPhase(assembling ? "beam" : "finish");
   }
 
-  function failAssemble() {
+  function failWhoosh() {
+    clearTimers();
     setAssembling(false);
     setAssembleFailed(true);
+    setPhase("finish");
     setRetryCount((c) => c + 1);
     say(DIRECTOR_MENTS_50.assembleTimeout);
   }
 
-  // §3·§4·§5 — AI 조립 1콜.
-  async function runAssemble() {
+  async function runWhoosh() {
     if (assembling) return;
     setAct(2);
     setAssembling(true);
     setAssembleFailed(false);
-    clearRevealTimers();
-    setRevealStep(0);
-    // 스트리밍 자리 말풍선 1개(delta 가 여기에 누적 — §61).
-    setLog((l) => [...l, { role: "lingo", text: "" }]);
-    const appendBot = (t: string) =>
-      setLog((prev) => {
-        const next = [...prev];
-        for (let i = next.length - 1; i >= 0; i--) {
-          if (next[i].role === "lingo") {
-            next[i] = { ...next[i], text: next[i].text + t };
-            break;
-          }
-        }
-        return next;
-      });
-    let acc = "";
+    setConfirmed(false);
+    say(DIRECTOR_MENTS_50.assembling);
+    startWhooshChoreography();
     let proposalActions: unknown[] = [];
     try {
       const res = await fetch("/api/lingo/chat", {
@@ -583,17 +628,12 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
         }),
       });
       const ct = res.headers.get("content-type") ?? "";
-      if (!ct.includes("text/event-stream")) {
-        failAssemble();
-        return;
-      }
+      if (!ct.includes("text/event-stream")) return failWhoosh();
       const reader = res.body?.getReader();
-      if (!reader) {
-        failAssemble();
-        return;
-      }
+      if (!reader) return failWhoosh();
       const decoder = new TextDecoder();
       let buf = "";
+      let acc = "";
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -610,7 +650,7 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
             const d = safeJson(ev.data);
             if (typeof d?.text === "string" && d.text) {
               acc += d.text;
-              appendBot(d.text);
+              setBubble(acc); // 말풍선 1개에 스트리밍.
             }
           } else if (ev.event === "actions") {
             const d = safeJson(ev.data);
@@ -626,32 +666,81 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
             proposalActions = acts;
           } else if (ev.event === "error") {
             const d = safeJson(ev.data);
-            if (typeof d?.friendly === "string" && d.friendly && !acc) appendBot(d.friendly);
+            if (typeof d?.friendly === "string" && d.friendly && !acc) setBubble(d.friendly);
           }
-          // intent/done — 무시(done = reader 종료로 처리).
         }
       }
     } catch {
-      // 타임아웃(AbortSignal)·네트워크 — 무언 실패 금지.
-      failAssemble();
-      return;
+      return failWhoosh();
     }
-    // §5 — 빈 actions 로 done: 말풍선 결과만 두고 진행은 허용(제목 비면 3막에서 직접 입력 — P3).
+    // 빈 actions 로 done — 결과만 두고 확인으로 진행(중단 없음).
     applyActions50(proposalActions);
+    clearTimers();
+    setStamped([...STAMP_KEYS]);
     setAssembling(false);
-    setAssembleFailed(false);
-    startReveal();
-    say(DIRECTOR_MENTS_50.reviewReady);
+    setPhase("finish");
+    setAct(3);
+    go("confirm");
   }
 
-  const isNumberStep = step === "price" || step === "qty" || step === "droppy";
-  const numPlaceholder =
-    step === "price" ? "25000" : step === "qty" ? "50" : String(DIRECTOR_DROPPY_RATE_DEFAULT);
+  // ── §E 확인 1탭 ───────────────────────────────────────────────────────────
+  function submitEdit() {
+    if (!editField) return;
+    const parsed = parseKrwInput(textInput);
+    if (!parsed.ok) {
+      say(parsed.reason === "empty" ? DIRECTOR_MENTS_50.numEmpty : DIRECTOR_MENTS_50.numMixed);
+      return;
+    }
+    const n = parsed.value;
+    if (editField === "droppy" && (!Number.isInteger(n) || n < 0 || n > DROPY_PCT_MAX)) {
+      setInlineErr(DIRECTOR_MENTS_50.droppyRange);
+      return;
+    }
+    if (editField === "price") setPriceKrw(n);
+    if (editField === "qty") setQtyNum(n);
+    if (editField === "droppy") setDroppyPct(n);
+    setEditField(null);
+    setTextInput("");
+    setInlineErr(null);
+  }
 
-  // ── 렌더 ──────────────────────────────────────────────────────────────────
+  // ── 렌더 조각 ─────────────────────────────────────────────────────────────
+  const isAskStep =
+    step === "askName" || step === "askPrice" || step === "askQty" || step === "askDroppy";
+  const isStepInput = step === "name" || step === "price" || step === "qty" || step === "droppy";
+  const showSlotOverlay = !aiTitle && !aiSubtitle;
+  const gbTiers = sellHow === "gb" ? buildGbProposal(priceKrw ?? 0, qtyNum ?? 0) : [];
+
+  // 입력칸/주버튼 — DESIGN-LOCK v2 §3 패턴 원문 복제.
+  const INPUT_CLS =
+    "min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white";
+  const INPUT_STYLE = { boxShadow: "inset 0 0 0 1px #E5E5E5" } as const;
+  const PRIMARY_CLS =
+    "flex min-h-[44px] shrink-0 items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]";
+  const CARD_CLS =
+    "rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]";
+  const CHIP_CLS =
+    "flex w-full min-h-[44px] items-center rounded-2xl bg-white p-4 text-left text-[14px] font-bold tracking-ko text-[#0A0A0A] [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99] [word-break:keep-all]";
+
   return (
-    // 오브가 컨테이너 하단 absolute 로 붙으므로 relative + 하단 여백 확보(fixed 금지).
-    <div className="relative min-h-screen bg-[#F7F7F9] pb-[168px]">
+    <div className="min-h-screen pb-[240px]" style={{ backgroundColor: PAGE_BG }}>
+      {/* §F 연출 keyframes — transform/opacity 전용 · 깜빡임 0 · reduced-motion 페이드만. */}
+      <style>{`
+        @keyframes w-brush{0%{transform:translateY(-110%);opacity:0}18%{opacity:.85}100%{transform:translateY(110%);opacity:0}}
+        .w-brush{animation:w-brush ${M.brushMs}ms ${M.easeOut} both}
+        @keyframes w-ring{0%{transform:scale(.86);opacity:.9}100%{transform:scale(1.06);opacity:0}}
+        .w-ring{animation:w-ring ${M.stampRingMs}ms ${M.easeOut} both}
+        @keyframes w-beam{0%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+        .w-beam{animation:w-beam 1.1s ${M.easeInOut} infinite}
+        @keyframes w-finish{0%{transform:scale(.985);opacity:.75}100%{transform:scale(1);opacity:0}}
+        .w-finish{animation:w-finish ${M.finishRingMs}ms ${M.easeOut} both}
+        @keyframes w-in{0%{transform:translateY(4px);opacity:0}100%{transform:translateY(0);opacity:1}}
+        .w-in{animation:w-in ${M.stampStaggerMs}ms ${M.easeOut} both}
+        @media (prefers-reduced-motion: reduce){
+          .w-brush,.w-ring,.w-beam,.w-finish,.w-in{animation:none!important;opacity:1!important;transform:none!important}
+        }
+      `}</style>
+
       <div className="mx-auto max-w-md px-5 pt-6">
         {/* 헤더 — 랩 전용(운영 링크 0). */}
         <div className="flex items-baseline justify-between">
@@ -661,410 +750,359 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
           </span>
         </div>
 
-        {/* ── 2막 무대(§6) — 대화 영역 위. 진입 = 빈 공유카드 프레임, 슬롯이 시차로 채워진다.
-            깜빡임 금지·가짜 로딩(프로그레스/퍼센트) 금지 — 대기 표시는 오브 펄스 하나뿐. */}
-        {act === 2 && (
-          <div className="mt-4">
-            <div className="rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
-              {/* 제목 슬롯 */}
-              <div className="min-h-[24px]">
-                {revealStep >= 1 && aiTitle ? (
-                  <p className="text-[16px] font-extrabold leading-snug tracking-ko text-[#0A0A0A] [word-break:keep-all]">
-                    {aiTitle}
-                  </p>
-                ) : (
-                  <div className="h-6 w-2/3 rounded-lg border border-dashed border-[#E0E0E4]" />
-                )}
-              </div>
-              {/* 한마디 슬롯 */}
-              <div className="mt-2 min-h-[20px]">
-                {revealStep >= 2 && aiSubtitle ? (
-                  <p className="text-[13px] font-semibold leading-relaxed tracking-ko text-[#525252] [word-break:keep-all]">
-                    {aiSubtitle}
-                  </p>
-                ) : (
-                  <div className="h-5 w-full rounded-lg border border-dashed border-[#E0E0E4]" />
-                )}
-              </div>
-              {/* 상품 한마디(있을 때만 — 빈 껍데기 금지) */}
-              {revealStep >= 2 && aiHeadline && (
-                <p className="mt-2 text-[12.5px] font-semibold leading-relaxed tracking-ko text-[#1D4ED8] [word-break:keep-all]">
-                  {aiHeadline}
-                </p>
-              )}
-              {/* 사진 — 1막에서 받은 실물(가짜 플레이스홀더 아님) */}
-              {photoPreview && (
-                <img
-                  src={photoPreview}
-                  alt="상품 사진 미리보기"
-                  className="mt-3 h-32 w-full rounded-xl object-cover"
-                />
-              )}
-              {/* 포인트 도착 예고 칩 — 키포인트가 실제로 있을 때만(칩 UI 본체는 P3). */}
-              {revealStep >= 3 && keyPoints.length > 0 && (
-                <span className="mt-3 inline-flex items-center rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
-                  포인트 {keyPoints.length}개 도착
-                </span>
-              )}
-            </div>
+        {/* ── §C 상주 거울 카드 — 화면 상단 고정. 슬롯은 최종 값과 같은 높이 선점(시프트 0). ── */}
+        <div className="relative mt-4">
+          <CardModelBody model={cardModel} variant="studio" showShareFooter={false} />
 
-            {/* 건너뛰기 — 연출 중 상시(§72). 결과는 동일, 연출만 즉시 종료. */}
-            {revealStep < 3 && !assembleFailed && (
+          {/* 제목·한마디 미도착 = 점선 슬롯 오버레이(CardModelBody 는 폴백이 없다 — 실측 계약). */}
+          {showSlotOverlay && (
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center pt-[46%]">
+              <span className="rounded-full border-[1.5px] border-dashed px-3 py-1 text-[11px] font-bold" style={{ borderColor: LINGO_BLUE, color: LINGO_BLUE, backgroundColor: "#EEF3FE" }}>
+                제목·한마디 — 링고가 채워요
+              </span>
+            </div>
+          )}
+
+          {/* 붓질 — 블루 빛띠 위→아래 1회 */}
+          {phase === "brush" && (
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+              <div
+                className="w-brush absolute inset-x-0 h-1/3"
+                style={{ background: `linear-gradient(180deg, transparent, ${LINGO_BLUE}33, transparent)` }}
+              />
+            </div>
+          )}
+          {/* 완성 숨 — 카드 링 1회 */}
+          {phase === "finish" && (
+            <div
+              className="w-finish pointer-events-none absolute inset-0 rounded-2xl"
+              style={{ boxShadow: `0 0 0 2px ${LINGO_BLUE}` }}
+            />
+          )}
+          {/* 제목 빛줄 — AI 실도착 동기(도착 전 지속 = 쓰는 중 표현 · 가짜 퍼센트 0) */}
+          {phase === "beam" && assembling && (
+            <div className="pointer-events-none absolute inset-x-4 top-[46%] h-5 overflow-hidden rounded-full">
+              <div
+                className="w-beam h-full w-1/2"
+                style={{ background: `linear-gradient(90deg, transparent, ${LINGO_BLUE}2E, transparent)` }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ── 도장 4연타 결과 — 재료 칩(값이 실제로 있을 때만) ── */}
+        {act >= 2 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {productName.trim() && stamped.includes("name") && (
+              <span className="w-in relative rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                {productName.trim()} ✦
+                <span className="w-ring pointer-events-none absolute inset-0 rounded-full" style={{ boxShadow: `0 0 0 2px ${LINGO_BLUE}` }} />
+              </span>
+            )}
+            {stamped.includes("priceQty") && (priceKrw != null || qtyNum != null) && (
+              <span className="w-in rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                {priceKrw != null ? `${priceKrw.toLocaleString("ko-KR")}원` : ""}
+                {priceKrw != null && qtyNum != null ? " · " : ""}
+                {qtyNum != null ? `${qtyNum.toLocaleString("ko-KR")}개` : ""}
+              </span>
+            )}
+            {stamped.includes("droppy") && droppyPct != null && (
+              <span className="w-in rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                나눔 {droppyPct}%
+              </span>
+            )}
+            {stamped.includes("tiers") && gbTiers.length > 0 && (
+              <span className="w-in rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
+                단계 {gbTiers.length}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── §E 확인 1탭 ── */}
+        {step === "confirm" && !confirmed && (
+          <div className="mt-4 rounded-2xl border border-[#C7D7FB] bg-[#EEF3FE] p-4">
+            <p className="text-[12px] font-bold text-[#1D4ED8] [word-break:keep-all]">
+              {DIRECTOR_MENTS_50.confirmNumbers}
+            </p>
+            <p className="mt-1.5 text-[12.5px] font-semibold tabular-nums text-[#0A0A0A] [word-break:keep-all]">
+              가격 {priceKrw != null ? priceKrw.toLocaleString("ko-KR") : "—"}원 · 수량{" "}
+              {qtyNum != null ? qtyNum.toLocaleString("ko-KR") : "—"}개 · 몫 {droppyPct ?? "—"}%
+              {gbTiers.length > 0 ? " · 단계표는 계산기" : ""}
+            </p>
+
+            {sellHow === "gb" && (
+              <div className="mt-3">
+                <p className="text-[12px] font-bold text-[#0A0A0A]">{DIRECTOR_MENTS_50.gbFailInline}</p>
+                <div className="mt-1.5 flex gap-2">
+                  {GBFAIL_CHIPS.map((c) => (
+                    <button
+                      key={c.key}
+                      type="button"
+                      onClick={() => setGbFailMode(c.key)}
+                      className={`flex min-h-[44px] flex-1 items-center justify-center rounded-xl text-[13px] font-bold active:scale-[0.98] ${
+                        gbFailMode === c.key
+                          ? "bg-[#1D4ED8] text-white"
+                          : "bg-white text-[#0A0A0A] [box-shadow:0_0_0_1px_#E8E8EC]"
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {editField && (
+              <div className="mt-3 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={textInput}
+                    onChange={(e) => { setTextInput(e.target.value); setInlineErr(null); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); submitEdit(); } }}
+                    inputMode="numeric"
+                    placeholder={editField === "price" ? "25000" : editField === "qty" ? "50" : String(DIRECTOR_DROPPY_RATE_DEFAULT)}
+                    className={INPUT_CLS}
+                    style={INPUT_STYLE}
+                  />
+                  <button type="button" onClick={submitEdit} disabled={!textInput.trim()} className={PRIMARY_CLS}>
+                    입력
+                  </button>
+                </div>
+                {inlineErr && (
+                  <p className="px-1 text-[11.5px] font-semibold text-[#DC2626] [word-break:keep-all]">{inlineErr}</p>
+                )}
+              </div>
+            )}
+
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={() => setConfirmed(true)} className={`${PRIMARY_CLS} flex-1`}>
+                맞아요 — 다음
+              </button>
               <button
                 type="button"
-                onClick={skipReveal}
-                className="mt-2 flex min-h-[36px] w-full items-center justify-center text-[12px] font-semibold text-[#8A8A8A] active:text-[#525252]"
+                onClick={() => setEditField(editField ? null : "price")}
+                className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-bold text-[#525252] [box-shadow:0_0_0_1px_#E8E8EC] active:scale-[0.98]"
               >
+                숫자 고칠래요
+              </button>
+            </div>
+            {editField && (
+              <div className="mt-2 flex gap-2">
+                {(["price", "qty", "droppy"] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => { setEditField(f); setTextInput(""); }}
+                    className={`flex min-h-[36px] flex-1 items-center justify-center rounded-xl text-[12px] font-bold ${
+                      editField === f ? "bg-[#16161D] text-white" : "bg-white text-[#525252] [box-shadow:0_0_0_1px_#E8E8EC]"
+                    }`}
+                  >
+                    {f === "price" ? "가격" : f === "qty" ? "수량" : "몫"}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* P2.5 종점 — 확정 후. 저장·발행 0(P3 범위). */}
+        {confirmed && (
+          <p className="mt-4 text-center text-[11px] font-semibold text-[#8A8A8A]">
+            3막 검수·발행은 다음 업데이트
+          </p>
+        )}
+      </div>
+
+      {/* ── 하단 링고 존 — 지니 + 말풍선 1개 + 입력줄/칩 (DESIGN-LOCK v2 §3 하단 바) ── */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-[#E8E8EC] pb-[env(safe-area-inset-bottom)]"
+        style={{ backgroundColor: PAGE_BG }}
+      >
+        <div className="mx-auto max-w-md px-5 pb-4 pt-3">
+          <div className="flex items-start gap-2.5">
+            {/* §0 실측 지니 — 직접 그린 원 제거. 조립 중 talking. */}
+            <span
+              className="shrink-0 transition-transform duration-500"
+              style={{ transform: phase === "swallow" ? `scale(${M.swallowScale})` : "scale(1)" }}
+            >
+              <LingoGenie size={40} variant="avatar" talking={assembling} />
+            </span>
+            <p className="min-w-0 flex-1 rounded-2xl bg-white px-3.5 py-2.5 text-[13px] font-semibold leading-relaxed tracking-ko text-[#16161D] [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] [word-break:keep-all]">
+              {bubble}
+            </p>
+          </div>
+
+          <div className="mt-2.5 space-y-2">
+            {/* 목적 4택 */}
+            {step === "purpose" &&
+              PURPOSE_CHIPS.map((c) => (
+                <button key={c.key} type="button" onClick={() => pickPurpose(c.key)} className={CHIP_CLS}>
+                  {c.label}
+                </button>
+              ))}
+
+            {step === "sellHow" &&
+              SELLHOW_CHIPS.map((c) => (
+                <button key={c.key} type="button" onClick={() => pickSellHow(c.key)} className={`${CHIP_CLS} flex-col items-start`}>
+                  <span className="text-[15px] font-bold text-[#0A0A0A]">{c.label}</span>
+                  <span className="mt-0.5 text-[12.5px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">{c.desc}</span>
+                </button>
+              ))}
+
+            {step === "hostHow" &&
+              HOSTHOW_CHIPS.map((c) => (
+                <button key={c.key} type="button" onClick={() => pickHostHow(c.key)} className={`${CHIP_CLS} flex-col items-start`}>
+                  <span className="text-[15px] font-bold text-[#0A0A0A]">{c.label}</span>
+                  <span className="mt-0.5 text-[12.5px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">{c.desc}</span>
+                </button>
+              ))}
+
+            {step === "photo" && (
+              <>
+                <label className={`${CHIP_CLS} cursor-pointer justify-center text-[#1D4ED8]`}>
+                  사진 고르기
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) submitPhoto(f); }} />
+                </label>
+                {/* 보조 칩 — 영상도 있으면 기존 선행 체인 재사용. */}
+                <button type="button" onClick={() => go("video")} className={CHIP_CLS}>
+                  🔗 영상도 있어요
+                </button>
+              </>
+            )}
+
+            {step === "video" && (
+              <div className="flex items-center gap-2">
+                <input
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); submitVideo(); } }}
+                  inputMode="url"
+                  placeholder="영상 링크 붙여넣기"
+                  className={INPUT_CLS}
+                  style={INPUT_STYLE}
+                />
+                <button type="button" onClick={submitVideo} disabled={!textInput.trim()} className={PRIMARY_CLS}>입력</button>
+              </div>
+            )}
+
+            {step === "oneLiner" && (
+              <div className="flex items-center gap-2">
+                <input
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); submitOneLiner(); } }}
+                  placeholder="찰옥수수 25000원 50박스, 나눔 10%"
+                  className={INPUT_CLS}
+                  style={INPUT_STYLE}
+                />
+                <button type="button" onClick={submitOneLiner} disabled={!textInput.trim()} className={PRIMARY_CLS}>입력</button>
+              </div>
+            )}
+
+            {(isAskStep || isStepInput) && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={textInput}
+                    onChange={(e) => { setTextInput(e.target.value); setInlineErr(null); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); submitAsk(); } }}
+                    inputMode={step === "askName" || step === "name" ? "text" : "numeric"}
+                    placeholder={
+                      step === "askName" || step === "name"
+                        ? "찰옥수수 10개입"
+                        : step === "askPrice" || step === "price"
+                          ? "25000"
+                          : step === "askQty" || step === "qty"
+                            ? "50"
+                            : String(DIRECTOR_DROPPY_RATE_DEFAULT)
+                    }
+                    className={INPUT_CLS}
+                    style={INPUT_STYLE}
+                  />
+                  <button type="button" onClick={submitAsk} disabled={!textInput.trim()} className={PRIMARY_CLS}>입력</button>
+                </div>
+                {inlineErr && <p className="px-1 text-[11.5px] font-semibold text-[#DC2626] [word-break:keep-all]">{inlineErr}</p>}
+              </div>
+            )}
+
+            {step === "gbPropose" && (
+              <div className="space-y-2">
+                <span className="inline-flex items-center rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2 py-0.5 text-[10px] font-bold text-[#1D4ED8]">제안</span>
+                {gbRows.map((r, i) => (
+                  <div key={i} className={`flex items-center gap-2 rounded-xl bg-white p-2 [box-shadow:0_0_0_1px_#E8E8EC] ${gbEditing && gbBad ? "ring-1 ring-inset ring-[#DC2626]" : ""}`}>
+                    <input value={r.qty} readOnly={!gbEditing} inputMode="numeric" onChange={(e) => setGbRows((d) => d.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))} className="h-10 w-0 min-w-0 flex-1 rounded-lg bg-[#F4F4F5] px-2 text-center text-[13px] font-semibold text-[#0A0A0A] outline-none" />
+                    <span className="text-[11px] font-semibold text-[#8A8A8A]">개</span>
+                    <input value={r.price} readOnly={!gbEditing} inputMode="numeric" onChange={(e) => setGbRows((d) => d.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)))} className="h-10 w-0 min-w-0 flex-1 rounded-lg bg-[#F4F4F5] px-2 text-center text-[13px] font-semibold text-[#0A0A0A] outline-none" />
+                    <span className="text-[11px] font-semibold text-[#8A8A8A]">원</span>
+                  </div>
+                ))}
+                {gbEditing && gbBad && (
+                  <p className="px-1 text-[11.5px] font-semibold text-[#DC2626] [word-break:keep-all]">
+                    {/* Duke 확정 문구 — 재량 수정 금지. */}
+                    수량은 늘고 가격은 내려가야 해요 — 마지막 단계는 준비 수량을 넘을 수 없어요.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { if (!gbBad) go("gbFail"); }} disabled={gbBad} className={`${PRIMARY_CLS} flex-1`}>이대로</button>
+                  {!gbEditing && (
+                    <button type="button" onClick={() => setGbEditing(true)} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-bold text-[#525252] [box-shadow:0_0_0_1px_#E8E8EC] active:scale-[0.98]">바꿀래요</button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {step === "gbFail" && (
+              <div className="flex gap-2">
+                {GBFAIL_CHIPS.map((c) => (
+                  <button key={c.key} type="button" onClick={() => { setGbFailMode(c.key); void runWhoosh(); }} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-bold text-[#0A0A0A] [box-shadow:0_0_0_1px_#E8E8EC] active:scale-[0.98]">
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 연출 중 — 건너뛰기 상시(§F). */}
+            {assembling && (
+              <button type="button" onClick={skipWhoosh} className="flex min-h-[36px] w-full items-center justify-center text-[12px] font-semibold text-[#8A8A8A] active:text-[#525252]">
                 건너뛰기
               </button>
             )}
 
-            {/* 실패(§5) — 타임아웃·네트워크·error 이벤트 공통. 3회째부터 [다시 시도] 제거. */}
+            {/* 실패 — 재시도 2회까지. */}
             {assembleFailed && (
-              <div className="mt-2 flex gap-2">
+              <div className="flex gap-2">
                 {retryCount <= ASSEMBLE_MAX_RETRY && (
-                  <button
-                    type="button"
-                    onClick={() => void runAssemble()}
-                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#1D4ED8] text-[13px] font-bold text-white active:scale-[0.98]"
-                  >
-                    다시 시도
-                  </button>
+                  <button type="button" onClick={() => void runWhoosh()} className={`${PRIMARY_CLS} flex-1`}>다시 시도</button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => void navigate({ to: "/studio-build" })}
-                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-bold text-[#525252] [box-shadow:0_0_0_1px_#E8E8EC] active:scale-[0.98]"
-                >
+                <button type="button" onClick={() => void navigate({ to: "/studio-build" })} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-bold text-[#525252] [box-shadow:0_0_0_1px_#E8E8EC] active:scale-[0.98]">
                   직접 할게요
                 </button>
               </div>
             )}
 
-            {/* P2 종점 — 3막 자리 표시(버튼 없음). */}
-            {!assembling && !assembleFailed && revealStep >= 3 && (
-              <p className="mt-3 text-center text-[11px] font-semibold text-[#8A8A8A]">
-                3막 검수는 다음 업데이트
-              </p>
+            {/* 후퇴로 상시 — "하나씩"(기존 단계 스텝 재사용) · "직접 할게요". */}
+            {!assembling && act === 1 && step !== "purpose" && (
+              <div className="flex gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => { setStepwise(true); go(purpose === "sell" ? (photoName ? "name" : "photo") : "video"); }}
+                  className="flex min-h-[36px] flex-1 items-center justify-center text-[12px] font-semibold text-[#8A8A8A] active:text-[#525252]"
+                >
+                  하나씩 물어봐 주세요
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void navigate({ to: "/studio-build" })}
+                  className="flex min-h-[36px] flex-1 items-center justify-center text-[12px] font-semibold text-[#8A8A8A] active:text-[#525252]"
+                >
+                  직접 할게요
+                </button>
+              </div>
             )}
           </div>
-        )}
-
-        {/* 대화 스크롤 — 링고 좌 / 사장님 우. */}
-        <div className="mt-4 space-y-2">
-          {log.map((b, i) => (
-            <div key={i} className={`flex ${b.role === "owner" ? "justify-end" : "justify-start"}`}>
-              <p
-                className={`max-w-[86%] rounded-2xl px-3.5 py-2.5 text-[13px] font-semibold leading-relaxed tracking-ko [word-break:keep-all] ${
-                  b.role === "owner"
-                    ? "bg-[#1D4ED8] text-white"
-                    : "bg-white text-[#16161D] [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]"
-                }`}
-              >
-                {b.text}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* 칩·입력 — 링고 말풍선 아래(화면당 최대 4개). 2막 진입 시 1막 입력면은 닫는다
-            ("만드는 동안은 아무것도 안 물어봐요" — assembleReady 계약). */}
-        <div className={`mt-4 space-y-2 ${act === 1 ? "" : "hidden"}`}>
-          {step === "purpose" &&
-            PURPOSE_CHIPS.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => pickPurpose(c.key, c.label)}
-                className="flex w-full min-h-[44px] items-center rounded-2xl bg-white p-4 text-left text-[14px] font-bold tracking-ko text-[#0A0A0A] [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99] [word-break:keep-all]"
-              >
-                {c.label}
-              </button>
-            ))}
-
-          {step === "sellHow" &&
-            SELLHOW_CHIPS.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => pickSellHow(c.key, c.label)}
-                className="flex w-full min-h-[44px] flex-col items-start rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99]"
-              >
-                <span className="text-[15px] font-bold text-[#0A0A0A]">{c.label}</span>
-                <span className="mt-0.5 text-[12.5px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
-                  {c.desc}
-                </span>
-              </button>
-            ))}
-
-          {step === "hostHow" &&
-            HOSTHOW_CHIPS.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => pickHostHow(c.key, c.label)}
-                className="flex w-full min-h-[44px] flex-col items-start rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99]"
-              >
-                <span className="text-[15px] font-bold text-[#0A0A0A]">{c.label}</span>
-                <span className="mt-0.5 text-[12.5px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
-                  {c.desc}
-                </span>
-              </button>
-            ))}
-
-          {step === "video" && (
-            <>
-              <div className="flex items-center gap-2">
-                <input
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      submitVideo();
-                    }
-                  }}
-                  inputMode="url"
-                  placeholder="영상 링크 붙여넣기"
-                  className="min-w-0 flex-1 rounded-xl bg-white px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
-                  style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                />
-                <button
-                  type="button"
-                  onClick={submitVideo}
-                  disabled={!textInput.trim()}
-                  className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
-                >
-                  입력
-                </button>
-              </div>
-              {/* 팔기 경로 전용 건너뛰기 — 사진이 본체가 되는 커머스 계약(49 발행 게이트: 커머스는
-                  사진·상품명·가격·판매기간이 필수, 영상은 비필수)과 정합. host·tell 은 영상 필수라 미노출. */}
-              {purpose === "sell" && (
-                <button
-                  type="button"
-                  onClick={() => skipVideo("📷 영상 없이 사진으로 할게요")}
-                  className="flex w-full min-h-[44px] items-center rounded-2xl bg-white p-4 text-left text-[14px] font-bold tracking-ko text-[#0A0A0A] [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99] [word-break:keep-all]"
-                >
-                  📷 영상 없이 사진으로 할게요
-                </button>
-              )}
-            </>
-          )}
-
-          {step === "name" && (
-            <div className="flex items-center gap-2">
-              <input
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    submitName();
-                  }
-                }}
-                inputMode="text"
-                placeholder="찰옥수수 10개입"
-                className="min-w-0 flex-1 rounded-xl bg-white px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
-                style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-              />
-              <button
-                type="button"
-                onClick={submitName}
-                disabled={!textInput.trim()}
-                className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
-              >
-                입력
-              </button>
-            </div>
-          )}
-
-          {step === "photo" && (
-            <label className="flex w-full min-h-[44px] cursor-pointer items-center justify-center rounded-2xl bg-white p-4 text-[14px] font-bold text-[#1D4ED8] [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
-              사진 고르기
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) submitPhoto(f);
-                }}
-              />
-            </label>
-          )}
-
-          {isNumberStep && (
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <input
-                  value={textInput}
-                  onChange={(e) => {
-                    setTextInput(e.target.value);
-                    setInlineErr(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      submitNumber();
-                    }
-                  }}
-                  inputMode="numeric"
-                  /* S0 원칙 — 프리필 금지: 추천값은 placeholder 로만 보여준다. */
-                  placeholder={numPlaceholder}
-                  className="min-w-0 flex-1 rounded-xl bg-white px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3]"
-                  style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                />
-                <button
-                  type="button"
-                  onClick={submitNumber}
-                  disabled={!textInput.trim()}
-                  className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
-                >
-                  입력
-                </button>
-              </div>
-              {inlineErr && (
-                <p className="px-1 text-[11.5px] font-semibold text-[#DC2626] [word-break:keep-all]">
-                  {inlineErr}
-                </p>
-              )}
-            </div>
-          )}
-
-          {step === "gbPropose" && (
-            <div className="space-y-2">
-              {/* "제안" 라벨 명시 — 확정 전 표시 전용(49 :7781 관례 동형). */}
-              <span className="inline-flex items-center rounded-full border border-[#C7D7FB] bg-[#EEF3FE] px-2 py-0.5 text-[10px] font-bold text-[#1D4ED8]">
-                제안
-              </span>
-              {gbRows.map((r, i) => {
-                const bad =
-                  !parseKrwInput(r.qty).ok ||
-                  !parseKrwInput(r.price).ok ||
-                  gbRowsInvalid(gbRows.slice(0, i + 1), i === gbRows.length - 1 ? (qtyNum ?? 0) : 0);
-                return (
-                  <div
-                    key={i}
-                    className={`flex items-center gap-2 rounded-xl bg-white p-2 [box-shadow:0_0_0_1px_#E8E8EC] ${
-                      gbEditing && bad ? "ring-1 ring-inset ring-[#DC2626]" : ""
-                    }`}
-                  >
-                    <input
-                      value={r.qty}
-                      readOnly={!gbEditing}
-                      inputMode="numeric"
-                      onChange={(e) =>
-                        setGbRows((d) => d.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))
-                      }
-                      className="h-10 w-0 min-w-0 flex-1 rounded-lg bg-[#F4F4F5] px-2 text-center text-[13px] font-semibold text-[#0A0A0A] outline-none"
-                    />
-                    <span className="text-[11px] font-semibold text-[#8A8A8A]">개</span>
-                    <input
-                      value={r.price}
-                      readOnly={!gbEditing}
-                      inputMode="numeric"
-                      onChange={(e) =>
-                        setGbRows((d) => d.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)))
-                      }
-                      className="h-10 w-0 min-w-0 flex-1 rounded-lg bg-[#F4F4F5] px-2 text-center text-[13px] font-semibold text-[#0A0A0A] outline-none"
-                    />
-                    <span className="text-[11px] font-semibold text-[#8A8A8A]">원</span>
-                  </div>
-                );
-              })}
-              {gbEditing && gbBad && (
-                <p className="px-1 text-[11.5px] font-semibold text-[#DC2626] [word-break:keep-all]">
-                  {/* Duke 확정 문구 — 재량 수정 금지. */}
-                  수량은 늘고 가격은 내려가야 해요 — 마지막 단계는 준비 수량을 넘을 수 없어요.
-                </p>
-              )}
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={confirmGbRows}
-                  disabled={gbBad}
-                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#1D4ED8] text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
-                >
-                  이대로
-                </button>
-                {!gbEditing && (
-                  <button
-                    type="button"
-                    onClick={() => setGbEditing(true)}
-                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-bold text-[#525252] [box-shadow:0_0_0_1px_#E8E8EC] active:scale-[0.98]"
-                  >
-                    바꿀래요
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {step === "gbFail" && (
-            <div className="flex gap-2">
-              {GBFAIL_CHIPS.map((c) => (
-                <button
-                  key={c.key}
-                  type="button"
-                  onClick={() => pickGbFail(c.key, c.label)}
-                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-bold text-[#0A0A0A] [box-shadow:0_0_0_1px_#E8E8EC] active:scale-[0.98]"
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {step === "summary" && (
-            <div className="space-y-3">
-              <div className="rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]">
-                <p className="text-[12px] font-bold uppercase tracking-wider text-[#737373]">받은 재료</p>
-                <div className="mt-2 space-y-1.5">
-                  {summaryRows.map((r) => (
-                    <div key={r.label} className="flex items-start gap-3">
-                      <span className="w-[64px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">
-                        {r.label}
-                      </span>
-                      <span className="min-w-0 flex-1 break-all text-[12.5px] font-semibold text-[#0A0A0A] [word-break:keep-all]">
-                        {r.value}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                {photoPreview && (
-                  <img
-                    src={photoPreview}
-                    alt="상품 사진 미리보기"
-                    className="mt-3 h-32 w-full rounded-xl object-cover"
-                  />
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => void runAssemble()}
-                className="flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-[#1D4ED8] text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
-              >
-                ✦ 만들어 주세요
-              </button>
-            </div>
-          )}
         </div>
       </div>
-
-      {/* 오브 — 컨테이너 하단 중앙 absolute(fixed 금지 · 드래그·추적 없음).
-          §6 — 2막에는 프레임 하단(위쪽)으로 이동하고, 대기 중에는 opacity 펄스만 준다.
-          프로그레스 바·퍼센트 금지 — 진행 표시는 이 펄스 하나뿐. */}
-      <div
-        aria-hidden="true"
-        className={`pointer-events-none absolute left-1/2 h-16 w-16 -translate-x-1/2 rounded-full transition-all duration-500 ${
-          act === 2 ? "top-[168px] h-10 w-10" : "bottom-8"
-        } ${assembling ? "animate-pulse" : ""}`}
-        style={{
-          background: "radial-gradient(circle at 32% 28%, #93C5FD 0%, #2563EB 58%, #1D4ED8 100%)",
-          boxShadow: "0 12px 28px -10px rgba(29,78,216,0.55)",
-        }}
-      />
     </div>
   );
 }

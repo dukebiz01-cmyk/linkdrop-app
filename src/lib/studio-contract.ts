@@ -110,6 +110,132 @@ export function parseKrwInput(
   return { ok: true, value: Number(body) };
 }
 
+// ── 한 문장 파서(C-매직) ────────────────────────────────────────────────────
+/** 수량 단위(한글) — 뒤에 한글이 더 붙으면 단위로 보지 않는다("10개입"의 "개" 등). */
+const QTY_UNITS = ["박스", "세트", "개", "봉", "팩", "병"] as const;
+/** 한글 배수 단위 — 붙으면 그 조각은 실패(자동 환산 절대 금지). */
+const MULT_UNITS = ["만", "천", "억"] as const;
+/** name 에서 걷어낼 접두어 — 지시서 명시분만(임의 확장 금지). */
+const NAME_STRIP_WORDS = ["나눔"] as const;
+
+export type OneLinerResult = {
+  name: string | null;
+  priceKrw: number | null;
+  qty: number | null;
+  droppyPct: number | null;
+  missing: ("name" | "price" | "qty" | "droppy")[];
+  ambiguous: boolean;
+};
+
+/**
+ * 한 문장 → 재료 조각 파서. [결정적 · AI 0 · 부수효과 0 · React 0]
+ *
+ * 정본 원칙(전 규칙 공통): **애매하면 읽지 않고 되묻는다(§0 NUMBER_CRITICAL).**
+ *
+ * 규칙:
+ *  1) 콤마·공백 정규화. 숫자 토큰의 역할은 **뒤따르는 단위로만** 판정한다 —
+ *     원=가격 · 개/박스/봉/세트/팩/병/kg=수량 · %/프로=몫.
+ *     ※ 애매하면 읽지 않고 되묻는다(§0 NUMBER_CRITICAL).
+ *  2) "만/천/억" 등 한글 배수 단위가 붙은 숫자는 **그 조각 실패** 처리한다(자동 환산 절대 금지 —
+ *     parseKrwInput 과 동일 원칙: "3만원"을 30000 으로 지어내지 않는다).
+ *     ※ 애매하면 읽지 않고 되묻는다(§0 NUMBER_CRITICAL).
+ *  3) 단위 없는 숫자는 **전부 무시**하고 missing 에 반영한다 — 정확히 1개여도 가격 후보로
+ *     채택하지 않는다. 단위 없는 숫자가 2개 이상이면 ambiguous=true(추측 금지 신호).
+ *     ※ 애매하면 읽지 않고 되묻는다(§0 NUMBER_CRITICAL).
+ *  4) name = 숫자·단위 토큰과 "나눔" 류 접두어를 걷어낸 잔여 텍스트. 빈 문자열이면 null.
+ *     ※ 애매하면 읽지 않고 되묻는다(§0 NUMBER_CRITICAL).
+ *  5) 부수효과 0 · React 0. 같은 역할이 2번 나오면 **첫 번째만** 채택한다(뒤 값은 무시).
+ *
+ * 단위 경계: 한글 단위 뒤에 한글이 이어지면 단위로 보지 않는다("10개입"의 "개", "1병원"의 "병").
+ *   → 그 숫자는 단위 없는 숫자로 떨어져 규칙 3 이 적용된다(오독보다 되물음이 안전).
+ */
+export function parseOneLiner(raw: string): OneLinerResult {
+  const text = raw.replace(/,/g, "").replace(/\s+/g, " ").trim();
+  let priceKrw: number | null = null;
+  let qty: number | null = null;
+  let droppyPct: number | null = null;
+  let unitlessCount = 0;
+  const consumed: { start: number; end: number }[] = [];
+
+  const isHangul = (ch: string | undefined) => !!ch && /[가-힣]/.test(ch);
+  const isLatin = (ch: string | undefined) => !!ch && /[A-Za-z]/.test(ch);
+
+  const numRe = /\d+(?:\.\d+)?/g;
+  let m: RegExpExecArray | null;
+  while ((m = numRe.exec(text)) !== null) {
+    const numStart = m.index;
+    let i = numStart + m[0].length;
+    if (text[i] === " ") i += 1; // 숫자와 단위 사이 공백 1칸 허용.
+
+    // 배수 단위 우선 판정 — 붙어 있으면 그 조각은 실패(값 미채택).
+    //   뒤따르는 역할 단위까지 함께 걷어낸다("3만원" → 전부 제거: name 에 "원"만 남는 것 방지).
+    const mult = MULT_UNITS.find((u) => text.startsWith(u, i));
+    if (mult) {
+      let end = i + mult.length;
+      const tail = ["원", "%", "프로", "kg", ...QTY_UNITS].find((u) => text.startsWith(u, end));
+      if (tail) end += tail.length;
+      consumed.push({ start: numStart, end });
+      continue; // 값 미채택 → 해당 역할은 missing 으로 남는다.
+    }
+
+    const value = Number(m[0]);
+    // 가격 — "원"
+    if (text.startsWith("원", i) && !isHangul(text[i + 1])) {
+      if (priceKrw == null) priceKrw = Math.floor(value);
+      consumed.push({ start: numStart, end: i + 1 });
+      continue;
+    }
+    // 몫 — "%" | "프로"
+    if (text.startsWith("%", i)) {
+      if (droppyPct == null) droppyPct = value;
+      consumed.push({ start: numStart, end: i + 1 });
+      continue;
+    }
+    if (text.startsWith("프로", i) && !isHangul(text[i + 2])) {
+      if (droppyPct == null) droppyPct = value;
+      consumed.push({ start: numStart, end: i + 2 });
+      continue;
+    }
+    // 수량 — kg(라틴) + 한글 단위
+    if (text.startsWith("kg", i) && !isLatin(text[i + 2])) {
+      if (qty == null) qty = Math.floor(value); // 정수부만.
+      consumed.push({ start: numStart, end: i + 2 });
+      continue;
+    }
+    const qUnit = QTY_UNITS.find((u) => text.startsWith(u, i) && !isHangul(text[i + u.length]));
+    if (qUnit) {
+      if (qty == null) qty = Math.floor(value);
+      consumed.push({ start: numStart, end: i + qUnit.length });
+      continue;
+    }
+    // 단위 없음 — 규칙 3: 값으로 채택하지 않고 세기만 한다.
+    //   name 에서도 걷어내지 않는다 — 읽지 않은 숫자는 이름의 일부일 수 있다("찰옥수수 10개입").
+    //   값으로 읽은 토큰만 제거하는 것이 규칙 4 의 의도(오독 잔해로 이름을 깨뜨리지 않는다).
+    unitlessCount += 1;
+  }
+
+  // 규칙 4 — 숫자·단위 구간과 접두어를 걷어낸 잔여 텍스트.
+  let rest = "";
+  let cursor = 0;
+  for (const c of consumed) {
+    rest += text.slice(cursor, c.start);
+    cursor = c.end;
+  }
+  rest += text.slice(cursor);
+  for (const w of NAME_STRIP_WORDS) rest = rest.split(w).join(" ");
+  const nameRaw = rest.replace(/[.,·/\\|~\-–—:;]+/g, " ").replace(/\s+/g, " ").trim();
+  // 이름은 글자를 하나라도 포함해야 한다 — 숫자·기호만 남으면 이름이 아니다("25000 50" 등).
+  const name = nameRaw && /[가-힣A-Za-z]/.test(nameRaw) ? nameRaw : null;
+
+  const missing: OneLinerResult["missing"] = [];
+  if (!name) missing.push("name");
+  if (priceKrw == null) missing.push("price");
+  if (qty == null) missing.push("qty");
+  if (droppyPct == null) missing.push("droppy");
+
+  return { name, priceKrw, qty, droppyPct, missing, ambiguous: unitlessCount >= 2 };
+}
+
 /**
  * 드로피 저장 payload — rate / fixed 배타(두 키 동시 반환 절대 금지).
  * 정본: commerce/ProductRegisterForm.tsx:350-355(고정 가드) · :674-682(배타 저장)
