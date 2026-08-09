@@ -15,6 +15,9 @@ import { PartnerCalendarPage } from "@/components/partner/PartnerCalendarPage";
 //   재사용(수정 0·신규 로직 0). 45 :100-104 import 동형.
 import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 import { startVoiceHandoff } from "@/lib/voice-handoff";
+// M1 — 마법 현관 한 문장 파서(순수 모듈 · 무수정 import). 매직 경로 한정 사용 —
+//   기존 스텝의 replace(/[^0-9]/g) 절삭 코드는 무접촉.
+import { parseOneLiner } from "@/lib/studio-contract";
 // UI-5-T2-E1 — 영상 검색 실배선(45 파이프 계승). 45 순수 모듈·공용 타입 import(45 컴포넌트 무수정).
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { getSupabase } from "@/lib/supabase";
@@ -595,12 +598,25 @@ export const DIRECTOR_MENTS = {
     "문구 초안 작성이 지금은 어렵습니다. 입력하신 정보로 기본 카드는 준비되었으니, 한마디는 직접 적어주세요.",
   // T5-W3a — done 분기: "세부 조정은 상품 등록 폼…" 1문(W1a Duke 확정)은 커머스 한정 —
   //   비커머스(퍼블릭·예약쿠폰)는 기존 done 정본 문장만 낭독(신규 작문 0 · 두 문장 모두 기존 정본 분해).
+  // M1 — 마법 현관(사진+한 문장) 2키. Duke 확정 원문 — 한 글자 불변.
+  magic:
+    "사진 한 장 주세요. 그리고 뭘 얼마에 몇 개 파실지 한 줄로 적어 주세요 — 예: 찰옥수수 25000원 50박스, 나눔 10%",
+  magicConfirm:
+    "사장님 문장에서 그대로 읽었어요 — 맞는지 확인해 주세요. 원산지랑 판매 기간만 더 여쭐게요.",
   done: "카드가 준비되었습니다. 내용을 확인하신 후 발행해 주세요.",
   doneCommerce: "카드가 준비되었습니다. 내용을 확인하신 후 발행해 주세요. 세부 조정은 상품 등록 폼에서 하실 수 있습니다.",
 } as const;
 // T5-W1a(v4) — 지휘 스텝: 사진→이름→유형(3분기)→분류→원산지→단위→가격→배송방식→배송비→보상→수량→기간
 //   →(신선=출하기간 / 가공·공산품=발송안내)→프리체크→done. 전부 기존 폼 상태 setter 직결(신규 쓰기 경로 0).
+// M1 — 매직 조립 지시문(멘트 아님 = AI 지시문 · Duke 확정 원문).
+//   정본 동일값: CardStudioPage50 DIRECTOR_MENTS_50.assembleOrder (50에서 import 금지 — 순환 참조).
+const MAGIC_ASSEMBLE_ORDER =
+  "받은 재료로 공유카드를 완성해 주세요. 제목과 한마디, 상품 한마디를 하나로 정해 도구로 바로 반영해 주세요. 후보를 나열하며 묻지 마세요. 영상과 입력값에 없는 사실은 쓰지 마세요. 가격·수량은 건드리지 마세요.";
+
 export type DirectorStep =
+  // M1 — 마법 현관(커머스 전용 첫 스텝) + 숫자 확인 자물쇠.
+  | "magic"
+  | "magicConfirm"
   | "photo"
   | "name"
   | "type"
@@ -1066,6 +1082,17 @@ export function CardStudioPage({
   // T5-W1c(P1) — 프리셋 스켈레톤 장착분 추적: 시작 시 일괄 장착한 블록 중 아직 실값 미확정분.
   //   이탈(X) 시 이 집합 기준으로 빈 껍데기만 해제(실값 입력분 보존) — 실값 승격 차단(F5-5)과 정합.
   const dPresetRef = useRef<Set<string>>(new Set());
+  // M1 — 마법 현관 상태. magicRef = 매직 경로 여부(목적지 분기 전용 — 스킵 전례 :1551 문법).
+  //   magicDraftRef = 파서 결과 보관(확인 전까지 setter 미호출 — NUMBER_CRITICAL 자물쇠).
+  //   magicQueueRef = 못 읽은 조각의 기존 스텝 대기열. magicFiredRef = done 자동 조립 1회 가드.
+  const magicRef = useRef(false);
+  const magicDraftRef = useRef<ReturnType<typeof parseOneLiner> | null>(null);
+  const magicQueueRef = useRef<DirectorStep[]>([]);
+  const magicFiredRef = useRef(false);
+  // M1-c — S1 게이트 경유 자동 시작 1회 가드. S1 선택 핸들러가 세우고, 아래 effect 가 소비한다.
+  //   ⚠️ 핸들러 안에서 직접 startDirector() 를 부르면 attemptSwitchMode→resetForMode 의 setMode 가
+  //   아직 반영 전이라 stale mode(=구 모드)로 첫 스텝이 갈린다. 반드시 mode 반영 후 effect 에서 1회.
+  const gateAutoStartRef = useRef(false);
   // T5-W5a — 모일수록 할인(gb): 확정분 = cfgProduct.gb* 단일 소스(W5a+ (a) 이관 — 폼·지휘·payload·
   //   역파싱 공유). dGbDraft = 지휘 편집 초안(확정 전 payload 무기록 — NUMBER_CRITICAL). 값 주입 없는
   //   대화 스텝이라 W1c 스켈레톤 사슬과 무간섭(applied/블록 장착 무접촉).
@@ -1123,8 +1150,12 @@ export function CardStudioPage({
       dPresetRef.current = new Set();
     }
     dSay(mode === "general" ? DIRECTOR_MENTS.startPublic : DIRECTOR_MENTS.start); // F6-11 — 첫 정의 분기.
-    // T5-W2 — 모드별 첫 스텝: 커머스 = 사진 / 퍼블릭·예약쿠폰 = 영상 링크.
-    dGo(mode === "commerce" ? "photo" : "link");
+    // M1 — 커머스 첫 스텝 = 마법 현관(사진+한 문장). 퍼블릭·예약쿠폰은 무변경(영상 링크).
+    magicRef.current = mode === "commerce";
+    magicDraftRef.current = null;
+    magicQueueRef.current = [];
+    magicFiredRef.current = false;
+    dGo(mode === "commerce" ? "magic" : "link");
   }
   // T5-W1c(P1-3) — 지휘 종료 단일 출구: 실값 입력분만 보존, 빈 스켈레톤 블록은 해제(미완성 껍데기
   //   장착 상태 정리 — 발행 방어는 프리체크·canPublish 가 기담당, 여기는 장착 정합).
@@ -1147,8 +1178,22 @@ export function CardStudioPage({
       }
     }
     dPresetRef.current = new Set();
+    magicRef.current = false; // M1 — 이탈 = 매직 경로 해제(잔여 분기 유령화 차단).
+    magicDraftRef.current = null;
+    magicQueueRef.current = [];
     setDirectorOn(false);
   }
+  // M1 — done 직후 자동 조립 1콜(매직 경로 한정 · 1회 가드). 기존 :4075 sendToLingo 경로 그대로
+  //   태우고, 응답 actions 는 기존 dispatchProposal→runAssembly 가 처리한다(무수정).
+  //   실패·타임아웃은 기존 sendToLingo 에러 경로 그대로(신규 처리 0).
+  useEffect(() => {
+    if (dStep !== "done" || !magicRef.current || magicFiredRef.current) return;
+    magicFiredRef.current = true;
+    magicRef.current = false;
+    void sendToLingo(MAGIC_ASSEMBLE_ORDER);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dStep]);
+
   // 사진 수신 → startCatalog 백그라운드 + 다음 스텝(effect — 업로드 파이프는 기존 핸들러 재사용).
   useEffect(() => {
     if (!directorOn || dStep !== "photo" || !productImageUrl) return;
@@ -1374,6 +1419,7 @@ export function CardStudioPage({
     if (!open) {
       // 안 열래요 = 3필드 초기화(undefined) — payload 키 미기록 보장(폼 OFF 전환과 대칭).
       setCfgProduct((p) => ({ ...p, gbEnabled: undefined, gbTiers: undefined, gbFailMode: undefined }));
+      if (magicRef.current) return finishDirector(); // M1 — 매직은 기간이 이미 끝나 있음(종점 직행).
       dGo("period");
       return;
     }
@@ -1391,6 +1437,7 @@ export function CardStudioPage({
   function pickGbFail(m: "base" | "cancel", label: string) {
     setCfgProduct((p) => ({ ...p, gbFailMode: m }));
     dEcho(label);
+    if (magicRef.current) return finishDirector(); // M1 — 매직 종점(기간 확정 완료 상태).
     dGo("period");
   }
   // T5-W2 — 영상 링크 제출: 기존 미니 지휘자 위 승차(oembed :3230 동형 조회 → DiscoverCandidate →
@@ -1503,20 +1550,62 @@ export function CardStudioPage({
     }
   }
   // 텍스트/숫자 답 제출 — 스텝별 기존 setter 직결(신규 쓰기 경로 0 · NUMBER_CRITICAL: digits 그대로).
+  // M1 — 매직 경로 목적지 이동: 못 읽은 조각 대기열을 하나씩 소진하고, 비면 잔여 필수 체인(origin)으로.
+  //   스킵 전례(:1551) 문법 — DIRECTOR_MENTS 무접촉, 목적지만 바꾼다.
+  function magicAdvance() {
+    const next = magicQueueRef.current.shift();
+    dGo(next ?? "origin");
+  }
+  // M1 — [맞아요] 일괄 반영. READ setter 표 그대로 · ⚠️ confirmHelper·touch 미호출(배지 폭주 차단).
+  function applyMagicDraft() {
+    const d = magicDraftRef.current;
+    if (!d) return;
+    const droppyOk =
+      d.droppyPct != null && Number.isInteger(d.droppyPct) && d.droppyPct >= 0 && d.droppyPct <= 20;
+    if (d.name) {
+      setCfgProductName(d.name);
+      if (!cfgTitle.trim()) setCfgTitle(d.name); // :1512 동일 — 제목 자동 승계.
+    }
+    if (d.priceKrw != null) setCfgProductPrice(String(d.priceKrw));
+    if (d.qty != null) setCfgProduct((p) => ({ ...p, quantity: String(d.qty) }));
+    if (droppyOk) {
+      setCfgProduct((p) => ({ ...p, droppyMode: "rate", droppyRate: d.droppyPct as number }));
+    }
+    dEcho("맞아요 — 다음");
+    // 못 읽은 조각만 기존 스텝으로 순차 이동(각 스텝의 기존 setter·멘트 그대로).
+    const q: DirectorStep[] = [];
+    if (!d.name) q.push("name");
+    if (d.priceKrw == null) q.push("price");
+    if (d.qty == null) q.push("qty");
+    if (!droppyOk) q.push("droppy");
+    magicQueueRef.current = q;
+    magicAdvance();
+  }
+
   function submitDirectorText() {
     const v = dText.trim();
     if (!v) return;
+    // M1 — 마법 현관: 결정적 파서만(AI 0). 결과는 보관만 하고 확인 스텝으로(자물쇠).
+    if (dStep === "magic") {
+      magicDraftRef.current = parseOneLiner(v);
+      dEcho(v);
+      setDText("");
+      dGo("magicConfirm");
+      return;
+    }
     if (dStep === "name") {
       setCfgProductName(v);
       // T5-W1a(D1) — 제목 자동 승계: 비어 있을 때만(사장님 기입분 보존 — 발행 게이트 hasTitleForPublish 정합).
       if (!cfgTitle.trim()) setCfgTitle(v);
       dEcho(v);
       setDText("");
+      if (magicRef.current) return magicAdvance(); // M1 — 목적지만 변경(스킵 전례 :1551).
       dGo("type");
     } else if (dStep === "origin") {
       setCfgProduct((p) => ({ ...p, origin: v }));
       dEcho(v);
       setDText("");
+      if (magicRef.current) return dGo("period"); // M1 — 잔여 필수 체인: 원산지 → 판매 기간.
       dGo("unit");
     } else if (dStep === "price") {
       const digits = v.replace(/[^0-9]/g, "");
@@ -1526,6 +1615,7 @@ export function CardStudioPage({
       dEcho(v);
       setDText("");
       setDBandLine(null);
+      if (magicRef.current) return magicAdvance(); // M1 — 목적지만 변경(스킵 전례 :1551).
       dGo("shipmethod");
     } else if (dStep === "droppy") {
       const digits = v.replace(/[^0-9]/g, "");
@@ -1535,6 +1625,7 @@ export function CardStudioPage({
       setCfgProduct((p) => ({ ...p, droppyMode: "rate", droppyRate: n }));
       dEcho(`${n}%`);
       setDText("");
+      if (magicRef.current) return magicAdvance(); // M1 — 목적지만 변경(스킵 전례 :1551).
       dGo("qty");
     } else if (dStep === "qty") {
       const digits = v.replace(/[^0-9]/g, "");
@@ -1548,6 +1639,7 @@ export function CardStudioPage({
       //   이후라 커머스 = 선택 완료 보장) → gbAsk 재질문은 같은 질문 2회가 되므로 건너뛴다.
       //   모일수록(gbEnabled true) = 단계표부터 / 혼자 팔기(undefined) = gb 3스텝 전량 통과.
       //   DIRECTOR_MENTS 무접촉 — 목적지만 바꾼다(스텝 스킵).
+      if (magicRef.current) return magicAdvance(); // M1 — 매직은 잔여 대기열 우선(gb 분기는 period 뒤).
       dGo(cfgProduct.gbEnabled === true ? "gbTiers" : "period");
     }
   }
@@ -1608,6 +1700,8 @@ export function CardStudioPage({
     dEcho(`${dStart} ~ ${dEnd}`);
     setDStart("");
     setDEnd("");
+    // M1-c — S1 2차에서 이미 확정 → gbAsk 재질문 금지(:1551 전례 동일 판정).
+    if (magicRef.current) return cfgProduct.gbEnabled === true ? dGo("gbTiers") : finishDirector();
     if (cfgProduct.type === "fresh") dGo("harvest");
     else dGo("shipnote");
   }
@@ -2661,6 +2755,18 @@ export function CardStudioPage({
       cfgReview.trim() !== ""
     );
   }
+
+  // M1-c — S1 게이트 경유 지휘자 자동 시작(1회). 게이트 통과 + 모드 반영 완료 시점에만 발화한다.
+  //   가드 4중: ① gateAutoStartRef(S1 경유 표시 — 직접 진입은 세워지지 않아 수동 버튼 그대로)
+  //   ② purposeGate === "done" ③ pendingModeSwitch 없음(작업물 확인 오버레이 대기 중 발화 금지)
+  //   ④ !directorOn(이미 열림 = 중복 금지). 소비 즉시 ref 를 내려 재렌더·뒤로가기 재진입에도 1회.
+  useEffect(() => {
+    if (!gateAutoStartRef.current) return;
+    if (purposeGate !== "done" || pendingModeSwitch || directorOn) return;
+    gateAutoStartRef.current = false;
+    startDirector();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [purposeGate, pendingModeSwitch, directorOn, mode]);
 
   // 모드 탭·전환 지점 단일 진입 — hasWork면 확인 게이트, 아니면 즉시 리셋.
   function attemptSwitchMode(next: StudioMode) {
@@ -4927,7 +5033,7 @@ export function CardStudioPage({
                   { key: "sell", title: "상품 팔기", desc: "농산물·가공품을 주문받아요", to: "commerce" },
                   { key: "book", title: "예약 받기", desc: "날짜를 정해 손님을 받아요", to: "reserve" },
                   { key: "coupon", title: "쿠폰 주기", desc: "할인 혜택으로 오게 만들어요", to: "reserve" },
-                  { key: "tell", title: "그냥 알리기", desc: "우리 가게를 소개해요", to: "general" },
+                  { key: "tell", title: "소식 알리기", desc: "다양한 소식을 친구에게 전해요", to: "general" },
                 ] as { key: string; title: string; desc: string; to: StudioMode }[]
               ).map((o) => {
                 // F5-3 정합 — 잠금 판정·처리 전부 기존 모드 탭(:4901·:4906-4909)과 동일:
@@ -4945,6 +5051,8 @@ export function CardStudioPage({
                       // 전환은 반드시 기존 사슬(attemptSwitchMode → hasWork 확인 게이트 → resetForMode).
                       //   resetForMode 가 purposeGate 를 "pick" 으로 되돌리므로 게이트 전진은 그 "뒤에".
                       attemptSwitchMode(o.to);
+                      // M1-c — 상품 팔기는 2차(판매 방식) 확정 후 자동 시작. 나머지 3택은 여기서 예약.
+                      if (o.to !== "commerce") gateAutoStartRef.current = true;
                       setPurposeGate(o.to === "commerce" ? "sellHow" : "done");
                     }}
                     aria-disabled={locked || undefined}
@@ -4995,6 +5103,7 @@ export function CardStudioPage({
                     gbTiers: undefined,
                     gbFailMode: undefined,
                   }));
+                  gateAutoStartRef.current = true; // M1-c — 판매 방식 확정 = 매직 즉시 시작.
                   setPurposeGate("done");
                 }}
                 className="flex w-full min-h-[44px] items-center gap-3 rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99]"
@@ -5013,6 +5122,7 @@ export function CardStudioPage({
                 type="button"
                 onClick={() => {
                   setCfgProduct((p) => ({ ...p, gbEnabled: true }));
+                  gateAutoStartRef.current = true; // M1-c — 판매 방식 확정 = 매직 즉시 시작.
                   setPurposeGate("done");
                 }}
                 className="flex w-full min-h-[44px] items-center gap-3 rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99]"
@@ -7359,7 +7469,8 @@ export function CardStudioPage({
           <div className="mx-auto max-w-md px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">
             {/* 헤더 — 체크리스트 + 탈출구·닫기 */}
             <div className="flex items-start justify-between gap-2">
-              <div className="flex min-w-0 flex-1 flex-wrap gap-x-2.5 gap-y-1">
+              {/* M1-d — 매직 경로에서는 12칩 스트립 숨김(조건부 렌더 · 삭제 0 · 비매직 무변경). */}
+              <div className={`flex min-w-0 flex-1 flex-wrap gap-x-2.5 gap-y-1 ${magicRef.current ? "hidden" : ""}`}>
                 {(() => {
                   // T5-W1a(v4) — 유효 순서(분기 반영 · shipfee 는 직접 전달 시 통과 스킵이라 지나가면 ✓).
                   // T5-W2 — 모드별 순서·체크리스트 분기(퍼블릭 = 링크 1개 조립).
@@ -7393,6 +7504,8 @@ export function CardStudioPage({
                 })()}
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {/* M1-d — 매직이 "한 번에 입력"의 역할을 흡수하므로 매직 중 숨김(조건부 · 삭제 0). */}
+                {!magicRef.current && (
                 <button
                   type="button"
                   onClick={() => {
@@ -7403,6 +7516,7 @@ export function CardStudioPage({
                 >
                   한 번에 입력하기
                 </button>
+                )}
                 <button
                   type="button"
                   aria-label="제작시키기 닫기"
@@ -7415,8 +7529,16 @@ export function CardStudioPage({
             </div>
 
             {/* 대화 로그 — 링고 좌 / 대표님 우(스파클 1회 = 즉시 반영 확인은 미리보기 burst 소관). */}
+            {/* M1-d — 매직 경로에서는 개방 안내 문단(start/startPublic)을 숨긴다. 멘트 상수·발화 이력은
+                무접촉 — 렌더에서만 걸러낸다(조건부 숨김 · 비매직 경로 무변경). */}
             <div className="mt-2 max-h-[24vh] space-y-1.5 overflow-y-auto">
-              {dLog.map((m, i) => (
+              {dLog
+                .filter(
+                  (m) =>
+                    !magicRef.current ||
+                    (m.text !== DIRECTOR_MENTS.start && m.text !== DIRECTOR_MENTS.startPublic),
+                )
+                .map((m, i) => (
                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <p
                     className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-[12.5px] font-medium leading-relaxed [word-break:keep-all] ${
@@ -7469,7 +7591,42 @@ export function CardStudioPage({
                   </div>
                 </div>
               )}
-              {(dStep === "name" || dStep === "origin" || dStep === "price" || dStep === "qty" || dStep === "droppy") && (
+              {/* M1 — 마법 현관: 사진(기존 실업로드 핸들러 그대로) + 한 문장(아래 공용 입력줄 재사용). */}
+              {dStep === "magic" && (
+                <label className="flex min-h-[48px] w-full cursor-pointer items-center justify-center rounded-2xl bg-[#0A0A0A] text-[14px] font-bold text-white active:scale-[0.98]">
+                  사진 고르기
+                  <input type="file" accept="image/*" className="hidden" onChange={handleProductImageChange} />
+                </label>
+              )}
+              {/* M1 — 숫자 확인 자물쇠: 읽힌 것만 표시 + 2택. 반영은 [맞아요] 탭에서만. */}
+              {dStep === "magicConfirm" && (
+                <div className="space-y-2">
+                  <div className="rounded-xl bg-[#F4F4F5] px-3 py-2.5">
+                    {(() => {
+                      const d = magicDraftRef.current;
+                      const rows: string[] = [];
+                      if (d?.name) rows.push(`이름 ${d.name}`);
+                      if (d?.priceKrw != null) rows.push(`가격 ${d.priceKrw.toLocaleString("ko-KR")}원`);
+                      if (d?.qty != null) rows.push(`수량 ${d.qty.toLocaleString("ko-KR")}개`);
+                      if (d?.droppyPct != null && d.droppyPct >= 0 && d.droppyPct <= 20) rows.push(`나눔 ${d.droppyPct}%`);
+                      return (
+                        <p className="text-[13px] font-semibold tabular-nums text-[#0A0A0A] [word-break:keep-all]">
+                          {rows.join(" · ")}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={applyMagicDraft} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#0A0A0A] text-[13px] font-bold text-white active:scale-[0.98]">
+                      맞아요 — 다음
+                    </button>
+                    <button type="button" onClick={() => dGo("name")} className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#525252] active:bg-[#F5F5F5]">
+                      숫자 고칠래요
+                    </button>
+                  </div>
+                </div>
+              )}
+              {(dStep === "magic" || dStep === "name" || dStep === "origin" || dStep === "price" || dStep === "qty" || dStep === "droppy") && (
                 <div className="space-y-1.5">
                   {/* T5-W1a — KAMIS 참고 1줄(신선+품목 확정 시에만 · 파트너 화면 전용 참고 — §0 락). */}
                   {dStep === "price" && dBandLine && (
@@ -7485,17 +7642,19 @@ export function CardStudioPage({
                           submitDirectorText();
                         }
                       }}
-                      inputMode={dStep === "name" || dStep === "origin" ? "text" : "numeric"}
+                      inputMode={dStep === "magic" || dStep === "name" || dStep === "origin" ? "text" : "numeric"}
                       placeholder={
-                        dStep === "name"
-                          ? "상품 이름"
-                          : dStep === "origin"
-                            ? "원산지"
-                            : dStep === "price"
-                              ? "판매 가격 (원)"
-                              : dStep === "droppy"
-                                ? "공유 보상 (%)"
-                                : "준비 수량 (개)"
+                        dStep === "magic"
+                          ? "찰옥수수 25000원 50박스, 나눔 10%"
+                          : dStep === "name"
+                            ? "상품 이름"
+                            : dStep === "origin"
+                              ? "원산지"
+                              : dStep === "price"
+                                ? "판매 가격 (원)"
+                                : dStep === "droppy"
+                                  ? "공유 보상 (%)"
+                                  : "준비 수량 (개)"
                       }
                       className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
                       style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
@@ -7882,6 +8041,8 @@ export function CardStudioPage({
                     <button
                       type="button"
                       onClick={() => {
+                        // M1 — 매직: 기간 뒤 gb 단계표 확인으로(gbEnabled 확정 경로).
+                        if (magicRef.current) return dGo("gbTiers");
                         if (cfgProduct.type === "fresh") finishDirector();
                         else dGo("shipnote");
                       }}
