@@ -11,7 +11,17 @@
 // ════════════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Globe, Calendar, Store, CalendarCheck, Megaphone, PenLine } from "lucide-react";
+import {
+  Globe,
+  Calendar,
+  Store,
+  CalendarCheck,
+  Megaphone,
+  PenLine,
+  Mic,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import {
   parseKrwInput,
   parseOneLiner,
@@ -25,6 +35,13 @@ import {
   isAiActionAllowed,
 } from "@/components/card-model/CardStudioPage49";
 import type { LingoContext } from "@/components/card-model/useLingoChat";
+// P2.7 — 음성은 공용 훅 재사용(신규 STT/TTS 구현 0). 반환 계약:
+//   { listening, speaking, notice, ttsOn, startListening, stopListening, finishListening,
+//     speak, stopSpeaking, toggleTts }  — useLingoChat.ts:408
+import { useLingoVoice } from "@/components/card-model/useLingoChat";
+// 음성 공용 가드 — 탭 시점 재판정·미지원 안내(한 글자 락)·인앱 WebView 판정.
+import { canUseSpeechRecognition, VOICE_UNSUPPORTED_NOTICE } from "@/lib/lingo-voice-tap";
+import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 // §0 실측 — 링고 지니 정본(brand/lingo-mascot v0(51) 심볼 + L6b 연출 래퍼). 신규 아이콘 제작 0.
 import { LingoGenie } from "@/components/lingo/LingoGenie";
 // §C 상주 거울 카드 — 어댑터·렌더러 모두 거울 파일(읽기·import만 · 무수정).
@@ -263,12 +280,29 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
   const [inlineErr, setInlineErr] = useState<string | null>(null);
   const photoUrlRef = useRef<string | null>(null);
 
+  // ── P2.7 음성 ─────────────────────────────────────────────────────────────
+  const voice = useLingoVoice();
+  const [interim, setInterim] = useState(""); // 인식 중 회색 미리보기(49 :2363 동형).
+  // 인앱 WebView(카톡 등) 음성 정직 게이트 — 마운트 후 판정(SSR=null · hydration 안전).
+  //   49 :2298-2303 동형. ⚠️ WebView 우회 시도 금지(영구 락) — 마이크 진입점 자체를 렌더하지 않는다.
+  const [inAppNoMic, setInAppNoMic] = useState<InAppBrowser | null>(null);
+  useEffect(() => {
+    setInAppNoMic(getInAppBrowser());
+  }, []);
+  // 마이크 노출 조건 — 지원 + 인앱 아님. 둘 중 하나라도 아니면 버튼 미렌더(가짜 버튼 금지).
+  const [micUsable, setMicUsable] = useState(false);
+  useEffect(() => {
+    setMicUsable(canUseSpeechRecognition());
+  }, []);
+  const showMic = micUsable && !inAppNoMic;
+
   // 2막(휘리릭)
   const videoAiRef = useRef<{ title: string; summary: string; keyPoints: string[] } | null>(null);
   const videoLeadRef = useRef<string | null>(null);
   const sessionRef = useRef<string | null>(null);
   const timersRef = useRef<number[]>([]);
   const [assembling, setAssembling] = useState(false);
+  const assemblingRef = useRef(false); // say 의 낭독 게이트 라이브 참조(오버레이 중 낭독 생략).
   const [assembleFailed, setAssembleFailed] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [aiTitle, setAiTitle] = useState("");
@@ -285,6 +319,8 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
   const [confirmed, setConfirmed] = useState(false);
   const [editField, setEditField] = useState<null | "price" | "qty" | "droppy">(null);
 
+  assemblingRef.current = assembling; // 렌더마다 동기(say 의 낭독 게이트 라이브 참조).
+
   const clearTimers = useCallback(() => {
     for (const t of timersRef.current) clearTimeout(t);
     timersRef.current = [];
@@ -296,7 +332,38 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
     };
   }, []);
 
-  const say = useCallback((text: string) => setBubble(text), []);
+  // 말풍선 갱신 = 낭독 1회(ttsOn OFF·미지원이면 speak 내부가 무음 통과 — 호출부 검사 불요).
+  //   ⚠️ 조립 오버레이 중에는 낭독 생략 — 오버레이 자체 연출과 겹치지 않게(assemblingRef 로 판정).
+  const say = useCallback(
+    (text: string) => {
+      setBubble(text);
+      if (!assemblingRef.current) voice.speak(text);
+    },
+    [voice],
+  );
+
+  // 마이크 탭 — 49 handleOrbTap(:3028-3067) 시퀀스 복제(인앱 분기는 버튼 미렌더가 대체).
+  //   결과는 입력 state 에 채우기만 — 자동 전송 금지(숫자 자물쇠 · 홈 패턴 :479-481).
+  function onMicTap() {
+    if (voice.listening) {
+      voice.finishListening(); // 재탭 = 확정 종료(FIX-43 — abort 아닌 stop).
+      setInterim("");
+      return;
+    }
+    if (!canUseSpeechRecognition()) {
+      say(VOICE_UNSUPPORTED_NOTICE); // 탭 시점 재판정 폴백(글 입력 유지).
+      return;
+    }
+    voice.stopSpeaking(); // 낭독 중 탭 = 끊고 청취(에코 차단).
+    setInterim("");
+    voice.startListening(
+      (t) => {
+        setInterim("");
+        setTextInput((prev) => (prev.trim() ? `${prev.trim()} ${t}` : t)); // 채우기만.
+      },
+      { onInterim: (t) => setInterim(t) },
+    );
+  }
   const go = useCallback(
     (next: Step50) => {
       setStep(next);
@@ -745,6 +812,36 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
     "flex min-h-[44px] shrink-0 items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]";
   const CARD_CLS =
     "rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]";
+  // 마이크 버튼 — 49 입력줄(:8285-8296) className 실측 복제. 미지원·인앱이면 렌더 자체를 안 한다.
+  const MicButton = () =>
+    showMic ? (
+      <button
+        type="button"
+        onClick={onMicTap}
+        aria-label={voice.listening ? "음성 입력 종료" : "음성으로 말하기"}
+        className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-90 disabled:opacity-50"
+        style={{ backgroundColor: voice.listening ? "#DC2626" : LINGO_BLUE }}
+      >
+        {voice.listening && (
+          <span
+            className="absolute inset-0 animate-ping rounded-full"
+            style={{ backgroundColor: "rgba(220,38,38,0.4)" }}
+          />
+        )}
+        <Mic className="relative h-[18px] w-[18px]" strokeWidth={2.25} />
+      </button>
+    ) : null;
+
+  // 인식 중 회색 미리보기 — 49 :8228-8233 마크업 복제(우측 정렬 · italic · #A3A3A3).
+  const InterimGhost = () =>
+    interim ? (
+      <div className="flex justify-end">
+        <span className="max-w-[82%] rounded-2xl bg-[#F4F4F5] px-3 py-2 text-[13px] italic text-[#A3A3A3]">
+          {interim}
+        </span>
+      </div>
+    ) : null;
+
   const CHIP_CLS =
     "flex w-full min-h-[44px] items-center rounded-2xl bg-white p-4 text-left text-[14px] font-bold tracking-ko text-[#0A0A0A] [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.99] [word-break:keep-all]";
 
@@ -952,12 +1049,33 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
               className="shrink-0 transition-transform duration-500"
               style={{ transform: swallow ? `scale(${M.swallowScale})` : "scale(1)" }}
             >
-              <LingoGenie size={40} variant="avatar" talking={assembling} />
+              <LingoGenie size={40} variant="avatar" talking={voice.speaking || assembling} />
             </span>
             <p className="min-w-0 flex-1 rounded-2xl bg-white px-3.5 py-2.5 text-[13px] font-semibold leading-relaxed tracking-ko text-[#16161D] [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] [word-break:keep-all]">
               {bubble}
             </p>
+            {/* 낭독 토글 — 49 :8138-8150 실측 복제(OFF 시 대기분 절단). */}
+            <button
+              type="button"
+              aria-label={voice.ttsOn ? "낭독 끄기" : "낭독 켜기"}
+              aria-pressed={voice.ttsOn}
+              onClick={() => {
+                if (voice.ttsOn) voice.stopSpeaking();
+                voice.toggleTts();
+              }}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform active:scale-90"
+              style={
+                voice.ttsOn
+                  ? { backgroundColor: "#EEF3FE", color: "#1D4ED8" }
+                  : { backgroundColor: "#F4F4F5", color: "#9A9A9A" }
+              }
+            >
+              {voice.ttsOn ? <Volume2 className="h-4 w-4" strokeWidth={2.5} /> : <VolumeX className="h-4 w-4" strokeWidth={2.5} />}
+            </button>
           </div>
+
+          {/* 인식 중 미리보기 — 입력줄 위. */}
+          {interim && <div className="mt-2">{InterimGhost()}</div>}
 
           <div className="mt-2.5 space-y-2">
             {/* 목적 4택 */}
@@ -1023,6 +1141,7 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
                   className={INPUT_CLS}
                   style={INPUT_STYLE}
                 />
+                {MicButton()}
                 <button type="button" onClick={submitOneLiner} disabled={!textInput.trim()} className={PRIMARY_CLS}>입력</button>
               </div>
             )}
@@ -1047,6 +1166,7 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
                     className={INPUT_CLS}
                     style={INPUT_STYLE}
                   />
+                  {MicButton()}
                   <button type="button" onClick={submitAsk} disabled={!textInput.trim()} className={PRIMARY_CLS}>입력</button>
                 </div>
                 {inlineErr && <p className="px-1 text-[11.5px] font-semibold text-[#DC2626] [word-break:keep-all]">{inlineErr}</p>}
