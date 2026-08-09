@@ -7554,7 +7554,10 @@ export function CardStudioPage({
             </div>
 
             {/* 입력 존 — 스텝별(대답 1 = setter 즉시 반영). */}
-            <div className="mt-2">
+            {/* M1-e — space-y-1.5 = 기존 스텝 내부 간격 상수 재사용(:7566 link · :7630 텍스트 스텝).
+                한 스텝이 형제 2개를 그리는 경우(magic = 사진 버튼 + 입력줄)에만 실효 —
+                자식 1개인 기존 스텝들은 영향 0(하단 붙음 해소). */}
+            <div className="mt-2 space-y-1.5">
               {dStep === "photo" && (
                 <label className="flex min-h-[48px] w-full cursor-pointer items-center justify-center rounded-2xl bg-[#0A0A0A] text-[14px] font-bold text-white active:scale-[0.98]">
                   사진 올리기
@@ -7591,16 +7594,18 @@ export function CardStudioPage({
                   </div>
                 </div>
               )}
-              {/* M1 — 마법 현관: 사진(기존 실업로드 핸들러 그대로) + 한 문장(아래 공용 입력줄 재사용). */}
+              {/* M1 — 마법 현관: 사진(기존 실업로드 핸들러 그대로) + 한 문장(아래 공용 입력줄 재사용).
+                  M1-e — 버튼 스타일·라벨 전부 photo 스텝(:7558-7562) 원문 복제(신규 문구 0). */}
               {dStep === "magic" && (
                 <label className="flex min-h-[48px] w-full cursor-pointer items-center justify-center rounded-2xl bg-[#0A0A0A] text-[14px] font-bold text-white active:scale-[0.98]">
-                  사진 고르기
+                  사진 올리기
                   <input type="file" accept="image/*" className="hidden" onChange={handleProductImageChange} />
                 </label>
               )}
-              {/* M1 — 숫자 확인 자물쇠: 읽힌 것만 표시 + 2택. 반영은 [맞아요] 탭에서만. */}
+              {/* M1 — 숫자 확인 자물쇠: 읽힌 것만 표시 + 2택. 반영은 [맞아요] 탭에서만.
+                  M1-e — 내부 간격 space-y-1.5(기존 스텝 상수) · 칩 행은 gbAsk/gbFail 문법(flex gap-2) 동일. */}
               {dStep === "magicConfirm" && (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <div className="rounded-xl bg-[#F4F4F5] px-3 py-2.5">
                     {(() => {
                       const d = magicDraftRef.current;
