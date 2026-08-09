@@ -142,7 +142,7 @@ const PURPOSE_CHIPS: {
 }[] = [
   { key: "sell", Icon: Store, label: "상품판매 — 농산물·가공품을 주문받아요" },
   { key: "host", Icon: CalendarCheck, label: "예약·쿠폰 — 손님이 찾아오게 해요" },
-  { key: "tell", Icon: Megaphone, label: "소식 알리기 — 우리 가게를 소개해요" },
+  { key: "tell", Icon: Megaphone, label: "소식 알리기 — 다양한 소식을 친구에게 전해요" },
   { key: "form", Icon: PenLine, label: "직접 만들기 — 링고 없이 폼으로 만들어요" },
 ];
 // 하위 칩 라벨 = 기존 확정분 재사용(신규 작문 0): 49 S1 목적 게이트(:4998·:5016·:4928·:4929).
