@@ -21,6 +21,7 @@ import {
   Mic,
   Volume2,
   VolumeX,
+  ArrowUp,
 } from "lucide-react";
 import {
   parseKrwInput,
@@ -292,12 +293,13 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
   useEffect(() => {
     setInAppNoMic(getInAppBrowser());
   }, []);
-  // 마이크 노출 조건 — 지원 + 인앱 아님. 둘 중 하나라도 아니면 버튼 미렌더(가짜 버튼 금지).
-  const [micUsable, setMicUsable] = useState(false);
+  // 마이크 렌더 게이트 — 49 :2364 동형: 낙관적 true 로 시작하고, SR 부재가 확인될 때만 내린다.
+  //   (구 50 자체 조합 `useState(false) + useEffect` 는 첫 페인트에 마이크가 사라지는 원인이었다.
+  //    49·홈 어느 쪽도 "SR 지원"을 비관적 초기값으로 렌더 게이트에 걸지 않는다.)
+  const [voiceSupported, setVoiceSupported] = useState(true);
   useEffect(() => {
-    setMicUsable(canUseSpeechRecognition());
+    if (!canUseSpeechRecognition()) setVoiceSupported(false);
   }, []);
-  const showMic = micUsable && !inAppNoMic;
 
   // 2막(휘리릭)
   const videoAiRef = useRef<{ title: string; summary: string; keyPoints: string[] } | null>(null);
@@ -815,38 +817,80 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
     "flex min-h-[44px] shrink-0 items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]";
   const CARD_CLS =
     "rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)]";
-  // 마이크 버튼 — 49 입력줄 실측 복제(2분기).
-  //   인앱(:8274-8283) = [음성으로 만들기] 크롬 핸드오프 — WebView 안에서 마이크를 켜지 않는다(영구 락).
-  //   정상(:8285-8296) = 원형 마이크. 미지원(인앱 아님 + SR 부재)이면 렌더 자체를 안 한다(가짜 버튼 0).
-  const MicButton = () =>
-    inAppNoMic ? (
-      <button
-        type="button"
-        onClick={() => void startVoiceHandoff("/studio-lab", say)}
-        aria-label="음성으로 만들기 — 크롬에서 이어져요"
-        className="flex h-9 shrink-0 items-center justify-center gap-1 rounded-full px-3 text-[12px] font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
-        style={{ backgroundColor: LINGO_BLUE }}
+  // 입력줄 — 49 입력 컴포저(:8255-8308) 구성 그대로 복제.
+  //   pill 컨테이너(rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5, gap-1.5) + 투명 input
+  //   + 우측 버튼 1개(자리 공유): 인앱=[음성으로 만들기] / 빈칸=마이크 / 글자 있음=전송.
+  //   청취 중에는 컨테이너에 빨간 링(49 :8257). 낭독 토글은 입력줄이 아니라 헤더 소관(49 :8137-8150).
+  function InputRow(opts: {
+    value: string;
+    onChange: (v: string) => void;
+    onSubmit: () => void;
+    placeholder: string;
+    inputMode?: "text" | "numeric" | "url";
+    submitDisabled?: boolean;
+  }) {
+    const empty = opts.value.trim() === "";
+    return (
+      <div
+        className="flex items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1.5 pl-4 pr-1.5"
+        style={voice.listening ? { boxShadow: "0 0 0 2px #DC2626" } : undefined}
       >
-        <Mic className="h-[14px] w-[14px]" strokeWidth={2.5} />
-        음성으로 만들기
-      </button>
-    ) : showMic ? (
-      <button
-        type="button"
-        onClick={onMicTap}
-        aria-label={voice.listening ? "음성 입력 종료" : "음성으로 말하기"}
-        className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-90 disabled:opacity-50"
-        style={{ backgroundColor: voice.listening ? "#DC2626" : LINGO_BLUE }}
-      >
-        {voice.listening && (
-          <span
-            className="absolute inset-0 animate-ping rounded-full"
-            style={{ backgroundColor: "rgba(220,38,38,0.4)" }}
-          />
+        <input
+          value={opts.value}
+          onChange={(e) => opts.onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing && (e as unknown as { keyCode?: number }).keyCode !== 229) {
+              e.preventDefault();
+              opts.onSubmit();
+            }
+          }}
+          inputMode={opts.inputMode ?? "text"}
+          placeholder={voice.listening ? "듣고 있어요…" : opts.placeholder}
+          className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#9A9A9A]"
+        />
+        {inAppNoMic && empty ? (
+          /* 인앱 마이크 자리 = [음성으로 만들기] 크롬 핸드오프(49 :8274-8283 동형). */
+          <button
+            type="button"
+            onClick={() => void startVoiceHandoff("/studio-lab", say)}
+            aria-label="음성으로 만들기 — 크롬에서 이어져요"
+            className="flex h-9 shrink-0 items-center justify-center gap-1 rounded-full px-3 text-[12px] font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
+            style={{ backgroundColor: LINGO_BLUE }}
+          >
+            <Mic className="h-[14px] w-[14px]" strokeWidth={2.5} />
+            음성으로 만들기
+          </button>
+        ) : voiceSupported && empty ? (
+          <button
+            type="button"
+            onClick={onMicTap}
+            aria-label={voice.listening ? "음성 입력 종료" : "음성으로 말하기"}
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-90 disabled:opacity-50"
+            style={{ backgroundColor: voice.listening ? "#DC2626" : LINGO_BLUE }}
+          >
+            {voice.listening && (
+              <span
+                className="absolute inset-0 animate-ping rounded-full"
+                style={{ backgroundColor: "rgba(220,38,38,0.4)" }}
+              />
+            )}
+            <Mic className="relative h-[18px] w-[18px]" strokeWidth={2.25} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={opts.onSubmit}
+            disabled={opts.submitDisabled ?? empty}
+            aria-label="보내기"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-90 disabled:opacity-40"
+            style={{ backgroundColor: LINGO_BLUE }}
+          >
+            <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
+          </button>
         )}
-        <Mic className="relative h-[18px] w-[18px]" strokeWidth={2.25} />
-      </button>
-    ) : null;
+      </div>
+    );
+  }
 
   // 인식 중 회색 미리보기 — 49 :8228-8233 마크업 복제(우측 정렬 · italic · #A3A3A3).
   const InterimGhost = () =>
@@ -1099,7 +1143,7 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
               {V6_INAPP_NOTICE}
             </p>
           ) : (
-            !micUsable && (
+            !voiceSupported && (
               <p className="mt-1.5 text-center text-[10px] font-medium text-[#B4B4B4]">
                 음성은 크롬에서 쓸 수 있어요. 지금은 입력으로 편집해요.
               </p>
@@ -1145,59 +1189,39 @@ export function CardStudioPage50({ store }: { store?: CardStudioPage50Store | nu
               </>
             )}
 
-            {step === "video" && (
-              <div className="flex items-center gap-2">
-                <input
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); submitVideo(); } }}
-                  inputMode="url"
-                  placeholder="영상 링크 붙여넣기"
-                  className={INPUT_CLS}
-                  style={INPUT_STYLE}
-                />
-                <button type="button" onClick={submitVideo} disabled={!textInput.trim()} className={PRIMARY_CLS}>입력</button>
-              </div>
-            )}
+            {step === "video" &&
+              InputRow({
+                value: textInput,
+                onChange: setTextInput,
+                onSubmit: submitVideo,
+                placeholder: "영상 링크 붙여넣기",
+                inputMode: "url",
+              })}
 
-            {step === "oneLiner" && (
-              <div className="flex items-center gap-2">
-                <input
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); submitOneLiner(); } }}
-                  placeholder="찰옥수수 25000원 50박스, 나눔 10%"
-                  className={INPUT_CLS}
-                  style={INPUT_STYLE}
-                />
-                {MicButton()}
-                <button type="button" onClick={submitOneLiner} disabled={!textInput.trim()} className={PRIMARY_CLS}>입력</button>
-              </div>
-            )}
+            {step === "oneLiner" &&
+              InputRow({
+                value: textInput,
+                onChange: setTextInput,
+                onSubmit: submitOneLiner,
+                placeholder: "찰옥수수 25000원 50박스, 나눔 10%",
+              })}
 
             {(isAskStep || isStepInput) && (
               <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <input
-                    value={textInput}
-                    onChange={(e) => { setTextInput(e.target.value); setInlineErr(null); }}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); submitAsk(); } }}
-                    inputMode={step === "askName" || step === "name" ? "text" : "numeric"}
-                    placeholder={
-                      step === "askName" || step === "name"
-                        ? "찰옥수수 10개입"
-                        : step === "askPrice" || step === "price"
-                          ? "25000"
-                          : step === "askQty" || step === "qty"
-                            ? "50"
-                            : String(DIRECTOR_DROPPY_RATE_DEFAULT)
-                    }
-                    className={INPUT_CLS}
-                    style={INPUT_STYLE}
-                  />
-                  {MicButton()}
-                  <button type="button" onClick={submitAsk} disabled={!textInput.trim()} className={PRIMARY_CLS}>입력</button>
-                </div>
+                {InputRow({
+                  value: textInput,
+                  onChange: (v) => { setTextInput(v); setInlineErr(null); },
+                  onSubmit: submitAsk,
+                  inputMode: step === "askName" || step === "name" ? "text" : "numeric",
+                  placeholder:
+                    step === "askName" || step === "name"
+                      ? "찰옥수수 10개입"
+                      : step === "askPrice" || step === "price"
+                        ? "25000"
+                        : step === "askQty" || step === "qty"
+                          ? "50"
+                          : String(DIRECTOR_DROPPY_RATE_DEFAULT),
+                })}
                 {inlineErr && <p className="px-1 text-[11.5px] font-semibold text-[#DC2626] [word-break:keep-all]">{inlineErr}</p>}
               </div>
             )}
