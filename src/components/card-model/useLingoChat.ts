@@ -65,7 +65,8 @@ export type LingoContext = {
   studio_state?: {
     mode: string;
     applied_blocks: string[];
-    score: number;
+    /** D-트랙 — 49 전환력 게이지 폐지로 미전송. 45(롤백 자산)는 계속 전송하므로 키는 존치·optional. */
+    score?: number;
     card_title: string;
     product_name?: string;
     product_price?: number;

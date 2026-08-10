@@ -37,7 +37,6 @@ import {
   Link as LinkIcon,
   Ticket,
   Search,
-  TrendingUp,
   Sparkles,
   Star,
   Check,
@@ -50,7 +49,6 @@ import {
   ChevronRight,
   Store,
   X,
-  Zap,
   Plus,
   Copy,
   MessageCircle,
@@ -417,22 +415,17 @@ const CONFIGURABLE = [
   "brand",
 ];
 
-function getStage(score: number) {
-  // T5-W0 — 3성 기준 75점 = 구 ENHANCE_UNLOCK 값 계승(게이지 등급 무변 · 강화 잠금 용도만 소멸).
-  if (score >= 75) return { stars: 3, label: "완성", tone: "전환 준비 완료" };
-  if (score >= 40) return { stars: 2, label: "괜찮음", tone: "조금만 더" };
-  return { stars: 1, label: "기본", tone: "아직 약해요" };
-}
-
 // UI-5-T2-E3c — 모드 식별자 단일 정본. 전 소비 지점(Record 키·함수 인자·상태)이 이 타입만 사용.
 //   실제 값 집합 = 이 세 리터럴. 하드코딩 유니온 제거 → 표기 불일치 원천 차단.
 type StudioMode = "general" | "reserve" | "commerce";
 
 // 모드별 덱 구성 (주 제작 → 일반 레버) — T5-W0: 강화 3종(top·boost·marketing) 제거.
+//   D-트랙 — 스텁 4종(aivideo·dock·image·review) 덱에서 숨김(노출만 제거).
+//   STUDIO_BLOCKS 정의·관련 상태(aivStatus·cfgDock)·DOCK_OPTIONS 는 부활 자산으로 보존.
 export const DECK_IDS: Record<StudioMode, string[]> = {
-  general: ["content", "dock"],
-  reserve: ["calendar", "party", "content", "review", "coupon", "brand", "dock", "image", "link"],
-  commerce: ["product", "productimage", "aivideo", "seasonal", "review", "delivery", "coupon", "brand", "dock", "link"],
+  general: ["content"],
+  reserve: ["calendar", "party", "content", "coupon", "brand", "link"],
+  commerce: ["product", "productimage", "seasonal", "delivery", "coupon", "brand", "link"],
 };
 
 // UI-5-T1h — AI 액션 모드 권한 가드(§0 역할 경계). 허용 블록 = 그 모드의 덱 구성(DECK_IDS) 자체(임의 창작 아님).
@@ -2927,17 +2920,26 @@ export function CardStudioPage({
     });
   }
 
-  const score = useMemo(
-    () =>
-      Math.min(
-        100,
-        STUDIO_BLOCKS.reduce((sum, b) => (applied[b.id] ? sum + b.power : sum), 0)
-      ),
-    [applied]
-  );
-
-  const stage = getStage(score);
-  const appliedCount = STUDIO_BLOCKS.filter((b) => applied[b.id]).length;
+  // D-트랙 — 전환력 게이지(점수·등급) 폐지 → 조건 기반 코칭 한 줄. 숫자·점수 금지.
+  //   판정 재료 = 기존 state 만(신규 state·계산 0): productImageUrl / saleStartIso·saleEndIso /
+  //   applied["coupon"] / slotDays / selectedVideo.
+  const coachLine = useMemo(() => {
+    const PUBLISH_OK = "지금 그대로 발행하셔도 좋아요";
+    const COUPON = "쿠폰을 더하면 손님이 다시 찾아와요";
+    if (mode === "commerce") {
+      if (!productImageUrl) return "사진을 올리면 손님 눈에 확 들어와요";
+      if (!(saleStartIso && saleEndIso)) return "판매 기간을 정하면 주문이 빨라져요";
+      if (!applied["coupon"]) return COUPON;
+      return PUBLISH_OK;
+    }
+    if (mode === "reserve") {
+      if (slotDays === 0) return "예약 가능일을 열면 손님이 바로 잡을 수 있어요";
+      if (!applied["coupon"]) return COUPON;
+      return PUBLISH_OK;
+    }
+    if (!selectedVideo && !productImageUrl) return "영상이나 사진을 담으면 전해지기 쉬워요";
+    return PUBLISH_OK;
+  }, [mode, productImageUrl, saleStartIso, saleEndIso, applied, slotDays, selectedVideo]);
 
   const lingo = useMemo(() => {
     const deckBlocks = DECK_IDS[mode].map(blockById);
@@ -4197,7 +4199,6 @@ export function CardStudioPage({
       studio_state: {
         mode: m, // E3c — 실모드 라이브(studio_state.mode 항상 현재 실모드와 일치).
         applied_blocks,
-        score,
         // F5-5-S2 — AI 재료 데모 폴백 제거: 제목 비움 = 빈값 전달(링고가 데모 제목을 실카드로 오인 금지).
         card_title: cfgTitle.trim() || (applied["product"] && cfgProductName ? cfgProductName : ""),
         ...(cfgProductName ? { product_name: cfgProductName } : {}),
@@ -5054,23 +5055,7 @@ export function CardStudioPage({
             )}
           </div>
 
-          {/* 등급 칩 — 별점 + 라벨 */}
-          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#F4F4F5] py-1 pl-2 pr-2.5">
-            <span className="flex items-center gap-0.5">
-              {[0, 1, 2].map((i) => (
-                <Star
-                  key={i}
-                  className="h-3.5 w-3.5 transition-all duration-300"
-                  style={{
-                    fill: i < stage.stars ? accent : "transparent",
-                    color: i < stage.stars ? accent : "#D4D4D4",
-                  }}
-                  strokeWidth={2.25}
-                />
-              ))}
-            </span>
-            <span className="text-[11px] font-bold text-[#0A0A0A]">{stage.label}</span>
-          </span>
+          {/* D-트랙 — 등급 칩(별점 + stage 라벨) 제거. 헤더 구조는 그대로. */}
         </div>
       </header>
 
@@ -5326,35 +5311,13 @@ export function CardStudioPage({
           </div>
         )}
 
-        {/* ───────── 전환력 게이지 ───────── */}
-        {/* UI-5-T1c — 조립 포인터 앵커(gauge): 완성도 스텝 지목 대상. */}
-        {/* M3 — 착지 중 숨김(별점 헤더 = 세부 편집 표면). 조건부 렌더 · 삭제 0. */}
+        {/* ───────── 링고 코칭 한 줄 (구 전환력 게이지 자리) ───────── */}
+        {/* UI-5-T1c — 조립 포인터 앵커(gauge): 완성도 스텝 지목 대상(앵커 키 유지). */}
+        {/* M3 — 착지 중 숨김. 조건부 렌더 · 삭제 0. */}
         <section data-assemble-anchor="gauge" className={`mt-5 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] ${magicLanding ? "hidden" : ""}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F4F4F5] text-[#525252]">
-                <TrendingUp className="h-[18px] w-[18px]" strokeWidth={2.25} />
-              </span>
-              <div className="flex flex-col">
-                <span className="text-[14px] font-bold text-[#0A0A0A]">{stage.label}</span>
-                <span className="text-[11px] text-[#8A8A8A]">전환력 · {stage.tone}</span>
-              </div>
-            </div>
-            <span className="text-[22px] font-bold tabular-nums" style={{ color: accent }}>
-              {score}
-              <span className="text-[13px] font-semibold text-[#A3A3A3]">/100</span>
-            </span>
-          </div>
-          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#F0F0F0]">
-            <div
-              className="h-full rounded-full transition-all duration-500 ease-out"
-              style={{
-                width: `${score}%`,
-                backgroundColor: accent,
-              }}
-            />
-          </div>
-          <p className="mt-2 text-[11px] text-[#8A8A8A]">레버 {appliedCount}개 장착</p>
+          <p className="text-[13px] font-bold leading-relaxed text-[#0A0A0A] [word-break:keep-all]">
+            {coachLine}
+          </p>
         </section>
 
         {/* ───────── 링고AI 코칭 (탭하면 어시스턴트 열림) ───────── */}
@@ -5452,7 +5415,7 @@ export function CardStudioPage({
                   {isOn && lingoTouched.has(block.id) && (
                     <LingoTouchBadge needsConfirm={NUMBER_CRITICAL_BLOCKS.has(block.id)} />
                   )}
-                  {/* 상단: 파워 + 카테고리 — T5-W0: 강화(isPaid) 분기·"도달↑" 표기 소멸. */}
+                  {/* 상단: 카테고리 — D-트랙: "레버 +N" 파워 표기 제거(power 필드는 데이터로 보존). */}
                   <div className="flex items-center justify-between">
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
@@ -5461,12 +5424,6 @@ export function CardStudioPage({
                       style={isMainBlock(block.id) ? { backgroundColor: accent } : undefined}
                     >
                       {isMainBlock(block.id) ? "핵심" : "레버"}
-                    </span>
-                    <span
-                      className="flex items-center gap-0.5 text-[15px] font-bold tabular-nums"
-                      style={{ color: accent }}
-                    >
-                      <Zap className="h-4 w-4" strokeWidth={2.5} fill={accent} />+{block.power}
                     </span>
                   </div>
 

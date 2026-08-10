@@ -244,7 +244,7 @@ export function CardModelBody({
     gridItems.push({ id: "store", label: "매장 정보", icon: Info });
   // S4-6 — 배송정보 셀(additive): 이중 게이트(applied.shipping + 실값 행 존재 — delivery 문법 동형).
   //   내용 = buildShippingView 산출 표(판매자 고지) — SHIP_STAGES/송장(배송추적)과 무관(§0 S4b 락).
-  if (applied["shipping"] && (model.shipping?.rows.length ?? 0) > 0)
+  if (applied["delivery"] && (model.shipping?.rows.length ?? 0) > 0)
     gridItems.push({ id: "shipping", label: "배송정보", icon: Truck });
   const hasDockCell = applied["dock"] && dockItems.length > 0;
   const gridCount = gridItems.length + (hasDockCell ? 1 : 0);
