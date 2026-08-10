@@ -397,6 +397,30 @@ const SEASONAL_HELPER: Record<ProductKind, string> = {
 // F3-10b — 구 TIME_OPTIONS(예약 시간 레일) 폐기(45 FIX-62 동형): 실슬롯 편집기가 대체.
 // 배송 택배사 선택지
 const COURIERS = ["CJ대한통운", "우체국택배", "한진택배", "롯데택배", "로젠택배", "직접 전달"];
+// M8 §1 — 매직 시트 판매 단위 칩(당근 어휘 · 명사 최대 4자).
+type MagUnit = "개" | "박스" | "망" | "kg" | "묶음";
+const MAG_UNITS: MagUnit[] = ["개", "박스", "망", "kg", "묶음"];
+// M8 §8 — 시트 단위 → 폼 정본 saleUnit 매핑. 개→unit / 박스·망·묶음→box / kg→weight.
+const MAG_UNIT_TO_SALE_UNIT: Record<MagUnit, "unit" | "box" | "weight"> = {
+  개: "unit",
+  박스: "box",
+  망: "box",
+  묶음: "box",
+  kg: "weight",
+};
+// M8 §5 — 거래 방식 "직거래" 저장값 = COURIERS 정본 픽업값(임의 enum 신설 금지 · F6-4 서버 게이트 재료).
+const MAG_DIRECT_COURIER = "직접 전달";
+// M8 후속 — 택배 선택 시 택배사는 아직 미선택. 특정 회사(COURIERS[0]) 확정 기록 대신 방식만 기록.
+//   서버 v7.12 배송형 게이트는 '직접 전달' 아닌 값 전부를 배송형으로 판정하므로 판정 결과 동일.
+const MAG_PARCEL_COURIER = "택배";
+// M8 §4 — 드로피 나눔 칩(값은 기존 0~20 검증을 그대로 통과하는 5단위만).
+const MAG_DROPPY_CHIPS: { label: string; value: string }[] = [
+  { label: "0%", value: "0" },
+  { label: "5%", value: "5" },
+  { label: "10%", value: "10" },
+  { label: "15%", value: "15" },
+  { label: "20%", value: "20" },
+];
 // 설정 UI가 필요한 블록
 const CONFIGURABLE = [
   "calendar",
@@ -550,6 +574,20 @@ export const STEP_PLAN: Record<StudioMode, PlanStep[]> = {
   ],
 };
 
+// M8-C §2 — 조립 안내 체크리스트(지니 무대)의 커머스 표시 문구. STEP_PLAN 자체는 무수정 —
+//   여기는 연출 라벨만 갈아끼우는 표시층 사전이다(단계 수·순서·앵커 무접촉).
+//   general 키(video/title/clip)까지 덮는 이유: 매직 진입 시 런타임 플랜이 general 로 남는
+//   경로가 있어(초기값 :2687 = STEP_PLAN.general) 상품 카드에 영상 문법이 뜨기 때문.
+const COMMERCE_ASSEMBLE_LABELS: Record<string, string> = {
+  video: "사진 담기",
+  photo: "사진 담기",
+  title: "제목·한마디",
+  clip: "가격·수량",
+  price: "가격·수량",
+  season: "판매 기간",
+  review: "확인",
+};
+
 // UI-5-T7-T5-W1 — "링고에게 제작시키기" 멘트 정본(Duke 확정 · CC 재량 작문 금지 — 수정은 이
 //   상수만). 화법 3규칙: 정중 존댓말 / 요청+용도 설명 세트 / 정의 용어만. 이모지·감탄사 0.
 export const DIRECTOR_MENTS = {
@@ -563,7 +601,8 @@ export const DIRECTOR_MENTS = {
   name: "상품 이름을 알려주세요. 카드 제목으로 사용됩니다.",
   type: "어떤 상품인가요? 신선식품은 수확일 기준 예약 판매로, 가공·공산품은 재고 판매로 준비해 드립니다.",
   // T5-W2 — 퍼블릭(정보) 멘트 정본(Duke 확정 · 재량 작문 금지). 시작·완성은 기존 정본 재사용.
-  link: "알리고 싶은 영상 링크를 붙여주세요. 제목과 요약을 만들어 카드에 담아드리겠습니다.",
+  // M8-L2 §4 — 장문 축약(1줄 · 존대 · 60대 친화). 발화 로직·순서 무수정 — 문자열만.
+  link: "영상 링크를 붙여 주세요 — 제목과 요약은 제가 만들어 드려요.",
   // T5-W3 — 예약·쿠폰 멘트 정본(Duke 확정 · 재량 작문 금지). 쿠폰 내용·달력 슬롯 = 사장님(AI_BLOCKED/PENDING).
   coupon: "손님께 드릴 쿠폰을 정해주세요. 만들어 두신 쿠폰을 고르시거나, 지금 새로 만드실 수 있습니다.",
   reserveAsk: "예약도 받으시나요? 받으시면 예약 달력을 함께 넣어 드립니다.",
@@ -949,6 +988,8 @@ export function CardStudioPage({
   const [couponAsk, setCouponAsk] = useState<null | "fresh" | "attached" | "insert_failed">(null);
   // F3-6(3) — 생성된 할인 쿠폰 id(발행 게이트 실패 시 재사용 — 고아 쿠폰 누적 방지). 장착 시도 후 소거.
   const pendingCouponIdRef = useRef<string | null>(null);
+  // M8-D §2 — 착지층 [쿠폰 붙이기] 인라인 펼침(Radix 금지 락 — 조건부 렌더 전용).
+  const [landingCouponOpen, setLandingCouponOpen] = useState(false);
   const [cfgDock, setCfgDock] = useState(DOCK_OPTIONS[0].id);
   const [cfgProductName, setCfgProductName] = useState("");
   const [cfgProductPrice, setCfgProductPrice] = useState("");
@@ -1096,6 +1137,20 @@ export function CardStudioPage({
   const [dMagPrice, setDMagPrice] = useState("");
   const [dMagQty, setDMagQty] = useState("");
   const [dMagDroppy, setDMagDroppy] = useState("");
+  // M8 §1 — 판매 단위 칩. 시트 라벨·접미·에코 전부 이 값에 연동. 저장은 §8 매핑(MAG_UNIT_TO_SALE_UNIT).
+  const [dMagUnit, setDMagUnit] = useState<MagUnit>("개");
+  // M8 §2 — 판매 방식 칩. "group" 확정 시 cfgProduct.gbEnabled=true → period 확정(:1803)에서 gbTiers 진입.
+  const [dMagSaleMode, setDMagSaleMode] = useState<"single" | "group">("single");
+  // M8 §5 — 거래 방식·배송비 칩(당근 어휘). 기본 미선택 = 만들기 잠김.
+  const [dMagDeal, setDMagDeal] = useState<"direct" | "parcel" | null>(null);
+  const [dMagShipMode, setDMagShipMode] = useState<"included" | "separate" | null>(null);
+  const [dMagShipFee, setDMagShipFee] = useState("");
+  // M8 §3 — 사진 확인 게이트. 업로드 성공만으로 확정하지 않는다(자동 전이 금지).
+  const [photoConfirmed, setPhotoConfirmed] = useState(false);
+  // M8 §8 — 시트가 확정한 단위 원문(sale_unit_label 기록용). null = 시트 미경유 = 키 생략.
+  const [magUnitLabel, setMagUnitLabel] = useState<string | null>(null);
+  // M8 §6 — 시세 띠 링고 팁용 도매 대표값(원/kg). 밴드 1줄과 같은 effect 가 함께 채운다.
+  const [dBandWon, setDBandWon] = useState<number | null>(null);
   // M3 — 매직 착지 상태. 매직 자동 조립 발화 시점에 true → 쉬운 고치기 전면·세부 편집 표면 숨김.
   //   [자세히 고치기]·지휘자 재시작·모드 전환에서 false(기존 전체 UI 원래 순서 복귀 — 삭제 0).
   const [magicLanding, setMagicLanding] = useState(false);
@@ -1172,6 +1227,13 @@ export function CardStudioPage({
     setDMagPrice("");
     setDMagQty("");
     setDMagDroppy("");
+    // M8 — 시트 칩 초안도 함께 초기화(새 지휘 = 새 시트).
+    setDMagUnit("개");
+    setDMagSaleMode("single");
+    setDMagDeal(null);
+    setDMagShipMode(null);
+    setDMagShipFee("");
+    setPhotoConfirmed(false);
     dGo(mode === "commerce" ? "magic" : "link");
   }
   // T5-W1c(P1-3) — 지휘 종료 단일 출구: 실값 입력분만 보존, 빈 스켈레톤 블록은 해제(미완성 껍데기
@@ -1244,7 +1306,8 @@ export function CardStudioPage({
   // T5-W1a — KAMIS 품목 1회 로드(폼 :312-315 동형 쿼리 — 분류 스텝 진입·신선 한정 · graceful).
   useEffect(() => {
     // M1-f — 시세 참고 옵트인도 같은 목록을 쓴다(로드 게이트만 확장 · 쿼리·상태 무변경).
-    const onCatStep = dStep === "category" || (dStep === "magic" && dCatOptIn);
+    // M8-E §2 — 옵트인 칩 폐지: 매직 스텝이면 목록을 항상 확보한다(자동 매칭 재료). 쿼리·상태 무변경.
+    const onCatStep = dStep === "category" || dStep === "magic";
     if (!directorOn || !onCatStep || cfgProduct.type !== "fresh" || dKamisList.length > 0) return;
     let cancelled = false;
     void (async () => {
@@ -1268,15 +1331,16 @@ export function CardStudioPage({
   // M1-f — 매직 확인 화면에도 같은 밴드를 붙인다. 트리거·소스·문구 전부 이 effect 단일 소스 재사용
   //   (조회 조건 3종 = 신선 + kamisItemCode + category_code 그대로 · 복제 0). 가격이 읽힌 경우만.
   useEffect(() => {
-    const onBandStep =
-      dStep === "price" ||
-      // M1-k — 시세는 매직 4칸 시트로 이사: 가격 칸에 유효 정수가 있을 때만.
-      (dStep === "magic" && /^\d+$/.test(dMagPrice.trim()) && Number(dMagPrice.trim()) > 0);
+    // M8-E §3 — 가격 정수>0 전제 제거: 가격 입력 전에도 참고 표시(팁의 비교 문장만 가격 게이트).
+    //   구 조건은 stale deps(dMagPrice 미포함)와 맞물려 "품목 먼저·가격 나중" 순서에서 띠가
+    //   영영 안 뜨거나, 가격을 지워도 띠가 남는 꼬임을 만들었다 — 전제 제거로 소멸.
+    const onBandStep = dStep === "price" || dStep === "magic";
     if (!directorOn || !onBandStep) return;
     const code = cfgProduct.kamisItemCode;
     const catCode = code ? (dKamisList.find((it) => it.item_code === code)?.category_code ?? null) : null;
     if (cfgProduct.type !== "fresh" || !code || !catCode) {
       setDBandLine(null);
+      setDBandWon(null); // M8-E §0 — 구 결함: 띠만 지우고 수치는 남아 이전 품목 기준으로 팁이 뜨던 것.
       return;
     }
     let cancelled = false;
@@ -1288,10 +1352,15 @@ export function CardStudioPage({
         if (cancelled || error || !data) return;
         const band = data as { status?: string; item_name?: string | null; wholesale?: { avg: number; median?: number } | null };
         const rep = band.status === "ok" ? (band.wholesale?.median ?? band.wholesale?.avg ?? null) : null;
-        if (rep != null && rep > 0) {
+        if (rep == null || rep <= 0) {
+          // M8-E §0 — 구 결함: 조회 실패·no_data 에 아무것도 안 해 직전 품목의 시세가 계속 떠 있었다.
+          setDBandLine(null);
+          setDBandWon(null);
+        } else {
           // 백원 반올림 + "약" 접두(단위 헌법 표기 — PriceBandAdvisor :111 동형). 참고 1줄뿐, 값 제안·자동입력 0.
           const won = (Math.round(rep / 100) * 100).toLocaleString("ko-KR");
           setDBandLine(`KAMIS 참고 — ${band.item_name ?? cfgProduct.itemCategory} 도매 약 ${won}원/kg`);
+          setDBandWon(Math.round(rep / 100) * 100); // M8 §6 — 팁 판정용 수치(표시 문구는 위 1줄 그대로).
         }
       } catch {
         // 참고 정보 — 조용히 생략.
@@ -1315,6 +1384,54 @@ export function CardStudioPage({
   const [dSlotRect, setDSlotRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [dSpark, setDSpark] = useState<{ x: number; y: number; key: number } | null>(null);
   const dSparkedRef = useRef<Set<string>>(new Set());
+  // ── M8-L4 §3 — ✦ 배달부(칩 탭 → 카드로 날아가 찍힘). dSpark 문법 계승(key 재마운트 · 인라인 keyframe ·
+  //   reduced-motion 가드). fixed 레이어라 독(z-55) 안에서 독 밖 hero 로 날아간다.
+  const [dDeliver, setDDeliver] = useState<
+    { key: number; x: number; y: number; dx: number; dy: number; burst: boolean }[]
+  >([]);
+  const dDeliverKeyRef = useRef(0);
+  const dConvergeTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // M8-L4 §5 — 햅틱(도착 순간 1회). iOS 미지원 = 무동작이 정상.
+  const buzz = () => {
+    try {
+      navigator.vibrate?.(10);
+    } catch {
+      /* 미지원·차단 = 무동작 */
+    }
+  };
+  const reduceMotion = () =>
+    typeof window !== "undefined" &&
+    !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  // 도착 처리 — 카드 버스트 1회 + 햅틱. 비행 생략(reduced-motion) 경로도 이 함수로 수렴.
+  const deliverArrive = () => {
+    setBurstKey((k) => k + 1);
+    buzz();
+  };
+  /** 발화 좌표(칩 등) → hero 앵커 중심으로 ✦ 1개 발사. 흐름 차단 0(전부 비동기 장식). */
+  const flyToCard = (el: HTMLElement | null, burst = true) => {
+    const hero = document.querySelector('[data-assemble-anchor="hero"]'); // :1408 기존 조회 패턴.
+    if (!el || !hero) return deliverArrive();
+    const a = el.getBoundingClientRect();
+    const b = hero.getBoundingClientRect();
+    const x = a.left + a.width / 2;
+    const y = a.top + a.height / 2;
+    if (reduceMotion()) return deliverArrive(); // 가드 — 비행 생략, 버스트만.
+    // §3 상한: 진행 중 배달부는 1개(이전 것은 즉시 완료 처리 후 교체).
+    setDDeliver((prev) => {
+      if (prev.length > 0) deliverArrive();
+      dDeliverKeyRef.current += 1;
+      return [
+        {
+          key: dDeliverKeyRef.current,
+          x,
+          y,
+          dx: b.left + b.width / 2 - x,
+          dy: b.top + b.height / 2 - y,
+          burst,
+        },
+      ];
+    });
+  };
   const dPrevStepRef = useRef<DirectorStep>("photo");
   const dLogLenRef = useRef(0);
   // 스파클 — dLog 구독(핸들러 무수정): 새 user 항목 = 답 반영 신호. 위치 = 이동 전(직전 렌더) 오브 좌표.
@@ -1574,6 +1691,69 @@ export function CardStudioPage({
     dEcho(c.title ?? "이름 없는 쿠폰");
     dGo("reserveAsk");
   }
+  /** M8-D §2 — 쿠폰 선택 패널 본문(에러 배너 / 쿠폰 칩 / 0건 안내 / [쿠폰 만들러 가기]).
+   *  ⚠️ 마크업은 기존 coupon 스텝 :8463-8507 원문 그대로 이동만 했다 — 선택 핸들러만 인자로 분리.
+   *  호출처 2곳: 지휘자 coupon 스텝(pickDirectorCoupon 그대로) / 착지층(pickLandingCoupon).
+   *  extra = 착지층 전용 [쿠폰 빼기] 칩 슬롯(지휘자 경로는 미주입 = 미렌더). */
+  function renderCouponPicker(onPick: (c: StudioCoupon) => void, extra?: React.ReactNode) {
+    return (
+      <div className="space-y-2">
+        {couponsError && (
+          <div className="flex items-center justify-between gap-2 rounded-xl bg-[#FEF2F2] px-3 py-2.5">
+            <span className="text-[12px] font-semibold text-[#DC2626] [word-break:keep-all]">{couponsError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                couponsLoadedRef.current = false;
+                void loadCoupons();
+              }}
+              className="shrink-0 text-[12px] font-bold text-[#1D4ED8]"
+            >
+              다시 시도
+            </button>
+          </div>
+        )}
+        {extra}
+        {coupons.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {coupons.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={(e) => {
+                  onPick(c);
+                  flyToCard(e.currentTarget); // M8-D §3 — 배달부(칩 문법 동일).
+                }}
+                className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+              >
+                <Ticket className="h-4 w-4" strokeWidth={2.25} />
+                {c.title ?? "이름 없는 쿠폰"}
+              </button>
+            ))}
+          </div>
+        )}
+        {!couponsLoading && !couponsError && coupons.length === 0 && (
+          <p className="text-[12px] font-medium text-[#8A8A8A] [word-break:keep-all]">
+            등록된 쿠폰이 없어요 — 파트너 페이지에서 만들 수 있어요
+          </p>
+        )}
+        <a
+          href="/partner/coupons"
+          className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
+        >
+          쿠폰 만들러 가기
+        </a>
+      </div>
+    );
+  }
+  /** M8-D §3 — 착지층 전용 선택 핸들러. 공통 3동작만 수행하고 dGo 호출 0(체인 진입 금지).
+   *  pickDirectorCoupon 원본은 무수정 — 예약 경로 동작 1비트도 건드리지 않는다. */
+  function pickLandingCoupon(c: StudioCoupon) {
+    setSelectedCouponId(c.id);
+    if (!applied["coupon"]) setApplied((p) => ({ ...p, coupon: true }));
+    dEcho(c.title ?? "이름 없는 쿠폰");
+    setLandingCouponOpen(false);
+  }
   // T5-W3 — 예약 분기: 예 = 달력+인원 세트 "대표님 차례"(calendar AI_PENDING — 슬롯 선택은 사장님,
   //   기존 실슬롯 편집기 표면으로 지목) / 아니오 = 쿠폰 카드 완성(프리체크 경유).
   function pickDirectorReserve(yes: boolean) {
@@ -1611,11 +1791,94 @@ export function CardStudioPage({
   const magPriceN = magInt(dMagPrice);
   const magQtyN = magInt(dMagQty);
   const magDroppyN = magInt(dMagDroppy);
+  // ── M8-L4 §1 — 라이브 미리보기(이름·가격). ProductRegisterForm49.tsx:400-446 의
+  //   useEffect + setTimeout(350) + cleanup + cancelled 3종 패턴 동일 이식(공용 훅 신설 0).
+  //   매직 가동 중에만 흘린다. 확정은 여전히 [만들기](submitMagicSheet 무수정) — 여기는 선반영뿐.
+  //   §2 「스민다」: 실제 값이 바뀐 순간에만 setBurstKey 1회(같은 값·빈 값 = 호출 0).
+  const liveNameRef = useRef(cfgProductName);
+  const livePriceRef = useRef(cfgProductPrice);
+  liveNameRef.current = cfgProductName;
+  livePriceRef.current = cfgProductPrice;
+  useEffect(() => {
+    if (!directorOn || dStep !== "magic") return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      const name = dMagName.trim();
+      const price = magInt(dMagPrice) != null ? String(magInt(dMagPrice)) : "";
+      let changed = false;
+      if (name && name !== liveNameRef.current) {
+        setCfgProductName(name);
+        changed = true;
+      }
+      if (price && price !== livePriceRef.current) {
+        setCfgProductPrice(price);
+        changed = true;
+      }
+      if (changed) setBurstKey((k) => k + 1); // §2 — 반영 순간 카드 버스트 1회.
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dMagName, dMagPrice, directorOn, dStep]);
+  // ── M8-L4 §4 「살아난다」 — 채움 단계(매직 가동 중에만). 0=기본 … 4=완전 소생.
+  //   완전 회색 금지: 0단계도 saturate(0.4)/opacity-70 로 "카드임이 명확한" 상태에서 출발.
+  const magAlive = directorOn && dStep === "magic";
+  const magAliveStage = magAlive
+    ? (photoConfirmed ? 1 : 0) +
+      (dMagName.trim() ? 1 : 0) +
+      (magPriceN != null && magPriceN > 0 ? 1 : 0) +
+      (magQtyN != null && magQtyN > 0 ? 1 : 0)
+    : 4;
+  // 마지막 단계 도달 순간 1회 scale 펄스(nextPulseKey 패턴 — key 재마운트).
+  const [aliveKey, setAliveKey] = useState(0);
+  const alivePrevRef = useRef(0);
+  useEffect(() => {
+    const was = alivePrevRef.current;
+    alivePrevRef.current = magAliveStage;
+    if (magAlive && magAliveStage === 4 && was < 4) setAliveKey((k) => k + 1);
+  }, [magAliveStage, magAlive]);
   const magSheetReady =
     dMagName.trim().length > 0 &&
     magPriceN != null && magPriceN > 0 &&
     magQtyN != null && magQtyN > 0 &&
-    magDroppyN != null && magDroppyN >= 0 && magDroppyN <= 20;
+    magDroppyN != null && magDroppyN >= 0 && magDroppyN <= 20 &&
+    // M8 §3 — 사진이 올라와 있으면 확인 1탭 필수(사진 없으면 현행과 동일하게 사진 조건 무관).
+    (!productImageUrl || photoConfirmed) &&
+    // M8 §5 — 거래 방식 필수. 택배는 배송비 방식까지, 별도는 금액(정수>0)까지.
+    (dMagDeal === "direct" ||
+      (dMagDeal === "parcel" &&
+        (dMagShipMode === "included" ||
+          (dMagShipMode === "separate" && magInt(dMagShipFee) != null && (magInt(dMagShipFee) as number) > 0))));
+
+  /** M8-L4 §4 수렴 — [✦ 만들기] 탭 시 시트 영역 → hero 로 ✦ 3개 순차 발사(120ms 간격).
+   *  비동기 장식 전용: submitMagicSheet 흐름·타이밍 무접촉(await 0 · 확정 로직 무수정). */
+  const fireConverge = (origin: HTMLElement | null) => {
+    const hero = document.querySelector('[data-assemble-anchor="hero"]');
+    if (!origin || !hero || reduceMotion()) return deliverArrive(); // 가드 = 버스트만.
+    const a = origin.getBoundingClientRect();
+    const b = hero.getBoundingClientRect();
+    const tx = b.left + b.width / 2;
+    const ty = b.top + b.height / 2;
+    dConvergeTimersRef.current.forEach(clearTimeout);
+    dConvergeTimersRef.current = [];
+    setDDeliver([]);
+    for (let i = 0; i < 3; i++) {
+      const t = setTimeout(() => {
+        const x = a.left + a.width * (0.25 + i * 0.25);
+        const y = a.top + 8;
+        dDeliverKeyRef.current += 1;
+        setDDeliver((prev) => [
+          ...prev,
+          { key: dDeliverKeyRef.current, x, y, dx: tx - x, dy: ty - y, burst: i === 2 },
+        ]);
+      }, i * 120);
+      dConvergeTimersRef.current.push(t);
+    }
+  };
+  useEffect(() => () => dConvergeTimersRef.current.forEach(clearTimeout), []);
 
   // M1-k — [✦ 만들기] = 확인 1탭. applyMagicDraft 와 동일한 일괄 반영(setter 4종 + 제목 승계)
   //   · ⚠️ confirmHelper·touch 미호출(배지 폭주 차단) — 그대로 유지. 이후 origin 직행.
@@ -1625,13 +1888,30 @@ export function CardStudioPage({
     setCfgProductName(name);
     if (!cfgTitle.trim()) setCfgTitle(name); // :1512 동일 — 제목 자동 승계.
     setCfgProductPrice(String(magPriceN));
+    // M8 §5 — 거래 방식 → 기존 배송 필드로만 기록(신설 키 0):
+    //   직거래 = ship_method "직접 전달"(COURIERS 정본) · 택배+포함 = free_ship true ·
+    //   택배+별도 = free_ship false + ship_fee(문자열 — payload 가 ship_fee_krw 로 정수화).
+    // M8 후속 — 택배는 택배사 미선택 상태다. COURIERS[0] 로 특정 택배사를 확정 기록하면
+    //   손님 카드 [배송방법] 행에 고르지 않은 회사가 사실처럼 찍힌다. ship_method 는
+    //   소비 3면 전부 자유 문자열(수신 파싱 lib/adapters.ts:292 · 표시 buildShippingView:63 ·
+    //   서버 v7.12:68 은 '직접 전달' 동등비교뿐 — 화이트리스트 0)이므로 "택배"를 그대로 기록한다.
+    const parcelFree = dMagDeal === "parcel" && dMagShipMode === "included";
+    setCfgCourier(dMagDeal === "direct" ? MAG_DIRECT_COURIER : MAG_PARCEL_COURIER);
     setCfgProduct((p) => ({
       ...p,
       quantity: String(magQtyN),
       droppyMode: "rate",
       droppyRate: magDroppyN as number,
+      // M8 §1·§8 — 시트 단위 → 폼 정본 saleUnit(블록데이터 sale_unit 이 그대로 소비).
+      saleUnit: MAG_UNIT_TO_SALE_UNIT[dMagUnit],
+      // M8 §5 — 직거래는 배송비 개념이 없으므로 무료 취급(기존 free_ship 문법 그대로).
+      freeShip: dMagDeal === "direct" ? true : parcelFree,
+      shipFee: dMagDeal === "parcel" && dMagShipMode === "separate" ? dMagShipFee.trim() : "",
+      // M8 §2 — 공동판매 확정. 단일판매는 기존 undefined 유지(payload 키 미기록 = 혼자 팔기 동등).
+      ...(dMagSaleMode === "group" ? { gbEnabled: true } : {}),
     }));
-    dEcho(`${name} · ${(magPriceN as number).toLocaleString("ko-KR")}원 · ${magQtyN}개 · 나눔 ${magDroppyN}%`);
+    setMagUnitLabel(dMagUnit); // M8 §8 — sale_unit_label 기록 신호(시트 경유일 때만).
+    dEcho(`${name} · ${(magPriceN as number).toLocaleString("ko-KR")}원 · ${magQtyN}${dMagUnit} · 나눔 ${magDroppyN}%`);
     dGo("origin");
   }
 
@@ -1768,6 +2048,86 @@ export function CardStudioPage({
     }
     dGo("origin");
   }
+  /** M8-L4-후속 — 품목 선택 블록(카테고리 후보·직접 찾기) 렌더 본문.
+   *  ⚠️ 마크업·핸들러·판정식 전부 기존 :8409-8486 원문 그대로 이동만 했다(로직 무수정).
+   *  호출처는 배타 2곳: 매직(시트 안 · 시세 띠 아래) / 그 외(기존 자리) — 중복 렌더 0. */
+  function renderDirectorCategoryPicker() {
+    const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    const isFreshType = cfgProduct.type === "fresh";
+    // 옵트인 시점엔 아직 [맞아요] 전이라 cfgProductName 이 비어 있다 → 파서가 읽은 이름으로 매칭.
+    const matchName = dStep === "magic" ? dMagName : cfgProductName;
+    const nameCands =
+      isFreshType && !dCatSearch
+        ? dKamisList.filter((it) => norm(matchName).includes(norm(it.item_name))).slice(0, 6)
+        : [];
+    const typedCands =
+      isFreshType && dCatSearch && dText.trim()
+        ? dKamisList.filter((it) => norm(it.item_name).includes(norm(dText))).slice(0, 6)
+        : [];
+    const showChips = isFreshType && !dCatSearch && nameCands.length > 0;
+    return showChips ? (
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          {nameCands.map((it) => (
+            <button
+              key={it.item_code}
+              type="button"
+              onClick={() => pickDirectorCategory(it)}
+              className="flex min-h-[44px] items-center rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+            >
+              {it.item_name}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setDCatSearch(true)}
+            className="flex min-h-[44px] items-center rounded-xl border border-[#E5E5E5] bg-white px-4 text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
+          >
+            직접 찾기
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div className="space-y-2">
+        {typedCands.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {typedCands.map((it) => (
+              <button
+                key={it.item_code}
+                type="button"
+                onClick={() => pickDirectorCategory(it)}
+                className="flex min-h-[44px] items-center rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+              >
+                {it.item_name}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <input
+            value={dText}
+            onChange={(e) => setDText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submitDirectorCategoryText();
+              }
+            }}
+            placeholder="품목 분류"
+            className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+          />
+          <button
+            type="button"
+            onClick={submitDirectorCategoryText}
+            className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+          >
+            입력
+          </button>
+        </div>
+      </div>
+    );
+  }
   // T5-W1a — 판매 단위(UNIT_OPTIONS 정본 3형). 무게 = 1개당 g 후속 입력(폼 총중량 kg 필드로 정확 환산 저장).
   function pickDirectorUnit(u: ProductForm["saleUnit"], label: string) {
     setCfgProduct((p) => ({ ...p, saleUnit: u }));
@@ -1886,6 +2246,7 @@ export function CardStudioPage({
       const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path);
       setProductImageUrl(pub.publicUrl); // 실 URL = 정본 소스(isStepDone·관문·어댑터·발행 예정).
       setProductImagePreview(pub.publicUrl);
+      setPhotoConfirmed(false); // M8 §3 — 새 업로드 = 확인 해제(자동 확정 금지).
       setApplied((p) => ({ ...p, productimage: true }));
       confirmHelper("productimage"); // 사진 확정 = 도우미 완료.
     } catch (err) {
@@ -1897,6 +2258,97 @@ export function CardStudioPage({
       URL.revokeObjectURL(localUrl);
     }
   }
+  // M8 §8 — block_data 조립 단일 소스. 폼 저장(/api/drops)·커머스 직발행 body 양 경로가 이 함수만
+  //   호출한다. 산출 키·조건부 로직은 registerProduct 원문 그대로 이동(1비트 변경 0) — 파생값도
+  //   같은 표현식을 같은 순서로 재계산하므로 두 경로의 산출은 동일하다. 유일한 추가 = sale_unit_label
+  //   (시트 경유일 때만 · magUnitLabel != null).
+  function buildProductBlockData(): Record<string, unknown> {
+    const digits = (v: string) => v.replace(/[^0-9]/g, "");
+    const priceNum = Number(digits(cfgProductPrice)) || 0;
+    const p = cfgProduct;
+    const isFresh = p.type === "fresh";
+    const dateVal = p.harvestDate.trim() || null;
+    const dateEndRaw = p.type !== "processed" ? p.harvestDateEnd.trim() : "";
+    const dateEndVal = dateVal && dateEndRaw && dateEndRaw > dateVal ? dateEndRaw : null;
+    const md = (iso: string) => {
+      const [, m, d] = iso.split("-");
+      return `${Number(m)}/${Number(d)}`;
+    };
+    const dateRangeLabel = dateVal && dateEndVal ? `${md(dateVal)}~${md(dateEndVal)} 순차 발송` : null; // 45 :955.
+    const points = p.sellingPoints.map((s) => s.trim()).filter(Boolean).slice(0, 5);
+    const qty = p.quantity && Number(digits(p.quantity)) > 0 ? Math.floor(Number(digits(p.quantity))) : null;
+    // 고정 Droppy 가드 — 정본(commerce/ProductRegisterForm.tsx :350-355) 그대로: 숫자 1~9자리 AND
+    //   >0 AND ≤판매가 통과분만. 무효 = null(키 미기록 · 차단 아님).
+    const dropyFixedValid = (() => {
+      const t = p.droppyFixed.trim();
+      if (!/^\d{1,9}$/.test(t)) return null;
+      const n = Number(t);
+      return n > 0 && n <= priceNum ? n : null;
+    })();
+    // block_data — 45 :958-1036 키 정합(49 폼 보유 필드만 · 미보유 키는 미주입=미렌더).
+    return {
+      name: cfgProductName.trim(),
+      price_krw: priceNum,
+      ...(p.headline.trim() ? { headline: p.headline.trim() } : {}),
+      ...(points.length > 0 ? { selling_points: points } : {}),
+      is_fresh: isFresh,
+      ...(isFresh && dateVal ? { harvest_date: dateVal } : {}),
+      ...(qty != null ? { stock_limit: qty } : {}),
+      price_band_enabled: false, // §0 시세 노출 영구 금지.
+      ...(isFresh && p.kamisItemCode ? { kamis_item_code: p.kamisItemCode } : {}),
+      origin: p.origin.trim(),
+      ...(p.itemCategory.trim() ? { category: p.itemCategory.trim() } : {}),
+      product_type: p.type,
+      sale_unit: p.saleUnit,
+      // M8 §8 — 시트 단위 원문(칩 라벨 그대로). 폼 경유(시트 미사용) = 키 생략.
+      ...(magUnitLabel ? { sale_unit_label: magUnitLabel } : {}),
+      ...(isFresh && p.saleUnit === "box" && p.boxCount ? { box_count: Math.floor(Number(p.boxCount)) } : {}),
+      ...(isFresh && p.saleUnit !== "unit" && !p.weightUnknown && p.totalWeight
+        ? { total_weight_kg: Number(p.totalWeight) }
+        : {}),
+      ...(p.type !== "goods" ? { storage_method: p.storage } : {}),
+      ...(p.type === "processed" && dateVal ? { expiry_date: dateVal } : {}),
+      ...(p.type === "goods" && dateVal ? { ship_date: dateVal } : {}),
+      ...(isFresh && dateEndVal ? { harvest_date_end: dateEndVal } : {}),
+      ...(p.type === "goods" && dateEndVal ? { ship_date_end: dateEndVal } : {}),
+      ...(dateRangeLabel ? { date_range_label: dateRangeLabel } : {}),
+      ...(p.type === "goods" ? { made_in: p.origin.trim() } : {}),
+      ...(p.type === "goods" && p.brand.trim() ? { brand: p.brand.trim() } : {}),
+      ...(p.type === "goods" && p.spec.trim() ? { spec: p.spec.trim() } : {}),
+      // 공유 보상(Droppy) — 정본(commerce/ProductRegisterForm.tsx :674-682) 동일 규칙 이식:
+      //   %모드 = dropy_rate(0~0.20 = 슬라이더 % ÷ 100) 만 / 고정모드 = dropy_fixed(가드 통과분) 만.
+      //   배타 저장(두 키 동시 기록 없음). 소스 = cfgProduct.droppy*(폼 슬라이더·지휘자 droppy 스텝 공용).
+      ...(p.droppyMode === "rate"
+        ? { dropy_rate: p.droppyRate / 100 }
+        : dropyFixedValid != null
+          ? { dropy_fixed: dropyFixedValid }
+          : {}),
+      free_ship: p.freeShip,
+      ...(!p.freeShip && p.shipFee ? { ship_fee_krw: Math.floor(Number(digits(p.shipFee))) } : {}),
+      // F5-8 — 발송 안내 편입(free_ship 선례 동형 additive 키). 수신 adapters.ts ship_note 소비
+      //   기배선(S4-5) → [배송정보] 표기 — 폼 안내 문구("받는 분께 보여요")의 근거.
+      ...(cfgShipEta.trim() ? { ship_note: cfgShipEta.trim() } : {}),
+      // T5-W1 — 배송 방식 편입(F6-4 서버 게이트 v7.12 의 판정 재료 = block_data.ship_method ·
+      //   수신 adapters ship_method 소비 기배선). "직접 전달" = 픽업형(배송지 게이트 면제).
+      ...(cfgCourier ? { ship_method: cfgCourier } : {}),
+      // T5-W5a — 모일수록 할인 additive 4키(ship_note/ship_method 선례 문법 — 미기록 = 수신 미렌더,
+      //   3면 안전 · 수신 소비는 W5b 소관). 소스 = cfgProduct.gb*(W5a+ 단일 소스 — 폼·지휘 공용).
+      //   gb_min_qty = tiers[0].qty 파생(정합 보장). 마감 시각 = 기존 판매기간(sale_start/sale_end)
+      //   재사용 — 신규 키 없음. 미개설·미완성·유효성 위반은 키 자체 미기록(폼 저장 차단·프리체크가 1차 방어).
+      ...(p.gbEnabled === true &&
+      (p.gbTiers?.length ?? 0) > 0 &&
+      p.gbFailMode &&
+      p.gbTiers!.every((_, i) => !gbRowInvalid(p.gbTiers!, i, qty ?? 0))
+        ? {
+            gb_enabled: true,
+            gb_tiers: p.gbTiers,
+            gb_min_qty: p.gbTiers![0].qty,
+            gb_fail_mode: p.gbFailMode,
+          }
+        : {}),
+    };
+  }
+
   // UI-5-T2-E5b — 상품 실등록(45 submitStudioProduct :2177-2248 동형 · blockData 45 :958-1036 보유 필드 계승).
   //   저장 시점 = 45 관례 계승: 폼 [상품 등록하기] 확정 시 즉시 /api/drops(self_upload) — 발행 일괄 아님.
   //   호출처 = 폼 버튼 onClick 1곳뿐(자동/링고/연출 트리거 0). 시세 = price_band_enabled:false 고정(§0 락).
@@ -1946,66 +2398,7 @@ export function CardStudioPage({
       const n = Number(t);
       return n > 0 && n <= priceNum ? n : null;
     })();
-    // block_data — 45 :958-1036 키 정합(49 폼 보유 필드만 · 미보유 키는 미주입=미렌더).
-    const blockData: Record<string, unknown> = {
-      name: cfgProductName.trim(),
-      price_krw: priceNum,
-      ...(p.headline.trim() ? { headline: p.headline.trim() } : {}),
-      ...(points.length > 0 ? { selling_points: points } : {}),
-      is_fresh: isFresh,
-      ...(isFresh && dateVal ? { harvest_date: dateVal } : {}),
-      ...(qty != null ? { stock_limit: qty } : {}),
-      price_band_enabled: false, // §0 시세 노출 영구 금지.
-      ...(isFresh && p.kamisItemCode ? { kamis_item_code: p.kamisItemCode } : {}),
-      origin: p.origin.trim(),
-      ...(p.itemCategory.trim() ? { category: p.itemCategory.trim() } : {}),
-      product_type: p.type,
-      sale_unit: p.saleUnit,
-      ...(isFresh && p.saleUnit === "box" && p.boxCount ? { box_count: Math.floor(Number(p.boxCount)) } : {}),
-      ...(isFresh && p.saleUnit !== "unit" && !p.weightUnknown && p.totalWeight
-        ? { total_weight_kg: Number(p.totalWeight) }
-        : {}),
-      ...(p.type !== "goods" ? { storage_method: p.storage } : {}),
-      ...(p.type === "processed" && dateVal ? { expiry_date: dateVal } : {}),
-      ...(p.type === "goods" && dateVal ? { ship_date: dateVal } : {}),
-      ...(isFresh && dateEndVal ? { harvest_date_end: dateEndVal } : {}),
-      ...(p.type === "goods" && dateEndVal ? { ship_date_end: dateEndVal } : {}),
-      ...(dateRangeLabel ? { date_range_label: dateRangeLabel } : {}),
-      ...(p.type === "goods" ? { made_in: p.origin.trim() } : {}),
-      ...(p.type === "goods" && p.brand.trim() ? { brand: p.brand.trim() } : {}),
-      ...(p.type === "goods" && p.spec.trim() ? { spec: p.spec.trim() } : {}),
-      // 공유 보상(Droppy) — 정본(commerce/ProductRegisterForm.tsx :674-682) 동일 규칙 이식:
-      //   %모드 = dropy_rate(0~0.20 = 슬라이더 % ÷ 100) 만 / 고정모드 = dropy_fixed(가드 통과분) 만.
-      //   배타 저장(두 키 동시 기록 없음). 소스 = cfgProduct.droppy*(폼 슬라이더·지휘자 droppy 스텝 공용).
-      ...(p.droppyMode === "rate"
-        ? { dropy_rate: p.droppyRate / 100 }
-        : dropyFixedValid != null
-          ? { dropy_fixed: dropyFixedValid }
-          : {}),
-      free_ship: p.freeShip,
-      ...(!p.freeShip && p.shipFee ? { ship_fee_krw: Math.floor(Number(digits(p.shipFee))) } : {}),
-      // F5-8 — 발송 안내 편입(free_ship 선례 동형 additive 키). 수신 adapters.ts ship_note 소비
-      //   기배선(S4-5) → [배송정보] 표기 — 폼 안내 문구("받는 분께 보여요")의 근거.
-      ...(cfgShipEta.trim() ? { ship_note: cfgShipEta.trim() } : {}),
-      // T5-W1 — 배송 방식 편입(F6-4 서버 게이트 v7.12 의 판정 재료 = block_data.ship_method ·
-      //   수신 adapters ship_method 소비 기배선). "직접 전달" = 픽업형(배송지 게이트 면제).
-      ...(cfgCourier ? { ship_method: cfgCourier } : {}),
-      // T5-W5a — 모일수록 할인 additive 4키(ship_note/ship_method 선례 문법 — 미기록 = 수신 미렌더,
-      //   3면 안전 · 수신 소비는 W5b 소관). 소스 = cfgProduct.gb*(W5a+ 단일 소스 — 폼·지휘 공용).
-      //   gb_min_qty = tiers[0].qty 파생(정합 보장). 마감 시각 = 기존 판매기간(sale_start/sale_end)
-      //   재사용 — 신규 키 없음. 미개설·미완성·유효성 위반은 키 자체 미기록(폼 저장 차단·프리체크가 1차 방어).
-      ...(p.gbEnabled === true &&
-      (p.gbTiers?.length ?? 0) > 0 &&
-      p.gbFailMode &&
-      p.gbTiers!.every((_, i) => !gbRowInvalid(p.gbTiers!, i, qty ?? 0))
-        ? {
-            gb_enabled: true,
-            gb_tiers: p.gbTiers,
-            gb_min_qty: p.gbTiers![0].qty,
-            gb_fail_mode: p.gbFailMode,
-          }
-        : {}),
-    };
+    const blockData = buildProductBlockData();
     setProductSaving(true);
     setProductSaveError(null);
     try {
@@ -2256,6 +2649,46 @@ export function CardStudioPage({
   useEffect(() => () => { assembleTimers.current.forEach(clearTimeout); }, []);
   // 상품 등록 상세 (유형·원산지·판매단위·수량·셀링포인트 등)
   const [cfgProduct, setCfgProduct] = useState<ProductForm>(EMPTY_PRODUCT);
+  // ── M8-E §2 — 시세 자동 매칭. 재료 = 기존 dKamisList(로드 경로 재사용 · 신규 API 0).
+  //   정규화는 renderDirectorCategoryPicker 와 동일 규칙(공백 제거 + 소문자).
+  const magKamisNorm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+  const magNameKey = magKamisNorm(dMagName);
+  //   정확 일치 = 품목명이 입력과 완전히 같은 1건. 부분 일치 = 입력이 품목명을 포함(기존 후보 규칙 동형).
+  const magKamisExact =
+    magNameKey && cfgProduct.type === "fresh"
+      ? dKamisList.filter((it) => magKamisNorm(it.item_name) === magNameKey)
+      : [];
+  const magKamisCands =
+    magNameKey && cfgProduct.type === "fresh"
+      ? dKamisList.filter((it) => magNameKey.includes(magKamisNorm(it.item_name))).slice(0, 6)
+      : [];
+  const magExactCode = magKamisExact.length === 1 ? magKamisExact[0].item_code : null;
+  const magCandCount = magKamisCands.length;
+  //   확정 코드 ↔ 이름 정합 감시: 이름을 바꿔 매칭이 깨지면 이전 코드·띠를 되돌린다.
+  const magCodeStillValid =
+    !!cfgProduct.kamisItemCode &&
+    magKamisCands.some((it) => it.item_code === cfgProduct.kamisItemCode);
+  useEffect(() => {
+    if (!directorOn || dStep !== "magic") return;
+    // ① 이름 변경으로 매칭이 깨진 경우 = 이전 매칭·밴드 초기화(오표시 차단).
+    if (cfgProduct.kamisItemCode && !magCodeStillValid) {
+      setCfgProduct((p) => ({ ...p, kamisItemCode: "", itemCategory: "" }));
+      setDBandLine(null);
+      setDBandWon(null);
+      return;
+    }
+    // ② 정확 일치 1건 = 자동 선택 → 기존 밴드 조회 발화(dBandKey). 가격 자동 입력은 하지 않는다(§4).
+    if (magExactCode && cfgProduct.kamisItemCode !== magExactCode) {
+      setCfgProduct((p) => ({
+        ...p,
+        kamisItemCode: magExactCode,
+        itemCategory: magKamisExact[0].item_name,
+      }));
+      setDBandKey((k) => k + 1);
+    }
+    // ③ 부분 일치 다수 = 자동 선택 금지(후보 칩 렌더가 담당) · 0건 = 아무 표시도 하지 않는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorOn, dStep, magExactCode, magCandCount, magCodeStillValid, cfgProduct.kamisItemCode]);
   // D3e — 실패 판정용 라이브 미러(비동기 발화 후 headline 무변 감지 — stale closure 회피).
   const cfgProductRef = useRef(cfgProduct);
   cfgProductRef.current = cfgProduct;
@@ -2376,7 +2809,12 @@ export function CardStudioPage({
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(() => new Set());
   // UI-5-T2-E3e — 런타임 플랜 사본(기본 코스 + 사용자 유래 추가 스텝). 진행 지도·isStepDone·릴레이 통일 근거.
-  const [stepPlanState, setStepPlanState] = useState<PlanStep[]>(() => STEP_PLAN.general);
+  // M8-C 후속 — 런타임 플랜 초기값을 mode 초기값(:919)과 동일 분기로 동기화.
+  //   구 하드코딩(STEP_PLAN.general)은 M5 이후 커머스 진입 시 플랜만 general 로 남아
+  //   상품 카드에 영상 문법 체크리스트가 뜨던 desync 의 근원이었다.
+  const [stepPlanState, setStepPlanState] = useState<PlanStep[]>(() =>
+    businessLocked ? STEP_PLAN.general : STEP_PLAN.commerce,
+  );
   const stepPlanRef = useRef<PlanStep[]>(stepPlanState); // SSE 사슬·다중 삽입 정합(modeRef와 동일 패턴).
   stepPlanRef.current = stepPlanState;
   // 확인 스텝 잔여-블록 제안: 1회만(재진입 반복 금지). used=이번 카드에서 이미 제안함.
@@ -2782,6 +3220,15 @@ export function CardStudioPage({
     setCfgReview("");
     setCfgShipEta("2~3일"); // F3-8(2) — cfgShipFee 리셋 제거(상태 자체 제거 — 폼 정본 미러).
     setCfgCourier(COURIERS[0]);
+    // M8 — 매직 시트 칩·사진 확인·단위 라벨 초기화(새 카드 = 새 시트).
+    setDMagUnit("개");
+    setDMagSaleMode("single");
+    setDMagDeal(null);
+    setDMagShipMode(null);
+    setDMagShipFee("");
+    setPhotoConfirmed(false);
+    setMagUnitLabel(null);
+    setDBandWon(null);
     setCfgShipStage(0);
     setCfgTrackingNo("");
     setCfgBrand("");
@@ -4291,7 +4738,13 @@ export function CardStudioPage({
       const actionBlock = (a: any): string =>
         a?.type === "equip" ? (a.blockId ?? "") : a?.type === "setField" ? (FIELD_TO_BLOCK[a.field] ?? a.field ?? "") : (a?.blockId ?? "");
       const sortedActions = [...okActions].sort((x, y) => planOrder(actionBlock(x)) - planOrder(actionBlock(y)));
-      const planConnut = stepPlanRef.current.map((s) => ({ label: s.label, note: "", anchor: planAnchor(s) }));
+      // M8-C §2 — 조립 체크리스트 커머스 문구. 상품 카드인데 영상 문법("영상 담기·핵심 장면")이
+      //   뜨던 것 교정 — 표시 문자열만 갈아끼운다(단계 수·순서·앵커·타이밍 전부 무수정).
+      const planConnut = stepPlanRef.current.map((s) => ({
+        label: m === "commerce" ? (COMMERCE_ASSEMBLE_LABELS[s.key] ?? s.label) : s.label,
+        note: "",
+        anchor: planAnchor(s),
+      }));
       runAssembly(sortedActions, planConnut); // 연출(T1b 분기 유지).
       return true; // L3 — 조립 진입(응답 낭독 생략 신호).
     } else {
@@ -4611,7 +5064,9 @@ export function CardStudioPage({
             price_band_enabled: false, // §0 시세 영구 금지.
             is_public: isPublic,
             blocks: [
-              { block_kind: "product", block_data: { name: cfgProductName.trim(), price_krw: priceNum }, position: 0 },
+              // M8 §8 — 직발행 유실 수선: 폼 저장 경로와 동일한 공용 조립 함수를 호출한다(구 {name,
+              //   price_krw} 2키 → 전체 키). dropy·gb·ship·unit 전량 관통.
+              { block_kind: "product", block_data: buildProductBlockData(), position: 0 },
               // FIX-57 계승 — 제목 WYSIWYG 동봉(커머스 직발행 경로 · 45 :2333-2340 동형).
               ...(resolvedCardTitle
                 ? [{ block_kind: "text", block_data: { custom_title: resolvedCardTitle }, position: 1 }]
@@ -5258,7 +5713,19 @@ export function CardStudioPage({
         {/* ───────── 히어로: 라이브 캔버스 카드 ───────── */}
         <section ref={heroRef} className="pt-2.5">
           {/* UI-5-T1c — 조립 포인터 앵커(hero): 제목·설명 스텝 지목 대상. */}
-          <div className="relative" data-assemble-anchor="hero">
+          {/* M8-L4 §4 「살아난다」 — 채움 단계별 소생(매직 가동 중에만 · 그 외 항상 100%).
+              완전 회색 금지 = 0단계도 saturate(.4)/opacity-70. 마지막 단계 도달 = key 재마운트 1회 펄스. */}
+          <style>{`@keyframes lingo-alive-pop{0%{transform:scale(1)}50%{transform:scale(1.03)}100%{transform:scale(1)}}`}</style>
+          <div
+            key={aliveKey}
+            className="relative transition-[filter,opacity] duration-[400ms] ease-out"
+            data-assemble-anchor="hero"
+            style={{
+              filter: `saturate(${[0.4, 0.55, 0.7, 0.85, 1][magAliveStage] ?? 1})`,
+              opacity: [0.7, 0.78, 0.86, 0.93, 1][magAliveStage] ?? 1,
+              ...(aliveKey > 0 ? { animation: "lingo-alive-pop 0.5s ease-out 1" } : {}),
+            }}
+          >
             <CardModelBody model={cardModel} variant="studio" burstKey={burstKey} />
             <LingoAssembleOverlay
               active={assembling}
@@ -5301,6 +5768,50 @@ export function CardStudioPage({
                 눌러서 고치기
               </button>
             </div>
+            {/* M8-D §1 — [쿠폰 붙이기] 칩(커머스 매직 착지층 한정). 같은 칩 문법·같은 무리에 4번째.
+                결합 후에는 "쿠폰: {이름}" 요약(말줄임) — 탭하면 목록 재오픈. */}
+            {mode === "commerce" && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !landingCouponOpen;
+                  setLandingCouponOpen(next);
+                  if (next) void loadCoupons(); // §2 — 첫 펼침 1회(couponsLoadedRef 캐시 존중).
+                }}
+                className={`flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold ${
+                  selectedCoupon
+                    ? "bg-[#0A0A0A] text-white"
+                    : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                }`}
+              >
+                <Ticket className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+                <span className="truncate">
+                  {selectedCoupon ? `쿠폰: ${selectedCoupon.title ?? "이름 없는 쿠폰"}` : "쿠폰 붙이기"}
+                </span>
+              </button>
+            )}
+            {/* M8-D §2 — 인라인 펼침(Sheet/Dialog 금지). 목록이 길면 40vh 로 제한. */}
+            {mode === "commerce" && landingCouponOpen && (
+              <div className="max-h-[40vh] overflow-y-auto">
+                {renderCouponPicker(
+                  pickLandingCoupon,
+                  // §3 해제 동선 — 결합 상태에서만 [쿠폰 빼기] 칩 1개를 목록 상단에.
+                  selectedCouponId ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCouponId(null);
+                        setApplied((p) => ({ ...p, coupon: false }));
+                        setLandingCouponOpen(false);
+                      }}
+                      className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#525252] active:bg-[#F5F5F5]"
+                    >
+                      쿠폰 빼기
+                    </button>
+                  ) : undefined,
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setMagicLanding(false)}
@@ -5314,13 +5825,19 @@ export function CardStudioPage({
         {/* ───────── 링고 코칭 한 줄 (구 전환력 게이지 자리) ───────── */}
         {/* UI-5-T1c — 조립 포인터 앵커(gauge): 완성도 스텝 지목 대상(앵커 키 유지). */}
         {/* M3 — 착지 중 숨김. 조건부 렌더 · 삭제 0. */}
+        {/* M8-L3 — 지휘 가동 중 배경 숨김(독이 무대 · 배경은 미리보기만). 조건부 렌더 래핑만 —
+            내부 로직·applied·자동 장착 무접촉. 착지층·지휘 종료 상태는 현행 그대로. */}
+        {!(directorOn && !magicLanding) && (
         <section data-assemble-anchor="gauge" className={`mt-5 rounded-2xl bg-white p-4 [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] ${magicLanding ? "hidden" : ""}`}>
           <p className="text-[13px] font-bold leading-relaxed text-[#0A0A0A] [word-break:keep-all]">
             {coachLine}
           </p>
         </section>
+        )}
 
         {/* ───────── 링고AI 코칭 (탭하면 어시스턴트 열림) ───────── */}
+        {/* M8-L3 — 지휘 가동 중 숨김(조건부 렌더 래핑). */}
+        {!(directorOn && !magicLanding) && (
         <button
           onClick={() => setLingoOpen(true)}
           className="mt-3 flex w-full items-start gap-3 rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform duration-150 active:scale-[0.99] animate-fade-in"
@@ -5343,6 +5860,7 @@ export function CardStudioPage({
             <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
           </span>
         </button>
+        )}
         </>
         )}
       </div>
@@ -5351,7 +5869,8 @@ export function CardStudioPage({
       {/* UI-5-T1c — 조립 포인터 앵커(deck): 쿠폰·판매기간 스텝 지목 대상. */}
       {/* PURPOSE-GATE — 덱도 게이트 통과 후에만. */}
       {/* M3 — 착지 중 숨김(덱 그리드 = 세부 편집 표면). 조건부 렌더 · 삭제 0. */}
-      {purposeChosen && !magicLanding && (
+      {/* M8-L3 — 지휘 가동 중 숨김(덱·설정 패널 = 배경 세부 편집 표면). 렌더 조건만 추가. */}
+      {purposeChosen && !magicLanding && !directorOn && (
       <section ref={deckRef} data-assemble-anchor="deck" className="mt-6">
         <div className="mx-auto flex max-w-md items-center justify-between px-5">
           <p className="text-[12px] font-bold uppercase tracking-wider text-[#737373]">강화 카드 덱</p>
@@ -7164,6 +7683,8 @@ export function CardStudioPage({
         </p>
 
         {/* 수신자 화면 미리보기 — 눈에 띄게 강조. UI-5-T4-D1 — do 스텝 지목 앵커(mirror). */}
+        {/* M8-L3 — 지휘 가동 중 숨김(조건부 렌더 래핑 · 공개 범위 레버는 유지). */}
+        {!(directorOn && !magicLanding) && (
         <button
           data-assemble-anchor="mirror"
           onClick={() => setMirrorOpen(true)}
@@ -7180,6 +7701,7 @@ export function CardStudioPage({
           </span>
           <ChevronRight className="h-4 w-4 flex-none text-[#C4C4C4] transition-transform group-active:translate-x-0.5" strokeWidth={2.5} />
         </button>
+        )}
       </div>
       )}
 
@@ -7187,7 +7709,9 @@ export function CardStudioPage({
       {/* UI-5-T1f(4) — 연출 중 개별 숨김 제거: 딤(오버레이 z-70)이 하단 CTA를 덮어 무대화 대체. */}
       {/* PURPOSE-GATE — 게이트 통과 후에만. 발행 로직·canPublish·publishGate 전부 무접촉(렌더 조건만).
           FAB 클램프는 ref 부재 시 barH=0 폴백이 이미 담당(:2799). */}
-      {purposeChosen && (
+      {/* M8-L3 — 지휘 가동 중 숨김(독이 하단을 차지 · 발행은 지휘 종료 후). 렌더 조건만 추가 —
+          발행 로직·canPublish·publishGate 여전히 무접촉. ref 부재 시 barH=0 폴백 기배선. */}
+      {purposeChosen && !(directorOn && !magicLanding) && (
       <div
         ref={publishBarRef} /* F3-5(2) — FAB 클램프용 실측 지점(레이아웃·층·동작 무변). */
         className="fixed inset-x-0 bottom-0 z-50 border-t border-[#E8E8EC] pb-[env(safe-area-inset-bottom)]"
@@ -7476,8 +8000,42 @@ export function CardStudioPage({
           </span>
         </div>
       )}
+      {/* M8-L4 §3 — ✦ 배달부 레이어. 독(z-55)·기존 스파클(z-57)보다 위 = z-58.
+          독 내부 칩에서 독 밖 hero 로 날아가야 하므로 fixed 최상위 레이어에서 렌더한다.
+          reduced-motion 은 flyToCard/fireConverge 진입부에서 이미 걸러진다(비행 생략·버스트만). */}
+      {dDeliver.length > 0 && (
+        <div className="pointer-events-none fixed left-0 top-0 z-[58]" aria-hidden="true">
+          <style>{`@keyframes d-deliver{0%{transform:translate(0,0) scale(1);opacity:1}70%{opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(.55);opacity:0}}`}</style>
+          {dDeliver.map((d) => (
+            <div key={d.key} className="absolute left-0 top-0" style={{ transform: `translate(${d.x}px, ${d.y}px)` }}>
+              <span
+                style={
+                  {
+                    display: "inline-block",
+                    animation: "d-deliver 600ms cubic-bezier(0.3,1.2,0.4,1) forwards",
+                    "--dx": `${d.dx}px`,
+                    "--dy": `${d.dy}px`,
+                  } as React.CSSProperties
+                }
+                onAnimationEnd={() => {
+                  if (d.burst) deliverArrive();
+                  setDDeliver((prev) => prev.filter((p) => p.key !== d.key));
+                }}
+              >
+                {/* :7603-7605 dSpark 인라인 ✦ SVG 재사용(동일 path·색). */}
+                <svg viewBox="0 0 24 24" width={18} height={18} aria-hidden="true">
+                  <path d="M12 0C13.4 8.6 15.4 10.6 24 12C15.4 13.4 13.4 15.4 12 24C10.6 15.4 8.6 13.4 0 12C8.6 10.6 10.6 8.6 12 0Z" fill="#60A5FA" />
+                </svg>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* M8-L2 §1 — 독 높이 제한 + 내부 스크롤. 62vh 를 넘기지 않으므로 위쪽 미리보기가 항상 보인다.
+          스텝 분기 없이 이 컨테이너 하나에만 적용(매직·origin·period·gbTiers 전부 동일 적용).
+          바깥 탭 동작은 현행 유지(신규 dismiss 0). */}
       {directorOn && (
-        <div ref={dDockRef} className="fixed inset-x-0 bottom-0 z-[55] rounded-t-2xl border-t border-[#E8E8EC] bg-white [box-shadow:0_-12px_40px_-12px_rgba(15,23,42,0.25)]">
+        <div ref={dDockRef} className="fixed inset-x-0 bottom-0 z-[55] max-h-[62vh] overflow-y-auto rounded-t-2xl border-t border-[#E8E8EC] bg-white [box-shadow:0_-12px_40px_-12px_rgba(15,23,42,0.25)]">
           <div className="mx-auto max-w-md px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">
             {/* 헤더 — 체크리스트 + 탈출구·닫기 */}
             <div className="flex items-start justify-between gap-2">
@@ -7547,8 +8105,12 @@ export function CardStudioPage({
               {dLog
                 .filter(
                   (m) =>
-                    !magicRef.current ||
-                    (m.text !== DIRECTOR_MENTS.start && m.text !== DIRECTOR_MENTS.startPublic),
+                    // M8-L2 §4 — 개방 장문(start/startPublic)은 전 경로에서 렌더 제외(소식·예약 포함).
+                    //   상수·발화 이력은 무접촉 — 화면에서만 걸러낸다.
+                    m.text !== DIRECTOR_MENTS.start &&
+                    m.text !== DIRECTOR_MENTS.startPublic &&
+                    // M8-L2 §3 — 매직 인사 문단도 렌더 제외(시트 자체가 안내 역할).
+                    m.text !== DIRECTOR_MENTS.magic,
                 )
                 .map((m, i) => (
                 <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -7616,24 +8178,29 @@ export function CardStudioPage({
                   const uploading = imageUploading;
                   const failed = !uploading && !!imageUploadError && !productImageUrl;
                   const doneUp = !uploading && !!productImageUrl;
+                  // M8 §3 — 확인 전 완료분은 아래 큰 썸네일 블록이 담당(라벨은 "다시 고르기").
+                  const pending = doneUp && !photoConfirmed;
                   const label = uploading
                     ? "올리는 중…"
                     : failed
                       ? "사진을 못 올렸어요 — 다시 시도"
-                      : doneUp
-                        ? "✓ 사진 올렸어요 — 다시 고르기"
-                        : "사진 올리기";
+                      : pending
+                        ? "다시 고르기"
+                        : doneUp
+                          ? "✓ 사진 확정 — 다시 고르기"
+                          : "사진 올리기";
                   // 완료 = 보조 톤(gbAsk 둘째 칩 문법) · 그 외 = 현행 검정 버튼.
                   const tone = doneUp
                     ? "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
                     : "bg-[#0A0A0A] text-white active:scale-[0.98]";
-                  return (
+                  const picker = (
                     <label
-                      className={`flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 rounded-2xl text-[14px] font-bold ${tone} ${
-                        uploading ? "pointer-events-none opacity-60" : ""
-                      }`}
+                      /* M8 압축 — 확정 상태는 40px 컴팩트 행(썸네일 24px 유지), 그 외는 현행 48px. */
+                      className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl font-bold ${
+                        doneUp && photoConfirmed ? "h-10 text-[13px]" : "min-h-[48px] text-[14px]"
+                      } ${tone} ${uploading ? "pointer-events-none opacity-60" : ""}`}
                     >
-                      {doneUp && productImagePreview && (
+                      {doneUp && photoConfirmed && productImagePreview && (
                         <img
                           src={productImagePreview}
                           alt=""
@@ -7649,6 +8216,27 @@ export function CardStudioPage({
                         onChange={handleProductImageChange}
                       />
                     </label>
+                  );
+                  // M8 §3 — 업로드 성공 ≠ 확정. 확인 1탭 전까지 크게 보여주고 되돌릴 기회를 준다.
+                  if (!pending) return picker;
+                  return (
+                    <div className="space-y-1.5">
+                      {productImagePreview && (
+                        <img
+                          src={productImagePreview}
+                          alt="올린 사진"
+                          className="aspect-video w-full rounded-2xl object-cover"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => { setPhotoConfirmed(true); flyToCard(e.currentTarget); }}
+                        className="flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-[#0A0A0A] text-[14px] font-bold text-white active:scale-[0.98]"
+                      >
+                        이 사진으로 확인
+                      </button>
+                      {picker}
+                    </div>
                   );
                 })()}
               {/* M1-k — 매직 4칸 시트(한 줄 작문 폐지 → 빈칸 채우기). 칸 문법 = 기존 입력칸 원문 복제.
@@ -7669,94 +8257,254 @@ export function CardStudioPage({
                     className="w-full rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
                     style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
                   />
-                  <div className="flex gap-2">
-                    <div className="relative min-w-0 flex-1">
-                      <input
-                        value={dMagPrice}
-                        onChange={(e) => setDMagPrice(e.target.value)}
-                        inputMode="numeric"
-                        placeholder="한 개 가격"
-                        className="w-full rounded-xl bg-[#F4F4F5] py-3 pl-3 pr-7 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                        style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                      />
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">원</span>
-                    </div>
-                    <div className="relative min-w-0 flex-1">
-                      <input
-                        value={dMagQty}
-                        onChange={(e) => setDMagQty(e.target.value)}
-                        inputMode="numeric"
-                        placeholder="몇 개까지"
-                        className="w-full rounded-xl bg-[#F4F4F5] py-3 pl-3 pr-7 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                        style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                      />
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">개</span>
+                  {/* M8 압축 — 칩 그룹 = 입력 칸과 같은 한 줄 행(라벨 고정폭 + 칩 flex 1줄).
+                      라벨 전용 줄·설명 줄 제거. 칩 선택/비선택 클래스는 기존 그대로. */}
+                  {/* M8 §2 — 판매 방식. 공동판매 = 확정 시 gbEnabled true → 기존 gbTiers 경로. */}
+                  <div className="flex h-11 items-center gap-2">
+                    <span className="w-[70px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">판매 방식</span>
+                    <div className="flex h-full flex-1 gap-1.5">
+                      {([
+                        { v: "single", label: "단일판매" },
+                        { v: "group", label: "공동판매" },
+                      ] as const).map((o) => (
+                        <button
+                          key={o.v}
+                          type="button"
+                          onClick={(e) => { setDMagSaleMode(o.v); flyToCard(e.currentTarget); }}
+                          className={`flex h-full flex-1 items-center justify-center rounded-xl text-[13px] font-bold ${
+                            dMagSaleMode === o.v
+                              ? "bg-[#0A0A0A] text-white"
+                              : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                          }`}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  {/* M1-k §5 — 시세 참고(옵트인 칩·품목 UI·밴드 라인)는 가격 칸 아래. 품목 UI 본체는
-                      아래 category 블록이 조건 확장으로 그대로 담당(신규 목록 UI 0). */}
-                  {dBandLine && (
-                    <p className="text-[11px] font-semibold text-[#8A8A8A]">{dBandLine}</p>
-                  )}
-                  {magPriceN != null && magPriceN > 0 && !dCatOptIn && !dBandLine && (
-                    <button
-                      type="button"
-                      onClick={() => setDCatOptIn(true)}
-                      className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#525252] active:bg-[#F5F5F5]"
-                    >
-                      시세 참고하기
-                    </button>
-                  )}
-                  <div className="flex gap-2">
-                    <div className="relative min-w-0 flex-1">
-                      <input
-                        value={dMagDroppy}
-                        onChange={(e) => setDMagDroppy(e.target.value)}
-                        inputMode="numeric"
-                        placeholder="나눔"
-                        className="w-full rounded-xl bg-[#F4F4F5] py-3 pl-3 pr-7 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                        style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                      />
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">%</span>
+                  {/* M8 §1 — 판매 단위. 가격·수량 라벨과 접미가 이 값에 연동된다. */}
+                  <div className="flex h-11 items-center gap-2">
+                    <span className="w-[70px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">판매 단위</span>
+                    <div className="flex h-full flex-1 gap-1.5">
+                      {MAG_UNITS.map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={(e) => { setDMagUnit(u); setCfgProduct((p) => ({ ...p, saleUnit: MAG_UNIT_TO_SALE_UNIT[u] })); flyToCard(e.currentTarget); }}
+                          className={`flex h-full flex-1 items-center justify-center rounded-xl text-[13px] font-bold ${
+                            dMagUnit === u
+                              ? "bg-[#0A0A0A] text-white"
+                              : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                          }`}
+                        >
+                          {u}
+                        </button>
+                      ))}
                     </div>
+                  </div>
+                  {/* M8-E §1 — 시세 블록(띠 + 링고 팁 + 품목 후보)을 가격 칸 "위"(단위 칩 아래)로 이동.
+                      옵트인 칩 폐지 — 이름만 치면 §2 자동 매칭이 알아서 띄운다.
+                      M8 §6 — 밴드는 연한 배경 띠(같은 톤 계열 · 문구 무변). */}
+                  {dBandLine && (
+                    <div className="rounded-xl bg-[#F4F4F5] px-3 py-1.5">
+                      <p className="text-[11px] font-semibold leading-snug text-[#8A8A8A]">{dBandLine}</p>
+                      {/* M8 §6 — 링고 팁: kg 단위 + 가격 있을 때만(§3 — 띠 자체는 가격 없어도 표시). */}
+                      {dMagUnit === "kg" && dBandWon != null && dBandWon > 0 && magPriceN != null && magPriceN > 0 && (
+                        <p className="mt-0.5 text-[11px] font-medium leading-snug text-[#525252] [word-break:keep-all]">
+                          {magPriceN > dBandWon * 1.5
+                            ? "도매가보다 넉넉한 편이에요"
+                            : magPriceN >= dBandWon * 0.8
+                              ? "도매가와 비슷한 수준이에요"
+                              : "도매가보다 낮은 편이에요"}
+                          {" — 가격은 사장님이 정하시는 게 정답이에요"}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {/* M8-E §2 — 부분 일치 다수 = 자동 선택 금지. 후보 칩(+직접 찾기)을 시세 자리에 표시.
+                      0건이면 이 블록 자체가 미렌더(빈 줄·오류 노출 0). 마크업은 기존 함수 재사용. */}
+                  {!cfgProduct.kamisItemCode && magKamisCands.length > 0 && (
+                    <div className="max-h-[30vh] overflow-y-auto">{renderDirectorCategoryPicker()}</div>
+                  )}
+                  <div className="relative">
+                    <input
+                      value={dMagPrice}
+                      onChange={(e) => setDMagPrice(e.target.value)}
+                      inputMode="numeric"
+                      placeholder={dMagUnit === "개" ? "한 개 가격" : `${dMagUnit}당 가격`}
+                      className="w-full rounded-xl bg-[#F4F4F5] py-3 pl-3 pr-7 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">원</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      value={dMagQty}
+                      onChange={(e) => setDMagQty(e.target.value)}
+                      inputMode="numeric"
+                      placeholder={`몇 ${dMagUnit}`}
+                      className="w-full rounded-xl bg-[#F4F4F5] py-3 pl-3 pr-9 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">{dMagUnit}</span>
+                  </div>
+                  {/* M8 §4 — 드로피. 칩이 유효값(0·5·10·15·20)만 내므로 기존 검증 그대로 통과.
+                      M8 압축 — 설명 줄 제거 → 라벨 옆 ⓘ 탭 = 기존 stepToast(1.8s :2504) 재사용. */}
+                  <div className="flex h-11 items-center gap-2">
+                    <span className="flex w-[70px] shrink-0 items-center gap-0.5 text-[12px] font-semibold text-[#8A8A8A]">
+                      드로피
+                      <button
+                        type="button"
+                        onClick={() => setStepToast("전한 분에게 드로피로 감사를 전해요")}
+                        aria-label="드로피 설명"
+                        className="text-[12px] text-[#A3A3A3] active:opacity-60"
+                      >
+                        ⓘ
+                      </button>
+                    </span>
+                    <div className="flex h-full flex-1 gap-1.5">
+                      {MAG_DROPPY_CHIPS.map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          onClick={(e) => { setDMagDroppy(c.value); flyToCard(e.currentTarget); }}
+                          className={`flex h-full min-w-0 flex-1 items-center justify-center rounded-xl text-[13px] font-bold ${
+                            dMagDroppy.trim() === c.value
+                              ? "bg-[#0A0A0A] text-white"
+                              : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                          }`}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* M8 §5 — 거래 방식 + 택배 하위 배송비. 저장은 기존 배송 필드로만. */}
+                  <div className="flex h-11 items-center gap-2">
+                    <span className="w-[70px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">거래 방식</span>
+                    <div className="flex h-full flex-1 gap-1.5">
+                      {([
+                        { v: "direct", label: "직거래" },
+                        { v: "parcel", label: "택배" },
+                      ] as const).map((o) => (
+                        <button
+                          key={o.v}
+                          type="button"
+                          onClick={(e) => { setDMagDeal(o.v); flyToCard(e.currentTarget); }}
+                          className={`flex h-full flex-1 items-center justify-center rounded-xl text-[13px] font-bold ${
+                            dMagDeal === o.v
+                              ? "bg-[#0A0A0A] text-white"
+                              : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                          }`}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {dMagDeal === "parcel" && (
+                    <div className="flex h-11 items-center gap-2">
+                      <span className="w-[70px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">배송비</span>
+                      <div className="flex h-full flex-1 gap-1.5">
+                        {([
+                          { v: "included", label: "포함" },
+                          { v: "separate", label: "별도" },
+                        ] as const).map((o) => (
+                          <button
+                            key={o.v}
+                            type="button"
+                            onClick={(e) => { setDMagShipMode(o.v); flyToCard(e.currentTarget); }}
+                            className={`flex h-full flex-1 items-center justify-center rounded-xl text-[13px] font-bold ${
+                              dMagShipMode === o.v
+                                ? "bg-[#0A0A0A] text-white"
+                                : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                            }`}
+                          >
+                            {o.label}
+                          </button>
+                        ))}
+                        {/* 별도 = 같은 행 오른쪽 금액 칸(44px 유지). */}
+                        {dMagShipMode === "separate" && (
+                          <div className="relative h-full w-[96px] shrink-0">
+                            <input
+                              value={dMagShipFee}
+                              onChange={(e) => setDMagShipFee(e.target.value)}
+                              inputMode="numeric"
+                              placeholder="배송비"
+                              className="h-full w-full rounded-xl bg-[#F4F4F5] pl-2.5 pr-6 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                              style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                            />
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">원</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {/* M8-C §1 — 택배사 칩(선택 사항). 소스 = 기존 COURIERS(:399) 재사용 · 새 배열 0.
+                      라벨이 길어 행이 깨지므로 가로 스크롤 + 칩 shrink-0(세로 확장 금지).
+                      미선택 = MAG_PARCEL_COURIER("택배") 현행 유지 — magSheetReady 조건 추가 0.
+                      [직거래] 선택 시 이 행 자체가 숨는다(dMagDeal === "parcel" 게이트). */}
+                  {dMagDeal === "parcel" && (
+                    <div className="flex h-11 items-center gap-2">
+                      <span className="w-[70px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">택배사</span>
+                      <div className="flex h-full flex-1 gap-1.5 overflow-x-auto">
+                        {COURIERS.filter((c) => c !== MAG_DIRECT_COURIER).map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={(e) => { setCfgCourier(c); flyToCard(e.currentTarget); }}
+                            className={`flex h-full shrink-0 items-center justify-center rounded-xl px-3 text-[13px] font-bold ${
+                              cfgCourier === c
+                                ? "bg-[#0A0A0A] text-white"
+                                : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                            }`}
+                          >
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* M8-L2 §1·§3 — 확정 행은 독 하단 sticky(스크롤 중에도 항상 보임). 대형 [말로 하기]
+                      풀폭 버튼 폐지 → 오른쪽 44×44 원형 마이크. 핸들러(handleOrbTap)·3분기 게이트
+                      (inAppNoMic / voiceSupported / 미지원)는 기존 그대로 — 파이프 무수정. */}
+                  <div className="sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-[#E8E8EC] bg-white px-4 py-2">
                     <button
                       type="button"
-                      onClick={submitMagicSheet}
+                      onClick={(e) => { fireConverge(e.currentTarget.closest("div")); submitMagicSheet(); }}
                       disabled={!magSheetReady}
-                      className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[#1D4ED8] text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                      className="flex h-11 flex-1 items-center justify-center rounded-xl bg-[#1D4ED8] text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
                     >
                       ✦ 만들기
                     </button>
+                    {inAppNoMic ? (
+                      <button
+                        type="button"
+                        onClick={handleOrbTap}
+                        disabled={thinking}
+                        aria-label="말로 하기 — 크롬에서 이어져요"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-95 disabled:opacity-50"
+                        style={{ backgroundColor: LINGO }}
+                      >
+                        <Mic className="h-[18px] w-[18px]" strokeWidth={2.5} />
+                      </button>
+                    ) : voiceSupported ? (
+                      <button
+                        type="button"
+                        onClick={handleOrbTap}
+                        disabled={thinking}
+                        aria-label="말로 하기"
+                        className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-95 disabled:opacity-50"
+                        style={{ backgroundColor: listening ? "#DC2626" : LINGO }}
+                      >
+                        {/* 듣는 중 펄스 — 기존 문법(animate-ping) 그대로, 원형에만 매핑. */}
+                        {listening && (
+                          <span className="absolute inset-0 animate-ping rounded-full" style={{ backgroundColor: "rgba(220,38,38,0.4)" }} />
+                        )}
+                        <Mic className="relative h-[18px] w-[18px]" strokeWidth={2.5} />
+                      </button>
+                    ) : null}
                   </div>
-                  {/* 마이크 줄 — 49 컴포저(:8271-8307) 3분기 그대로(인앱 핸드오프 / 원형 마이크). */}
-                  {inAppNoMic ? (
-                    <button
-                      type="button"
-                      onClick={handleOrbTap}
-                      disabled={thinking}
-                      aria-label="음성으로 만들기 — 크롬에서 이어져요"
-                      className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-xl text-[13px] font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
-                      style={{ backgroundColor: LINGO }}
-                    >
-                      <Mic className="h-[14px] w-[14px]" strokeWidth={2.5} />
-                      음성으로 만들기
-                    </button>
-                  ) : voiceSupported ? (
-                    <button
-                      type="button"
-                      onClick={handleOrbTap}
-                      disabled={thinking}
-                      aria-label={listening ? "음성 입력 종료" : "음성으로 말하기"}
-                      className="relative flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl text-[13px] font-bold text-white transition-transform active:scale-95 disabled:opacity-50"
-                      style={{ backgroundColor: listening ? "#DC2626" : LINGO }}
-                    >
-                      {listening && (
-                        <span className="absolute inset-0 animate-ping rounded-xl" style={{ backgroundColor: "rgba(220,38,38,0.4)" }} />
-                      )}
-                      <Mic className="relative h-[16px] w-[16px]" strokeWidth={2.5} />
-                      <span className="relative">{listening ? "듣고 있어요" : "말로 하기"}</span>
-                    </button>
-                  ) : null}
                 </div>
               )}
               {/* M1 — 숫자 확인 자물쇠: 읽힌 것만 표시 + 2택. 반영은 [맞아요] 탭에서만.
@@ -7858,51 +8606,7 @@ export function CardStudioPage({
                 </div>
               )}
               {/* T5-W3 — 쿠폰 스텝(대표님 차례): 기쿠폰 1탭 / 없으면 생성 표면(파트너 쿠폰) 연결 — 내용은 사장님(AI_BLOCKED). */}
-              {dStep === "coupon" && (
-                <div className="space-y-2">
-                  {couponsError && (
-                    <div className="flex items-center justify-between gap-2 rounded-xl bg-[#FEF2F2] px-3 py-2.5">
-                      <span className="text-[12px] font-semibold text-[#DC2626] [word-break:keep-all]">{couponsError}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          couponsLoadedRef.current = false;
-                          void loadCoupons();
-                        }}
-                        className="shrink-0 text-[12px] font-bold text-[#1D4ED8]"
-                      >
-                        다시 시도
-                      </button>
-                    </div>
-                  )}
-                  {coupons.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {coupons.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => pickDirectorCoupon(c)}
-                          className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
-                        >
-                          <Ticket className="h-4 w-4" strokeWidth={2.25} />
-                          {c.title ?? "이름 없는 쿠폰"}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {!couponsLoading && !couponsError && coupons.length === 0 && (
-                    <p className="text-[12px] font-medium text-[#8A8A8A] [word-break:keep-all]">
-                      등록된 쿠폰이 없어요 — 파트너 페이지에서 만들 수 있어요
-                    </p>
-                  )}
-                  <a
-                    href="/partner/coupons"
-                    className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
-                  >
-                    쿠폰 만들러 가기
-                  </a>
-                </div>
-              )}
+              {dStep === "coupon" && renderCouponPicker(pickDirectorCoupon)}
               {/* T5-W3 — 예약 분기(예/아니오). */}
               {dStep === "reserveAsk" && (
                 <div className="flex gap-2">
@@ -7936,85 +8640,9 @@ export function CardStudioPage({
               )}
               {/* T5-W1a — 품목 분류: 신선 = 상품명 기반 후보 1탭 확정 + [직접 찾기] 폴백 / 가공·공산품 = 자유 입력. */}
               {/* M1-f — 시세 참고 옵트인도 이 블록을 그대로 쓴다(조건만 확장 · 신규 목록 UI 0). */}
-              {(dStep === "category" || (dStep === "magic" && dCatOptIn)) &&
-                (() => {
-                  const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
-                  const isFreshType = cfgProduct.type === "fresh";
-                  // 옵트인 시점엔 아직 [맞아요] 전이라 cfgProductName 이 비어 있다 → 파서가 읽은 이름으로 매칭.
-                  const matchName =
-                    dStep === "magic" ? dMagName : cfgProductName;
-                  const nameCands =
-                    isFreshType && !dCatSearch
-                      ? dKamisList.filter((it) => norm(matchName).includes(norm(it.item_name))).slice(0, 6)
-                      : [];
-                  const typedCands =
-                    isFreshType && dCatSearch && dText.trim()
-                      ? dKamisList.filter((it) => norm(it.item_name).includes(norm(dText))).slice(0, 6)
-                      : [];
-                  const showChips = isFreshType && !dCatSearch && nameCands.length > 0;
-                  return showChips ? (
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap gap-1.5">
-                        {nameCands.map((it) => (
-                          <button
-                            key={it.item_code}
-                            type="button"
-                            onClick={() => pickDirectorCategory(it)}
-                            className="flex min-h-[44px] items-center rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
-                          >
-                            {it.item_name}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => setDCatSearch(true)}
-                          className="flex min-h-[44px] items-center rounded-xl border border-[#E5E5E5] bg-white px-4 text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
-                        >
-                          직접 찾기
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {typedCands.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {typedCands.map((it) => (
-                            <button
-                              key={it.item_code}
-                              type="button"
-                              onClick={() => pickDirectorCategory(it)}
-                              className="flex min-h-[44px] items-center rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
-                            >
-                              {it.item_name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <input
-                          value={dText}
-                          onChange={(e) => setDText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                              e.preventDefault();
-                              submitDirectorCategoryText();
-                            }
-                          }}
-                          placeholder="품목 분류"
-                          className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                          style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
-                        />
-                        <button
-                          type="button"
-                          onClick={submitDirectorCategoryText}
-                          className="flex min-h-[44px] shrink-0 items-center rounded-xl bg-[#1D4ED8] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
-                        >
-                          입력
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
+              {/* M8-L4-후속 — 매직 경로는 시트 안(시세 띠 아래)에서 렌더하므로 여기서는 제외.
+                  비매직(기존 지휘자 category 스텝) 렌더 위치·조건은 무수정. */}
+              {dStep === "category" && renderDirectorCategoryPicker()}
               {/* T5-W1a — 판매 단위(UNIT_OPTIONS 정본 3형) · 무게 선택 시 1개당 g 후속 입력. */}
               {dStep === "unit" &&
                 (dUnitGrams ? (
