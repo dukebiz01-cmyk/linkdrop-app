@@ -5426,7 +5426,11 @@ export function CardStudioPage({
               </button>
               <button
                 type="button"
-                onClick={() => onEditField("product")}
+                onClick={() => {
+                  // M3-fix — 착지를 먼저 풀어 덱·게이지를 펼친 뒤 지목한다(숨은 대상으로 스크롤 헛돎 방지).
+                  setMagicLanding(false);
+                  onEditField("product");
+                }}
                 className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
               >
                 눌러서 고치기
