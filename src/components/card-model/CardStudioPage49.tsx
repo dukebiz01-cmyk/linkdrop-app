@@ -74,6 +74,7 @@ import {
   Undo2,
   Pencil,
   ListOrdered,
+  Layers,
 } from "lucide-react";
 // UI-5-T3-L1 — 오브=마이크(45 S2b 이식): 즉시 청취 시퀀스·사운드·게이트(보존 lib 무수정 소비만).
 import { primeAudio, playListenStart, playListenStop } from "@/lib/lingo-sound";
@@ -5760,7 +5761,13 @@ export function CardStudioPage({
                 type="button"
                 onClick={() => {
                   // M3-fix — 착지를 먼저 풀어 덱·게이지를 펼친 뒤 지목한다(숨은 대상으로 스크롤 헛돎 방지).
+                  // L3-fix(2) — [자세히 고치기]와 동형: 지휘까지 종료해야 L3 배경 게이트
+                  //   (directorOn && !magicLanding)가 풀려 덱·설정 폼·발행바가 실제로 복귀한다.
+                  //   지목은 무손실 — jumpToBlock 의 스크롤이 setTimeout(:3471, 60ms) 지연이라
+                  //   배경 복귀 커밋 뒤에 실행되고, closeDirector 는 applied 의 "미확정 스켈레톤"만
+                  //   정리하는데 product 는 이름·가격 실값이 있어 filled 판정으로 보존된다.
                   setMagicLanding(false);
+                  closeDirector();
                   onEditField("product");
                 }}
                 className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
@@ -5814,7 +5821,15 @@ export function CardStudioPage({
             )}
             <button
               type="button"
-              onClick={() => setMagicLanding(false)}
+              onClick={() => {
+                // L3-fix — 착지만 풀면 directorOn 이 true 로 남아 L3 배경 게이트
+                //   (directorOn && !magicLanding)가 계속 참 → 덱·설정 폼·발행바·코칭·공개 레버가
+                //   영영 복귀하지 않았다. 지휘를 완전히 종료해 폼 직행 편집 상태로 착지시킨다.
+                //   closeDirector 는 cfgProduct·cfgProductName/Price·selectedCouponId·dMag* 를
+                //   건드리지 않고, applied 는 "미확정 스켈레톤"만 정리한다(X 닫기와 동형).
+                setMagicLanding(false);
+                closeDirector();
+              }}
               className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#525252] active:bg-[#F5F5F5]"
             >
               자세히 고치기
@@ -8074,26 +8089,17 @@ export function CardStudioPage({
                 })()}
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                {/* M1-d — 매직이 "한 번에 입력"의 역할을 흡수하므로 매직 중 숨김(조건부 · 삭제 0). */}
-                {!magicRef.current && (
+                {/* 버튼정리 §2 — [한 번에 입력하기] 렌더 제거: 지휘→폼 출구를 아래 [카드덱 열기]
+                    하나로 통일한다(둘 다 closeDirector 경유라 도달 상태 동일). 죽은 텍스트 경로
+                    코드(:1665 근방)는 후일 스윕 대상 — 여기서 손대지 않는다. */}
                 <button
                   type="button"
-                  onClick={() => {
-                    closeDirector(); // P1-3 — 이탈 정리 경유(실값 보존·빈 스켈레톤 해제).
-                    jumpToBlock("product"); // 탈출구 — 동일 상태 수렴(경량 폼 = 기존 상품 폼).
-                  }}
-                  className="flex min-h-[32px] items-center rounded-lg border border-[#E8E8EC] bg-white px-2 text-[11px] font-semibold text-[#525252]"
-                >
-                  한 번에 입력하기
-                </button>
-                )}
-                <button
-                  type="button"
-                  aria-label="제작시키기 닫기"
+                  aria-label="카드덱 열기"
+                  title="카드덱 열기"
                   onClick={closeDirector}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-[#8A8A8A] active:bg-[#F5F5F5]"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[#16161D] text-white active:scale-95"
                 >
-                  <X className="h-4 w-4" strokeWidth={2.25} />
+                  <Layers className="h-4 w-4" strokeWidth={2.25} />
                 </button>
               </div>
             </div>
