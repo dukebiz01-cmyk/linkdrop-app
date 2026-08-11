@@ -8195,15 +8195,16 @@ export function CardStudioPage({
                         : doneUp
                           ? "✓ 사진 확정 — 다시 고르기"
                           : "사진 올리기";
-                  // 완료 = 보조 톤(gbAsk 둘째 칩 문법) · 그 외 = 현행 검정 버튼.
+                  // D2 §4 — 보조 동작(다시 고르기·확정 후 재선택)은 텍스트 링크 톤(밑줄 없음·보조색),
+                  //   히트는 44px 유지. 미업로드·실패 = 여전히 주 톤(사진이 이 단계의 유일한 행동).
                   const tone = doneUp
-                    ? "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                    ? "text-[#8A8A8A] active:opacity-60"
                     : "bg-[#0A0A0A] text-white active:scale-[0.98]";
                   const picker = (
                     <label
-                      /* M8 압축 — 확정 상태는 40px 컴팩트 행(썸네일 24px 유지), 그 외는 현행 48px. */
-                      className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl font-bold ${
-                        doneUp && photoConfirmed ? "h-10 text-[13px]" : "min-h-[48px] text-[14px]"
+                      /* M8 압축 — 확정 상태는 컴팩트 행(썸네일 24px 유지), 그 외는 주 CTA 48px. */
+                      className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl font-bold ${
+                        doneUp ? "h-11 text-[13px]" : "h-12 text-[15px]"
                       } ${tone} ${uploading ? "pointer-events-none opacity-60" : ""}`}
                     >
                       {doneUp && photoConfirmed && productImagePreview && (
@@ -8226,18 +8227,19 @@ export function CardStudioPage({
                   // M8 §3 — 업로드 성공 ≠ 확정. 확인 1탭 전까지 크게 보여주고 되돌릴 기회를 준다.
                   if (!pending) return picker;
                   return (
-                    <div className="space-y-1.5">
+                    /* D2 §3·§4 — 간격 8px · 확인은 주 CTA 48px · [다시 고르기]는 텍스트 링크 톤. */
+                    <div className="space-y-2">
                       {productImagePreview && (
                         <img
                           src={productImagePreview}
                           alt="올린 사진"
-                          className="aspect-video w-full rounded-2xl object-cover"
+                          className="aspect-video w-full rounded-[10px] object-cover"
                         />
                       )}
                       <button
                         type="button"
                         onClick={(e) => { setPhotoConfirmed(true); flyToCard(e.currentTarget); }}
-                        className="flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-[#0A0A0A] text-[14px] font-bold text-white active:scale-[0.98]"
+                        className="flex h-12 w-full items-center justify-center rounded-xl bg-[#0F766E] text-[15px] font-bold text-white active:scale-[0.98]"
                       >
                         이 사진으로 확인
                       </button>
@@ -8248,10 +8250,11 @@ export function CardStudioPage({
               {/* M1-k — 매직 4칸 시트(한 줄 작문 폐지 → 빈칸 채우기). 칸 문법 = 기존 입력칸 원문 복제.
                   칸에 보이는 값이 곧 확인 → [✦ 만들기] 1탭이 NUMBER_CRITICAL 자물쇠. 설명문 0. */}
               {dStep === "magic" && (
-                <div className="space-y-1.5">
+                /* D2 §3 — 행 리듬 8px 통일(구 space-y-1.5 = 6px 혼재 제거). */
+                <div className="space-y-2">
                   {/* 듣는 중 회색 미리보기(:8228 문법) — 컴포저 고스트는 독 아래로 가리므로 여기 표시. */}
                   {listening && interim && (
-                    <p className="text-[12.5px] font-medium italic leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
+                    <p className="text-[11px] font-medium italic leading-relaxed text-[#A3A3A3] [word-break:keep-all]">
                       {interim}
                     </p>
                   )}
@@ -8260,15 +8263,16 @@ export function CardStudioPage({
                     onChange={(e) => setDMagName(e.target.value)}
                     inputMode="text"
                     placeholder="뭘 파세요"
-                    className="w-full rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                    style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                    className="h-11 w-full rounded-[10px] bg-[#F4F4F5] px-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                    style={{ boxShadow: "inset 0 0 0 1px #EDEDF0" }}
                   />
                   {/* M8 압축 — 칩 그룹 = 입력 칸과 같은 한 줄 행(라벨 고정폭 + 칩 flex 1줄).
                       라벨 전용 줄·설명 줄 제거. 칩 선택/비선택 클래스는 기존 그대로. */}
-                  {/* M8 §2 — 판매 방식. 공동판매 = 확정 시 gbEnabled true → 기존 gbTiers 경로. */}
-                  <div className="flex h-11 items-center gap-2">
-                    <span className="w-[70px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">판매 방식</span>
-                    <div className="flex h-full flex-1 gap-1.5">
+                  {/* M8 §2 — 판매 방식. 공동판매 = 확정 시 gbEnabled true → 기존 gbTiers 경로.
+                      D2 §1 — 필 2개 → 세그먼트 1덩어리(트랙 명도-1 + 선택 세그 white·0.5px 림·액센트). */}
+                  <div className="flex h-11 items-center gap-3">
+                    <span className="w-[70px] shrink-0 text-[11px] font-semibold text-[#8A8A8A]">판매 방식</span>
+                    <div className="flex flex-1 gap-[2px] rounded-[10px] bg-[#F1F0EC] p-[2px]">
                       {([
                         { v: "single", label: "단일판매" },
                         { v: "group", label: "공동판매" },
@@ -8277,10 +8281,10 @@ export function CardStudioPage({
                           key={o.v}
                           type="button"
                           onClick={(e) => { setDMagSaleMode(o.v); flyToCard(e.currentTarget); }}
-                          className={`flex h-full flex-1 items-center justify-center rounded-xl text-[13px] font-bold ${
+                          className={`flex min-h-[40px] flex-1 items-center justify-center rounded-lg text-[13px] font-bold transition-colors ${
                             dMagSaleMode === o.v
-                              ? "bg-[#0A0A0A] text-white"
-                              : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                              ? "bg-white text-[#0F766E] [box-shadow:0_0_0_0.5px_rgba(15,23,42,0.10)]"
+                              : "text-[#8A8A8A]"
                           }`}
                         >
                           {o.label}
@@ -8288,19 +8292,20 @@ export function CardStudioPage({
                       ))}
                     </div>
                   </div>
-                  {/* M8 §1 — 판매 단위. 가격·수량 라벨과 접미가 이 값에 연동된다. */}
-                  <div className="flex h-11 items-center gap-2">
-                    <span className="w-[70px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">판매 단위</span>
-                    <div className="flex h-full flex-1 gap-1.5">
+                  {/* M8 §1 — 판매 단위. 가격·수량 라벨과 접미가 이 값에 연동된다.
+                      D2 §2 — 시각 36px(h-9) + 배경 틴트·0.5px 림. 히트는 행 h-11 이 확보. */}
+                  <div className="flex h-11 items-center gap-3">
+                    <span className="w-[70px] shrink-0 text-[11px] font-semibold text-[#8A8A8A]">판매 단위</span>
+                    <div className="flex flex-1 gap-2">
                       {MAG_UNITS.map((u) => (
                         <button
                           key={u}
                           type="button"
                           onClick={(e) => { setDMagUnit(u); setCfgProduct((p) => ({ ...p, saleUnit: MAG_UNIT_TO_SALE_UNIT[u] })); flyToCard(e.currentTarget); }}
-                          className={`flex h-full flex-1 items-center justify-center rounded-xl text-[13px] font-bold ${
+                          className={`flex h-9 flex-1 items-center justify-center rounded-lg text-[13px] font-bold transition-colors ${
                             dMagUnit === u
-                              ? "bg-[#0A0A0A] text-white"
-                              : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                              ? "bg-[#0F766E]/10 text-[#0F766E] [box-shadow:0_0_0_0.5px_rgba(15,118,110,0.35)]"
+                              : "bg-[#F4F4F5] text-[#525252] [box-shadow:0_0_0_0.5px_rgba(15,23,42,0.08)]"
                           }`}
                         >
                           {u}
@@ -8311,9 +8316,10 @@ export function CardStudioPage({
                   {/* M8-E §1 — 시세 블록(띠 + 링고 팁 + 품목 후보)을 가격 칸 "위"(단위 칩 아래)로 이동.
                       옵트인 칩 폐지 — 이름만 치면 §2 자동 매칭이 알아서 띄운다.
                       M8 §6 — 밴드는 연한 배경 띠(같은 톤 계열 · 문구 무변). */}
+                  {/* D2 §5 — 시세 띠 = 액센트 유지 대상(살아있는 정보). 패딩만 4배수 정렬(12/8). */}
                   {dBandLine && (
-                    <div className="rounded-xl bg-[#F4F4F5] px-3 py-1.5">
-                      <p className="text-[11px] font-semibold leading-snug text-[#8A8A8A]">{dBandLine}</p>
+                    <div className="rounded-[10px] bg-[#0F766E]/[0.07] px-3 py-2">
+                      <p className="text-[11px] font-semibold leading-snug text-[#0F766E]">{dBandLine}</p>
                       {/* M8 §6 — 링고 팁: kg 단위 + 가격 있을 때만(§3 — 띠 자체는 가격 없어도 표시). */}
                       {dMagUnit === "kg" && dBandWon != null && dBandWon > 0 && magPriceN != null && magPriceN > 0 && (
                         <p className="mt-0.5 text-[11px] font-medium leading-snug text-[#525252] [word-break:keep-all]">
@@ -8332,16 +8338,17 @@ export function CardStudioPage({
                   {!cfgProduct.kamisItemCode && magKamisCands.length > 0 && (
                     <div className="max-h-[30vh] overflow-y-auto">{renderDirectorCategoryPicker()}</div>
                   )}
+                  {/* D2 §3 — 값 텍스트 15px + tabular-nums, placeholder 는 13px 유지(계단 준수). */}
                   <div className="relative">
                     <input
                       value={dMagPrice}
                       onChange={(e) => setDMagPrice(e.target.value)}
                       inputMode="numeric"
                       placeholder={dMagUnit === "개" ? "한 개 가격" : `${dMagUnit}당 가격`}
-                      className="w-full rounded-xl bg-[#F4F4F5] py-3 pl-3 pr-7 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                      className="h-11 w-full rounded-[10px] bg-[#F4F4F5] pl-3 pr-7 text-[15px] font-semibold text-[#0A0A0A] outline-none [font-variant-numeric:tabular-nums] placeholder:text-[13px] placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                      style={{ boxShadow: "inset 0 0 0 1px #EDEDF0" }}
                     />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">원</span>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-[#8A8A8A]">원</span>
                   </div>
                   <div className="relative">
                     <input
@@ -8349,35 +8356,35 @@ export function CardStudioPage({
                       onChange={(e) => setDMagQty(e.target.value)}
                       inputMode="numeric"
                       placeholder={`몇 ${dMagUnit}`}
-                      className="w-full rounded-xl bg-[#F4F4F5] py-3 pl-3 pr-9 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                      className="h-11 w-full rounded-[10px] bg-[#F4F4F5] pl-3 pr-9 text-[15px] font-semibold text-[#0A0A0A] outline-none [font-variant-numeric:tabular-nums] placeholder:text-[13px] placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                      style={{ boxShadow: "inset 0 0 0 1px #EDEDF0" }}
                     />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">{dMagUnit}</span>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-[#8A8A8A]">{dMagUnit}</span>
                   </div>
                   {/* M8 §4 — 드로피. 칩이 유효값(0·5·10·15·20)만 내므로 기존 검증 그대로 통과.
                       M8 압축 — 설명 줄 제거 → 라벨 옆 ⓘ 탭 = 기존 stepToast(1.8s :2504) 재사용. */}
-                  <div className="flex h-11 items-center gap-2">
-                    <span className="flex w-[70px] shrink-0 items-center gap-0.5 text-[12px] font-semibold text-[#8A8A8A]">
+                  <div className="flex h-11 items-center gap-3">
+                    <span className="flex w-[70px] shrink-0 items-center gap-1 text-[11px] font-semibold text-[#8A8A8A]">
                       드로피
                       <button
                         type="button"
                         onClick={() => setStepToast("전한 분에게 드로피로 감사를 전해요")}
                         aria-label="드로피 설명"
-                        className="text-[12px] text-[#A3A3A3] active:opacity-60"
+                        className="text-[11px] text-[#A3A3A3] active:opacity-60"
                       >
                         ⓘ
                       </button>
                     </span>
-                    <div className="flex h-full flex-1 gap-1.5">
+                    <div className="flex flex-1 gap-2">
                       {MAG_DROPPY_CHIPS.map((c) => (
                         <button
                           key={c.value}
                           type="button"
                           onClick={(e) => { setDMagDroppy(c.value); flyToCard(e.currentTarget); }}
-                          className={`flex h-full min-w-0 flex-1 items-center justify-center rounded-xl text-[13px] font-bold ${
+                          className={`flex h-9 min-w-0 flex-1 items-center justify-center rounded-lg text-[13px] font-bold transition-colors ${
                             dMagDroppy.trim() === c.value
-                              ? "bg-[#0A0A0A] text-white"
-                              : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                              ? "bg-[#0F766E]/10 text-[#0F766E] [box-shadow:0_0_0_0.5px_rgba(15,118,110,0.35)]"
+                              : "bg-[#F4F4F5] text-[#525252] [box-shadow:0_0_0_0.5px_rgba(15,23,42,0.08)]"
                           }`}
                         >
                           {c.label}
@@ -8385,10 +8392,11 @@ export function CardStudioPage({
                       ))}
                     </div>
                   </div>
-                  {/* M8 §5 — 거래 방식 + 택배 하위 배송비. 저장은 기존 배송 필드로만. */}
-                  <div className="flex h-11 items-center gap-2">
-                    <span className="w-[70px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">거래 방식</span>
-                    <div className="flex h-full flex-1 gap-1.5">
+                  {/* M8 §5 — 거래 방식 + 택배 하위 배송비. 저장은 기존 배송 필드로만.
+                      D2 §1 — 세그먼트 동형(판매 방식과 같은 트랙 문법). */}
+                  <div className="flex h-11 items-center gap-3">
+                    <span className="w-[70px] shrink-0 text-[11px] font-semibold text-[#8A8A8A]">거래 방식</span>
+                    <div className="flex flex-1 gap-[2px] rounded-[10px] bg-[#F1F0EC] p-[2px]">
                       {([
                         { v: "direct", label: "직거래" },
                         { v: "parcel", label: "택배" },
@@ -8397,10 +8405,10 @@ export function CardStudioPage({
                           key={o.v}
                           type="button"
                           onClick={(e) => { setDMagDeal(o.v); flyToCard(e.currentTarget); }}
-                          className={`flex h-full flex-1 items-center justify-center rounded-xl text-[13px] font-bold ${
+                          className={`flex min-h-[40px] flex-1 items-center justify-center rounded-lg text-[13px] font-bold transition-colors ${
                             dMagDeal === o.v
-                              ? "bg-[#0A0A0A] text-white"
-                              : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                              ? "bg-white text-[#0F766E] [box-shadow:0_0_0_0.5px_rgba(15,23,42,0.10)]"
+                              : "text-[#8A8A8A]"
                           }`}
                         >
                           {o.label}
@@ -8409,38 +8417,40 @@ export function CardStudioPage({
                     </div>
                   </div>
                   {dMagDeal === "parcel" && (
-                    <div className="flex h-11 items-center gap-2">
-                      <span className="w-[70px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">배송비</span>
-                      <div className="flex h-full flex-1 gap-1.5">
-                        {([
-                          { v: "included", label: "포함" },
-                          { v: "separate", label: "별도" },
-                        ] as const).map((o) => (
-                          <button
-                            key={o.v}
-                            type="button"
-                            onClick={(e) => { setDMagShipMode(o.v); flyToCard(e.currentTarget); }}
-                            className={`flex h-full flex-1 items-center justify-center rounded-xl text-[13px] font-bold ${
-                              dMagShipMode === o.v
-                                ? "bg-[#0A0A0A] text-white"
-                                : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
-                            }`}
-                          >
-                            {o.label}
-                          </button>
-                        ))}
+                    <div className="flex h-11 items-center gap-3">
+                      <span className="w-[70px] shrink-0 text-[11px] font-semibold text-[#8A8A8A]">배송비</span>
+                      <div className="flex flex-1 items-center gap-2">
+                        <div className="flex flex-1 gap-[2px] rounded-[10px] bg-[#F1F0EC] p-[2px]">
+                          {([
+                            { v: "included", label: "포함" },
+                            { v: "separate", label: "별도" },
+                          ] as const).map((o) => (
+                            <button
+                              key={o.v}
+                              type="button"
+                              onClick={(e) => { setDMagShipMode(o.v); flyToCard(e.currentTarget); }}
+                              className={`flex min-h-[40px] flex-1 items-center justify-center rounded-lg text-[13px] font-bold transition-colors ${
+                                dMagShipMode === o.v
+                                  ? "bg-white text-[#0F766E] [box-shadow:0_0_0_0.5px_rgba(15,23,42,0.10)]"
+                                  : "text-[#8A8A8A]"
+                              }`}
+                            >
+                              {o.label}
+                            </button>
+                          ))}
+                        </div>
                         {/* 별도 = 같은 행 오른쪽 금액 칸(44px 유지). */}
                         {dMagShipMode === "separate" && (
-                          <div className="relative h-full w-[96px] shrink-0">
+                          <div className="relative h-11 w-[96px] shrink-0">
                             <input
                               value={dMagShipFee}
                               onChange={(e) => setDMagShipFee(e.target.value)}
                               inputMode="numeric"
                               placeholder="배송비"
-                              className="h-full w-full rounded-xl bg-[#F4F4F5] pl-2.5 pr-6 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                              style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                              className="h-full w-full rounded-[10px] bg-[#F4F4F5] pl-3 pr-6 text-[15px] font-semibold text-[#0A0A0A] outline-none [font-variant-numeric:tabular-nums] placeholder:text-[13px] placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
+                              style={{ boxShadow: "inset 0 0 0 1px #EDEDF0" }}
                             />
-                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-[#8A8A8A]">원</span>
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[#8A8A8A]">원</span>
                           </div>
                         )}
                       </div>
@@ -8451,18 +8461,18 @@ export function CardStudioPage({
                       미선택 = MAG_PARCEL_COURIER("택배") 현행 유지 — magSheetReady 조건 추가 0.
                       [직거래] 선택 시 이 행 자체가 숨는다(dMagDeal === "parcel" 게이트). */}
                   {dMagDeal === "parcel" && (
-                    <div className="flex h-11 items-center gap-2">
-                      <span className="w-[70px] shrink-0 text-[12px] font-semibold text-[#8A8A8A]">택배사</span>
-                      <div className="flex h-full flex-1 gap-1.5 overflow-x-auto">
+                    <div className="flex h-11 items-center gap-3">
+                      <span className="w-[70px] shrink-0 text-[11px] font-semibold text-[#8A8A8A]">택배사</span>
+                      <div className="flex flex-1 items-center gap-2 overflow-x-auto">
                         {COURIERS.filter((c) => c !== MAG_DIRECT_COURIER).map((c) => (
                           <button
                             key={c}
                             type="button"
                             onClick={(e) => { setCfgCourier(c); flyToCard(e.currentTarget); }}
-                            className={`flex h-full shrink-0 items-center justify-center rounded-xl px-3 text-[13px] font-bold ${
+                            className={`flex h-9 shrink-0 items-center justify-center rounded-lg px-3 text-[13px] font-bold transition-colors ${
                               cfgCourier === c
-                                ? "bg-[#0A0A0A] text-white"
-                                : "border border-[#E5E5E5] bg-white text-[#0A0A0A] active:bg-[#F5F5F5]"
+                                ? "bg-[#0F766E]/10 text-[#0F766E] [box-shadow:0_0_0_0.5px_rgba(15,118,110,0.35)]"
+                                : "bg-[#F4F4F5] text-[#525252] [box-shadow:0_0_0_0.5px_rgba(15,23,42,0.08)]"
                             }`}
                           >
                             {c}
@@ -8474,12 +8484,13 @@ export function CardStudioPage({
                   {/* M8-L2 §1·§3 — 확정 행은 독 하단 sticky(스크롤 중에도 항상 보임). 대형 [말로 하기]
                       풀폭 버튼 폐지 → 오른쪽 44×44 원형 마이크. 핸들러(handleOrbTap)·3분기 게이트
                       (inAppNoMic / voiceSupported / 미지원)는 기존 그대로 — 파이프 무수정. */}
-                  <div className="sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-[#E8E8EC] bg-white px-4 py-2">
+                  {/* D2 §4 — [✦ 만들기] = 시트의 유일한 대형 48px(주 CTA 1개 규칙) · 마이크 44px 유지. */}
+                  <div className="sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-[#EDEDF0] bg-white px-4 py-3">
                     <button
                       type="button"
                       onClick={(e) => { fireConverge(e.currentTarget.closest("div")); submitMagicSheet(); }}
                       disabled={!magSheetReady}
-                      className="flex h-11 flex-1 items-center justify-center rounded-xl bg-[#1D4ED8] text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                      className="flex h-12 flex-1 items-center justify-center rounded-xl bg-[#0F766E] text-[15px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
                     >
                       ✦ 만들기
                     </button>
