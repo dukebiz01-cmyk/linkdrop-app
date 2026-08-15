@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 // UI-5-T7-F5-3 — 비사업자 모드 게이트 인라인 유도의 [파트너 등록하기] 이동용.
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { ProductRegisterForm, EMPTY_PRODUCT, type ProductForm } from "@/components/card-studio/ProductRegisterForm49";
 // T5-W5e — 통합 판매 일정 달력(폼과 동일 공유 부품 — 지휘 gb 경로 period 스텝 소비).
 import { GbScheduleCalendar } from "@/components/card-studio/GbScheduleCalendar";
@@ -589,6 +589,16 @@ const COMMERCE_ASSEMBLE_LABELS: Record<string, string> = {
   review: "확인",
 };
 
+// R8 §3 — 예약 조립 체크리스트 표시 문구(COMMERCE_ASSEMBLE_LABELS 문법 동형 · STEP_PLAN 무수정).
+//   런타임 플랜(STEP_PLAN.reserve) 키 = video/title/coupon/calendar/review.
+const RESERVE_ASSEMBLE_LABELS: Record<string, string> = {
+  video: "영상 담기",
+  title: "제목·한마디",
+  coupon: "쿠폰·예약",
+  calendar: "쿠폰·예약",
+  review: "확인",
+};
+
 // UI-5-T7-T5-W1 — "링고에게 제작시키기" 멘트 정본(Duke 확정 · CC 재량 작문 금지 — 수정은 이
 //   상수만). 화법 3규칙: 정중 존댓말 / 요청+용도 설명 세트 / 정의 용어만. 이모지·감탄사 0.
 export const DIRECTOR_MENTS = {
@@ -605,6 +615,8 @@ export const DIRECTOR_MENTS = {
   // M8-L2 §4 — 장문 축약(1줄 · 존대 · 60대 친화). 발화 로직·순서 무수정 — 문자열만.
   link: "영상 링크를 붙여 주세요 — 제목과 요약은 제가 만들어 드려요.",
   // T5-W3 — 예약·쿠폰 멘트 정본(Duke 확정 · 재량 작문 금지). 쿠폰 내용·달력 슬롯 = 사장님(AI_BLOCKED/PENDING).
+  // R8 §1 — 예약 시트 안내(1줄 · 존대 · 60대 친화). dGo 가 DIRECTOR_MENTS[next] 를 낭독하므로 필수.
+  rsheet: "영상 링크를 붙여 주시고, 예약과 쿠폰만 골라 주세요.",
   coupon: "손님께 드릴 쿠폰을 정해주세요. 만들어 두신 쿠폰을 고르시거나, 지금 새로 만드실 수 있습니다.",
   reserveAsk: "예약도 받으시나요? 받으시면 예약 달력을 함께 넣어 드립니다.",
   calendar: "예약 날짜를 선택해 주세요. 선택하신 날짜만 손님이 예약할 수 있습니다.",
@@ -645,6 +657,10 @@ export const DIRECTOR_MENTS = {
 //   정본 동일값: CardStudioPage50 DIRECTOR_MENTS_50.assembleOrder (50에서 import 금지 — 순환 참조).
 const MAGIC_ASSEMBLE_ORDER =
   "받은 재료로 공유카드를 완성해 주세요. 제목과 한마디, 상품 한마디를 하나로 정해 도구로 바로 반영해 주세요. 후보를 나열하며 묻지 마세요. 영상과 입력값에 없는 사실은 쓰지 마세요. 가격·수량은 건드리지 마세요.";
+// R8 §3 — 예약 조립 지시(MAGIC_ASSEMBLE_ORDER 문법 동형 · 재료만 예약 축으로 교체).
+//   쿠폰 내용·달력 슬롯은 사장님 소관(AI_PENDING)이라 "건드리지 마세요"로 명시 — 기존 락 계승.
+const RESERVE_ASSEMBLE_ORDER =
+  "받은 재료로 공유카드를 완성해 주세요. 제목과 한마디를 하나로 정해 도구로 바로 반영해 주세요. 후보를 나열하며 묻지 마세요. 영상·쿠폰명·매장 이름에 없는 사실은 쓰지 마세요. 쿠폰 내용과 예약 날짜는 건드리지 마세요.";
 
 export type DirectorStep =
   // M1 — 마법 현관(커머스 전용 첫 스텝) + 숫자 확인 자물쇠.
@@ -674,6 +690,9 @@ export type DirectorStep =
   | "coupon"
   | "reserveAsk"
   | "calendar"
+  // R8 §1 — 예약·쿠폰 시트 한 장(구 link→coupon→reserveAsk→calendar 릴레이 대체).
+  //   구 4스텝은 렌더·핸들러 무수정 존치(reserve 도달 0 = 사체 · general 의 link 사용은 유지).
+  | "rsheet"
   | "done";
 // T5-W1a — 공유 보상 추천 기본값(rate %). 판단: 정본 미지정 — 폼 슬라이더 0~20% 범위 중앙
 //   보수값 10 제안(확정은 사장님 · 숫자 입력 그대로). Duke 판정으로 교체 가능(이 상수만 수정).
@@ -976,6 +995,14 @@ export function CardStudioPage({
   //   studio-build49 loader 재조회(get_available_slots) 사슬.
   const slotView = useMemo(() => buildReservationSlotView(initialSlots), [initialSlots]);
   const slotDays = slotView.dates.length;
+  // R8-보완 §4 — [자리 확인] 재조회 수단. slotDays 소스는 initialSlots prop 뿐이므로 갱신은
+  //   studio-build loader 재실행이 유일 경로 = 기존 사슬(:994 PartnerCalendarPage 내장과 동일 수단).
+  const router = useRouter();
+  // R8-보완 §3 — 파트너 페이지 외부 이동 공통(새 탭 고정 — 위저드 state 보존 락).
+  //   경로는 routeTree.gen 실확인분: /partner/coupons · /partner/calendar.
+  const openPartnerPage = (path: "/partner/coupons" | "/partner/calendar") => {
+    if (typeof window !== "undefined") window.open(path, "_blank", "noopener,noreferrer");
+  };
   // UI-5-T2-E5d — 파트너 실쿠폰(45 selectedCouponId :820-822 동형): 목록 = get_active_store_coupons(소유 매장).
   //   선택 = 실 UUID 보관 · 기본 선택 없음(가짜 c1 기본값 폐기 — 쿠폰은 대표님이 골라야 확정).
   const [coupons, setCoupons] = useState<StudioCoupon[]>([]);
@@ -1119,6 +1146,14 @@ export function CardStudioPage({
   const [dVideoErr, setDVideoErr] = useState<string | null>(null);
   // T5-W3 — 예약 분기 답(프리체크의 달력 요구 여부 판정 재료).
   const [dReserveYes, setDReserveYes] = useState(false);
+  // R8 §1 — 예약 시트 전용 state. dText(공용 버퍼) 대신 전용 링크 칸을 쓴다(READ 충돌① 회피).
+  const [dRsvLink, setDRsvLink] = useState("");
+  // R8 §3 — 예약 조립 경로 표시·1회 가드(magicRef/magicFiredRef 동형) + 실패 안내 플래그.
+  const rsheetRef = useRef(false);
+  const rsheetFiredRef = useRef(false);
+  const [rsvAssembleFailed, setRsvAssembleFailed] = useState(false);
+  const [dRsvCoupon, setDRsvCoupon] = useState(false); // 쿠폰 세그 [붙여요/안 붙여요].
+  const [dRsvCouponOpen, setDRsvCouponOpen] = useState(false); // 쿠폰 칩 확장(첫 확장 시 1회 로드).
   // T5-W1c(P1) — 프리셋 스켈레톤 장착분 추적: 시작 시 일괄 장착한 블록 중 아직 실값 미확정분.
   //   이탈(X) 시 이 집합 기준으로 빈 껍데기만 해제(실값 입력분 보존) — 실값 승격 차단(F5-5)과 정합.
   const dPresetRef = useRef<Set<string>>(new Set());
@@ -1222,6 +1257,13 @@ export function CardStudioPage({
     magicDraftRef.current = null;
     magicQueueRef.current = [];
     magicFiredRef.current = false;
+    // R8 §3 — 새 지휘 = 예약 조립 가드·실패 안내 초기화.
+    rsheetRef.current = false;
+    rsheetFiredRef.current = false;
+    setRsvAssembleFailed(false);
+    setDRsvLink("");
+    setDRsvCoupon(false);
+    setDRsvCouponOpen(false);
     magicPhotoSaidRef.current = null; // M1-j — 새 지휘 = 사진 발화 가드 초기화.
     setMagicLanding(false); // M3 — 지휘 재시작 = 착지 해제.
     setDMagName(""); // M1-k — 4칸 초안 초기화.
@@ -1235,7 +1277,8 @@ export function CardStudioPage({
     setDMagShipMode(null);
     setDMagShipFee("");
     setPhotoConfirmed(false);
-    dGo(mode === "commerce" ? "magic" : "link");
+    // R8 §1 — 커머스=매직 시트 / 예약=예약 시트 / 소식=기존 link 스텝(무접촉).
+    dGo(mode === "commerce" ? "magic" : mode === "reserve" ? "rsheet" : "link");
   }
   // T5-W1c(P1-3) — 지휘 종료 단일 출구: 실값 입력분만 보존, 빈 스켈레톤 블록은 해제(미완성 껍데기
   //   장착 상태 정리 — 발행 방어는 프리체크·canPublish 가 기담당, 여기는 장착 정합).
@@ -1272,6 +1315,22 @@ export function CardStudioPage({
     magicRef.current = false;
     setMagicLanding(true); // M3 — 착지 진입(쉬운 고치기 전면).
     void sendToLingo(MAGIC_ASSEMBLE_ORDER);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dStep]);
+
+  // R8 §3 — 예약 자동 조립 1콜(매직 effect 동형 · 1회 가드). 응답 처리는 기존
+  //   dispatchProposal→runAssembly 무수정 재사용(사슬은 모드 비결합 — isAiActionAllowed 가
+  //   DECK_IDS[reserve] 로 심사하고 제목·한마디는 COPY_FIELDS 전 모드 허용).
+  //   실패·타임아웃 = oEmbed 승계 제목으로 그대로 착지(빈 카드 금지) + 착지층 한 줄 안내.
+  useEffect(() => {
+    if (dStep !== "done" || !rsheetRef.current || rsheetFiredRef.current) return;
+    rsheetFiredRef.current = true;
+    rsheetRef.current = false;
+    setMagicLanding(true); // R8 §4 — 예약도 착지층 진입(쉬운 고치기 전면).
+    void (async () => {
+      const r = await sendToLingo(RESERVE_ASSEMBLE_ORDER);
+      if (r.failFriendly) setRsvAssembleFailed(true);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dStep]);
 
@@ -1639,6 +1698,77 @@ export function CardStudioPage({
   }
   // T5-W2 — 링크 스텝 진행 가드 ref(effect 본체는 selectedVideo 선언부 아래 — TDZ 회피 · :1793 인근).
   const dLinkDoneRef = useRef<string | null>(null);
+  /** R8 §1a — 예약 시트 영상 확인. submitDirectorLink(:1601) 본문과 동일 사슬
+   *  (parseYouTubeId → /api/oembed → selectVideo)이되 입력 소스만 dRsvLink 전용 버퍼.
+   *  ⚠️ 스텝 이동 0 — 시트에 머문다(구 link 스텝의 dGo 사슬 미사용). 성공 = burstKey 1회(H세트). */
+  async function submitRsheetLink() {
+    const raw = dRsvLink.trim();
+    const id = parseYouTubeId(raw);
+    if (!id || dVideoBusy) return;
+    setDVideoErr(null);
+    setDVideoBusy(true);
+    try {
+      const vUrl = `https://www.youtube.com/watch?v=${id}`;
+      const res = await fetch("/api/oembed?url=" + encodeURIComponent(vUrl));
+      const meta = (await res.json()) as {
+        title?: string | null;
+        author_name?: string | null;
+        thumbnail_url?: string | null;
+        duration_sec?: number | null;
+        message?: string;
+      };
+      if (!res.ok) {
+        setDVideoErr(meta.message ?? "영상 정보를 불러올 수 없어요. 링크를 확인해 주세요."); // 기존 문구 재사용.
+        return;
+      }
+      void selectVideo({
+        provider: "youtube",
+        source_url: vUrl,
+        source_id: id,
+        canonical_url: vUrl,
+        title: meta.title ?? null,
+        thumbnail_url: meta.thumbnail_url ?? null,
+        author_name: meta.author_name ?? null,
+        duration_sec: meta.duration_sec ?? null,
+        raw_meta: {},
+      });
+      setBurstKey((k) => k + 1); // H세트 — 영상 확인 = 카드 버스트(신규 연출 0).
+    } catch {
+      setDVideoErr("지금 검색이 잘 안돼요 — 링크를 직접 붙여넣어 주세요."); // 기존 문구 재사용.
+    } finally {
+      setDVideoBusy(false);
+    }
+  }
+  /** R8 §1a-b — 예약 시트 영상 행 겸용 제출(입력 칸 하나 · 분기 2).
+   *  ⓐ URL = submitRsheetLink 사슬 무변(parseYouTubeId → oembed → selectVideo → burst).
+   *  ⓑ 비-URL = 기존 검색 엔진 재사용(runVideoSearch — /api/discover 주소스 → youtube-search 폴백).
+   *  신규 API 0 · 신규 상태 0(videoResults/videoSearching/videoError 공유). */
+  async function submitRsheetVideo() {
+    const raw = dRsvLink.trim();
+    if (!raw || dVideoBusy || videoSearching) return;
+    if (parseYouTubeId(raw)) {
+      await submitRsheetLink();
+      return;
+    }
+    setDVideoErr(null); // 검색 분기 = 링크 에러 슬롯 비움(엔진 에러는 videoError 가 그린다).
+    await runVideoSearch(raw);
+  }
+  /** R8 §1a-b — 시트 결과 행 탭 = 기존 selectVideo 단일 합류점 그대로(신규 장착 경로 0).
+   *  확인 축약 행은 selectedVideo 분기가 이미 그린다 → 여기선 검색 잔상만 정리.
+   *  스텝 이동 0(시트에 머문다) · burstKey 1회 = submitRsheetLink 동형. */
+  async function pickRsheetVideo(c: DiscoverCandidate) {
+    if (dVideoBusy) return;
+    setDVideoBusy(true);
+    try {
+      await selectVideo(c);
+      setDRsvLink("");
+      setVideoResults([]);
+      setVideoSearched(false);
+      setBurstKey((k) => k + 1);
+    } finally {
+      setDVideoBusy(false);
+    }
+  }
   // T5-W1a(D1) — 프리체크: done 선언 전 발행 게이트 판정 체인(:3906 publishGate 동일 순서) 자체 점검.
   //   미충족 = 해당 스텝 복귀(복귀 질문 = 그 스텝 멘트 정본 재제시 — 재량 작문 0).
   function finishDirector() {
@@ -1715,35 +1845,57 @@ export function CardStudioPage({
           </div>
         )}
         {extra}
-        {coupons.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {coupons.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={(e) => {
-                  onPick(c);
-                  flyToCard(e.currentTarget); // M8-D §3 — 배달부(칩 문법 동일).
-                }}
-                className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
-              >
-                <Ticket className="h-4 w-4" strokeWidth={2.25} />
-                {c.title ?? "이름 없는 쿠폰"}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* R8-보완 §3 — 목록 상단 재조회 링크. 새 탭에서 만든 쿠폰이 캐시(couponsLoadedRef) 때문에
+            안 보이는 문제 해소: 캐시 무효화 후 loadCoupons() 재실행(로딩 표기 = couponsLoading 재사용). */}
+        <button
+          type="button"
+          onClick={() => {
+            couponsLoadedRef.current = false;
+            void loadCoupons();
+          }}
+          disabled={couponsLoading}
+          className="text-[12px] font-bold text-[#1D4ED8] disabled:opacity-40 active:opacity-60"
+        >
+          {couponsLoading ? "불러오는 중…" : "방금 만든 쿠폰 불러오기"}
+        </button>
+        {/* R8-보완 §3 — [+ 새 쿠폰] 칩 상시(0건이어도 렌더) · 탭 = 파트너 쿠폰 페이지 새 탭. */}
+        <div className="flex flex-wrap gap-1.5">
+          {coupons.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={(e) => {
+                onPick(c);
+                flyToCard(e.currentTarget); // M8-D §3 — 배달부(칩 문법 동일).
+              }}
+              className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#0A0A0A] px-4 text-[13px] font-bold text-white active:scale-[0.98]"
+            >
+              <Ticket className="h-4 w-4" strokeWidth={2.25} />
+              {c.title ?? "이름 없는 쿠폰"}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => openPartnerPage("/partner/coupons")}
+            className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-white px-4 text-[13px] font-bold text-[#0A0A0A] active:scale-[0.98]"
+            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.5} />새 쿠폰
+          </button>
+        </div>
         {!couponsLoading && !couponsError && coupons.length === 0 && (
           <p className="text-[12px] font-medium text-[#8A8A8A] [word-break:keep-all]">
             등록된 쿠폰이 없어요 — 파트너 페이지에서 만들 수 있어요
           </p>
         )}
-        <a
-          href="/partner/coupons"
+        {/* R8-보완 §3 — 같은 탭 <a href> 폐기 → window.open(위저드 state 보존 락). */}
+        <button
+          type="button"
+          onClick={() => openPartnerPage("/partner/coupons")}
           className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
         >
           쿠폰 만들러 가기
-        </a>
+        </button>
       </div>
     );
   }
@@ -1883,6 +2035,23 @@ export function CardStudioPage({
 
   // M1-k — [✦ 만들기] = 확인 1탭. applyMagicDraft 와 동일한 일괄 반영(setter 4종 + 제목 승계)
   //   · ⚠️ confirmHelper·touch 미호출(배지 폭주 차단) — 그대로 유지. 이후 origin 직행.
+  /** R8 §2 — 예약 시트 확정. rsheet 전용 완료 함수(기존 finishDirector·submitMagicSheet 무수정 ·
+   *  중복 실행 방지를 위해 finishDirector 를 부르지 않는다). 예약 여부만 applied 에 반영하고
+   *  done 으로 넘긴다 — 쿠폰 applied 는 pickLandingCoupon 이 이미 세운다. */
+  function submitRsheet() {
+    if (!rsheetReady) return;
+    if (dReserveYes && !applied["calendar"]) setApplied((p) => ({ ...p, calendar: true }));
+    dEcho(
+      [
+        selectedVideo?.title ? `영상 ${selectedVideo.title}` : "영상",
+        dReserveYes ? "예약 받아요" : "예약 안 받아요",
+        dRsvCoupon && selectedCoupon ? `쿠폰 ${selectedCoupon.title ?? "이름 없는 쿠폰"}` : "쿠폰 없음",
+      ].join(" · "),
+    );
+    rsheetRef.current = true; // R8 §3 — done 도달 시 예약 자동 조립 발화(effect 가 소비).
+    setDStep("done");
+  }
+
   function submitMagicSheet() {
     if (!magSheetReady) return;
     const name = dMagName.trim();
@@ -2115,8 +2284,8 @@ export function CardStudioPage({
               }
             }}
             placeholder="품목 분류"
-            className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-            style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+            className="min-w-0 flex-1 rounded-xl bg-white px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:text-[11px] placeholder:font-medium placeholder:text-[#A3A3A3]"
+            style={{ boxShadow: "inset 0 0 0 0.5px #D8D7D2" }}
           />
           <button
             type="button"
@@ -2785,6 +2954,13 @@ export function CardStudioPage({
   const [videoSearched, setVideoSearched] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoSlot49 | null>(null);
+  // ── R8 §2 — 예약 시트 활성 조건. 판정 기준 = finishDirector 의 reserve 분기(:1669-1677) 재사용:
+  //   영상 + 제목(oEmbed 승계 포함) + (쿠폰 붙여요면 실 UUID). 자리 0일은 막지 않는다(착지층 이연).
+  //   선언 위치 = selectedVideo·cfgTitle 뒤(TDZ 회피).
+  const rsheetReady =
+    !!selectedVideo &&
+    (cfgTitle.trim().length > 0 || cfgProductName.trim().length > 0) &&
+    (!dRsvCoupon || !!selectedCouponId);
   // T5-W2 — 링크 스텝 진행(photo effect 동형 패턴): 영상 확정 "커밋 후" 프리체크(stale 읽기 회피).
   //   videoId 1회 처리 가드 = 프리체크 복귀(같은 영상·제목 미충족) 시 재발화 루프 방지 — 새 링크만 재진행.
   useEffect(() => {
@@ -4119,12 +4295,17 @@ export function CardStudioPage({
     setHelperPhase("guide");
   }
 
+  // R8 §1a-b — 예약 시트 결과 행: 유튜브만 최대 4건(블로그 후보는 장착 불가 → 죽은 행 금지).
+  //   덱 패널의 12건 목록과 동일 소스(videoResults) — 상한만 시트 높이에 맞춰 좁힌다.
+  const rsheetVideoRows = videoResults.filter((c) => c.provider === "youtube").slice(0, 4);
   // UI-5-T2-E1 — 영상 검색 실배선(45 handleVideoSearch :1977 계승). URL=oembed / 키워드=discover→youtube-search 폴백.
   const focusVideoLink = () => {
     if (typeof document !== "undefined") document.getElementById("video-link-49")?.focus?.();
   };
-  async function runVideoSearch() {
-    const k = videoQuery.trim();
+  //   R8 §1a-b — 입력 소스 인자화(로직 무수정): 인자 없으면 기존대로 videoQuery, 있으면 그 키워드.
+  //   시트 겸용 행이 같은 엔진(discover→youtube-search 폴백)을 그대로 타게 하는 유일한 접점.
+  async function runVideoSearch(keyword?: string) {
+    const k = (typeof keyword === "string" ? keyword : videoQuery).trim();
     if (!k || videoSearching) return;
     setVideoShowCount(12); // E1b — 새 검색마다 노출 상한 초기화.
     setPendingVideo(null); // E5c(A) — 새 검색 = 이전 선택 대기 해제(stale 확정 방지).
@@ -4742,7 +4923,12 @@ export function CardStudioPage({
       // M8-C §2 — 조립 체크리스트 커머스 문구. 상품 카드인데 영상 문법("영상 담기·핵심 장면")이
       //   뜨던 것 교정 — 표시 문자열만 갈아끼운다(단계 수·순서·앵커·타이밍 전부 무수정).
       const planConnut = stepPlanRef.current.map((s) => ({
-        label: m === "commerce" ? (COMMERCE_ASSEMBLE_LABELS[s.key] ?? s.label) : s.label,
+        label:
+          m === "commerce"
+            ? (COMMERCE_ASSEMBLE_LABELS[s.key] ?? s.label)
+            : m === "reserve"
+              ? (RESERVE_ASSEMBLE_LABELS[s.key] ?? s.label) // R8 §3 — 예약 표시 문구.
+              : s.label,
         note: "",
         anchor: planAnchor(s),
       }));
@@ -5775,9 +5961,10 @@ export function CardStudioPage({
                 눌러서 고치기
               </button>
             </div>
-            {/* M8-D §1 — [쿠폰 붙이기] 칩(커머스 매직 착지층 한정). 같은 칩 문법·같은 무리에 4번째.
-                결합 후에는 "쿠폰: {이름}" 요약(말줄임) — 탭하면 목록 재오픈. */}
-            {mode === "commerce" && (
+            {/* M8-D §1 — [쿠폰 붙이기] 칩. 같은 칩 문법·같은 무리에 4번째.
+                결합 후에는 "쿠폰: {이름}" 요약(말줄임) — 탭하면 목록 재오픈.
+                R8 §4 — 예약 착지층까지 게이트 확장(시트에서 안 붙였어도 여기서 가능). */}
+            {(mode === "commerce" || mode === "reserve") && (
               <button
                 type="button"
                 onClick={() => {
@@ -5798,7 +5985,7 @@ export function CardStudioPage({
               </button>
             )}
             {/* M8-D §2 — 인라인 펼침(Sheet/Dialog 금지). 목록이 길면 40vh 로 제한. */}
-            {mode === "commerce" && landingCouponOpen && (
+            {(mode === "commerce" || mode === "reserve") && landingCouponOpen && (
               <div className="max-h-[40vh] overflow-y-auto">
                 {renderCouponPicker(
                   pickLandingCoupon,
@@ -5818,6 +6005,27 @@ export function CardStudioPage({
                   ) : undefined,
                 )}
               </div>
+            )}
+            {/* R8 §3 — 조립 실패(타임아웃 등) 안내 1줄. 제목은 oEmbed 승계분이 이미 있어 빈 카드 아님. */}
+            {rsvAssembleFailed && (
+              <p className="text-[11px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                문구를 다 짓지 못했어요 — 영상 제목으로 담아 뒀어요. 말로 고치기로 다듬어 주세요.
+              </p>
+            )}
+            {/* R8 §4 — 자리 0일 안내 칩(예약 받아요일 때만). 탭 = 지휘 종료 후 달력 지목
+                ([자세히 고치기] 동형 — READ 충돌③은 착지 이후라 안전). */}
+            {mode === "reserve" && dReserveYes && slotDays === 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMagicLanding(false);
+                  closeDirector();
+                  jumpToBlock("calendar");
+                }}
+                className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#E5E5E5] bg-white text-[13px] font-bold text-[#0A0A0A] active:bg-[#F5F5F5]"
+              >
+                자리를 열어야 손님이 잡을 수 있어요 — 자리 관리
+              </button>
             )}
             <button
               type="button"
@@ -6590,7 +6798,7 @@ export function CardStudioPage({
                         className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
                       />
                       <button
-                        onClick={runVideoSearch}
+                        onClick={() => void runVideoSearch()}
                         disabled={videoSearching || !videoQuery.trim()}
                         className="flex shrink-0 items-center gap-1 rounded-xl bg-[#16161D] px-3 text-[12px] font-bold text-white transition-transform active:scale-95 disabled:opacity-40"
                       >
@@ -8144,6 +8352,215 @@ export function CardStudioPage({
                   <input type="file" accept="image/*" className="hidden" onChange={handleProductImageChange} />
                 </label>
               )}
+              {/* ───────── R8 — 예약·쿠폰 시트 한 장(v3 스킨 · D2 상품 시트와 동형 문법) ─────────
+                  영상 → 예약 세그 → 쿠폰 세그 → [✦ 만들기]. 마이크 없음(예약 파서 부재 — 발명 금지). */}
+              {dStep === "rsheet" && (
+                <div className="space-y-2">
+                  {dVideoErr && <p className="text-[11px] font-semibold text-[#DC2626]">{dVideoErr}</p>}
+                  {/* a) 영상 행 — 확인 전 = 입력+[입력] / 확인 후 = 축약 행(사진 확인 문법). */}
+                  {selectedVideo ? (
+                    <div className="flex h-11 items-center gap-2 rounded-[10px] bg-[#F4F4F5] px-3">
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#0A0A0A]">
+                        ✓ 영상 확인 — {selectedVideo.title ?? "제목 없음"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedVideo(null);
+                          setDRsvLink("");
+                        }}
+                        className="shrink-0 text-[11px] font-semibold text-[#8A8A8A] active:opacity-60"
+                      >
+                        다시 넣기
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={dRsvLink}
+                        onChange={(e) => setDRsvLink(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            void submitRsheetVideo();
+                          }
+                        }}
+                        inputMode="text"
+                        placeholder="유튜브 링크 붙여넣기 또는 검색어"
+                        className="h-11 min-w-0 flex-1 rounded-[10px] bg-white px-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:text-[11px] placeholder:font-medium placeholder:text-[#A3A3A3]"
+                        style={{ boxShadow: "inset 0 0 0 0.5px #D8D7D2" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void submitRsheetVideo()}
+                        disabled={dVideoBusy || videoSearching || !dRsvLink.trim()}
+                        className="flex h-11 shrink-0 items-center rounded-[10px] bg-[#1D4ED8] px-4 text-[13px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                      >
+                        {parseYouTubeId(dRsvLink.trim()) ? "입력" : "찾기"}
+                      </button>
+                    </div>
+                  )}
+                  {/* a-b) 검색 분기 결과 — 확인 전에만. 최대 4건 세로(시트 높이 보존) · 탭 = selectVideo 동일 사슬. */}
+                  {!selectedVideo && videoSearching && (
+                    <div className="flex h-11 items-center justify-center gap-2 rounded-[10px] bg-[#F4F4F5] text-[12px] font-semibold text-[#8A8A8A]">
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+                      영상을 찾고 있어요…
+                    </div>
+                  )}
+                  {!selectedVideo && !videoSearching && videoError && (
+                    <p className="text-[11px] font-semibold text-[#DC2626]">{videoError}</p>
+                  )}
+                  {!selectedVideo && !videoSearching && !videoError && videoSearched && rsheetVideoRows.length === 0 && (
+                    <p className="flex h-11 items-center justify-center rounded-[10px] bg-[#F4F4F5] text-[12px] font-medium text-[#8A8A8A]">
+                      검색 결과가 없어요 — 다른 말로 찾아볼까요?
+                    </p>
+                  )}
+                  {!selectedVideo && !videoSearching && rsheetVideoRows.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      {rsheetVideoRows.map((c) => {
+                        const slot = toVideoSlot(c);
+                        return (
+                          <button
+                            key={`${c.provider}|${c.source_id}`}
+                            type="button"
+                            onClick={() => void pickRsheetVideo(c)}
+                            disabled={dVideoBusy}
+                            className="flex min-h-[52px] items-center gap-2.5 rounded-[10px] bg-white px-2.5 py-2 text-left transition-transform active:scale-[0.99] disabled:opacity-40"
+                            style={{ boxShadow: "inset 0 0 0 0.5px #D8D7D2" }}
+                          >
+                            <span className="relative flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#0F172A]">
+                              {slot.thumbnailUrl ? (
+                                <img src={slot.thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                              ) : null}
+                              <Play className="absolute h-3.5 w-3.5 text-white drop-shadow" strokeWidth={2.5} fill="currentColor" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[12.5px] font-bold text-[#0A0A0A]">{c.title ?? "영상"}</span>
+                              <span className="mt-0.5 block truncate text-[11px] font-medium text-[#8A8A8A]">
+                                {c.author_name ?? "YouTube"}
+                                {slot.durationLabel ? ` · ${slot.durationLabel}` : ""}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* b) 예약 세그 — dReserveYes 재사용. 받아요면 자리 수 안내(정보만 · 이탈 버튼 0). */}
+                  <div className="flex h-11 items-center gap-3">
+                    <span className="w-[70px] shrink-0 text-[11px] font-semibold text-[#8A8A8A]">예약</span>
+                    <div className="flex flex-1 gap-[2px] rounded-[10px] bg-[#F1F0EC] p-[2px]">
+                      {([
+                        { v: true, label: "받아요" },
+                        { v: false, label: "안 받아요" },
+                      ] as const).map((o) => (
+                        <button
+                          key={String(o.v)}
+                          type="button"
+                          onClick={(e) => { setDReserveYes(o.v); flyToCard(e.currentTarget); }}
+                          className={`flex min-h-[40px] flex-1 items-center justify-center rounded-lg text-[13px] font-bold transition-colors ${
+                            dReserveYes === o.v
+                              ? "bg-white text-[#1D4ED8] [box-shadow:0_0_0_0.5px_rgba(15,23,42,0.10)]"
+                              : "text-[#8A8A8A]"
+                          }`}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* R8-보완 §4 — 자리 0일 = 막다른 안내 폐기 → 안내+행동 한 줄(0일 분기만 · N일>0 무수정). */}
+                  {dReserveYes &&
+                    (slotDays > 0 ? (
+                      <p className="pl-[82px] text-[11px] font-medium text-[#8A8A8A]">
+                        {slotDays}일 자리 열려 있어요
+                      </p>
+                    ) : (
+                      <p className="pl-[82px] text-[11px] font-medium leading-relaxed text-[#8A8A8A] [word-break:keep-all]">
+                        예약을 받으려면 날짜와 자리 수를 열어야 해요{" "}
+                        <button
+                          type="button"
+                          onClick={() => openPartnerPage("/partner/calendar")}
+                          className="font-bold text-[#1D4ED8] active:opacity-60"
+                        >
+                          자리 열러 가기
+                        </button>
+                        {" · "}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // 슬롯 소스 = initialSlots prop(studio-build loader) → 재조회 수단은 invalidate 뿐.
+                            void router.invalidate().then(() => setStepToast("자리를 다시 확인했어요"));
+                          }}
+                          className="font-bold text-[#1D4ED8] active:opacity-60"
+                        >
+                          자리 확인
+                        </button>
+                      </p>
+                    ))}
+                  {/* c) 쿠폰 세그 — 붙여요 시 renderCouponPicker 확장(첫 확장 1회 로드 · 선택 = pickLandingCoupon). */}
+                  <div className="flex h-11 items-center gap-3">
+                    <span className="w-[70px] shrink-0 text-[11px] font-semibold text-[#8A8A8A]">쿠폰</span>
+                    <div className="flex flex-1 gap-[2px] rounded-[10px] bg-[#F1F0EC] p-[2px]">
+                      {([
+                        { v: true, label: "붙여요" },
+                        { v: false, label: "안 붙여요" },
+                      ] as const).map((o) => (
+                        <button
+                          key={String(o.v)}
+                          type="button"
+                          onClick={(e) => {
+                            setDRsvCoupon(o.v);
+                            if (o.v) {
+                              setDRsvCouponOpen(true);
+                              void loadCoupons(); // couponsLoadedRef 캐시 존중 = 실질 1회.
+                            } else {
+                              setDRsvCouponOpen(false);
+                            }
+                            flyToCard(e.currentTarget);
+                          }}
+                          className={`flex min-h-[40px] flex-1 items-center justify-center rounded-lg text-[13px] font-bold transition-colors ${
+                            dRsvCoupon === o.v
+                              ? "bg-white text-[#1D4ED8] [box-shadow:0_0_0_0.5px_rgba(15,23,42,0.10)]"
+                              : "text-[#8A8A8A]"
+                          }`}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {dRsvCoupon && selectedCoupon && !dRsvCouponOpen && (
+                    <button
+                      type="button"
+                      onClick={() => setDRsvCouponOpen(true)}
+                      className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#1D4ED8]/10 px-3 text-[13px] font-bold text-[#1D4ED8] [box-shadow:0_0_0_0.5px_rgba(29,78,216,0.35)]"
+                    >
+                      <Ticket className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+                      <span className="truncate">{selectedCoupon.title ?? "이름 없는 쿠폰"}</span>
+                    </button>
+                  )}
+                  {dRsvCoupon && dRsvCouponOpen && (
+                    <div className="max-h-[30vh] overflow-y-auto">
+                      {renderCouponPicker((c) => {
+                        pickLandingCoupon(c); // dGo 0 — 시트 잔류(READ 충돌② 회피).
+                        setDRsvCouponOpen(false);
+                      })}
+                    </div>
+                  )}
+                  {/* d) 주 CTA 48px — 시트의 유일한 대형. 마이크 없음. */}
+                  <div className="sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-[#EDEDF0] bg-white px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={(e) => { fireConverge(e.currentTarget.closest("div")); submitRsheet(); }}
+                      disabled={!rsheetReady}
+                      className="flex h-12 flex-1 items-center justify-center rounded-xl bg-[#1D4ED8] text-[15px] font-bold text-white disabled:opacity-40 active:scale-[0.98]"
+                    >
+                      ✦ 만들기
+                    </button>
+                  </div>
+                </div>
+              )}
               {/* T5-W2 — 영상 링크 입력(비커머스 첫 스텝 · 기존 미니 지휘자 합류점 경유). */}
               {dStep === "link" && (
                 <div className="space-y-1.5">
@@ -8160,8 +8577,8 @@ export function CardStudioPage({
                       }}
                       inputMode="url"
                       placeholder="유튜브 링크 붙여넣기"
-                      className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                      className="min-w-0 flex-1 rounded-xl bg-white px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:text-[11px] placeholder:font-medium placeholder:text-[#A3A3A3]"
+                      style={{ boxShadow: "inset 0 0 0 0.5px #D8D7D2" }}
                     />
                     <button
                       type="button"
@@ -8263,8 +8680,8 @@ export function CardStudioPage({
                     onChange={(e) => setDMagName(e.target.value)}
                     inputMode="text"
                     placeholder="뭘 파세요"
-                    className="h-11 w-full rounded-[10px] bg-[#F4F4F5] px-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                    style={{ boxShadow: "inset 0 0 0 1px #EDEDF0" }}
+                    className="h-11 w-full rounded-[10px] bg-white px-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:text-[11px] placeholder:font-medium placeholder:text-[#A3A3A3]"
+                    style={{ boxShadow: "inset 0 0 0 0.5px #D8D7D2" }}
                   />
                   {/* M8 압축 — 칩 그룹 = 입력 칸과 같은 한 줄 행(라벨 고정폭 + 칩 flex 1줄).
                       라벨 전용 줄·설명 줄 제거. 칩 선택/비선택 클래스는 기존 그대로. */}
@@ -8292,6 +8709,13 @@ export function CardStudioPage({
                       ))}
                     </div>
                   </div>
+                  {/* R8-보완 §1 — [공동판매] 하위 정보 줄(택배→배송비 확장 문법 동형 · 정보만 · 이탈 0).
+                      단계표·목표 수량은 만들기 다음 단계 소관 = gbEnabled 확정·:1803 gbTiers 분기 무수정. */}
+                  {dMagSaleMode === "group" && (
+                    <p className="flex items-center gap-1.5 pl-[82px] text-[11px] font-medium text-[#8A8A8A] [word-break:keep-all]">
+                      <Users className="h-3 w-3 shrink-0" strokeWidth={2.25} />몇 개 모이면 얼마로 할지는 만들기 다음에 정해요
+                    </p>
+                  )}
                   {/* M8 §1 — 판매 단위. 가격·수량 라벨과 접미가 이 값에 연동된다.
                       D2 §2 — 시각 36px(h-9) + 배경 틴트·0.5px 림. 히트는 행 h-11 이 확보. */}
                   <div className="flex h-11 items-center gap-3">
@@ -8345,8 +8769,8 @@ export function CardStudioPage({
                       onChange={(e) => setDMagPrice(e.target.value)}
                       inputMode="numeric"
                       placeholder={dMagUnit === "개" ? "한 개 가격" : `${dMagUnit}당 가격`}
-                      className="h-11 w-full rounded-[10px] bg-[#F4F4F5] pl-3 pr-7 text-[15px] font-semibold text-[#0A0A0A] outline-none [font-variant-numeric:tabular-nums] placeholder:text-[13px] placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                      style={{ boxShadow: "inset 0 0 0 1px #EDEDF0" }}
+                      className="h-11 w-full rounded-[10px] bg-white pl-3 pr-7 text-[15px] font-semibold text-[#0A0A0A] outline-none [font-variant-numeric:tabular-nums] placeholder:text-[11px] placeholder:font-medium placeholder:text-[#A3A3A3]"
+                      style={{ boxShadow: "inset 0 0 0 0.5px #D8D7D2" }}
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-[#8A8A8A]">원</span>
                   </div>
@@ -8356,8 +8780,8 @@ export function CardStudioPage({
                       onChange={(e) => setDMagQty(e.target.value)}
                       inputMode="numeric"
                       placeholder={`몇 ${dMagUnit}`}
-                      className="h-11 w-full rounded-[10px] bg-[#F4F4F5] pl-3 pr-9 text-[15px] font-semibold text-[#0A0A0A] outline-none [font-variant-numeric:tabular-nums] placeholder:text-[13px] placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                      style={{ boxShadow: "inset 0 0 0 1px #EDEDF0" }}
+                      className="h-11 w-full rounded-[10px] bg-white pl-3 pr-9 text-[15px] font-semibold text-[#0A0A0A] outline-none [font-variant-numeric:tabular-nums] placeholder:text-[11px] placeholder:font-medium placeholder:text-[#A3A3A3]"
+                      style={{ boxShadow: "inset 0 0 0 0.5px #D8D7D2" }}
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-[#8A8A8A]">{dMagUnit}</span>
                   </div>
@@ -8447,8 +8871,8 @@ export function CardStudioPage({
                               onChange={(e) => setDMagShipFee(e.target.value)}
                               inputMode="numeric"
                               placeholder="배송비"
-                              className="h-full w-full rounded-[10px] bg-[#F4F4F5] pl-3 pr-6 text-[15px] font-semibold text-[#0A0A0A] outline-none [font-variant-numeric:tabular-nums] placeholder:text-[13px] placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                              style={{ boxShadow: "inset 0 0 0 1px #EDEDF0" }}
+                              className="h-full w-full rounded-[10px] bg-white pl-3 pr-6 text-[15px] font-semibold text-[#0A0A0A] outline-none [font-variant-numeric:tabular-nums] placeholder:text-[11px] placeholder:font-medium placeholder:text-[#A3A3A3]"
+                              style={{ boxShadow: "inset 0 0 0 0.5px #D8D7D2" }}
                             />
                             <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[#8A8A8A]">원</span>
                           </div>
@@ -8675,8 +9099,8 @@ export function CardStudioPage({
                       }}
                       inputMode="numeric"
                       placeholder="1개당 무게 (g)"
-                      className="min-w-0 flex-1 rounded-xl bg-[#F4F4F5] px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:font-medium placeholder:text-[#A3A3A3] focus:bg-white"
-                      style={{ boxShadow: "inset 0 0 0 1px #E5E5E5" }}
+                      className="min-w-0 flex-1 rounded-xl bg-white px-3 py-3 text-[13px] font-semibold text-[#0A0A0A] outline-none placeholder:text-[11px] placeholder:font-medium placeholder:text-[#A3A3A3]"
+                      style={{ boxShadow: "inset 0 0 0 0.5px #D8D7D2" }}
                     />
                     <button
                       type="button"
