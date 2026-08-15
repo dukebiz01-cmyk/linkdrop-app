@@ -884,6 +884,8 @@ const SHARE_JOURNEY: {
 
 // UI-5-T2-E2 — lingo-chat SSE 파서·경량 재가드(useLingoChat :110/116/126 동형 — 훅 비export 함수라 복제).
 const LINGO_ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField", "goToBlock"]);
+// FIX-B1 S4 — lingo-chat 응답 시한(ms). 매직 조립 발행 잠금(S0-A) 해제 상한과 동일 값.
+const LINGO_TIMEOUT_MS = 15_000;
 function safeJson(raw: string): Record<string, unknown> | null {
   try {
     const v = JSON.parse(raw) as unknown;
@@ -1190,6 +1192,13 @@ export function CardStudioPage({
   // M3 — 매직 착지 상태. 매직 자동 조립 발화 시점에 true → 쉬운 고치기 전면·세부 편집 표면 숨김.
   //   [자세히 고치기]·지휘자 재시작·모드 전환에서 false(기존 전체 UI 원래 순서 복귀 — 삭제 0).
   const [magicLanding, setMagicLanding] = useState(false);
+  // FIX-B1 S0-A — 매직 조립 잠금. 착지 진입(조립 발화) 시 true → 발행 버튼 disabled.
+  //   해제 3조건은 전부 sendToLingo 프라미스 종단으로 합류한다:
+  //   ① actions 적용 완료(dispatchProposal 은 :5056 에서 resolve 전에 실행) ② S4 15초 타임아웃
+  //   ③ 조립 실패(failFriendly). 발행 경로·2단 수동 원칙 무수정 — 시점 가드만.
+  const [magicAssembling, setMagicAssembling] = useState(false);
+  // FIX-B1 S3 — 매직 조립 실패 표면화(예약판 rsvAssembleFailed 동형). SAY-DO: 실패했을 때만 true.
+  const [magicAssembleFailed, setMagicAssembleFailed] = useState(false);
   // M1-c — S1 게이트 경유 자동 시작 1회 가드. S1 선택 핸들러가 세우고, 아래 effect 가 소비한다.
   //   ⚠️ 핸들러 안에서 직접 startDirector() 를 부르면 attemptSwitchMode→resetForMode 의 setMode 가
   //   아직 반영 전이라 stale mode(=구 모드)로 첫 스텝이 갈린다. 반드시 mode 반영 후 effect 에서 1회.
@@ -1314,7 +1323,18 @@ export function CardStudioPage({
     magicFiredRef.current = true;
     magicRef.current = false;
     setMagicLanding(true); // M3 — 착지 진입(쉬운 고치기 전면).
-    void sendToLingo(MAGIC_ASSEMBLE_ORDER);
+    // FIX-B1 S0-A — 착지 진입 = 발행 잠금 개시. FIX-B1 S3 — 실패는 착지층 1줄로 표면화.
+    //   구 `void sendToLingo(...)`(반환값 폐기)를 예약판 :1331-1332 동형으로 격상한다.
+    setMagicAssembling(true);
+    setMagicAssembleFailed(false);
+    void (async () => {
+      try {
+        const r = await sendToLingo(MAGIC_ASSEMBLE_ORDER);
+        if (r.failFriendly) setMagicAssembleFailed(true); // ③ 실패(타임아웃 포함 — S4 가 friendly 로 수렴).
+      } finally {
+        setMagicAssembling(false); // ①②③ 공통 종단 — 어떤 경로로 끝나도 발행 잠금은 반드시 풀린다.
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dStep]);
 
@@ -4977,9 +4997,18 @@ export function CardStudioPage({
     let acc = "";
     let proposalActions: any[] = [];
     let proposalSteps: { label: string; note?: string }[] = [];
+    // FIX-B1 S4 — 15초 시한. fetch 와 SSE 리더 루프 공통(abort 시 reader.read() 가 reject →
+    //   아래 catch 합류). 시한 = 응답 전체 기준이라 스트림이 늘어져도 잠금이 영구화되지 않는다.
+    const ctrl = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      ctrl.abort();
+    }, LINGO_TIMEOUT_MS);
     try {
       const res = await fetch("/api/lingo/chat", {
         method: "POST",
+        signal: ctrl.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...(lingoSessionRef.current ? { session_id: lingoSessionRef.current } : {}),
@@ -5069,9 +5098,13 @@ export function CardStudioPage({
         });
       }
     } catch {
-      failFriendly = "링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요.";
+      // FIX-B1 S4 — 타임아웃과 일반 실패를 문구로 분리(무언 실패 금지 · 둘 다 S3 실패 경로 합류).
+      failFriendly = timedOut
+        ? "링고가 오래 걸리고 있어요 — 카드 글은 직접 쓰거나 다시 부탁해 주세요."
+        : "링고가 잠깐 딴생각했어요 — 다시 말씀해 주세요.";
       setBot(failFriendly); // 무언 실패 금지 · 재시도 가능.
     } finally {
+      clearTimeout(timeoutId); // FIX-B1 S4 — 정상 종료 시 타이머 해제(늦은 abort 방지).
       setThinking(false);
     }
     return { text: acc, failFriendly };
@@ -5115,6 +5148,9 @@ export function CardStudioPage({
   // F3-6(1) — 발행 직전 확인 분기: 커머스 + 예정 할인 > 0 시에만. 분기는 질문 제시일 뿐 —
   //   발행(doPublish)은 여전히 확인 모달의 사용자 탭에서만 호출(2단 수동 무변 · 자동 발행 경로 신설 0).
   function requestPublish() {
+    // FIX-B1 S0-A — 조립 중 발행 차단(버튼 disabled 의 2차 방어 · 키보드/프로그램 우회 봉쇄).
+    //   해제 3조건은 :1312 effect 종단이 일괄 담당 — 여기서는 판정만.
+    if (magicAssembling) return;
     if (mode === "commerce" && plannedDiscountKrw() > 0) {
       const hasCoupon = !!applied["coupon"] && !!selectedCouponId;
       setCouponAsk(hasCoupon ? "attached" : "fresh");
@@ -5249,6 +5285,9 @@ export function CardStudioPage({
             headline: cfgProduct.headline.trim(),
             selling_points: points,
             price_band_enabled: false, // §0 시세 영구 금지.
+            // FIX-B1 S1 — 카드 한마디 배선(비커머스 :5311 동형 1키). 이 키가 없어 커머스에서는
+            //   조립이 subtitle 을 채워도 발행 시 통째로 소실됐다. headline(상품 한마디)과 별개 필드.
+            curator_message: cfgSubtitle.trim() || null,
             is_public: isPublic,
             blocks: [
               // M8 §8 — 직발행 유실 수선: 폼 저장 경로와 동일한 공용 조립 함수를 호출한다(구 {name,
@@ -5935,6 +5974,13 @@ export function CardStudioPage({
             제거 아님 — 순서 반전. [자세히 고치기]로 기존 전체 UI가 원래 순서 그대로 복귀. */}
         {magicLanding && (
           <div className="mt-4 space-y-2">
+            {/* FIX-B1 S3 — 조립 실패 안내(SAY-DO: 실제 실패했을 때만). 타임아웃도 이 경로로 합류.
+                발행은 막지 않는다 — 현행 값으로 나갈 수 있고, 글은 아래 두 버튼으로 직접 고친다. */}
+            {magicAssembleFailed && (
+              <p className="rounded-xl bg-[#FFF4EC] px-3 py-2.5 text-[12px] font-semibold leading-relaxed text-[#C2410C] [box-shadow:inset_0_0_0_1px_#FDBA74] [word-break:keep-all]">
+                카드 글은 못 채웠어요 — 아래에서 직접 쓸 수 있어요
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 type="button"
@@ -8019,14 +8065,15 @@ export function CardStudioPage({
               )}
               <button
                 type="button"
-                disabled={saving} /* D3f — E5f 잔재 수복: 구 `|| mode === "commerce"` 차단 해제(게이트는 canPublish·doPublish 검증이 담당). */
+                disabled={saving || magicAssembling} /* D3f — E5f 잔재 수복: 구 `|| mode === "commerce"` 차단 해제(게이트는 canPublish·doPublish 검증이 담당). FIX-B1 S0-A — 조립 중 잠금. */
                 onClick={() => requestPublish()} /* F3-6(1) — 커머스+예정 할인 시 확인 분기 선행(그 외 = doPublish 직행 — 경로 무변). */
                 aria-label="발행하기"
                 className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-[15px] font-bold text-white transition-transform active:translate-y-px disabled:opacity-60"
                 style={{ backgroundColor: accent, boxShadow: `0 10px 30px -8px ${accent}80` }}
               >
                 <Send className="h-[18px] w-[18px]" strokeWidth={2.25} />
-                {saving ? "발행하는 중…" : "발행하기"}
+                {/* FIX-B1 S0-A — 잠금 중 라벨. saving(발행 중)이 우선 — 잠금은 발행 전 상태라 겹치지 않는다. */}
+                {saving ? "발행하는 중…" : magicAssembling ? "글 다듬는 중…" : "발행하기"}
               </button>
               <p className="mt-2 text-center text-[11px] font-medium text-[#8A8A8A] tracking-ko">
                 발행은 대표님이 직접 눌러야 나가요
@@ -8057,9 +8104,10 @@ export function CardStudioPage({
                   <button
                     type="button"
                     onClick={() => void publishWithNewCoupon()}
-                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+                    disabled={magicAssembling} /* FIX-B1 S0-A */
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#1D4ED8] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
                   >
-                    쿠폰 걸고 발행하기
+                    {magicAssembling ? "글 다듬는 중…" : "쿠폰 걸고 발행하기"}
                   </button>
                   <button
                     type="button"
@@ -8067,9 +8115,10 @@ export function CardStudioPage({
                       setCouponAsk(null);
                       void doPublish();
                     }}
-                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-[#E8E8EC] px-4 text-[14px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                    disabled={magicAssembling} /* FIX-B1 S0-A */
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-[#E8E8EC] px-4 text-[14px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7] disabled:opacity-60"
                   >
-                    쿠폰 없이 발행하기
+                    {magicAssembling ? "글 다듬는 중…" : "쿠폰 없이 발행하기"}
                   </button>
                 </div>
               </>
@@ -8090,16 +8139,18 @@ export function CardStudioPage({
                       setCouponAsk(null);
                       void doPublish();
                     }}
-                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#16161D] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+                    disabled={magicAssembling} /* FIX-B1 S0-A */
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#16161D] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
                   >
-                    지금 쿠폰 그대로 두기
+                    {magicAssembling ? "글 다듬는 중…" : "지금 쿠폰 그대로 두기"}
                   </button>
                   <button
                     type="button"
                     onClick={() => void publishWithNewCoupon()}
-                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-[#E8E8EC] px-4 text-[14px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7]"
+                    disabled={magicAssembling} /* FIX-B1 S0-A */
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl border border-[#E8E8EC] px-4 text-[14px] font-bold text-[#525252] transition-colors active:bg-[#F5F5F7] disabled:opacity-60"
                   >
-                    새 할인 쿠폰으로 바꾸기
+                    {magicAssembling ? "글 다듬는 중…" : "새 할인 쿠폰으로 바꾸기"}
                   </button>
                 </div>
               </>
@@ -8119,9 +8170,10 @@ export function CardStudioPage({
                       setCouponAsk(null);
                       void doPublish();
                     }}
-                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#16161D] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+                    disabled={magicAssembling} /* FIX-B1 S0-A */
+                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#16161D] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
                   >
-                    쿠폰 없이 발행하기
+                    {magicAssembling ? "글 다듬는 중…" : "쿠폰 없이 발행하기"}
                   </button>
                   <button
                     type="button"
