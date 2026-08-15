@@ -2025,6 +2025,22 @@ export function CardStudioPage({
       (dMagDeal === "parcel" &&
         (dMagShipMode === "included" ||
           (dMagShipMode === "separate" && magInt(dMagShipFee) != null && (magInt(dMagShipFee) as number) > 0))));
+  // FIX-A1(A″-1) S1 — 잠김 사유(표시 전용·순수 파생·상태 신설 0). 위 magSheetReady 판정은 무접촉이며
+  //   같은 조건을 같은 순서로 읽어 이유만 말한다. ⚠️ 자동 환산 금지 — "3만원"을 30000 으로 고쳐 넣지 않는다.
+  const MAG_KR_UNIT = /[만천억]/;
+  const magBlockReason = (() => {
+    if (magSheetReady) return null;
+    if (dMagPrice && MAG_KR_UNIT.test(dMagPrice)) return "가격은 숫자만 입력해요 — 3만원이면 30000";
+    if (dMagQty && MAG_KR_UNIT.test(dMagQty)) return "수량은 숫자만 입력해요 — 백 개면 100";
+    if (dMagShipFee && MAG_KR_UNIT.test(dMagShipFee)) return "배송비는 숫자만 입력해요 — 3천원이면 3000";
+    if (!dMagName.trim()) return "상품 이름을 입력해 주세요";
+    if (magPriceN == null || magPriceN <= 0) return "판매 가격을 숫자로 입력해 주세요";
+    if (magQtyN == null || magQtyN <= 0) return "판매 수량을 숫자로 입력해 주세요";
+    if (magDroppyN == null || magDroppyN < 0 || magDroppyN > 20) return "나눔은 0~20% 중에서 골라 주세요";
+    if (productImageUrl && !photoConfirmed) return "올리신 사진을 확인해 주세요";
+    if (dMagDeal === "parcel" && dMagShipMode === "separate") return "배송비를 숫자로 입력해 주세요";
+    return "필수 칸을 확인해 주세요";
+  })();
 
   /** M8-L4 §4 수렴 — [✦ 만들기] 탭 시 시트 영역 → hero 로 ✦ 3개 순차 발사(120ms 간격).
    *  비동기 장식 전용: submitMagicSheet 흐름·타이밍 무접촉(await 0 · 확정 로직 무수정). */
@@ -8831,6 +8847,8 @@ export function CardStudioPage({
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-[#8A8A8A]">원</span>
                   </div>
+                  {/* FIX-A1(A″-1) S3 — 한글 단위 인라인 힌트(안내만 · 값 변환 0). */}
+                  {MAG_KR_UNIT.test(dMagPrice) && <p className="mt-0.5 text-[11px] font-medium leading-snug text-[#525252] [word-break:keep-all]">숫자만 입력해요 — 3만원이면 30000</p>}
                   <div className="relative">
                     <input
                       value={dMagQty}
@@ -8842,6 +8860,7 @@ export function CardStudioPage({
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-[#8A8A8A]">{dMagUnit}</span>
                   </div>
+                  {MAG_KR_UNIT.test(dMagQty) && <p className="mt-0.5 text-[11px] font-medium leading-snug text-[#525252] [word-break:keep-all]">숫자만 입력해요 — 백 개면 100</p>}
                   {/* M8 §4 — 드로피. 칩이 유효값(0·5·10·15·20)만 내므로 기존 검증 그대로 통과.
                       M8 압축 — 설명 줄 제거 → 라벨 옆 ⓘ 탭 = 기존 stepToast(1.8s :2504) 재사용. */}
                   <div className="flex h-11 items-center gap-3">
@@ -8937,6 +8956,7 @@ export function CardStudioPage({
                       </div>
                     </div>
                   )}
+                  {MAG_KR_UNIT.test(dMagShipFee) && <p className="mt-0.5 text-[11px] font-medium leading-snug text-[#525252] [word-break:keep-all]">숫자만 입력해요 — 3천원이면 3000</p>}
                   {/* M8-C §1 — 택배사 칩(선택 사항). 소스 = 기존 COURIERS(:399) 재사용 · 새 배열 0.
                       라벨이 길어 행이 깨지므로 가로 스크롤 + 칩 shrink-0(세로 확장 금지).
                       미선택 = MAG_PARCEL_COURIER("택배") 현행 유지 — magSheetReady 조건 추가 0.
@@ -8966,6 +8986,10 @@ export function CardStudioPage({
                       풀폭 버튼 폐지 → 오른쪽 44×44 원형 마이크. 핸들러(handleOrbTap)·3분기 게이트
                       (inAppNoMic / voiceSupported / 미지원)는 기존 그대로 — 파이프 무수정. */}
                   {/* D2 §4 — [✦ 만들기] = 시트의 유일한 대형 48px(주 CTA 1개 규칙) · 마이크 44px 유지. */}
+                  {/* FIX-A1(A″-1) S2 — 잠김 사유 1줄(무언 잠금 해소). 버튼 disabled 바인딩·라벨 무변경. */}
+                  {magBlockReason && (
+                    <p className="mt-0.5 text-[11px] font-medium leading-snug text-[#525252] [word-break:keep-all]">{magBlockReason}</p>
+                  )}
                   <div className="sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-[#EDEDF0] bg-white px-4 py-3">
                     <button
                       type="button"
