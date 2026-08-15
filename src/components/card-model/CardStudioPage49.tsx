@@ -5953,19 +5953,22 @@ export function CardStudioPage({
             }}
           >
             <CardModelBody model={cardModel} variant="studio" burstKey={burstKey} />
-            <LingoAssembleOverlay
-              active={assembling}
-              steps={assembleSteps}
-              step={assembleStep}
-              accent={LINGO}
-              onSkip={skipAssembly}
-              summary={assembleSummary}
-              onUndo={undoAssembly}
-              onConfirm={confirmAssembly}
-              onEditField={onEditField}
-              feedback={assembleFeedback} /* D1 — 수행 마이크로 피드백(0.8s). */
-            />
           </div>
+          {/* FIX-D6 S1 — filter 래퍼 밖(section 직계)으로 이동. filter≠none 조상은 fixed 자손의
+              containing block 이라, 래퍼 안에서는 fixed inset-0 이 히어로 박스에 갇혀 겹쳤다(D6).
+              props·상태·연출 값 무변경 — 연출이 감싸는 대상만 카드 본체로 좁혔다. */}
+          <LingoAssembleOverlay
+            active={assembling}
+            steps={assembleSteps}
+            step={assembleStep}
+            accent={LINGO}
+            onSkip={skipAssembly}
+            summary={assembleSummary}
+            onUndo={undoAssembly}
+            onConfirm={confirmAssembly}
+            onEditField={onEditField}
+            feedback={assembleFeedback} /* D1 — 수행 마이크로 피드백(0.8s). */
+          />
         </section>
 
         {/* ───────── M3 착지층 — 쉬운 고치기 전면(세부 편집은 [자세히 고치기] 뒤로) ─────────
@@ -6106,10 +6109,12 @@ export function CardStudioPage({
 
         {/* ───────── 링고AI 코칭 (탭하면 어시스턴트 열림) ───────── */}
         {/* M8-L3 — 지휘 가동 중 숨김(조건부 렌더 래핑). */}
+        {/* FIX-D6 S2 — 착지 중 숨김. 위 형제 section 의 `magicLanding ? "hidden"` 전례 복제
+            (게이트 조건식 무변경). 착지층 [말로 고치기]가 같은 목적지를 이미 제공한다. */}
         {!(directorOn && !magicLanding) && (
         <button
           onClick={() => setLingoOpen(true)}
-          className="mt-3 flex w-full items-start gap-3 rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform duration-150 active:scale-[0.99] animate-fade-in"
+          className={`mt-3 flex w-full items-start gap-3 rounded-2xl bg-white p-4 text-left [box-shadow:0_0_0_1px_#E8E8EC,0_1px_2px_rgba(15,23,42,0.04)] transition-transform duration-150 active:scale-[0.99] animate-fade-in ${magicLanding ? "hidden" : ""}`}
         >
           <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4F4F5] text-[#525252]">
             <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2.25} />
