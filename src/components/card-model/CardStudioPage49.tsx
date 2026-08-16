@@ -5132,9 +5132,28 @@ export function CardStudioPage({
   //   기존 magicConfirm [맞아요] 1탭 그대로 — 음성이어도 확인 없이 확정 0.
   // M1-k — 음성 = 받아 적기. 읽힌 조각만 해당 칸에 채우고 제출하지 않는다([만들기]가 확인 1탭).
   //   못 읽은 칸은 그대로 두어 사장님이 마저 채운다. 채운 뒤 링고 발화 0(칸이 보이는 게 확인).
+  // FIX-V1 — 관문을 "전부 삼킴" → "분류". M1-k 받아쓰기 계약은 숫자 조각 존재 시 보존(무변경).
+  //   실측 정정: 지휘 중(:9579 게이트) 기록실 시트·음성 고스트 전부 미렌더 → 표시면은 dLog 뿐.
+  //   응답 낭독은 sendToLingo(:5107)가 1회 — dSay(speak 동반)를 응답에 쓰지 않는 이유.
   magicVoiceRef.current = (t: string) => {
     if (!directorOn || dStep !== "magic") return false;
     const r = parseOneLiner(t);
+    const hasNumeric = r.priceKrw != null || r.qty != null || r.droppyPct != null;
+    // S1 — 문장형(숫자 0 + 이름에 공백) = 칸 무접촉·링고 대화로. 한 단어("옥수수")는 받아쓰기 유지.
+    if (!hasNumeric && r.name && /\s/.test(r.name.trim())) {
+      dEcho(t);
+      lingoChannelRef.current = "voice";
+      void sendToLingo(t).then((res) => {
+        const line = res.text || res.failFriendly;
+        if (line) setDLog((l) => [...l, { role: "lingo", text: line }]); // S2 — 지휘 로그 표시(낭독은 sendToLingo 담당).
+      });
+      return true;
+    }
+    // S3 — 무언삼킴 방지: 조각 0(예: "3만"·"1000"). 대화로는 보내지 않는다.
+    if (!hasNumeric && !r.name) {
+      dSay("잘 못 알아들었어요 — 상품 이름이나 가격을 말씀해 주세요");
+      return true;
+    }
     if (r.name) setDMagName(r.name);
     if (r.priceKrw != null) setDMagPrice(String(r.priceKrw));
     if (r.qty != null) setDMagQty(String(r.qty));
