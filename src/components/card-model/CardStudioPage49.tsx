@@ -5160,6 +5160,13 @@ export function CardStudioPage({
     if (r.droppyPct != null && Number.isInteger(r.droppyPct) && r.droppyPct >= 0 && r.droppyPct <= 20) {
       setDMagDroppy(String(r.droppyPct));
     }
+    // FIX-V1b — 한글 금액이 발화엔 있었는데 가격으로 못 읽힌 경우 표면화(환산 금지 유지 — 알려만 준다).
+    //   판정 입력 = 원 발화 t(파서가 이미 버려 r 에 흔적 0). 앞자리(숫자·한글수) 필수 —
+    //   사양 예시식은 "천천히·만들기·강원도·원산지·만두"에 과발동(20건 중 5건)해 조정.
+    //   기입분(qty 등) 롤백 0 · 이 분기까지 온 발화만이라 S1/S3 와 중복 발동 불가.
+    if (r.priceKrw == null && /[0-9일이삼사오육칠팔구십백]\s*[만천억]|[0-9일이삼사오육칠팔구십백천만억]\s*원/.test(t)) {
+      dSay("금액은 못 알아들었어요 — 삼만원이면 30000처럼 숫자로 말씀해 주세요");
+    }
     return true;
   };
 
