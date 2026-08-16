@@ -1326,6 +1326,8 @@ export function CardStudioPage({
     // FIX-B1 S0-A — 착지 진입 = 발행 잠금 개시. FIX-B1 S3 — 실패는 착지층 1줄로 표면화.
     //   구 `void sendToLingo(...)`(반환값 폐기)를 예약판 :1331-1332 동형으로 격상한다.
     setMagicAssembling(true);
+    // FIX-D9 S1 — 대기 무표시 해소: 요청 시작 시점에 dLog 1줄(magicFiredRef 1회 가드 안 — 중복 0).
+    setDLog((l) => [...l, { role: "lingo", text: "카드 글을 다듬고 있어요 — 잠깐만요" }]);
     setMagicAssembleFailed(false);
     void (async () => {
       try {
@@ -3954,6 +3956,14 @@ export function CardStudioPage({
       recognitionRef.current.start();
       setListening(true);
       showVoiceGhost("듣고 있어요 — 말씀하세요"); // 텍스트 안내만(45 :3524 동형).
+      // FIX-D9 S2 — 지휘 중엔 위 고스트가 미렌더(:9605 게이트)라 dLog 로 표시. 연타 중복 1줄 가드.
+      if (directorOn) {
+        setDLog((l) =>
+          l[l.length - 1]?.text === "듣고 있어요 — 말씀하세요"
+            ? l
+            : [...l, { role: "lingo", text: "듣고 있어요 — 말씀하세요" }],
+        );
+      }
     } catch {
       // 중복 start 등 — 상태만 정합.
       setListening(true);
