@@ -886,6 +886,20 @@ const SHARE_JOURNEY: {
 const LINGO_ACTION_TYPES = new Set(["switchMode", "equip", "detach", "setField", "goToBlock"]);
 // FIX-B1 S4 — lingo-chat 응답 시한(ms). 매직 조립 발행 잠금(S0-A) 해제 상한과 동일 값.
 const LINGO_TIMEOUT_MS = 15_000;
+// FIX-A2-1 S1 — 지휘 숫자칸 엄격 판정(매직시트 magInt 동형 · magInt 본체 무접촉 — 동형 로직 신규 정의).
+//   한글 금액 패턴은 FIX-V1b 가 20건 코퍼스로 교정한 식과 동일(새 발명 0 — 앞자리 숫자·한글수 필수라
+//   "천천히·만들기·강원도·원산지·만두" 류 과발동 0). ⚠️ 자동 환산 금지 — 값을 고쳐 넣지 않고 되묻는다.
+//   ⚠️ 호출은 숫자 성격 칸(가격·수량)에서만 — 텍스트 칸(상품명·원산지)에는 붙이지 않으므로
+//   한국어 문장이 이 함수에 도달할 경로 자체가 없다(V1b 오발동 교훈).
+const DIR_KR_MONEY = /[0-9일이삼사오육칠팔구십백]\s*[만천억]|[0-9일이삼사오육칠팔구십백천만억]\s*원/;
+function strictDirInt(t: string): { ok: true; n: number } | { ok: false; reason: string } {
+  const s = t.trim().replace(/,/g, "");
+  if (/^\d+$/.test(s)) return { ok: true, n: Number(s) };
+  if (DIR_KR_MONEY.test(s)) {
+    return { ok: false, reason: "한글 단위는 아직 읽지 못해요 — 30000처럼 숫자로 말씀해 주세요" };
+  }
+  return { ok: false, reason: "숫자만 입력해 주세요" };
+}
 function safeJson(raw: string): Record<string, unknown> | null {
   try {
     const v = JSON.parse(raw) as unknown;
@@ -1211,6 +1225,8 @@ export function CardStudioPage({
   const [dKamisList, setDKamisList] = useState<{ item_code: string; item_name: string; category_code: string }[]>([]);
   // T5-W1a — 가격 스텝 KAMIS 참고 1줄(생산자=신선 한정 · §0 락: 파트너 화면 전용 참고 — payload 무유출).
   const [dBandLine, setDBandLine] = useState<string | null>(null);
+  // FIX-A2-1 S3 — 지휘 숫자칸 차단 사유(표시 전용). 매직시트 magBlockReason 과 별개 상태.
+  const [dirBlockReason, setDirBlockReason] = useState<string | null>(null);
   // 링고 발화 = 로그 + 낭독(F5-4 FIFO — 순차 1줄 원칙이라 큐 상한 무접촉).
   const dSay = (text: string) => {
     setDLog((l) => [...l, { role: "lingo", text }]);
@@ -2043,6 +2059,12 @@ export function CardStudioPage({
     if (dMagDeal === "parcel" && dMagShipMode === "separate") return "배송비를 숫자로 입력해 주세요";
     return "필수 칸을 확인해 주세요";
   })();
+  // FIX-A2-1 S3/S4 — 지휘 숫자칸 1줄 규칙(사유 > 힌트 > 시세밴드 · 동시 2줄 금지). 힌트 문구·클래스는
+  //   A″-1 인라인 힌트(:8887) 복제. dStep 화이트리스트 필수 — dText 파생이 unit(무게) 화면에 새면 안 된다.
+  const dirNumStep = dStep === "price" || dStep === "qty";
+  const dirNote = !dirNumStep
+    ? null
+    : (dirBlockReason ?? (MAG_KR_UNIT.test(dText) ? "숫자만 입력해요 — 3만원이면 30000" : null));
 
   /** M8-L4 §4 수렴 — [✦ 만들기] 탭 시 시트 영역 → hero 로 ✦ 3개 순차 발사(120ms 간격).
    *  비동기 장식 전용: submitMagicSheet 흐름·타이밍 무접촉(await 0 · 확정 로직 무수정). */
@@ -2184,6 +2206,10 @@ export function CardStudioPage({
       if (magicRef.current) return dGo("period"); // M1 — 잔여 필수 체인: 원산지 → 판매 기간.
       dGo("unit");
     } else if (dStep === "price") {
+      // FIX-A2-1 S2 — 엄격 판정 선행: 통과분만 아래 기존 추출에 도달한다("3만원"→3원 오독 차단).
+      const sp = strictDirInt(v);
+      if (!sp.ok) return setDirBlockReason(sp.reason); // 값 커밋 0 — 이미 저장된 값은 건드리지 않는다.
+      setDirBlockReason(null);
       const digits = v.replace(/[^0-9]/g, "");
       if (!digits) return;
       setCfgProductPrice(digits);
@@ -2204,6 +2230,10 @@ export function CardStudioPage({
       if (magicRef.current) return magicAdvance(); // M1 — 목적지만 변경(스킵 전례 :1551).
       dGo("qty");
     } else if (dStep === "qty") {
+      // FIX-A2-1 S2 — 엄격 판정 선행("3만개"→3개 오독 차단). 기존 추출·후속 사슬 무변경.
+      const sq = strictDirInt(v);
+      if (!sq.ok) return setDirBlockReason(sq.reason);
+      setDirBlockReason(null);
       const digits = v.replace(/[^0-9]/g, "");
       if (!digits) return;
       setCfgProduct((p) => ({ ...p, quantity: digits }));
@@ -9115,13 +9145,16 @@ export function CardStudioPage({
               {(dStep === "name" || dStep === "origin" || dStep === "price" || dStep === "qty" || dStep === "droppy") && (
                 <div className="space-y-1.5">
                   {/* T5-W1a — KAMIS 참고 1줄(신선+품목 확정 시에만 · 파트너 화면 전용 참고 — §0 락). */}
-                  {dStep === "price" && dBandLine && (
+                  {dStep === "price" && dBandLine && !dirNote && (
                     <p className="text-[11px] font-semibold text-[#8A8A8A]">{dBandLine}</p>
                   )}
                   <div className="flex items-center gap-2">
                     <input
                       value={dText}
-                      onChange={(e) => setDText(e.target.value)}
+                      onChange={(e) => {
+                        setDText(e.target.value);
+                        if (dirBlockReason) setDirBlockReason(null); // FIX-A2-1 S3 — 고쳐 쓰기 시작 = 사유 해제.
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                           e.preventDefault();
@@ -9161,6 +9194,10 @@ export function CardStudioPage({
                       {dStep === "droppy" ? "확정" : "입력"}
                     </button>
                   </div>
+                  {/* FIX-A2-1 S3/S4 — 차단 사유·한글단위 힌트 1줄(A″-1 :8887 클래스 복제). flex 밖 세로 배치. */}
+                  {dirNote && (
+                    <p className="mt-0.5 text-[11px] font-medium leading-snug text-[#525252] [word-break:keep-all]">{dirNote}</p>
+                  )}
                 </div>
               )}
               {/* T5-W3 — 쿠폰 스텝(대표님 차례): 기쿠폰 1탭 / 없으면 생성 표면(파트너 쿠폰) 연결 — 내용은 사장님(AI_BLOCKED). */}
