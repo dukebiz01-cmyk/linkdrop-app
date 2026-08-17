@@ -268,3 +268,151 @@ export function buildDropyPayload(
   if (n > 0 && n <= priceNum) return { dropy_fixed: n };
   return {};
 }
+
+// ── 한글 금액 결정적 파서(FIX-D13-1) ────────────────────────────────────────
+// [결정적 · AI 0 · 부수효과 0 · React 0] — 위 parseOneLiner 와 같은 파일 성격.
+//
+// ⚠️ 이 섹션은 **소비처 배선 0**이다(FIX-D13-1 = 신설 전용). parseOneLiner :152 본체와
+//    parseKrwInput :103 의 "자동 환산 절대 금지" 계약은 **그대로 유지**된다 — 이 파서는
+//    그 계약의 예외가 아니라, 별도 경로(사장님 발화 → 제안값 기입 → [✦ 만들기] 확정)를
+//    위한 신규 모듈이다. 확정은 끝까지 사람이 한다(숫자 불가침 불변).
+//
+// 유일 원칙: **정확히 하나의 값으로 환산되지 않으면 거부한다.**
+//   parseOneLiner :133 의 "애매하면 읽지 않고 되묻는다(§0 NUMBER_CRITICAL)" 계승 —
+//   환산을 허용하는 것이지 애매함을 허용하는 것이 아니다.
+
+/** 한글 숫자(일~구) — 어림 인접 판정·게이트에 함께 쓰인다. */
+const KM_DIGITS = "일이삼사오육칠팔구";
+/** 소단위(십·백·천)와 대단위(만·억) 배수표. */
+const KM_SMALL: Record<string, number> = { 십: 10, 백: 100, 천: 1000 };
+const KM_BIG: Record<string, number> = { 만: 10_000, 억: 100_000_000 };
+/** 금액 표현을 이룰 수 있는 문자 집합(원 제외 — 원은 꼬리에서 따로 뗀다). */
+const KM_BODY_RE = /^[0-9일이삼사오육칠팔구십백천만억]+$/;
+/** 한글 숫자·단위가 실제로 있는가(게이트 — "30000원"은 기존 parseOneLiner 영역). */
+const KM_HAS_HANGUL_RE = /[일이삼사오육칠팔구십백천만억]/;
+/** 어림·범위 토큰 — 하나라도 있으면 거부(정확한 금액이 아니다). */
+const KM_VAGUE_RE = /수|쯤|정도|남짓|안팎|가량|~|약/;
+/** 한글 단자리 두 개가 붙은 어림 표현(삼사·이삼·사오 …) — 십백천만억이 없으면 어림이다. */
+const KM_LOOSE_PAIR_RE = new RegExp(`[${KM_DIGITS}][${KM_DIGITS}]`);
+/** 상한(원). 초과 = 상품 카드 금액으로 비현실적 → 거부. */
+const KM_MAX_WON = 100_000_000;
+
+export type KoreanMoneyResult = { ok: true; won: number } | { ok: false; reason: string };
+
+/**
+ * 한글 금액 표현 1건 → 원(정수). [결정적 · 단일 표현 전용]
+ *
+ * 정규화: trim → 콤마 제거 → 공백 전량 제거("삼 만 원" → "삼만원").
+ *
+ * 수용:
+ *  1) 순한글 + "원": 삼만원=30000 · 만오천원=15000 · 백만원=1000000 · 천원=1000 · 만원=10000
+ *     (선행 숫자 없이 단위로 시작하면 1로 본다 — "만원"=1만원).
+ *  2) 아라비아+한글 + "원": 3만원=30000 · 3만5천원=35000.
+ *  3) 아라비아 순수 + "원": 30000원=30000(단독 호출 대비 — 평소엔 parseKrwInput 영역).
+ *  4) "원"이 없는 배수 표현("3만"·"1억5천")은 opts.allowBareMultiplier=true 일 때만.
+ *
+ * 거부: 어림·범위 토큰(수/쯤/정도/남짓/안팎/가량/~/약) · 단자리 어림(삼사·이삼) ·
+ *       상한 1억 초과 · 0 이하 · 숫자 성분 없음 · 금액 밖 잔여 문자.
+ */
+export function parseKoreanMoney(
+  raw: string,
+  opts?: { allowBareMultiplier?: boolean },
+): KoreanMoneyResult {
+  const s = (raw ?? "").trim().replace(/,/g, "").replace(/\s+/g, "");
+  if (!s) return { ok: false, reason: "금액을 읽지 못했어요" };
+  if (KM_VAGUE_RE.test(s) || KM_LOOSE_PAIR_RE.test(s)) {
+    return { ok: false, reason: "어림 표현은 넣지 않아요 — 정확한 금액으로 말씀해 주세요" };
+  }
+  const hadWon = s.endsWith("원");
+  const body = hadWon ? s.slice(0, -1) : s;
+  if (!body || !KM_BODY_RE.test(body)) return { ok: false, reason: "금액을 읽지 못했어요" };
+  if (!hadWon && !opts?.allowBareMultiplier) {
+    return { ok: false, reason: "단위를 확인해 주세요 — 3만원처럼 '원'까지 말씀해 주세요" };
+  }
+  const won = kmConvert(body);
+  if (won == null || won <= 0) return { ok: false, reason: "금액을 읽지 못했어요" };
+  if (won > KM_MAX_WON) return { ok: false, reason: "금액이 너무 커요 — 다시 확인해 주세요" };
+  return { ok: true, won };
+}
+
+/**
+ * 한글/아라비아 혼합 수사 → 정수. 실패(숫자 성분 0 등) = null.
+ * 누산 규칙(표준 한국어 수사): 소단위는 구간에 더하고, 대단위에서 구간을 닫아 총합에 싣는다.
+ */
+function kmConvert(body: string): number | null {
+  let total = 0;
+  let section = 0;
+  let current = 0;
+  let sawNumber = false;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (ch >= "0" && ch <= "9") {
+      let j = i;
+      while (j < body.length && body[j] >= "0" && body[j] <= "9") j++;
+      current = Number(body.slice(i, j));
+      sawNumber = true;
+      i = j - 1;
+      continue;
+    }
+    const d = KM_DIGITS.indexOf(ch);
+    if (d >= 0) {
+      current = d + 1;
+      sawNumber = true;
+      continue;
+    }
+    const small = KM_SMALL[ch];
+    if (small != null) {
+      section += (current || 1) * small;
+      current = 0;
+      sawNumber = true;
+      continue;
+    }
+    const big = KM_BIG[ch];
+    if (big != null) {
+      total += (section + current || 1) * big;
+      section = 0;
+      current = 0;
+      sawNumber = true;
+      continue;
+    }
+    return null; // KM_BODY_RE 통과분이라 도달 0 — 방어적 종료.
+  }
+  if (!sawNumber) return null;
+  return total + section + current;
+}
+
+/** 어림 수식이 금액 앞에 붙는 문자(수백만원의 "수", 2~3만원의 "~", 약 3만원의 "약"). */
+const KM_PREFIX_VAGUE_RE = /[수약~]/;
+/** 어림 수식이 금액 뒤에 붙는 표현. */
+const KM_SUFFIX_VAGUE_RE = /^(쯤|정도|남짓|안팎|가량)/;
+
+/**
+ * 문장 안에서 한글 금액을 스캔해 **정확히 1건**일 때만 위치와 함께 돌려준다.
+ * 0건이거나 2건 이상이면 null(애매 = 거부).
+ *
+ * 게이트: 후보에 한글 숫자·단위가 실제로 있어야 한다 — "30000원"류 순수 아라비아는
+ *   기존 parseOneLiner :152 가 이미 처리하므로 여기서는 후보로 삼지 않는다.
+ * 어림 인접 거부: 후보 바로 앞 "수/약/~", 바로 뒤 "쯤/정도/남짓/안팎/가량"이면 그 후보를 버린다.
+ *
+ * start/end 는 **원문 text 기준** 인덱스 — 호출부가 그 구간을 잘라내 이름 오염을 막을 수 있다.
+ */
+export function findKoreanMoney(
+  text: string,
+  opts?: { allowBareMultiplier?: boolean },
+): { won: number; start: number; end: number } | null {
+  const src = text ?? "";
+  const runRe = /[0-9일이삼사오육칠팔구십백천만억원]+/g;
+  const hits: { won: number; start: number; end: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = runRe.exec(src)) !== null) {
+    const span = m[0];
+    const start = m.index;
+    const end = start + span.length;
+    if (!KM_HAS_HANGUL_RE.test(span)) continue; // 순수 아라비아 = 기존 파서 영역.
+    if (start > 0 && KM_PREFIX_VAGUE_RE.test(src[start - 1])) continue;
+    if (KM_SUFFIX_VAGUE_RE.test(src.slice(end))) continue;
+    const r = parseKoreanMoney(span, opts);
+    if (r.ok) hits.push({ won: r.won, start, end });
+  }
+  return hits.length === 1 ? hits[0] : null;
+}
