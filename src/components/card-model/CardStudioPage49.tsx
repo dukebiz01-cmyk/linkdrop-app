@@ -17,7 +17,7 @@ import { getInAppBrowser, type InAppBrowser } from "@/lib/pwa-install";
 import { startVoiceHandoff } from "@/lib/voice-handoff";
 // M1 — 마법 현관 한 문장 파서(순수 모듈 · 무수정 import). 매직 경로 한정 사용 —
 //   기존 스텝의 replace(/[^0-9]/g) 절삭 코드는 무접촉.
-import { parseOneLiner } from "@/lib/studio-contract";
+import { parseOneLiner, findKoreanMoney } from "@/lib/studio-contract";
 // UI-5-T2-E1 — 영상 검색 실배선(45 파이프 계승). 45 순수 모듈·공용 타입 import(45 컴포넌트 무수정).
 import type { DiscoverCandidate } from "@/components/explore/DiscoverSection";
 import { getSupabase } from "@/lib/supabase";
@@ -540,6 +540,8 @@ export const IMAGE_BLOCKS = new Set(["image", "productimage"]); // 사진 선택
 // NUMBER_CRITICAL — productPrice·stockQty 편입(E5d coupon 전례): 가격·수량은 실제 현금 거래 직결 —
 //   구 방어는 값 반영 후 needsConfirm 배지(사후 표시)뿐이라 "AI 숫자 무확인 반영 금지" 절대 규칙의
 //   실차단이 부재했다. 숫자 확정 경로 = 대표님 직접 입력만(폼 칸 · 지휘자 스텝 — 둘 다 무영향).
+// FIX-D13-2 S4 — 단, 결정적 파서(parseKoreanMoney — AI 0)의 제안 기입은 이 차단 대상이 아니다.
+//   확정은 여전히 [✦ 만들기] 사장님 탭. (주석만 — 상수·로직 무변경)
 export const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLink", "image", "imageUrl", "photo", "coupon", "productPrice", "stockQty"]);
 // UI-5-T4-E4e-2(재) — 준비 중 블록 = AI 경유(equip·setField·조립) 차단 2차 방어층(L4 대본이 1차).
 //   등재 근거(전수 조사): aivideo = 생성 엔진 부재(aivStatus 타이머 목업 :757-760) / image = reserve 매장
@@ -1208,6 +1210,10 @@ export function CardStudioPage({
   const [dMagPrice, setDMagPrice] = useState("");
   const [dMagQty, setDMagQty] = useState("");
   const [dMagDroppy, setDMagDroppy] = useState("");
+  // FIX-D13-2 S1-2e — 가격 칸이 "파서 제안값"임을 표시하는 미확인 플래그(표시 전용).
+  //   ★magSheetReady(:2053)·[✦ 만들기] disabled 바인딩 무접촉 — 확정은 여전히 사장님 탭이다.
+  //   해제 = 사장님이 가격 칸을 직접 고치는 순간(onChange) · 새 지휘 시작(startDirector).
+  const [dPriceSuggested, setDPriceSuggested] = useState(false);
   // M8 §1 — 판매 단위 칩. 시트 라벨·접미·에코 전부 이 값에 연동. 저장은 §8 매핑(MAG_UNIT_TO_SALE_UNIT).
   const [dMagUnit, setDMagUnit] = useState<MagUnit>("개");
   // M8 §2 — 판매 방식 칩. "group" 확정 시 cfgProduct.gbEnabled=true → period 확정(:1803)에서 gbTiers 진입.
@@ -1314,6 +1320,7 @@ export function CardStudioPage({
     setDMagPrice("");
     setDMagQty("");
     setDMagDroppy("");
+    setDPriceSuggested(false); // FIX-D13-2 S1-2e — 새 지휘 = 제안 표시 초기화.
     // M8 — 시트 칩 초안도 함께 초기화(새 지휘 = 새 시트).
     setDMagUnit("개");
     setDMagSaleMode("single");
@@ -5250,8 +5257,42 @@ export function CardStudioPage({
   //   응답 낭독은 sendToLingo(:5107)가 1회 — dSay(speak 동반)를 응답에 쓰지 않는 이유.
   magicVoiceRef.current = (t: string) => {
     if (!directorOn || dStep !== "magic") return false;
+    // FIX-D13-2 S1 — 한글 금액 결정적 파서 선행(기존 parseOneLiner 분기 앞단).
+    //   ★opts 생략 = allowBareMultiplier:false 락. true 를 넘기면 문장 스캔에서 "고구마"의
+    //   '구'(=9)가 후보가 되어 후보 2건 → null 오동작(D13-1 보고 (d)). 절대 켜지 말 것.
+    const km = findKoreanMoney(t);
+    if (km) {
+      // (a) 가격 제안 — 빈 칸일 때만. 사장님이 이미 적은 값은 덮어쓰지 않는다.
+      if (!dMagPrice.trim()) {
+        setDMagPrice(String(km.won));
+        setDPriceSuggested(true);
+        // (d) 출처 표기 락 — "AI가 넣었다"는 오해 차단(파서는 AI 0 · 결정적).
+        dSay(`가격 ${km.won.toLocaleString("ko-KR")}원 — 제가 들은 대로 적어봤어요. 맞는지 확인해 주세요`);
+      } else {
+        dSay("가격 칸에 이미 값이 있어 그대로 뒀어요");
+      }
+      // (b) 수량 칸 미기입 락 — setDMagQty 호출 0. "한박스에"의 '한'은 단가의 분모지
+      //     판매 수량이 아니다(READ-D13 C-3). 수량은 사장님이 직접 적는다.
+      // (c) 오염 수술 — 금액 구간을 걷어낸 잔여만 기존 받아쓰기 로직에 재투입(새 로직 0).
+      const rest = (t.slice(0, km.start) + t.slice(km.end)).replace(/^\s*(에서|에)\s+/, "").trim();
+      if (rest) {
+        const rr = parseOneLiner(rest);
+        if (rr.name) setDMagName(rr.name);
+        if (rr.qty != null) setDMagQty(String(rr.qty));
+        if (rr.droppyPct != null && Number.isInteger(rr.droppyPct) && rr.droppyPct >= 0 && rr.droppyPct <= 20) {
+          setDMagDroppy(String(rr.droppyPct));
+        }
+      }
+      return true;
+    }
     const r = parseOneLiner(t);
     const hasNumeric = r.priceKrw != null || r.qty != null || r.droppyPct != null;
+    // FIX-D13-2 S1-3 — 한글 금액이 있었으나 환산 불가(어림·범위 등)한 발화. 아래 받아쓰기에서
+    //   이름 기입만 건너뛴다("쯤"·"수백만원"이 상품명에 박히던 병). 판정 = V1b 상수 단일 소스.
+    //   ★`r.priceKrw == null` 동반 필수 — 이 항이 없으면 "고구마 30000원 100박스"의 "0원"이
+    //   DIR_KR_MONEY 2절에 걸려 이름("고구마") 기입까지 막힌다(회귀 실측으로 확인).
+    //   기존 V1b 안내(:5285)도 같은 가드를 쓰고 있었으므로 판정을 이 상수 하나로 합친다.
+    const krUnparsed = r.priceKrw == null && DIR_KR_MONEY.test(t);
     // S1 — 문장형(숫자 0 + 이름에 공백) = 칸 무접촉·링고 대화로. 한 단어("옥수수")는 받아쓰기 유지.
     if (!hasNumeric && r.name && /\s/.test(r.name.trim())) {
       dEcho(t);
@@ -5267,7 +5308,7 @@ export function CardStudioPage({
       dSay("잘 못 알아들었어요 — 상품 이름이나 가격을 말씀해 주세요");
       return true;
     }
-    if (r.name) setDMagName(r.name);
+    if (r.name && !krUnparsed) setDMagName(r.name); // FIX-D13-2 S1-3 — 환산 불가 금액 발화는 이름 기입 스킵.
     if (r.priceKrw != null) setDMagPrice(String(r.priceKrw));
     if (r.qty != null) setDMagQty(String(r.qty));
     if (r.droppyPct != null && Number.isInteger(r.droppyPct) && r.droppyPct >= 0 && r.droppyPct <= 20) {
@@ -5277,7 +5318,9 @@ export function CardStudioPage({
     //   판정 입력 = 원 발화 t(파서가 이미 버려 r 에 흔적 0). 앞자리(숫자·한글수) 필수 —
     //   사양 예시식은 "천천히·만들기·강원도·원산지·만두"에 과발동(20건 중 5건)해 조정.
     //   기입분(qty 등) 롤백 0 · 이 분기까지 온 발화만이라 S1/S3 와 중복 발동 불가.
-    if (r.priceKrw == null && /[0-9일이삼사오육칠팔구십백]\s*[만천억]|[0-9일이삼사오육칠팔구십백천만억]\s*원/.test(t)) {
+    //   FIX-D13-2 S2 — 인라인 리터럴 2벌 → :913 DIR_KR_MONEY 상수 1벌로 통일(패턴 동일 · 동작 0변화).
+    //   krUnparsed 가 `r.priceKrw == null` 을 이미 품고 있어 조건식 의미는 구식과 동일하다.
+    if (krUnparsed) {
       dSay("금액은 못 알아들었어요 — 삼만원이면 30000처럼 숫자로 말씀해 주세요");
     }
     return true;
@@ -8978,7 +9021,10 @@ export function CardStudioPage({
                   <div className="relative">
                     <input
                       value={dMagPrice}
-                      onChange={(e) => setDMagPrice(e.target.value)}
+                      onChange={(e) => {
+                        setDMagPrice(e.target.value);
+                        if (dPriceSuggested) setDPriceSuggested(false); // FIX-D13-2 S1-2e — 사장님이 손대면 제안 표시 해제.
+                      }}
                       inputMode="numeric"
                       placeholder={dMagUnit === "개" ? "한 개 가격" : `${dMagUnit}당 가격`}
                       className="h-11 w-full rounded-[10px] bg-white pl-3 pr-7 text-[15px] font-semibold text-[#0A0A0A] outline-none [font-variant-numeric:tabular-nums] placeholder:text-[11px] placeholder:font-medium placeholder:text-[#A3A3A3]"
@@ -9128,6 +9174,11 @@ export function CardStudioPage({
                   {/* FIX-A1(A″-1) S2 — 잠김 사유 1줄(무언 잠금 해소). 버튼 disabled 바인딩·라벨 무변경. */}
                   {magBlockReason && (
                     <p className="mt-0.5 text-[11px] font-medium leading-snug text-[#525252] [word-break:keep-all]">{magBlockReason}</p>
+                  )}
+                  {/* FIX-D13-2 S1-2e — 제안값 미확인 1줄(A″-1 잠김 사유와 동일 시각 문법).
+                      ★표시 전용 — magSheetReady·disabled 바인딩 무접촉(확정은 사장님 탭). */}
+                  {dPriceSuggested && (
+                    <p className="mt-0.5 text-[11px] font-medium leading-snug text-[#525252] [word-break:keep-all]">제안된 가격을 확인해 주세요</p>
                   )}
                   <div className="sticky bottom-0 -mx-4 flex items-center gap-2 border-t border-[#EDEDF0] bg-white px-4 py-3">
                     <button
