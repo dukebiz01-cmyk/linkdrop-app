@@ -492,6 +492,15 @@ export function isAiActionAllowed(mode: StudioMode, a: any): boolean {
       allowed.includes(a.blockId) &&
       !AI_PENDING_BLOCKS.has(a.blockId) // E4e-2(재) — 준비 중 블록 AI 장착 차단(2차 방어).
     );
+  // FIX-D12-1 S1 — goToBlock 가드 봉합. 구 동작: 아래 :502 `return true` 로 무검사 통과라
+  //   준비 중 블록(calendar·dock·aivideo·image)으로도 이동 요청이 뚫렸다(실행부 부재로 무해했을 뿐).
+  //   equip 동형 검사로 통일 — 탈락분은 dispatchProposal 기존 차단 안내에 합류(새 UI 0).
+  if (a.type === "goToBlock")
+    return (
+      typeof a.blockId === "string" &&
+      allowed.includes(a.blockId) &&
+      !AI_PENDING_BLOCKS.has(a.blockId)
+    );
   if (a.type === "setField") {
     if (AI_BLOCKED_FIELDS.has(a.field)) return false; // T1k(D) — 구간 값 등 자동 설정 금지(선택은 대표님).
     if (COPY_FIELDS.has(a.field)) return true; // F2③ — 카피(제목·한마디)는 전 모드 허용.
@@ -539,6 +548,16 @@ export const AI_BLOCKED_FIELDS = new Set(["clip", "video", "videoUrl", "videoLin
 //   49에 잔존 — 실슬롯 이식(F3-10 본대) 전까지 AI 경로 폐쇄(유일 차단 밖 목업 해소).
 //   수동 편집(덱 탭·칸 조작)은 무영향 — 차단은 AI 액션 경로 한정.
 export const AI_PENDING_BLOCKS = new Set(["aivideo", "image", "dock", "calendar"]);
+// FIX-D12-1 S2 — 지휘 중 goToBlock 안내 문구(화면 점프 대신 dLog 1줄 — 매직시트 충돌 회피).
+//   지휘 중 표시면은 dLog 뿐이라 여기 없는 blockId 는 무동작(콘솔 경고만 · 지어낸 안내 금지).
+const GOTO_DIRECTOR_HINT: Record<string, string> = {
+  productimage: "사진은 시트의 [사진 올리기] 버튼을 눌러 주세요.",
+  product: "이름·가격·수량은 시트의 칸에 적어 주세요.",
+  delivery: "거래 방식은 시트에서 직거래·택배 중 골라 주세요.",
+  seasonal: "판매 기간은 [✦ 만들기] 다음에 정해요.",
+  coupon: "쿠폰은 [✦ 만들기] 다음에 붙일 수 있어요.",
+  content: "영상은 화면에서 직접 골라 주세요.",
+};
 // UI-5-T6a — 인앱 안내 1줄(45 V6_INAPP_NOTICE :424 동형 — 한 글자 락·탭 문법).
 export const V6_INAPP_NOTICE = "카카오톡에서는 누르면 크롬에서 이어져요.";
 // UI-5-T1m — 미확정 릴레이 큐 정렬 우선순위: 영상 → 이미지 → 숫자(product/party/…) → 구간(content) → 기타.
@@ -4038,6 +4057,17 @@ export function CardStudioPage({
         }
       } else if (a.type === "detach" && a.blockId) {
         if (applied[a.blockId]) setApplied((p) => ({ ...p, [a.blockId]: false }));
+      } else if (a.type === "goToBlock" && a.blockId) {
+        // FIX-D12-1 S2 — 구 실행부 부재(분기 자체가 없어 무동작) = SAY-DO 위반의 진원.
+        //   지휘 중: onEditField 는 yieldToHand·equip·setBlinkBlock 동반이라 매직시트와 충돌 →
+        //   화면 점프 대신 dLog 1줄로 실제 자리를 알린다(지휘 중 유일 표시면 · 낭독 0).
+        if (directorOn) {
+          const hint = GOTO_DIRECTOR_HINT[a.blockId];
+          if (hint) setDLog((l) => [...l, { role: "lingo", text: hint }]);
+          else console.warn("[studio49] goToBlock 안내 문구 미정의:", a.blockId);
+        } else {
+          onEditField(a.blockId); // 비지휘: 실제 이동(기존 AI 경로 전례 = 미디어 관문 :5000 동형).
+        }
       } else if (a.type === "setField" && a.field) {
         const v = a.value ?? "";
         // F2③ — content 동반 장착은 content 가 현재 모드 덱에 있을 때만(커머스 유령 블록 장착 방지).
@@ -4064,6 +4094,10 @@ export function CardStudioPage({
           //   default 무적용·무기록이 2차 방어). 확정 = 대표님 직접 입력만(폼 칸·지휘자 스텝).
           case "productName":
             setCfgProductName(v);
+            // FIX-D12-1 S3 — 매직시트 역방향 브리지. 시트가 보는 값은 dMagName 별도 state 라
+            //   대화로 채워도 시트 이름 칸이 빈칸으로 남던 것(단절점 ①). 이중 반영이 의도.
+            //   magSheetReady 본체 무접촉 — 판정 재료가 채워지는 간접 전진은 의도된 효과.
+            if (directorOn && dStep === "magic") setDMagName(v);
             break;
           case "dock":
             setCfgDock(v);
@@ -4952,7 +4986,13 @@ export function CardStudioPage({
       const pendingBlk =
         (rawActions ?? [])
           .map((a: any) =>
-            a?.type === "equip" ? a.blockId : a?.type === "setField" ? FIELD_TO_BLOCK[a.field] : null,
+            // FIX-D12-1 S1 — goToBlock 편입: 준비 중 블록 이동 요청이 탈락했을 때 폴백 문구
+            //   ("소식 카드엔 적용하지 않았어요")가 나가던 오답 교정. 문구 상수 무변경.
+            a?.type === "equip" || a?.type === "goToBlock"
+              ? a.blockId
+              : a?.type === "setField"
+                ? FIELD_TO_BLOCK[a.field]
+                : null,
           )
           .find((blk: unknown) => typeof blk === "string" && AI_PENDING_BLOCKS.has(blk as string)) ??
         null;
@@ -4984,6 +5024,18 @@ export function CardStudioPage({
         },
       ]);
     }
+    // FIX-D12-1 S4 — D7 임시 방어: title 이 상품명 메아리면 조용히 스킵(안내 0 — 위 차단 안내
+    //   집계 뒤에 두어 말풍선을 유발하지 않는다). 판정 = 같은 응답의 productName 값 또는 현재
+    //   cfgProductName 과 trim 동일. 근본 해결은 FIX-D7 본대(Edge 카피 규칙) 소관 — 여기는 증상 차단.
+    const echoName = (rawActions ?? []).find(
+      (a: any) => a?.type === "setField" && a.field === "productName",
+    )?.value;
+    const actions = okActions.filter((a: any) => {
+      if (a?.type !== "setField" || a.field !== "title") return true;
+      const t = String(a.value ?? "").trim();
+      if (!t) return true; // 빈 값은 판정 대상 아님(기존 동작 유지).
+      return t !== String(echoName ?? "").trim() && t !== cfgProductName.trim();
+    });
     // 관문은 클라 선처리(T1m·T1n). 미디어 = general/reserve 영상(selectedVideo) · commerce 상품 사진(productImageUrl).
     const mediaReady = m === "commerce" ? !!productImageUrl : !!selectedVideo;
     if (steps.length >= 2 && !mediaReady) {
@@ -5004,7 +5056,7 @@ export function CardStudioPage({
     //   트리거는 유저 메시지 응답의 equip뿐(자동 증설 아님). stepPlanRef 즉시 반영 → 아래 connut 정합.
     {
       const inPlan = new Set(stepPlanRef.current.map((s) => s.block).filter(Boolean) as string[]);
-      for (const a of okActions) {
+      for (const a of actions) {
         if (a?.type === "equip" && a.blockId && DECK_IDS[m].includes(a.blockId) && !inPlan.has(a.blockId) && EXTRA_LABELS[a.blockId]) {
           insertStep(a.blockId);
           inPlan.add(a.blockId);
@@ -5016,7 +5068,7 @@ export function CardStudioPage({
     if (steps.length >= 2) {
       const actionBlock = (a: any): string =>
         a?.type === "equip" ? (a.blockId ?? "") : a?.type === "setField" ? (FIELD_TO_BLOCK[a.field] ?? a.field ?? "") : (a?.blockId ?? "");
-      const sortedActions = [...okActions].sort((x, y) => planOrder(actionBlock(x)) - planOrder(actionBlock(y)));
+      const sortedActions = [...actions].sort((x, y) => planOrder(actionBlock(x)) - planOrder(actionBlock(y)));
       // M8-C §2 — 조립 체크리스트 커머스 문구. 상품 카드인데 영상 문법("영상 담기·핵심 장면")이
       //   뜨던 것 교정 — 표시 문자열만 갈아끼운다(단계 수·순서·앵커·타이밍 전부 무수정).
       const planConnut = stepPlanRef.current.map((s) => ({
@@ -5032,8 +5084,8 @@ export function CardStudioPage({
       runAssembly(sortedActions, planConnut); // 연출(T1b 분기 유지).
       return true; // L3 — 조립 진입(응답 낭독 생략 신호).
     } else {
-      applyLingoActions(okActions); // 단순 편집 즉시 적용.
-      if (okActions.length) setAiSyncPending((n) => n + 1); // E2b(B1) — 즉시 적용도 커밋 후 재검증 동기화.
+      applyLingoActions(actions); // 단순 편집 즉시 적용.
+      if (actions.length) setAiSyncPending((n) => n + 1); // E2b(B1) — 즉시 적용도 커밋 후 재검증 동기화.
     }
     return false;
   }
