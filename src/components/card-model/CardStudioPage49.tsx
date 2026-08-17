@@ -4869,6 +4869,11 @@ export function CardStudioPage({
   function buildLingoContext(): LingoContext & {
     step_plan?: string[];
     current_step?: { index: number; key: string; block: string | null };
+    // FIX-D11 S1 — 지휘 축 additive. LingoContext.studio_state 는 고정 형태라 교차 타입으로만 넓힌다
+    //   (계약 파일 useLingoChat.ts·Edge 무접촉 — 이 시그니처 밖 편집 0).
+    studio_state?: NonNullable<LingoContext["studio_state"]> & {
+      director?: { on: boolean; step: string | null; magic_ready: boolean; photo_confirmed: boolean; dropped: boolean };
+    };
   } {
     // E3c — 요청 mode = 실모드 라이브 ref(stale 클로저 방어). 아래 단언으로 클로저·실모드 정합 검증.
     const m = modeRef.current;
@@ -4908,12 +4913,28 @@ export function CardStudioPage({
         card_title: cfgTitle.trim() || (applied["product"] && cfgProductName ? cfgProductName : ""),
         ...(cfgProductName ? { product_name: cfgProductName } : {}),
         ...(cfgProductPrice ? { product_price: Number(cfgProductPrice.replace(/[^0-9]/g, "")) || undefined } : {}),
+        // FIX-D11 S1 — 지휘 축(불리언·짧은 enum만 — payload 위생). Edge ctxSummary 가 studio_state 를
+        //   JSON.stringify 로 통째 싣기 때문에 이 한 키 추가만으로 프롬프트에 반영된다(Edge 무수정).
+        director: {
+          on: directorOn,
+          step: directorOn ? dStep : null,
+          magic_ready: magSheetReady,
+          photo_confirmed: photoConfirmed,
+          dropped,
+        },
       },
       studio: { mode: m, deck, fields },
       ...(selectedVideo ? { video_summary: selectedVideo.title } : {}),
       // UI-5-T2-E2a(8a) — 현재 스텝 컨텍스트: Edge v6 대본이 "지금 몇 번째"를 인지.
-      step_plan: stepPlanRef.current.map((s) => s.label),
-      current_step: { index: currentStep, key: cur?.key ?? "", block: cur?.block ?? null },
+      // FIX-D11 S2 — 단, 지휘 중에는 보내지 않는다. 이 두 키는 덱 스텝플랜 축(currentStep)이라
+      //   지휘·매직 흐름에서는 갱신되지 않아 "지금 1번째 상품 사진 단계" 오답의 재료가 된다.
+      //   미전송 시 persona.ts:295 가드가 걸려 문장 자체가 안 구워진다(비지휘 = 기존 그대로).
+      ...(directorOn
+        ? {}
+        : {
+            step_plan: stepPlanRef.current.map((s) => s.label),
+            current_step: { index: currentStep, key: cur?.key ?? "", block: cur?.block ?? null },
+          }),
     };
   }
 
